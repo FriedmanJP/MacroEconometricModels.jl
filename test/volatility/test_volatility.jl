@@ -55,8 +55,10 @@ end
         @test length(m.conditional_variance) == length(y_arch)
         @test length(m.standardized_residuals) == length(y_arch)
         @test all(m.conditional_variance .> 0)
-        @test isfinite(m.loglik)
-        @test m.aic > m.loglik * (-2) - 1  # AIC ≈ -2ℓ + 2k
+        # T159: sign pin (Gaussian ll ≈-785) + exact IC wiring (k = 2+q = dof).
+        @test isfinite(m.loglik) && m.loglik < 0
+        @test m.aic ≈ -2 * m.loglik + 2 * dof(m) atol = 1e-8
+        @test m.bic ≈ -2 * m.loglik + dof(m) * log(length(y_arch)) atol = 1e-8
     end
 
     @testset "ARCH(1) stationarity" begin
@@ -68,10 +70,12 @@ end
     @testset "ARCH(1) unconditional variance" begin
         m = m_arch
         uv = unconditional_variance(m)
-        @test isfinite(uv)
+        @test isfinite(uv)  # T159: (see note above)
         @test uv > 0
         # Should be roughly close to sample variance
         @test uv < var(y_arch) * 5
+        # T159: exact definitional identity uv = ω/(1−Σα) recomputed from fields.
+        @test uv ≈ m.omega / (1 - sum(m.alpha)) rtol = 1e-12
     end
 
     @testset "ARCH(2)" begin
@@ -91,6 +95,8 @@ end
         hl = halflife(m)
         @test isfinite(hl)
         @test hl > 0
+        # T159: exact identity halflife = log(0.5)/log(persistence).
+        @test hl ≈ log(0.5) / log(sum(m.alpha)) rtol = 1e-12
     end
 
     @testset "ARCH Integer input" begin
@@ -134,6 +140,8 @@ end
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
+        # T159: exact identity uv = ω/(1−Σα−Σβ) recomputed from fields.
+        @test uv ≈ m.omega / (1 - (sum(m.alpha) + sum(m.beta))) rtol = 1e-12
     end
 
     @testset "GARCH(2,1)" begin
@@ -200,6 +208,8 @@ end
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
+        # T159: exact identity uv = exp(ω/(1−Σβ)) recomputed from fields.
+        @test uv ≈ exp(m.omega / (1 - sum(m.beta))) rtol = 1e-12
     end
 
     @testset "EGARCH StatsAPI dof" begin
@@ -245,6 +255,8 @@ end
         uv = unconditional_variance(m)
         @test isfinite(uv)
         @test uv > 0
+        # T159: exact identity uv = ω/(1−Σα−Σγ/2−Σβ) — pins the γ/2 asymmetry weight.
+        @test uv ≈ m.omega / (1 - (sum(m.alpha) + sum(m.gamma) / 2 + sum(m.beta))) rtol = 1e-12
     end
 end
 
@@ -334,9 +346,11 @@ end
         @test length(coef(m)) == 3  # mu + omega + alpha
         @test length(residuals(m)) == 500
         @test length(predict(m)) == 500
-        @test isfinite(loglikelihood(m))
-        @test isfinite(aic(m))
-        @test isfinite(bic(m))
+        # T159: sign pin (ll ≈-289) + exact IC wiring (k = 2+q = dof).
+        ll_arch = loglikelihood(m)
+        @test isfinite(ll_arch) && ll_arch < 0
+        @test aic(m) ≈ -2 * ll_arch + 2 * dof(m) atol = 1e-8
+        @test bic(m) ≈ -2 * ll_arch + dof(m) * log(nobs(m)) atol = 1e-8
         @test dof(m) == 3
         @test islinear(m) == false
     end
@@ -638,6 +652,8 @@ end
     # (b) Structural: default == :robust; transform-space sandwich is symmetric & PSD
     @test stderror(mg) ≈ stderror(mg; cov_type=:robust)
     se_r = stderror(mg; cov_type=:robust)
+    # T159: kept — this block is structural (default==robust, sandwich PSD); the
+    # robust-SE value pins live in (c) below on the larger-sample fit.
     @test all(isfinite, se_r) && all(se_r .> 0)
     S = Mod.ForwardDiff.jacobian(θ -> Mod._garch_loglik_contribs(θ, mg.y, 1, 1), params_opt)
     V = Mod._qmle_sandwich_cov(Hn, S)
@@ -652,6 +668,8 @@ end
     sh2 = stderror(mg2; cov_type=:hessian)
     @test 0.6 <= sr2[3] / sh2[3] <= 1.6
     @test 0.6 <= sr2[4] / sh2[4] <= 1.6
+    @test 0.6 <= sr2[1] / sh2[1] <= 1.6   # T159: extended to μ (0.99) and ω (1.10)
+    @test 0.6 <= sr2[2] / sh2[2] <= 1.6
 
     # (d) Fat-tail divergence (the point of the fix): t(5) innovations inflate the OPG
     #     meat B relative to H, so robust α/β SEs exceed the inverse-Hessian ones.
@@ -659,10 +677,11 @@ end
                                              omega=0.02, alpha1=0.08, beta1=0.90, innov=:t5), 1, 1)
     srt = stderror(mt; cov_type=:robust)
     sht = stderror(mt; cov_type=:hessian)
-    @test all(isfinite, srt) && all(srt .> 0)
+    @test all(isfinite, srt) && all(srt .> 0)  # T159: (see note above)
     @test max(abs(srt[3] - sht[3]) / sht[3], abs(srt[4] - sht[4]) / sht[4]) > 0.05
     @test srt[3] > sht[3]
     @test srt[4] > sht[4]
+    @test srt[2] > sht[2]   # T159: kurtosis also inflates the ω SE (1.29×); μ (≈1.00×) is location-robust, unpinned
 
     # (e) Monte-Carlo dispersion oracle: under misspecification the inverse-Hessian SE
     #     understates the true sampling dispersion; the robust SE tracks it better.
@@ -691,12 +710,18 @@ end
     ye = simulate_garch11_rng(Xoshiro(303), 1200)
     me = estimate_egarch(ye, 1, 1)
     se_e = stderror(me; cov_type=:robust)
+    se_eh = stderror(me; cov_type=:hessian)
     @test length(se_e) == 2 + 2 * 1 + 1 && all(isfinite, se_e) && all(se_e .> 0)
-    @test any(se_e .!= stderror(me; cov_type=:hessian))
+    # T159: Gaussian sim ⇒ sandwich ≈ Hessian on all 5 params (observed 0.98–1.11);
+    # the 0.6–1.6 band mirrors (c) and catches delta-method Jacobian bugs (10–50×).
+    @test all(0.6 .<= se_e ./ se_eh .<= 1.6)
+    @test any(se_e .!= se_eh)
     mj = estimate_gjr_garch(ye, 1, 1)
     se_j = stderror(mj; cov_type=:robust)
+    se_jh = stderror(mj; cov_type=:hessian)
     @test length(se_j) == 2 + 2 * 1 + 1 && all(isfinite, se_j) && all(se_j .> 0)
-    @test any(se_j .!= stderror(mj; cov_type=:hessian))
+    @test all(0.6 .<= se_j ./ se_jh .<= 1.6)   # T159: observed 0.88–1.13
+    @test any(se_j .!= se_jh)
 end
 
 # =============================================================================
@@ -733,7 +758,7 @@ end
             m = est(yv)
             k = kfun(m)
             @test size(m.param_vcov) == (k, k)
-            @test all(isfinite, m.param_vcov)        # cache populated at estimation
+            @test all(isfinite, m.param_vcov)        # T159: kept — excludes the all-Inf-cache escape hatch of the == pins below
 
             se_cached = stderror(m)                  # reads the cache
             @test se_cached == stderror(m)           # deterministic
@@ -824,9 +849,10 @@ end
         # the extremes where `2 + exp(x)` would round to exactly 2.0 in Float64.
         for x in (-500.0, -50.0, -5.0, 0.0, 5.0, 500.0)
             @test M._vol_shape_transform(x, :student) > 2
+            # T159: kept — excludes the +Inf escape hatch of the constraint pins.
             @test isfinite(M._vol_shape_transform(x, :student))
             @test M._vol_shape_transform(x, :ged) > 0
-            @test isfinite(M._vol_shape_transform(x, :ged))
+            @test isfinite(M._vol_shape_transform(x, :ged))  # T159: (see note above)
         end
         @test M._vol_dist_nparams(:normal) == 0
         @test M._vol_dist_nparams(:student) == 1
@@ -862,8 +888,10 @@ end
 
         @test mt.dist === :student && mg.dist === :ged && mn.dist === :normal
         @test isnan(mn.shape)                              # no shape under the Gaussian
+        # T159: kept — subsumed by the shape-recovery pins below (scalar ≈/comparison
+        # against finite targets fails on any non-finite value); belt-and-braces.
         @test mt.shape > 2 && isfinite(mt.shape)
-        @test mg.shape > 0 && isfinite(mg.shape)
+        @test mg.shape > 0 && isfinite(mg.shape)  # T159: (see note above)
         @test isapprox(mt.shape, 5.0; atol=1.5)            # measured 4.79
         @test mg.shape < 2                                 # fatter than Gaussian
         # the fat-tailed likelihood fits better, and AIC/BIC charge for the extra parameter
@@ -889,8 +917,14 @@ end
             mt = f(y, 1, 1; dist=:student)
             @test mn.dist === :normal && isnan(mn.shape)
             @test mt.dist === :student
-            @test mt.shape > 2 && isfinite(mt.shape)
-            @test isfinite(mt.loglik)
+            # T159: Gaussian data ⇒ effectively infinite ν (observed at the 500
+            # ceiling); 30 is deep in the thin-tail region (t(30)≈Gaussian) while
+            # transform bugs strand ν̂ near the 2.0 floor.
+            @test isfinite(mt.shape) && mt.shape > 30
+            @test isfinite(mt.loglik) && mt.loglik < 0
+            # T159: exact IC wiring — the shape parameter counts (k = dof+1).
+            @test mt.aic ≈ -2 * mt.loglik + 2 * (dof(mt) + 1) atol = 1e-8
+            @test mt.bic ≈ -2 * mt.loglik + (dof(mt) + 1) * log(nobs(mt)) atol = 1e-8
             @test_throws ArgumentError f(y, 1, 1; dist=:bogus)
         end
     end

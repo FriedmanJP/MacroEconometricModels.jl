@@ -52,9 +52,10 @@ end
     pe = intermediary_pe(sys; R=1.01, rk=0.06, max_iter=180, tol=1e-6)
     @test pe isa IntermediaryPE
     @test pe.converged
+    # T159: kept — positivity above/below is the real pin; GK + monotonicity + balance-sheet pins guard the PE.
     @test all(isfinite, pe.V)
     @test all(>(0), pe.V)
-    @test all(isfinite, pe.l_policy)
+    @test all(isfinite, pe.l_policy)  # T159: kept (nonnegativity below is the pin)
     @test all(>=(0), pe.l_policy)
     # GK incentive constraint λ l ≤ V
     @test maximum(sys.lambda .* pe.l_policy .- pe.V) <= 1e-6
@@ -70,11 +71,13 @@ end
     ss = intermediary_steady_state(sys; tol=2e-3, max_iter=18,
                                    pe_max_iter=140, pe_tol=1e-5)
     @test ss isa IntermediarySteadyState
+    # T159: kept — the > 0 pins below guard aggregates.
     @test isfinite(ss.aggregates[:leverage])
     @test isfinite(ss.aggregates[:L])
     @test ss.aggregates[:L] > 0
     @test ss.aggregates[:leverage] > 0
     @test all(isfinite, ss.V)
+    @test all(ss.V .> 0)  # T159: franchise value positive at SS, mirroring the PE pin (observed min 0.61)
     @test isapprox(sum(ss.distribution), 1; atol=1e-8)
 
     # n distribution has positive dispersion when ξ is on
@@ -87,6 +90,7 @@ end
     # solve / compute_steady_state dispatch on the kind
     sol = solve(spec; tol=2e-3, max_iter=18, pe_max_iter=140, pe_tol=1e-5)
     @test sol isa IntermediarySteadyState
+    # T159: kept — dispatch smoke; the identical ss solve above pins L > 0.
     @test isfinite(sol.aggregates[:L])
     css = compute_steady_state(spec; tol=2e-3, max_iter=18,
                                pe_max_iter=140, pe_tol=1e-5)
@@ -99,16 +103,19 @@ end
                                    pe_max_iter=120, pe_tol=1e-5)
     resp = irf(ss, 8; shock_size=0.02, persist=0.5, pe_max_iter=50, pe_tol=1e-4)
     @test resp isa ImpulseResponse
+    # T159: kept — the Z-impact ≈ + L-impact > 0 pins below guard the IRF.
     @test all(isfinite, resp.values)
     @test resp.variables == ["L", "Y", "Z"]
     @test size(resp.values, 1) == 8
     # impact on Z is the shock; L path is finite (may be small)
     @test resp.values[1, 3, 1] ≈ ss.system.Z * 0.02 atol=1e-10
+    @test resp.values[1, 1, 1] > 0  # T159: TFP+ raises lending on impact (observed 0.056)
 
     spec = to_spec(sys)
     # façade: irf(spec) → solve → irf(::IntermediarySteadyState)
     resp2 = irf(ss, 6; shock_size=0.01, persist=0.0,
                 pe_max_iter=40, pe_tol=1e-4)
+    # T159: kept — façade smoke; the Z-impact ≈ + L-impact > 0 pins above guard IRF machinery.
     @test all(isfinite, resp2.values)
     @test MacroEconometricModels.has_kind(spec, IntermediarySystem)
 end
@@ -120,6 +127,7 @@ end
     @test pe.converged
     n_grid = sys.grid.grids[1]
     lev = pe.l_policy[3:end-2, 1] ./ n_grid[3:end-2]
+    # T159: kept — the mean > 1 + λl ≈ V pins below guard the GK nest.
     @test all(isfinite, lev)
     @test mean(lev) > 1
     # With ζ₁ = 0 the IC binds: λ l ≈ V (scale-invariant GK nest).
@@ -212,6 +220,7 @@ end
     l32, v32 = MacroEconometricModels._best_lending(
         n, j, l_hi, V, n_grid, sys.xi, sys.kappa, sys.rk, sys.R,
         sys.zeta1, sys.zeta2, sys.beta, sys.sigma; n_try=32)
+    # T159: kept — the n_try agreement + v32 ≥ v16 pins below guard the optimizer.
     @test isfinite(l16) && isfinite(l32)
     @test isapprox(l16, l32; rtol=1e-3, atol=1e-4)
     @test v32 >= v16 - 1e-10

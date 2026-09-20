@@ -135,12 +135,28 @@ using Random
         new_uncapped = ceil(Int, 1.1447 * (a1 * n)^(1 / 3))
         @test new_uncapped < old_uncapped
 
-        # (6) Smoke: every kernel flows finitely through the public estimators
+        # (6) T159: every kernel pinned by value/property assertions through the
+        #     public estimators (no longer isfinite-only).
         X = hcat(ones(n), randn(rng, n, 2)); u = randn(rng, n)
+        vx = var(x)  # marginal-variance baseline for the LRV inflation bound
         for k in (:bartlett, :parzen, :quadratic_spectral, :tukey_hanning)
-            @test all(isfinite, MacroEconometricModels.newey_west(X, u; kernel=k))
-            @test isfinite(MacroEconometricModels.long_run_variance(x; kernel=k))
-            @test all(isfinite, MacroEconometricModels.long_run_covariance(X; kernel=k))
+            V = MacroEconometricModels.newey_west(X, u; kernel=k)
+            # Sandwich form is symmetric PSD in exact arithmetic: a sign/transpose
+            # bug breaks symmetry/PSD, a dropped 1/n inflates the diagonal ~200×.
+            @test isapprox(V, V'; atol=1e-10)                    # 1e-10: BLAS roundoff only (cf. T055)
+            @test minimum(eigvals(Symmetric(V))) ≥ -1e-8         # 1e-8: PSD up to roundoff (cf. T055)
+            @test all(diag(V) .> 0)                              # degenerate-zero SEs fail
+            @test all(diag(V) .< 0.1)                            # O(1/n)≈0.005 scale; 20× headroom, catches n-fold inflation
+            lrv = MacroEconometricModels.long_run_variance(x; kernel=k)
+            # AR(1) φ=0.5 ⇒ LRV/var → (1+φ)/(1−φ) = 3; an S0-only bug sits at ≈1.0×.
+            # T159: kept — the 1.5× ratio pin (S0-only bug sits at 1.0×) is already the strong form.
+            @test isfinite(lrv) && lrv > 1.5 * vx                # 1.5×: 25%+ below observed 2.04–2.19×, 50% above the 1.0× bug
+            S = MacroEconometricModels.long_run_covariance(X; kernel=k)
+            # IID N(0,1) columns ⇒ diagonal LRVs → 1; col 1 is a demeaned constant.
+            @test isapprox(S, S'; atol=1e-12)                    # 1e-12: symmetrized accumulator (cf. T063)
+            @test minimum(eigvals(Symmetric(S))) ≥ -1e-10        # 1e-10: PSD-gate tolerance (cf. T063)
+            @test S[1, 1] ≈ 0.0 atol = 1e-12                     # structural zero from demeaning, not estimation noise
+            @test all(0 .< diag(S)[2:3] .< 5.0)                  # →1; 5× headroom, catches 200× normalization bug
         end
     end
 

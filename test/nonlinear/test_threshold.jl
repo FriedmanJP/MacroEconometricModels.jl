@@ -143,6 +143,7 @@ end
         @test m95.gamma_ci[2] <= m99.gamma_ci[2] + 1e-9
         # Heteroskedasticity correction runs and returns a finite interval.
         mh = estimate_setar(y, 1, 1; linearity=false, ci_level=0.95, het=true)
+        # T159: kept — the bracketing below guards the het-corrected interval.
         @test all(isfinite, mh.gamma_ci)
         @test mh.gamma_ci[1] <= mh.gamma <= mh.gamma_ci[2]
     end

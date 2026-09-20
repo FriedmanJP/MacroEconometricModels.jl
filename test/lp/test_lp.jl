@@ -189,6 +189,9 @@ using Random
         # F-stats should be finite and positive
         @test all(model_hac.first_stage_F .> 0)
         @test all(isfinite.(model_hac.first_stage_F))
+        # T159: F ≈ population (T−k)·R²/(1−R²) ≈ 395 (R²=0.5 from the 0.5/0.5
+        # loadings); observed 382–389. Mirrors the pop-F pin above.
+        @test all(0.5 * 395 .< model_hac.first_stage_F .< 2 * 395)
 
         # At h=0, HAC with auto bandwidth is used (no MA correction needed)
         # At h > 0, bandwidth is floored at h+1, so F-stats typically decrease
@@ -203,8 +206,10 @@ using Random
         fs5 = MacroEconometricModels.first_stage_regression(endog_test, Z_test, ctrl_test; h=5)
         @test fs0.F_stat > 0
         @test fs5.F_stat > 0
-        @test isfinite(fs0.F_stat)
-        @test isfinite(fs5.F_stat)
+        # T159: independent noise ⇒ correctly weak first stage (observed 0.38 ≪ 10;
+        # F > 10 would be a 0.2% fluke). Weak-IV detection is the point of F.
+        @test isfinite(fs0.F_stat) && fs0.F_stat < 10
+        @test isfinite(fs5.F_stat) && fs5.F_stat < 10  # T159: (see note above)
     end
 
     @testset "Smooth LP (Barnichon & Brownlees 2019)" begin
@@ -392,6 +397,8 @@ using Random
         end
         m_nw = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:newey_west)
         m_wh = doubly_robust_lp(Yp, Dp, Xp, H_p; lags=2, cov_type=:white)
+        # T159: kept — SE level is pinned by ≥0 plus the HAC-vs-White reldiff below
+        # (which caught a real bug: pre-fix both paths returned identical SEs).
         @test all(isfinite, m_nw.ate_se)
         @test all(m_nw.ate_se .>= 0)
         # The SE now depends on cov_type via the HAC path; pre-fix both cov_types produced the
@@ -440,9 +447,14 @@ using Random
         @test ipw_model isa PropensityLPModel
         @test dr_model isa PropensityLPModel
 
-        # Both should produce finite ATE estimates
-        @test all(isfinite.(ipw_model.ate))
-        @test all(isfinite.(dr_model.ate))
+        # T159: impact ATE recovers the truth τ=1.0 (observed 1.25 for both); iid
+        # treatment ⇒ no dynamic effects (later horizons ≈ 0). Returning τ at every
+        # horizon, or 0/−1 at impact, fails these.
+        @test all(isfinite.(ipw_model.ate)) && all(isfinite.(dr_model.ate))  # T159: (see note above)
+        @test maximum(abs, ipw_model.ate[1, :] .- 1.0) < 0.5
+        @test maximum(abs, dr_model.ate[1, :] .- 1.0) < 0.5
+        @test all(abs.(ipw_model.ate[2:end, :]) .< 0.5)
+        @test all(abs.(dr_model.ate[2:end, :]) .< 0.5)
 
         # The ATEs should differ: doubly robust adds outcome regression correction
         # that the pure IPW estimator lacks
@@ -572,12 +584,14 @@ using Random
         Y_nc[:, 3] = Y_nc[:, 1] + 0.01 * randn(rng, T_nc)
 
         # Should handle near-collinearity gracefully
+        # T159: kept as genuine smoke — adversarial near-singular X'X has no
+        # reference value; coefficient/IRF value pins live in well-conditioned testsets.
         model_nc = estimate_lp(Y_nc, 1, 5; lags=2)
         @test model_nc isa LPModel
-        @test all(isfinite.(model_nc.B[1]))
+        @test all(isfinite.(model_nc.B[1]))  # T159: (see note above)
 
         irf_nc = lp_irf(model_nc)
-        @test all(isfinite.(irf_nc.values))
+        @test all(isfinite.(irf_nc.values))  # T159: (see note above)
     end
 
     @testset "Edge Cases - Horizons" begin
@@ -778,7 +792,7 @@ using Random
         grid = collect(10.0 .^ (-4:1.0:2))
         errs = MacroEconometricModels._smooth_lp_cv_errors(Y_hld, 1, 6; lambda_grid=grid, k_folds=5, lags=2)
         @test length(errs) == length(grid)
-        @test all(isfinite, errs)
+        @test all(isfinite, errs)   # T159: kept — excludes the +Inf escape of ≥0; non-degeneracy + argmin pins carry the weight.
         @test all(errs .>= 0)
         @test maximum(errs) > 0                             # not the degenerate all-zero objective
         @test length(unique(round.(errs, digits=10))) > 1   # genuinely varies across lambda
@@ -979,7 +993,7 @@ using Random
         # (i) the exposed objective varies MEANINGFULLY with γ, not at the FP-noise level.
         ssr_lo = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 1.0, 0.0; lags=2)
         ssr_hi = MacroEconometricModels._state_lp_transition_ssr(z_dd, Y_dd, 1, 5.0, 0.0; lags=2)
-        @test isfinite(ssr_lo) && isfinite(ssr_hi)
+        @test isfinite(ssr_lo) && isfinite(ssr_hi) && ssr_lo >= 0 && ssr_hi >= 0   # T159: SSR ≥ 0 exact
         @test abs(ssr_lo - ssr_hi) > 1e-3 * abs(ssr_lo)
 
         # (ii) :grid_search actually minimizes that objective over its internal grid.
@@ -1197,13 +1211,17 @@ using Random
         model_white = estimate_lp(Y_cov, 1, 8; lags=2, cov_type=:white)
         @test model_white isa LPModel
         irf_white = lp_irf(model_white)
-        @test all(isfinite.(irf_white.se))
+        # T159: SEs are sqrt(diag) ≥ 0 (degenerate h=0 cell is ≈1e-17, hence ≥ not >);
+        # analytical bands bracket the estimates.
+        @test all(isfinite.(irf_white.se)) && all(irf_white.se .>= 0)
+        @test all(irf_white.ci_lower .<= irf_white.values .<= irf_white.ci_upper)
 
         # Test with Newey-West and custom bandwidth
         model_nw = estimate_lp(Y_cov, 1, 8; lags=2, cov_type=:newey_west, bandwidth=5)
         @test model_nw isa LPModel
         irf_nw = lp_irf(model_nw)
-        @test all(isfinite.(irf_nw.se))
+        @test all(isfinite.(irf_nw.se)) && all(irf_nw.se .>= 0)   # T159: sqrt(diag) ≥ 0 (degenerate cell ≈1e-17)
+        @test all(irf_nw.ci_lower .<= irf_nw.values .<= irf_nw.ci_upper)
     end
 
     # ==========================================================================
@@ -1234,7 +1252,9 @@ using Random
         for kernel in [:bartlett, :parzen, :quadratic_spectral]
             lrv = MacroEconometricModels.long_run_variance(white_noise; bandwidth=5, kernel=kernel)
             @test lrv >= 0
+            # T159: white noise ⇒ LRV ≈ var (observed within 4%; rtol=0.1 mirrors the bw=0 pin).
             @test isfinite(lrv)
+            @test lrv ≈ var(white_noise) rtol = 0.1
         end
 
         # Long-run covariance for multivariate data
@@ -1248,7 +1268,7 @@ using Random
         # Small sample edge case
         small_x = randn(rng, 5)
         lrv_small = MacroEconometricModels.long_run_variance(small_x)
-        @test isfinite(lrv_small)
+        @test isfinite(lrv_small) && lrv_small >= 0   # T159: variance estimates are non-negative (observed 1.87)
     end
 
     @testset "LP with Cholesky Identification" begin
@@ -1363,8 +1383,10 @@ using Random
         @test all(diag(V_pw) .>= 0)
 
         # Both should give reasonable (finite) results
+        # T159: kept — symmetry + diag≥0 above and the tight prewhitening-ratio pins
+        # below (≈1.65/1.0/1.0) carry the weight; a sign bug breaks the ratios.
         @test all(isfinite.(V_no_pw))
-        @test all(isfinite.(V_pw))
+        @test all(isfinite.(V_pw))  # T159: (see note above)
 
         # Prewhitening de-biases the persistent (intercept) moments: the ratio
         # is ≈ 1.6 there (DGP-05 #794; probed 1.59/1.71 over two seeds, so
@@ -1476,6 +1498,10 @@ using Random
         @test size(V_dk) == (3, 3)
         @test V_dk ≈ V_dk' atol=1e-10  # Symmetric
         @test all(isfinite.(V_dk))
+        # T159: sandwich form ⇒ symmetric PSD with positive diagonal (observed
+        # mineig 0.0037, diag ≈ 0.005); a sign/transpose bug breaks these.
+        @test minimum(eigvals(Symmetric(V_dk))) >= -1e-8
+        @test all(diag(V_dk) .> 0)
 
         # Compare with Newey-West (should give similar structure for time series)
         V_nw = newey_west(X_dk, u_dk; bandwidth=5)
@@ -1521,7 +1547,7 @@ using Random
         model_dk = estimate_lp(Y_dk, 1, 8; lags=2, cov_type=:driscoll_kraay, bandwidth=5)
         @test model_dk isa LPModel
         irf_dk = lp_irf(model_dk)
-        @test all(isfinite.(irf_dk.se))
+        @test all(isfinite.(irf_dk.se)) && all(irf_dk.se .>= 0)   # T159: sqrt(diag) ≥ 0; bracketing below pins the bands
         @test all(irf_dk.ci_lower .<= irf_dk.values)
         @test all(irf_dk.values .<= irf_dk.ci_upper)
 
@@ -1529,7 +1555,11 @@ using Random
         for kernel in [:bartlett, :parzen, :quadratic_spectral]
             V_kernel = driscoll_kraay(X_dk, u_dk; bandwidth=5, kernel=kernel)
             @test size(V_kernel) == (3, 3)
-            @test all(isfinite.(V_kernel))
+            # T159: every kernel gives a symmetric PSD sandwich with positive diagonal
+            # (observed sym 0.0, mineig ≥ 0.0036, diag ≥ 0.0043).
+            @test V_kernel ≈ V_kernel' atol = 1e-10
+            @test minimum(eigvals(Symmetric(V_kernel))) >= -1e-8
+            @test all(isfinite.(V_kernel)) && all(diag(V_kernel) .> 0)  # T159: (see note above)
         end
     end
 
@@ -1645,10 +1675,15 @@ using Random
         degree = 3
         # At left boundary
         v0 = MacroEconometricModels.bspline_basis_value(0.0, 1, degree, knots)
-        @test isfinite(v0)
+        @test v0 == 1.0   # T159: clamped B-splines interpolate 1 at the left edge (exact)
         # At right boundary
         v_end = MacroEconometricModels.bspline_basis_value(15.0, 6, degree, knots)
-        @test isfinite(v_end)
+        # T159 FINDING: the evaluator uses half-open intervals with no right-edge
+        # special case, so B_6(15) = 0 and the smooth-LP design's last row is ALL
+        # ZEROS (partition of unity fails; smoothed IRF(15) ≡ 0). Locked as broken
+        # pending a right-edge fix (special-case x == last knot, or extend knots).
+        @test_broken v_end == 1.0
+        @test isfinite(v_end)  # T159: kept (v==1 broken pending edge fix; finiteness guards no-NaN)
     end
 
     # ==========================================================================
@@ -1671,7 +1706,7 @@ using Random
 
         # SEs should be finite and positive
         @test all(irf_hab.se .> 0)
-        @test all(isfinite.(irf_hab.se))
+        @test all(isfinite.(irf_hab.se))   # T159: kept — positivity + no-collapse pins carry the weight.
 
         # Key property: SEs at long horizons should not collapse below short-horizon SEs.
         # For cross-variable response (var 2), SE at h=10 should be >= SE at h=1
@@ -1691,17 +1726,17 @@ using Random
         # no-collapse assertions above and the bootstrap-bands testset below.
         model_low_bw = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west, bandwidth=2)
         irf_low_bw = lp_irf(model_low_bw; conf_level=0.95)
-        @test all(isfinite.(irf_low_bw.se))
+        @test all(isfinite.(irf_low_bw.se)) && all(irf_low_bw.se .>= 0)   # T159: sqrt(diag) ≥ 0
 
         # With manual bandwidth, _lp_robust_vcov should pass through unchanged
         model_fixed = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:newey_west, bandwidth=5)
         irf_fixed = lp_irf(model_fixed; conf_level=0.95)
-        @test all(isfinite.(irf_fixed.se))
+        @test all(isfinite.(irf_fixed.se)) && all(irf_fixed.se .>= 0)   # T159: sqrt(diag) ≥ 0
 
         # White estimator should still work (passthrough)
         model_white = estimate_lp(Y_hab, 1, horizon; lags=2, cov_type=:white)
         irf_white = lp_irf(model_white; conf_level=0.95)
-        @test all(isfinite.(irf_white.se))
+        @test all(isfinite.(irf_white.se)) && all(irf_white.se .>= 0)   # T159: sqrt(diag) ≥ 0 (degenerate cell ≈1e-17)
 
         # Cumulative IRF CI: cumsum of point estimates implies monotone growth of CI
         irf_cum = cumulative_irf(irf_hab)
@@ -1730,7 +1765,7 @@ using Random
 
         # SEs should be positive and finite
         @test all(irf_ivh.se .> 0)
-        @test all(isfinite.(irf_ivh.se))
+        @test all(isfinite.(irf_ivh.se))   # T159: kept — positivity + no-collapse pins carry the weight.
 
         # SE at h=5 should be >= SE at h=1 (for persistent system)
         @test irf_ivh.se[6, 2] >= irf_ivh.se[2, 2] * 0.7
@@ -1751,7 +1786,7 @@ using Random
 
         # SEs should be finite and positive
         @test all(irf_slh.se .> 0)
-        @test all(isfinite.(irf_slh.se))
+        @test all(isfinite.(irf_slh.se))   # T159: kept — positivity + no-collapse pins carry the weight.
 
         # SE should not collapse at later horizons
         @test irf_slh.se[end, 1] >= irf_slh.se[1, 1] * 0.3
@@ -1964,7 +1999,7 @@ end
             # switching ci_type can never move the estimate itself.
             @test b.values == a.values
             @test b.se == a.se
-            @test all(isfinite, b.ci_lower) && all(isfinite, b.ci_upper)
+            @test all(isfinite, b.ci_lower) && all(isfinite, b.ci_upper)   # T159: kept — excludes the −Inf-lower escape of the ≤ ordering.
             @test all(b.ci_lower .<= b.ci_upper)
             @test b.ci_lower != a.ci_lower
             @test size(b.ci_lower) == size(a.ci_lower)
@@ -1995,6 +2030,7 @@ end
         @test_throws ArgumentError lp_irf(m; ci_type=:bootstrap, bootstrap=:bogus, reps=10)
         # the convenience one-shot form forwards the options
         c = lp_irf(Y, 1, 6; lags=2, ci_type=:bootstrap, bootstrap=:block, reps=100, seed=4)
+        # T159: kept — the ordering passes a −Inf lower bound, so finiteness is meaningful.
         @test all(isfinite, c.ci_lower) && all(c.ci_lower .<= c.ci_upper)
         @test size(c.ci_lower, 1) == 7
     end

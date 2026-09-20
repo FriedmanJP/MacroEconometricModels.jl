@@ -18,6 +18,7 @@ First major release. **Breaking**: downstream `[compat]` of `MacroEconometricMod
 **New**
 
 - Julia 1.13 support: SVAR internals accept any `LowerTriangular` backing store (`cholesky().L` changed wrapper in 1.13).
+- Test hardening (`#258`): `isfinite`-only assertions guarding statistical quantities tightened to value assertions (bounds, identities, determinism checks) across the suite.
 - No exports added or removed.
 
 ---

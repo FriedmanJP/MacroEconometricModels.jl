@@ -37,6 +37,7 @@ using Random
         @test post.n == n
         @test size(post.B_draws) == ((FAST ? 50 : 100), 1 + n*p, n)
         @test size(post.Sigma_draws) == ((FAST ? 50 : 100), n, n)
+        # T159: kept — recovery pinned by the standardized-error < 2 bound in "Direct-Gibbs equivalence and recovery" below.
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
         _tprint("  -> Passed")
@@ -49,6 +50,7 @@ using Random
         @test post isa BVARPosterior
         @test post.sampler == :gibbs
         @test post.n_draws == (FAST ? 25 : 50)
+        # T159: kept — recovery pinned by the standardized-error < 2 bound in "Direct-Gibbs equivalence and recovery" below.
         @test all(isfinite.(post.B_draws))
         @test all(isfinite.(post.Sigma_draws))
         _tprint("  -> Passed")

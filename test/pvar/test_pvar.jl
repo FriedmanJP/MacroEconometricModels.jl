@@ -345,6 +345,7 @@ end
     @testset "cluster-robust SEs" begin
         model = estimate_pvar_feols(pd, 1)
         @test all(model.se .>= 0)
+        # T159: kept — the ≥ 0 pin above guards SE validity.
         @test all(isfinite.(model.se))
     end
 
@@ -511,6 +512,10 @@ end
         @test haskey(mmsc, :hqic)
         @test isfinite(mmsc.bic)
         @test isfinite(mmsc.aic)
+        # T159: Andrews-Lu MMSC identities (J − excess·penalty; bit-exact wiring check).
+        J_t159 = pvar_hansen_j(model)
+        @test mmsc.bic == J_t159.statistic - (model.n_instruments - size(model.Phi, 2)) * log(model.n_obs)
+        @test mmsc.aic == J_t159.statistic - (model.n_instruments - size(model.Phi, 2)) * 2
     end
 
     @testset "lag selection" begin
@@ -687,6 +692,7 @@ end
         m = estimate_pvar(pd, 1; steps=:twostep)
         push!(bs, m.Phi[1, 1]); push!(ses, m.se[1, 1])
     end
+    # T159: kept — the SE/sampling-SD ratio pin below guards SE accuracy.
     @test all(isfinite, ses) && all(ses .>= 0)
     robsd = 1.4826 * median(abs.(bs .- median(bs)))
     ratio = median(ses) / robsd
@@ -720,6 +726,7 @@ end
     @test m.n_instruments != minimum(widths)
     # coefficients finite (padded zero columns contribute nothing to the moment sums)
     @test all(isfinite, coef(m))
+    @test 0.1 < coef(m)[1] < 0.4  # T159: AB one-step biased down on short panels (truth 0.5; observed 0.25)
 end
 
 @testset "PVAR one-step GMM Arellano-Bond H matrix (T081)" begin
@@ -775,9 +782,11 @@ end
     # (3) FOD path: homoskedastic ⇒ H not applied; still finite
     mf = estimate_pvar(pd, 1; steps=:onestep, transformation=:fod, min_lag_endo=2, max_lag_endo=99)
     @test all(isfinite, coef(mf))
+    @test 0.1 < coef(mf)[1] < 0.4  # T159: FOD one-step in the same AB band (observed 0.238)
     # (4) two-step still produces finite estimates (regression guard)
     m2 = estimate_pvar(pd, 1; steps=:twostep, min_lag_endo=2, max_lag_endo=99)
     @test all(isfinite, coef(m2))
+    @test 0.1 < coef(m2)[1] < 0.4  # T159: two-step in the same AB band (observed 0.250)
 end
 
 @testset "PVAR Σ removes fixed effects (T082)" begin

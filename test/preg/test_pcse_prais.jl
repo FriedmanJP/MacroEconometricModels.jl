@@ -261,7 +261,7 @@ end
         resid = ydm .- Xdm * beta
         V = @test_logs (:warn,) match_mode=:any MEM._panel_pcse_vcov(
             Xdm, resid, XtXinv, groups, time_ids; unbalanced=:casewise)
-        @test all(isfinite, V)   # finite, not NaN — Σ̂ never inverted
+        @test all(isfinite, V)   # T159 kept: finite, not NaN — Σ̂ never inverted (the comment IS the contract)
     end
 
     # -------------------------------------------------------------------------

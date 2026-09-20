@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, MacroEconometricModels, Random
+using Test, MacroEconometricModels, Random, StatsAPI
 
 @testset "Fourier Unit Root Tests" begin
     rng = Random.Xoshiro(44556)
@@ -30,15 +30,25 @@ using Test, MacroEconometricModels, Random
         @test haskey(result.critical_values, 5)
         @test haskey(result.critical_values, 1)
         @test haskey(result.critical_values, 10)
-        @test isfinite(result.statistic)
-        @test isfinite(result.f_statistic)
-        @test isfinite(result.pvalue)
-        @test isfinite(result.f_pvalue)
+        # T159: DF-type tau is negative on stationary data; the Fourier-term F is an
+        # SSR ratio ≥ 0; both p-values are probabilities.
+        @test isfinite(result.statistic) && result.statistic < 0
+        @test isfinite(result.f_statistic) && result.f_statistic >= 0  # T159: (see note above)
+        @test isfinite(result.pvalue) && 0 <= result.pvalue <= 1  # T159: (see note above)
+        @test isfinite(result.f_pvalue) && 0 <= result.f_pvalue <= 1  # T159: (see note above)
         @test result.regression == :constant
 
         result_t = fourier_adf_test(y_rw; regression=:trend)
         @test result_t isa FourierADFResult
         @test result_t.regression == :trend
+
+        # T159: designed comparisons (same :constant spec) — stationary tau is more
+        # negative (−3.77 vs −1.86); the sinusoidal DGP yields a far more
+        # significant Fourier F (p-values are cross-spec comparable: 0.001 vs 0.2).
+        result_rw_c = fourier_adf_test(y_rw; regression=:constant)
+        @test result.statistic < result_rw_c.statistic
+        result_smooth = fourier_adf_test(y_smooth)
+        @test result_smooth.f_pvalue < result.f_pvalue
 
         result_f2 = fourier_adf_test(y_smooth; fmax=2)
         @test result_f2.frequency <= 2
@@ -75,11 +85,15 @@ using Test, MacroEconometricModels, Random
         @test result isa FourierKPSSResult
         @test result.frequency >= 1
         @test result.bandwidth > 0
-        @test isfinite(result.statistic)
-        @test isfinite(result.f_statistic)
-        @test isfinite(result.pvalue)
-        @test isfinite(result.f_pvalue)
+        # T159: KPSS LM and the Fourier F are non-negative by construction; p-values
+        # are probabilities. RW inflates the LM two orders of magnitude (0.149 vs 2.88).
+        @test isfinite(result.statistic) && result.statistic >= 0
+        @test isfinite(result.f_statistic) && result.f_statistic >= 0  # T159: (see note above)
+        @test isfinite(result.pvalue) && 0 <= result.pvalue <= 1  # T159: (see note above)
+        @test isfinite(result.f_pvalue) && 0 <= result.f_pvalue <= 1  # T159: (see note above)
         @test result.regression == :constant
+        result_rw_c = fourier_kpss_test(y_rw; regression=:constant)
+        @test result.statistic < result_rw_c.statistic
         @test haskey(result.critical_values, 1)
         @test haskey(result.critical_values, 5)
         @test haskey(result.critical_values, 10)

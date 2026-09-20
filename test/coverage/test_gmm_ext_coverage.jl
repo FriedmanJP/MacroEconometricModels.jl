@@ -192,6 +192,7 @@ end
             @test result.n_params == 2
             @test size(result.vcov) == (2, 2)
             @test all(isfinite, result.vcov)
+            @test all(diag(result.vcov) .>= 0)  # T159: sandwich variances (exact, by construction)
 
             # J-test should be available for overidentified model.
             # Identity weighting: J is not χ²-distributed, so p_value is
@@ -234,6 +235,7 @@ end
             @test result isa SMMModel{Float64}
             @test result.weighting.method == :identity
             @test all(isfinite, stderror(result))
+            @test all(stderror(result) .>= 0)  # T159: standard errors (exact, by construction)
         end
     end
 
@@ -379,6 +381,7 @@ end
             data, d -> autocovariance_moment_contributions(d; lags=1); hac=false)
         @test size(Omega) == (5, 5)
         @test all(isfinite, Omega)
+        @test all(diag(Omega) .>= 0)  # T159: moment covariance diagonal (exact, by construction)
 
         # With HAC + explicit bandwidth
         Omega_hac = MacroEconometricModels.smm_data_covariance(

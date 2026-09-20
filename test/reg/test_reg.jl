@@ -305,9 +305,12 @@ using LinearAlgebra, Statistics, Random, Distributions
         y = X * [1.0, 0.5] + randn(rng, n)
 
         m = estimate_reg(y, X)
-        @test isfinite(aic(m))
-        @test isfinite(bic(m))
-        @test isfinite(loglikelihood(m))
+        # T159: sign pin (Gaussian OLS ll ≈-128; min-objective confusion flips it)
+        # + exact IC wiring (k = dof+1 for σ²).
+        ll_ols = loglikelihood(m)
+        @test isfinite(ll_ols) && ll_ols < 0  # T159: (see sign-pin note above)
+        @test aic(m) ≈ -2 * ll_ols + 2 * (dof(m) + 1) atol = 1e-8
+        @test bic(m) ≈ -2 * ll_ols + log(n) * (dof(m) + 1) atol = 1e-8
     end
 
     @testset "OLS — varnames auto-generated and custom" begin
@@ -679,11 +682,16 @@ end
         X = hcat(ones(n), x_endog)
         Z = hcat(ones(n), z1, z2)
 
+        # T159: point estimates are cov_type-invariant (exact) and recover the truth
+        # β=[1,1.5]: OLS-instead-of-IV would give slope ≈1.87 (endogeneity bias
+        # +0.37), outside the band. Fixed seed ⇒ deterministic, no flake risk.
+        b_ref = coef(estimate_iv(y, X, Z; endogenous=[2], cov_type=:ols))
         for ct in [:ols, :hc0, :hc1, :hc2, :hc3]
             m = estimate_iv(y, X, Z; endogenous=[2], cov_type=ct)
             @test m.cov_type == ct
             @test all(stderror(m) .> 0)
-            @test all(isfinite.(coef(m)))
+            @test coef(m) ≈ b_ref atol = 1e-12
+            @test 0.8 < coef(m)[1] < 1.2 && 1.1 < coef(m)[2] < 1.7
         end
     end
 
@@ -754,9 +762,11 @@ end
         Z = hcat(ones(n), z1)
 
         m = estimate_iv(y, X, Z; endogenous=[2])
-        @test isfinite(aic(m))
-        @test isfinite(bic(m))
-        @test isfinite(loglikelihood(m))
+        # T159: sign pin (pseudo-Gaussian ll ≈-299) + exact IC wiring (k = dof+1).
+        ll_iv = loglikelihood(m)
+        @test isfinite(ll_iv) && ll_iv < 0
+        @test aic(m) ≈ -2 * ll_iv + 2 * (dof(m) + 1) atol = 1e-8
+        @test bic(m) ≈ -2 * ll_iv + log(n) * (dof(m) + 1) atol = 1e-8
     end
 
 end
@@ -835,7 +845,10 @@ end
 
         m = estimate_logit(y, X)
 
+        # T159: deviance identity — Σ deviance-resid² = model deviance = −2ll
+        # (exact to FP; a mis-scaled residual breaks it while staying finite).
         @test all(isfinite.(residuals(m)))
+        @test sum(abs2, residuals(m)) ≈ -2 * loglikelihood(m) rtol = 1e-10
         @test length(residuals(m)) == n
     end
 
@@ -848,9 +861,12 @@ end
 
         m = estimate_logit(y, X)
 
-        @test isfinite(aic(m))
-        @test isfinite(bic(m))
-        @test isfinite(loglikelihood(m))
+        # T159: Bernoulli ll is strictly negative and beats the null (ordering pin);
+        # IC wiring is exact (k = dof, no σ² in discrete choice).
+        ll_logit = loglikelihood(m)
+        @test isfinite(ll_logit) && m.loglik_null < ll_logit < 0  # T159: (see ordering-pin note above)
+        @test aic(m) ≈ -2 * ll_logit + 2 * dof(m) atol = 1e-8
+        @test bic(m) ≈ -2 * ll_logit + log(n) * dof(m) atol = 1e-8
     end
 
     @testset "Logit robust covariance" begin
@@ -1025,7 +1041,9 @@ end
         y = Float64.(rand(rng, n) .< p)
 
         m = estimate_probit(y, X)
+        # T159: deviance identity — Σ deviance-resid² = −2ll (exact to FP).
         @test all(isfinite.(residuals(m)))
+        @test sum(abs2, residuals(m)) ≈ -2 * loglikelihood(m) rtol = 1e-10
     end
 
     @testset "Probit robust covariance" begin
@@ -1632,6 +1650,8 @@ end
         y_hat = predict(m, X_new)
 
         @test length(y_hat) == n_new
+        # T159: kept — subsumed by the exact X*β identity below (array ≈ fails on
+        # any non-finite element); belt-and-braces.
         @test all(isfinite.(y_hat))
 
         # Should equal X_new * beta
@@ -1669,6 +1689,8 @@ end
         p_hat = predict(m, X_new)
 
         @test length(p_hat) == n_new
+        # T159: kept — doubly subsumed by the (0,1) bound and the exact logistic
+        # identity below; belt-and-braces.
         @test all(isfinite.(p_hat))
 
         # Predictions should be probabilities in (0, 1)
@@ -1712,6 +1734,8 @@ end
         p_hat = predict(m, X_new)
 
         @test length(p_hat) == n_new
+        # T159: kept — doubly subsumed by the (0,1) bound and the exact Phi
+        # identity below; belt-and-braces.
         @test all(isfinite.(p_hat))
 
         # Predictions should be probabilities in (0, 1)
@@ -2027,7 +2051,12 @@ end
                              rng=Random.Xoshiro(5))
         for m in (m_iid, m_rob, m_bt)
             @test vec(m.stderr)[2] ≈ theory rtol = 0.25
+            # T159: intercept SE obeys the same closed form (x̄²/n ≈ 0 ⇒ the
+            # (X'X)⁻¹[1,1] factor is ≈1/n like the slope's); observed ratios
+            # 0.99–1.00 for all three SE types, so rtol=0.25 matches the slope pin.
+            @test vec(m.stderr)[1] ≈ theory rtol = 0.25
             @test all(vec(m.stderr) .> 0)
+            # T159: kept — the theory-≈ + positivity pins above guard SEs.
             @test all(isfinite, m.stderr)
         end
         @test m_iid.se_type === :iid
@@ -2098,7 +2127,9 @@ end
         @test_throws ArgumentError estimate_qreg(y, X, 0.5; varnames=["only_one"])
         # Integer inputs are converted internally
         mi = estimate_qreg(collect(1:20) .+ 0.0, hcat(ones(20), collect(1.0:20.0)), 0.5)
-        @test all(isfinite, coef(mi))
+        # T159: y ≡ x exactly ⇒ the LAD minimizer is unique at β=[0,1] (objective 0
+        # attained only at the exact fit); the solver must reproduce it, not just stay finite.
+        @test vec(coef(mi)) ≈ [0.0, 1.0] atol = 1e-8
     end
 end
 
@@ -2167,6 +2198,12 @@ end
             @test rd.b >= rd.h                       # the pilot is at least as wide
             @test rd.n_left > 10 && rd.n_right > 10
             @test rd.se_robust > 0 && rd.se_conventional > 0
+            # T159: exact z/p identities — z = τ̂/se, p = 2(1−Φ(|z|)) (a p computed
+            # from the wrong τ/se pair, e.g. conventional instead of robust, is in
+            # [0,1] but breaks these).
+            @test rd.z_robust ≈ rd.tau_bias_corrected / rd.se_robust rtol = 1e-12
+            @test rd.pvalue_robust ≈ 2 * (1 - Distributions.cdf(Distributions.Normal(), abs(rd.z_robust))) atol = 1e-12
+            # T159: kept — the exact z/p ≈ pins above guard the robust pair; [0,1] completes it.
             @test isfinite(rd.pvalue_robust) && 0 <= rd.pvalue_robust <= 1
         end
     end
@@ -2234,6 +2271,8 @@ end
         ests = Float64[]
         for kern in (:triangular, :epanechnikov, :uniform), pp in (1, 2)
             rd = estimate_rdd(y, x; cutoff=0.0, kernel=kern, p=pp)
+            # T159: kept — subsumed by the 0.8-recovery pin below (scalar ≈ against
+            # a finite target fails on any non-finite value); belt-and-braces pre-push guard.
             @test isfinite(rd.tau_bias_corrected)
             @test rd.kernel === kern && rd.p == pp
             push!(ests, rd.tau_bias_corrected)

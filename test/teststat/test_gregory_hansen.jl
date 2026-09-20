@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, MacroEconometricModels, Random, LinearAlgebra
+using Test, MacroEconometricModels, Random, LinearAlgebra, StatsAPI
 
 @testset "Gregory-Hansen Cointegration Test" begin
     rng = Random.Xoshiro(99001)
@@ -22,9 +22,12 @@ using Test, MacroEconometricModels, Random, LinearAlgebra
         @test result isa GregoryHansenResult
         @test result.model == :C
         @test result.adf_break > 0
-        @test isfinite(result.adf_statistic)
-        @test isfinite(result.zt_statistic)
-        @test isfinite(result.za_statistic)
+        # T159: signs only — the DGP has a SLOPE change, so level-shift-only :C is
+        # misspecified and correctly fails to reject (−3.56 vs CV −4.61). :CS below
+        # is the right spec and carries the rejection + break-recovery pins.
+        @test isfinite(result.adf_statistic) && result.adf_statistic < 0  # T159: (see note above)
+        @test isfinite(result.zt_statistic) && result.zt_statistic < 0  # T159: (see note above)
+        @test isfinite(result.za_statistic) && result.za_statistic < 0  # T159: (see note above)
         @test haskey(result.adf_critical_values, 5)
         @test haskey(result.za_critical_values, 5)
         @test result.n_regressors == 1
@@ -35,28 +38,37 @@ using Test, MacroEconometricModels, Random, LinearAlgebra
         result = gregory_hansen_test(Y; model=:CS)
         @test result isa GregoryHansenResult
         @test result.model == :CS
-        @test isfinite(result.adf_statistic)
-        @test isfinite(result.zt_statistic)
-        @test isfinite(result.za_statistic)
+        # T159: :CS matches the DGP (regime shift) ⇒ decisive rejection (ADF −11.3
+        # vs CV −4.95; Za −178 vs CV −47) and all three break searches land within
+        # ±10 of the true t=100 (observed 96/101/100; a broken search lands at the
+        # trim boundary ~30/170). No zt CV table exists ⇒ sign pin for Zt.
+        @test isfinite(result.adf_statistic) && result.adf_statistic < result.adf_critical_values[5]  # T159: (see note above)
+        @test isfinite(result.zt_statistic) && result.zt_statistic < 0  # T159: (see note above)
+        @test isfinite(result.za_statistic) && result.za_statistic < result.za_critical_values[5]  # T159: (see note above)
+        @test abs(result.adf_break - 100) <= 10
+        @test abs(result.zt_break - 100) <= 10
+        @test abs(result.za_break - 100) <= 10
     end
 
     @testset "Model CT (level + trend)" begin
         result = gregory_hansen_test(Y; model=:CT)
         @test result isa GregoryHansenResult
         @test result.model == :CT
-        @test isfinite(result.adf_statistic)
+        # T159: sign pin only — :CT (no slope change) also misses the DGP's regime
+        # shift and correctly fails to reject (−4.08 vs CV −4.99).
+        @test isfinite(result.adf_statistic) && result.adf_statistic < 0
     end
 
     @testset "Fixed lags" begin
         result = gregory_hansen_test(Y; model=:C, lags=2)
         @test result isa GregoryHansenResult
-        @test isfinite(result.adf_statistic)
+        @test isfinite(result.adf_statistic) && result.adf_statistic < 0   # T159: sign pin (−2.68)
     end
 
     @testset "BIC lag selection" begin
         result = gregory_hansen_test(Y; model=:C, lags=:bic)
         @test result isa GregoryHansenResult
-        @test isfinite(result.adf_statistic)
+        @test isfinite(result.adf_statistic) && result.adf_statistic < 0   # T159: sign pin (−3.56)
     end
 
     @testset "Multiple regressors" begin

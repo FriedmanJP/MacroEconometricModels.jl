@@ -236,9 +236,11 @@ end
         md = estimate_reg(yd, Xd; varnames = ["const", "z", "d"])
         infd = influence_stats(md)
         @test all(isfinite, infd.hat)
-        @test all(isfinite, infd.dffits)
+        @test all(0 .<= infd.hat .<= 1)  # T159: leverages (exact, by construction)
+        @test all(isfinite, infd.dffits)  # T159: kept (DFFITS unbounded; finiteness + flag pins guard it)
         @test all(isfinite, infd.cooksd)
-        @test all(isfinite, infd.dfbetas)
+        @test all(infd.cooksd .>= 0)  # T159: Cook's distances (exact, by construction)
+        @test all(isfinite, infd.dfbetas)  # T159: kept (DFBETAS unbounded; see above)
         @test nn in infd.high_leverage      # leverage-1 obs flagged
         @test isapprox(infd.hat[nn], 1.0; atol = 1e-8)
     end

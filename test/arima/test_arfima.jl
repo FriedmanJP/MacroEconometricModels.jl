@@ -146,7 +146,9 @@ end
         x .-= mean(x)
         r = [phi^abs(k) / (1 - phi^2) for k in 0:n-1]
         ll, s2, e = _dl_concentrated_loglik(x, r)
-        @test isfinite(ll)
+        # T159: concentrated Gaussian ll at σ²≈1, n=300 is ≈-416; a sign flip
+        # (min-objective instead of max-likelihood) gives +416.
+        @test isfinite(ll) && ll < 0
         @test s2 > 0
         # innovations e_t ≈ x_t − φ x_{t−1} for t ≥ 2 (steady state)
         pred_err = x[3:end] .- phi .* x[2:end-1]
@@ -180,7 +182,11 @@ end
         @test isempty(m.theta)
         @test m.p == 1 && m.q == 0
         @test m.converged
-        @test isfinite(m.loglik) && isfinite(m.aic) && isfinite(m.bic)
+        # T159: sign pin (CSS ll ≈-541 here) + exact IC wiring (k = p+q+3 = dof,
+        # N = n−max(p,q) = 399 for CSS — the T108 n_eff convention).
+        @test isfinite(m.loglik) && m.loglik < 0
+        @test m.aic ≈ -2 * m.loglik + 2 * StatsAPI.dof(m) atol = 1e-8
+        @test m.bic ≈ -2 * m.loglik + StatsAPI.dof(m) * log(length(x) - max(m.p, m.q)) atol = 1e-8
         @test length(m.residuals) == length(x)
         @test length(m.fitted) == length(x)
         # coef ordering [c, d, φ…, θ…]
@@ -292,12 +298,20 @@ end
     # Local Whittle estimator (Robinson 1995)
     # =========================================================================
     @testset "local_whittle" begin
-        lw = local_whittle(_sim_arfima(7, 1000, 0.4, 0.0))
+        x_lw = _sim_arfima(7, 1000, 0.4, 0.0)
+        lw = local_whittle(x_lw)
         @test lw isa LocalWhittleResult
         @test -0.5 < lw.d < 1.0
         @test lw.se ≈ 1 / (2 * sqrt(lw.m)) atol = 1e-12   # Robinson (1995) SE
         @test lw.m == floor(Int, sqrt(1000))
-        @test isfinite(lw.objective)
+        # T159: exact reconstruction of Robinson's R(d) from the docstring formula
+        # + local optimality at d̂ (a wrong objective — sign flip, dropped −2d
+        # term — is finite but shifts the value/minimizer).
+        lam_lw, Ip_lw = _periodogram(x_lw .- mean(x_lw))
+        R_lw = d -> log(mean(lam_lw[1:lw.m] .^ (2d) .* Ip_lw[1:lw.m])) - 2 * d * mean(log.(lam_lw[1:lw.m]))
+        @test isfinite(lw.objective)  # T159: (see note above)
+        @test lw.objective ≈ R_lw(lw.d) atol = 1e-10
+        @test R_lw(lw.d) < R_lw(lw.d + 0.05) && R_lw(lw.d) < R_lw(lw.d - 0.05)
 
         # averaged recovery near the truth
         lm = mean(local_whittle(_sim_arfima(s, 800, 0.4, 0.0)).d for s in 1:15)
@@ -343,7 +357,11 @@ end
         @test fc isa MacroEconometricModels.ARIMAForecast
         @test length(fc.forecast) == 10
         @test length(fc.se) == 10
-        @test all(isfinite, fc.forecast)
+        # T159: stationary ⇒ mean-reverting; observed max |fc−mean| is 0.19σ, so 3σ
+        # keeps 15× headroom while a divergent recursion (unit-root mishandling)
+        # exceeds it within a few steps.
+        @test all(isfinite, fc.forecast)  # T159: (see note above)
+        @test maximum(abs.(fc.forecast .- mean(x))) < 3 * std(x)
         @test all(fc.se .> 0)
         @test issorted(fc.se)                         # error variance accumulates
         @test all(fc.ci_lower .< fc.forecast .< fc.ci_upper)

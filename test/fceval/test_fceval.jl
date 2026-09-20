@@ -136,6 +136,7 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics
         f = [0.1, 1.1, 1.9, 3.2, 3.8]
         ev = forecast_evaluate(a, f)
         k_mape = findfirst(==("MAPE"), ev.metrics)
+        # T159: kept — finiteness (not Inf) IS the skip-contract for zero-actual rows.
         @test isfinite(ev.values[1, k_mape])   # zero-actual row skipped, not Inf
     end
 

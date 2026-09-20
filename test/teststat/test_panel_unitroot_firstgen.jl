@@ -212,8 +212,16 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
         r0 = ips_test(X; cs_demean = false)
         r1 = ips_test(X; cs_demean = true)
         @test r0.statistic != r1.statistic         # demeaning changes the statistic
-        @test isfinite(r1.statistic)
-        @test isfinite(hadri_test(X; cs_demean = true).statistic)
+        # T159: demeaning strips the common stochastic trend ⇒ the left-tailed IPS
+        # stat shifts decisively toward rejection (−29.05 vs −0.63) and rejects.
+        @test r1.statistic < r0.statistic
+        @test r1.pvalue < 0.05
+        # T159: Hadri (H0: stationarity) mirrors it — 129.9/p≈0 without demeaning
+        # (rejects) vs −0.96/p=0.83 with it (fails to reject).
+        h0 = hadri_test(X; cs_demean = false)
+        h1 = hadri_test(X; cs_demean = true)
+        @test h1.statistic < h0.statistic
+        @test h0.pvalue < 0.05 && h1.pvalue > 0.05
     end
 
     @testset "PanelData dispatch" begin
@@ -255,7 +263,11 @@ _stat_panel(rng, T=60, N=20) = randn(rng, T, N)
         @test StatsAPI.dof(rf) == 2 * rf.n_units    # Fisher χ²(2N)
         # Fisher stores all four combination statistics.
         @test rf.P > 0
-        @test isfinite(rf.Z) && isfinite(rf.Lstar) && isfinite(rf.Pm)
+        # T159: stationary panel ⇒ individual p→0 ⇒ inverse-normal/logit combos
+        # diverge to −∞ (Z=−25.9, L*=−51.1) while Pm→+∞ (87.4); sign flips break these.
+        @test isfinite(rf.Z) && rf.Z < 0
+        @test isfinite(rf.Lstar) && rf.Lstar < 0  # T159: (see note above)
+        @test isfinite(rf.Pm) && rf.Pm > 0  # T159: (see note above)
         @test length(rf.individual_pvalues) == 20
         # Float32 input converts and runs.
         @test llc_test(Float32.(X)) isa LLCResult{Float32}

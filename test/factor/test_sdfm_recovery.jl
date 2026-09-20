@@ -185,6 +185,8 @@ end
             sdfm = estimate_structural_dfm(X, q; r=2, p=1, H=6, standardize=false,
                 identification=:proxy, instrument=z, normalize=(1, 1.0))
             @test isfinite(sdfm.first_stage_F)
+            @test sdfm.first_stage_F > 500  # T159: strong proxy by DGP construction (z = ε1 + 0.3 noise; observed 1089)
+            # T159: kept — impact recovery pinned by rel < 0.15 in the full-sampling branch above.
             @test all(isfinite, sdfm.B0)
         end
     end

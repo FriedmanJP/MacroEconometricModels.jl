@@ -96,7 +96,7 @@ _min_eig(H) = minimum(eigen(Symmetric(Matrix(H))).values)
         @test m.n == 2
         @test length(m.margins) == 2
         @test size(m.H) == (2, 2, 700)
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: MGARCH ll on 700 obs (seed-fixed; verified by green run)
         @test m.converged
 
         # (5) correlation bounds + unit diagonal (constant R)
@@ -175,6 +175,7 @@ _min_eig(H) = minimum(eigen(Symmetric(Matrix(H))).values)
         # second-stage SEs finite & positive (interior estimate)
         se = stderror(m)
         @test length(se) == 2
+        # T159: kept — positivity below is the pin for SEs.
         @test all(isfinite, se)
         @test all(se .> 0)
     end
@@ -222,6 +223,7 @@ _min_eig(H) = minimum(eigen(Symmetric(Matrix(H))).values)
         Hbar = dropdims(mean(m.H; dims = 3); dims = 3)
         @test isapprox(Hbar, Sigbar; rtol = 0.15)
         se = stderror(m)
+        # T159: kept — positivity is the pin (already strong).
         @test all(isfinite, se) && all(se .> 0)
     end
 

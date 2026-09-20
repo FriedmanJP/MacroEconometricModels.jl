@@ -571,6 +571,7 @@ end
 
     ll_correct = MacroEconometricModels._kalman_loglikelihood(ss_correct, data)
 
+    # T159: kept — spec §T159 removed anchor (negativity + correct-vs-wrong ordering neighbor).
     @test isfinite(ll_correct)
     @test ll_correct < 0.0  # log-likelihood should be negative
 
@@ -579,6 +580,7 @@ end
     ss_wrong = MacroEconometricModels.DSGEStateSpace{Float64}(G1_wrong, impact, Z, d, H_me, Q)
     ll_wrong = MacroEconometricModels._kalman_loglikelihood(ss_wrong, data)
 
+    # T159: kept — spec §T159 removed anchor (correct-vs-wrong ordering neighbors).
     @test isfinite(ll_wrong)
     @test ll_correct > ll_wrong  # correct model should have higher log-likelihood
 end
@@ -600,6 +602,7 @@ end
     ll = _suppress_warnings() do
         MacroEconometricModels._kalman_loglikelihood(ss, data)
     end
+    # T159: kept — scale-invariance (≈, atol=15) below guards the likelihood value.
     @test isfinite(ll)
 
     # Rescale ONLY the nonstationary STATE direction (Z compensates), so the OBSERVED
@@ -649,6 +652,7 @@ end
 
     # Complete data log-likelihood
     ll_complete = MacroEconometricModels._kalman_loglikelihood(ss, x)
+    # T159: kept — negativity below guards the likelihood.
     @test isfinite(ll_complete)
     @test ll_complete < 0.0
 
@@ -660,6 +664,7 @@ end
     x_missing[2, 50] = NaN   # both missing at t=50
 
     ll_missing = MacroEconometricModels._kalman_loglikelihood(ss, x_missing)
+    # T159: kept — differs-pin below guards the missing-data handling.
     @test isfinite(ll_missing)
     @test ll_missing != ll_complete  # should differ from complete data
 
@@ -668,6 +673,7 @@ end
     x_all_nan[:, 30] .= NaN
     ll_all_nan = MacroEconometricModels._kalman_loglikelihood(ss, x_all_nan)
     @test isfinite(ll_all_nan)
+    @test ll_all_nan > ll_complete  # T159: skipped all-NaN period drops its (negative, −1.07 here) term
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -768,12 +774,14 @@ end
     # Numerical stability with large values
     x_large = [1000.0, 1001.0, 1002.0]
     result = MacroEconometricModels._logsumexp(x_large)
+    # T159: kept — closed-form ≈ below guards the value.
     @test isfinite(result)
     @test result ≈ 1000.0 + log(1.0 + exp(1.0) + exp(2.0)) atol=1e-10
 
     # Numerical stability with very negative values
     x_neg = [-1000.0, -1001.0, -1002.0]
     result_neg = MacroEconometricModels._logsumexp(x_neg)
+    # T159: kept — closed-form ≈ below guards the value.
     @test isfinite(result_neg)
     @test result_neg ≈ -1000.0 + log(1.0 + exp(-1.0) + exp(-2.0)) atol=1e-10
 
@@ -880,6 +888,7 @@ end
 
     ll_pf_mean = mean(ll_pf_runs)
 
+    # T159: kept — PF-vs-Kalman 15% agreement below guards both likelihoods.
     @test isfinite(ll_pf_mean)
     @test isfinite(ll_kalman)
 
@@ -926,12 +935,14 @@ end
         ws, ss, data, T_sim; rng=Random.Xoshiro(500), store_trajectory=true)
 
     @test isfinite(ll_init)
+    @test ll_init < 0.0  # T159: PF loglik on T=100×1 obs is deeply negative
     @test ws.reference_trajectory !== nothing
 
     # CSMC run
     ll_csmc = MacroEconometricModels._conditional_smc!(
         ws, ss, data, T_sim; rng=Random.Xoshiro(600))
 
+    # T159: kept — negativity below guards the likelihood.
     @test isfinite(ll_csmc)
     @test ll_csmc < 0.0  # log-likelihood should be negative
 
@@ -1038,6 +1049,7 @@ end
     # Valid parameter vector (sorted order: ρ, σ)
     θ_valid = [0.5, 0.3]
     lp = MacroEconometricModels._log_prior(θ_valid, prior)
+    # T159: kept — closed-form ≈ below guards the value.
     @test isfinite(lp)
     @test lp ≈ logpdf(Beta(2, 2), 0.5) + logpdf(InverseGamma(2.0, 0.5), 0.3)
 
@@ -1069,6 +1081,7 @@ end
         [:y], nothing, :gensys, NamedTuple())
 
     # Should return finite log-likelihood at valid parameter
+    # T159: kept — negativity below guards the likelihood.
     ll = ll_fn([0.8])
     @test isfinite(ll)
     @test ll < 0.0
@@ -1105,7 +1118,9 @@ end
         [:y], nothing, :gensys, NamedTuple(); failures=fails, evals=evals)
     @test ll_fn([1.5]) == -Inf          # explosive ⇒ !is_determined
     @test fails[] == 1 && evals[] == 1
-    @test isfinite(ll_fn([0.6]))
+    ll06_t159 = ll_fn([0.6])  # single call: the eval counter below must stay at 2
+    @test isfinite(ll06_t159)
+    @test ll06_t159 < 0.0  # T159: valid-parameter likelihood is negative (explosive ⇒ −Inf above)
     @test fails[] == 1 && evals[] == 2
     end
 end
@@ -1195,6 +1210,7 @@ end
     @test length(result.phi_schedule) > 1
     @test result.phi_schedule[end] ≈ 1.0
     @test isfinite(result.log_marginal_likelihood)
+    @test result.log_marginal_likelihood < 0.0  # T159: SMC log-ML on T×n obs is deeply negative
 
     # Posterior mean should be close to true value
     w = exp.(result.log_weights .- MacroEconometricModels._logsumexp(result.log_weights))
@@ -1444,6 +1460,7 @@ end
     rng = Random.Xoshiro(123)
 
     ll = pf_ll_fn([0.8], ws, rng)
+    # T159: kept — negativity below guards the likelihood.
     @test isfinite(ll)
     @test ll < 0.0
 
@@ -1489,6 +1506,7 @@ end
 
     @test result.phi_schedule[end] ≈ 1.0
     @test isfinite(result.log_marginal_likelihood)
+    @test result.log_marginal_likelihood < 0.0  # T159: SMC log-ML is deeply negative
     end
 end
 
@@ -1531,6 +1549,7 @@ end
     @test length(result.param_names) == 1
     @test result.param_names[1] == :ρ
     @test isfinite(result.log_marginal_likelihood)
+    @test result.log_marginal_likelihood < 0.0  # T159: SMC log-ML is deeply negative
     @test 0.0 < result.acceptance_rate <= 1.0
     @test result.phi_schedule[end] ≈ 1.0
     end
@@ -1832,6 +1851,7 @@ end
         n_smc=100, rng=Random.Xoshiro(1))
 
     ml = marginal_likelihood(result)
+    # T159: kept — negativity below guards the marginal likelihood.
     @test isfinite(ml)
     @test ml < 0
     end
@@ -1859,6 +1879,7 @@ end
 
     bf = bayes_factor(r1, r2)
     @test isfinite(bf)
+    @test abs(bf) < 2.0  # T159: same model+data ⇒ log-BF is pure cross-seed MC noise (observed −0.48)
     end
 end
 
@@ -1880,6 +1901,7 @@ end
     kernel = [log_c + logpdf(mvn, draws[s, :]) for s in 1:S]
 
     est = MacroEconometricModels._geweke_mhm(draws, kernel)
+    # T159: kept — the ≈ log_c pin below guards the estimator.
     @test isfinite(est)
     @test isapprox(est, log_c; atol=0.3)         # observed ≈ -49.99
 
@@ -1930,6 +1952,7 @@ end
 
     ml_smc = marginal_likelihood(r_smc)
     ml_mh  = marginal_likelihood(r_mh)
+    # T159: kept — Occam bound + SMC↔MHM agreement below guard both estimates.
     @test isfinite(ml_smc)
     @test isfinite(ml_mh)
     # Regression against the old behaviour: the estimator is a genuine evidence
@@ -1983,6 +2006,7 @@ end
 
     ml_lo = run_cfg(0.50)   # few, large steps → non-resampled stages
     ml_hi = run_cfg(0.90)   # many, small steps → resamples ≈ every stage
+    # T159: kept — negativity + resample-invariance below guard the ML vectors.
     @test all(isfinite, ml_lo)
     @test all(isfinite, ml_hi)
     @test all(<(0), ml_lo)
@@ -2214,6 +2238,7 @@ end
         state, spec, [:ρ], [:y], merr, :gensys, NamedTuple(),
         pool, data, T_obs, Random.Xoshiro(99))
 
+    # T159: kept — the != SENTINEL pin below guards the stale-marker check.
     @test all(isfinite, state.log_likelihoods)          # all recomputed to finite values
     @test all(state.log_likelihoods .!= SENTINEL)       # no stale (old-N_x) estimate remains
     end
@@ -2265,6 +2290,7 @@ end
     end
 
     @test ll_thr == ll_ser              # bit-identical, thread-count-independent (#146/#147)
+    # T159: kept — bit-identical == above guards threaded determinism.
     @test all(isfinite, ll_thr)
     end
 end
@@ -2415,6 +2441,7 @@ end
 
     c = StatsAPI.coef(result)
     @test length(c) == 1
+    # T159: kept — the ≈ draw-mean pin below guards the accessor.
     @test isfinite(c[1])
     @test c[1] ≈ mean(result.theta_draws[:, 1])
 
@@ -2778,6 +2805,7 @@ end
     ll = MacroEconometricModels._bootstrap_particle_filter!(ws, nlss, data, 50;
                                                               rng=Random.Xoshiro(42))
 
+    # T159: kept — the > −1e6 no-divergence bound below guards the likelihood.
     @test isfinite(ll)
     @test ll > -1e6  # not absurdly large negative
     end
@@ -2817,10 +2845,12 @@ end
                                                                store_trajectory=true,
                                                                rng=Random.Xoshiro(10))
     @test isfinite(ll1)
+    @test ll1 > -1e6  # T159: same no-divergence bound as ll2 below
 
     # Now run CSMC using the stored reference trajectory
     ll2 = MacroEconometricModels._conditional_smc!(ws, nlss, data, T_obs;
                                                       rng=Random.Xoshiro(20))
+    # T159: kept — the > −1e6 no-divergence bound below guards the likelihood.
     @test isfinite(ll2)
     @test ll2 > -1e6
     end
@@ -2874,6 +2904,7 @@ end
     ll_pf_mean = mean(ll_pf_runs)
 
     # PF should approximate Kalman — within 10% relative error
+    # T159: kept — the 10% PF-vs-Kalman agreement below guards both likelihoods.
     @test isfinite(ll_kalman)
     @test isfinite(ll_pf_mean)
     rel_error = abs(ll_pf_mean - ll_kalman) / abs(ll_kalman)
@@ -3019,6 +3050,7 @@ end
     end
 
     # All particles should be finite
+    # T159: kept — per-particle ≈ policy (1e-10) above guards the values.
     @test all(isfinite, ws.particles)
 
     # Zero-allocation check (warmup + measure)
@@ -3083,6 +3115,7 @@ end
     ll = MacroEconometricModels._bootstrap_particle_filter!(
         ws, pss, data, T_obs; rng=rng)
 
+    # T159: kept — the > −1e6 no-divergence bound below guards the likelihood.
     @test isfinite(ll)
     @test ll > -1e6  # not absurdly negative
     end
@@ -3128,6 +3161,7 @@ end
     ll = MacroEconometricModels._bootstrap_particle_filter!(
         ws, pss, data, T_obs; rng=rng)
 
+    # T159: kept — the > −1e6 no-divergence bound below guards the likelihood.
     @test isfinite(ll)
     @test ll > -1e6
     end
@@ -3171,6 +3205,7 @@ end
     ll = MacroEconometricModels._conditional_smc!(
         ws, pss, data, T_obs; rng=rng)
 
+    # T159: kept — the > −1e6 no-divergence bound below guards the likelihood.
     @test isfinite(ll)
     @test ll > -1e6
     end
@@ -3225,9 +3260,9 @@ end
     end
     ll_pf_mean = mean(lls)
 
-    # PF should be in the right ballpark (within 30% of Kalman)
+    # PF should be in the right ballpark (within 5% of Kalman; observed 0.15%)
     @test isfinite(ll_pf_mean)
-    @test abs(ll_pf_mean - ll_kalman) / abs(ll_kalman) < 0.3
+    @test abs(ll_pf_mean - ll_kalman) / abs(ll_kalman) < 0.05  # T159: tightened from the too-loose 0.3 (spec archetype; observed 0.0015)
     end
 end
 
@@ -3280,6 +3315,9 @@ end
         rng=Xoshiro(123))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
+    # T159 [reworked for cross-platform CI]: SMC² log-ML sign is
+    # sampling-path-dependent (ubuntu CI gives +55..+74 at identical
+    # seeds); the isfinite pin above is the portable contract.
     @test any(r -> r > 0, result.ess_history)
     end
 end
@@ -3318,6 +3356,7 @@ end
                  initial_coeffs=copy(coeffs1))
     @test sol3 isa MacroEconometricModels.ProjectionSolution
     @test isfinite(MacroEconometricModels.max_euler_error(sol3))
+    @test MacroEconometricModels.max_euler_error(sol3) < 1e-10  # T159: linear model ⇒ exact recovery (observed 3e-17)
     end
 end
 
@@ -3354,6 +3393,7 @@ end
                  initial_coeffs=copy(coeffs1))
     @test sol3 isa MacroEconometricModels.ProjectionSolution
     @test isfinite(MacroEconometricModels.max_euler_error(sol3))
+    @test MacroEconometricModels.max_euler_error(sol3) < 1e-10  # T159: linear model ⇒ exact recovery (observed 3e-17)
     end
 end
 
@@ -3381,6 +3421,9 @@ end
         rng=Xoshiro(999))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
+    # T159 [reworked for cross-platform CI]: SMC² log-ML sign is
+    # sampling-path-dependent (ubuntu CI gives +55..+74 at identical
+    # seeds); the isfinite pin above is the portable contract.
     end
 end
 
@@ -3409,6 +3452,9 @@ end
         rng=Xoshiro(555))
     @test result isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result.log_marginal_likelihood)
+    # T159 [reworked for cross-platform CI]: SMC² log-ML sign is
+    # sampling-path-dependent (ubuntu CI gives +55..+74 at identical
+    # seeds); the isfinite pin above is the portable contract.
     end
 end
 
@@ -3447,6 +3493,9 @@ end
 
     @test result_da isa MacroEconometricModels.BayesianDSGE
     @test isfinite(result_da.log_marginal_likelihood)
+    # T159 [reworked for cross-platform CI]: SMC² log-ML sign is
+    # sampling-path-dependent (ubuntu CI gives +55..+74 at identical
+    # seeds); the isfinite pin above is the portable contract.
 
     # Posterior means should be in same ballpark (both target same posterior)
     rho_std = mean(result_std.theta_draws[:, 1])
@@ -3655,8 +3704,10 @@ end
     @test pm.hessian[1, 1] > 0
     @test pm.inv_hessian[1, 1] > 0
     @test pm.inv_hessian[1, 1] ≈ 1 / pm.hessian[1, 1] rtol=1e-6
+    # T159: kept — != pin + mode-maximizer below guard posterior and Laplace ML.
     @test isfinite(pm.log_posterior)
     @test isfinite(pm.log_likelihood)
+    @test pm.log_likelihood < 0.0  # T159: mode likelihood on T=300×1 obs is deeply negative
     @test isfinite(pm.laplace_log_ml)
     # Laplace ML must be below the log posterior maximum plus the Gaussian volume
     # term only when det H > 1; sanity: it is finite and differs from log posterior
@@ -3758,6 +3809,7 @@ end
     end
     @test isnan(pm.laplace_log_ml)
     # Diagonal fallback proposal is still usable
+    # T159: kept — the > 0 pin below guards the fallback.
     @test isfinite(pm.inv_hessian[1, 1])
     @test pm.inv_hessian[1, 1] > 0
     end
@@ -3838,10 +3890,12 @@ end
     @test d isa MCMCDiagnostics{Float64}
     @test d.param_names == [:ρ]
     @test d.n_draws == 1500                    # burnin discarded
+    # T159: kept — the < 1.2 pin below guards mixing.
     @test isfinite(d.rhat[1])
     @test d.rhat[1] < 1.2                      # short but reasonably mixed chain
     @test 0 < d.ess_bulk[1] <= 1500 * log10(1500.0)
     @test 0 < d.ess_tail[1]
+    # T159: kept — p-value ∈ [0,1] below guards the diagnostic.
     @test isfinite(d.geweke_z[1])
     @test 0 <= d.geweke_p[1] <= 1
     @test abs(d.mean[1] - 0.8) < 0.3
@@ -3933,6 +3987,7 @@ end
     @test fit.solver == :gensys
 
     bml = bridge_sampling_ml(fit; rng=Random.Xoshiro(3))
+    # T159: kept — 1-nat agreement with SMC/Laplace below guards the estimate.
     @test isfinite(bml)
 
     # Documented tolerance: 1 nat against the SMC tempering path and Laplace
@@ -3946,11 +4001,13 @@ end
 
     # Student-t proposal agrees closely with the normal proposal
     bml_t = bridge_sampling_ml(fit; proposal=:t, df=5, rng=Random.Xoshiro(3))
+    # T159: kept — t↔normal agreement below guards the proposal path.
     @test isfinite(bml_t)
     @test abs(bml_t - bml) < 0.5
 
     # Works on SMC draws too (context stored for all methods)
     bml_smc = bridge_sampling_ml(smc_fit; rng=Random.Xoshiro(3))
+    # T159: kept — SMC↔MH agreement below guards the context path.
     @test isfinite(bml_smc)
     @test abs(bml_smc - bml) < 0.5
 
@@ -4128,6 +4185,7 @@ end
     @test "var_y" in ppr.stat_names
     @test "ar1_y" in ppr.stat_names
     j = findfirst(==("var_y"), ppr.stat_names)
+    # T159: kept — positivity below guards the prior-predictive variance.
     @test isfinite(mean(ppr.stats[:, j]))
     @test mean(ppr.stats[:, j]) > 0
     io = IOBuffer()
@@ -4201,6 +4259,7 @@ end
                                       rng=Random.Xoshiro(14))
     @test ppc2.stat_names == ["mean_y", "var_y", "ar1_y"]   # no phantom cross-corrs
     @test all(isfinite, ppc2.observed)
+    @test ppc2.observed[2] > 0  # T159: observed var_y is positive (stat order pinned above)
     end
 end
 
@@ -4231,6 +4290,7 @@ end
     # Numerically stable at extreme y where naive σ(y)(1-σ(y)) under/overflows
     yext = [-800.0, -800.0, -800.0, 900.0]
     @test isfinite(log_jacobian(pt, yext))
+    @test log_jacobian(pt, yext) < 0  # T159: sigmoid derivative < 1 everywhere ⇒ log-Jacobian negative (exact)
 end
 
 @testset "RWMH transform=true: boundary-safe walk (#337)" begin
@@ -4876,6 +4936,7 @@ end
         @test r_smc.param_names == [:rho_z]
         @test r_smc.phi_schedule[end] ≈ 1.0
         rho_smc = mean(r_smc.theta_draws[:, 1])
+        # T159: kept — recovery pins below guard the posterior means.
         @test isfinite(rho_smc)
         @test abs(rho_smc - rho_true) < abs(rho_smc - 0.50) || abs(rho_smc - rho_true) < 0.25
 
@@ -4886,6 +4947,7 @@ end
         @test r_mh isa BayesianDSGE{Float64}
         @test r_mh.method === :rwmh
         rho_mh = mean(r_mh.theta_draws[:, 1])
+        # T159: kept — recovery pin below guards the posterior mean.
         @test isfinite(rho_mh)
         @test abs(rho_mh - rho_true) < 0.30
     end

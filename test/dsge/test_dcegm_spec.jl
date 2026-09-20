@@ -64,6 +64,7 @@ end
     @test r0 ≈ firm.alpha * firm.Z * kl^(firm.alpha - 1) - firm.delta atol=1e-12
     @test dcegm_capital_demand(firm, 0.10) < Kd
     @test dcegm_firm_wage(firm, 0.10) < w0
+    # T159: kept — negative assertion (K^d singular at r = -δ) is already the strong form; wage == 0 pinned below.
     @test !isfinite(dcegm_capital_demand(firm, -firm.delta))
     @test dcegm_firm_wage(firm, -firm.delta) == 0.0
     @test_throws ArgumentError DCEGMFirm(; alpha=1.5)
@@ -144,18 +145,23 @@ end
     @test tr0.K[1] ≈ eq.K atol=1e-12
     @test maximum(abs.(tr0.K .- eq.K)) < 5e-2
     @test all(isfinite, tr0.r) && all(isfinite, tr0.A)
+    # T159: zero shock ⇒ flat rate path (observed maxdev 6.2e-4) and assets track K (observed maxdev 0.031).
+    @test maximum(abs.(tr0.r .- eq.r)) < 5e-3
+    @test maximum(abs.(tr0.A .- eq.K)) < 5e-2
 
     Z = [firm.Z * (1 + 0.03 * 0.6^(n - 1)) for n in 1:8]
     tr = dcegm_mit(eq, Z)
     @test tr.K[1] ≈ eq.K atol=1e-12
     @test all(isfinite, tr.K) && all(isfinite, tr.r)
     @test tr.r[1] != eq.r                         # TFP moves MPK on impact
+    @test tr.r[1] > eq.r  # T159: TFP+ raises MPK ⇒ r rises on impact (observed 0.1042 vs 0.0988)
     resp = irf(eq, 8; shock_size=0.03, persist=0.6)
     @test resp isa ImpulseResponse
     @test resp.variables == ["K", "r", "w", "Y", "Z"]
     @test all(isfinite, resp.values)
     @test resp.values[1, 1, 1] ≈ 0 atol=1e-10     # K predetermined
     @test maximum(abs, resp.values[:, 2, 1]) > 0  # r IRF finite and nonzero
+    @test resp.values[1, 2, 1] > 0  # T159: r IRF impact is positive (observed 0.0054)
     @test_throws ArgumentError dcegm_mit(eq, [firm.Z])
 end
 
@@ -166,6 +172,7 @@ end
                                                a_max=60.0, disutility=0.5)
     eq1 = dcegm_steady_state(factory, firm; n_sim=80, max_iter=16, tol=2e-3)
     eq2 = dcegm_steady_state(factory, firm; n_sim=160, max_iter=16, tol=2e-3)
+    # T159: kept — the n_sim agreement below guards simulation stability.
     @test isfinite(eq1.r) && isfinite(eq2.r)
     @test abs(eq1.r - eq2.r) < 1e-4
 end

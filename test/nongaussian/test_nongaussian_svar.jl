@@ -526,6 +526,7 @@ end
         ri = regime[2:end]
         ev = identify_external_volatility(modelsid, ri; regimes=2)
         @test size(ev.se) == (n_sid, n_sid)
+        # T159: kept — nonnegativity below is the pin for standard errors.
         @test all(isfinite, ev.se)
         @test all(ev.se .>= 0)
 
@@ -586,6 +587,7 @@ end
             B_k3, Matrix{Float64}(I, n_sid, n_sid), Σ_k3, Λ_k3,
             [collect(1:3) for _ in 1:3], -10.0, fill(NaN, n_sid, n_sid), V_k3)
         w_k3 = test_lambda_distinct(ev_k3; pairs=[(1, 2)])
+        # T159: kept — the rejection pin below guards the K=3 separation logic.
         @test isfinite(w_k3.pvalue[1])
         @test w_k3.pvalue[1] < 0.05
 

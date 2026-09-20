@@ -43,17 +43,24 @@ end
     @test hh.ss_inputs[:r] == ss.r
     @test hh.ss_inputs[:w] == ss.w
     @test isfinite(hh.ss_outputs[:A]) && isfinite(hh.ss_outputs[:C])
+    # T159: block aggregates reproduce the SS (A ≈ K within 0.5% observed) and consumption is positive.
+    @test hh.ss_outputs[:A] ≈ ss.K rtol = 0.05
+    @test hh.ss_outputs[:C] > 0
     @test occursin("MitBlock", sprint(show, hh))
 
     Th = 6
     flat = Dict(:r => fill(ss.r, Th), :w => fill(ss.w, Th))
     base = MacroEconometricModels._block_evaluate(hh, flat, Th)
+    # T159: kept — the 25% SS-tracking pin below guards block evaluation.
     @test all(isfinite, base[:A]) && all(isfinite, base[:C])
     @test maximum(abs, base[:A] .- hh.ss_outputs[:A]) < 0.25 * abs(hh.ss_outputs[:A])
 
     Jb = block_jacobian(hh, Th)
     @test Set(keys(Jb)) == Set([(:A, :r), (:A, :w), (:C, :r), (:C, :w)])
     @test all(isfinite, Jb[(:A, :r)]) && all(isfinite, Jb[(:C, :w)])
+    # T159: contemporaneous partials have the textbook signs (observed dA/dr = 1.53, dC/dw = 0.095).
+    @test Jb[(:A, :r)][1, 1] > 0  # higher r → more saving
+    @test Jb[(:C, :w)][1, 1] > 0  # higher w → more consumption
 
     firm = _cd_firm_block(ss.K, ss.L, m.Z, m.alpha, m.delta)
     mkt = SimpleBlock(x -> [x[1] - x[2]];
@@ -67,15 +74,17 @@ end
 
     gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
                        T_horizon=Th, target_tol=Inf)
+    # T159: kept — the H_U·K + H_Z·dZ < 1e-8 residual identity below is the strong pin.
     @test all(isfinite, gej.H_U) && all(isfinite, gej.H_Z)
     @test size(gej.H_U) == (Th, Th)
 
     dZ = Dict(:Z => [0.01 * 0.8^(t - 1) for t in 1:Th])
     ir = ssj_irf(gej, dZ; residual=false)
+    # T159: kept — the residual identity below pins the whole IRF solve.
     @test all(isfinite, ir.paths[:K])
     @test all(isfinite, ir.paths[:A])
-    @test all(isfinite, ir.paths[:r])
-    @test all(isfinite, ir.paths[:Y])
+    @test all(isfinite, ir.paths[:r])  # T159: kept (residual identity below pins the solve)
+    @test all(isfinite, ir.paths[:Y])  # T159: kept (residual identity below pins the solve)
     @test maximum(abs, gej.H_U * ir.paths[:K] .+ gej.H_Z * dZ[:Z]) < 1e-8
 
     @test_throws ArgumentError HetBlock(spec, ss; outputs=[:N])
@@ -103,11 +112,13 @@ end
     dag = combine_blocks(firm, hh, mkt; name=:ct_cd, ss_tol=1e-5)
     gej = ssj_jacobian(dag; unknowns=[:K], targets=[:asset_mkt], shocks=[:Z],
                        T_horizon=Th, target_tol=Inf)
+    # T159: kept — the residual identity below pins the whole IRF solve.
     @test all(isfinite, gej.H_U) && all(isfinite, gej.H_Z)
     dZ = Dict(:Z => [0.01 * 0.8^(t - 1) for t in 1:Th])
     ir = ssj_irf(gej, dZ; residual=false)
     @test all(isfinite, ir.paths[:K]) && all(isfinite, ir.paths[:A])
     @test all(isfinite, ir.paths[:r])
+    @test maximum(abs, gej.H_U * ir.paths[:K] .+ gej.H_Z * dZ[:Z]) < 1e-8  # T159: residual identity mirrors the lifecycle block (observed 8.7e-19)
 end
 
 @testset "G-16: DCEGM HetBlock throws G-11 (#650)" begin

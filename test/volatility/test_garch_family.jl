@@ -162,7 +162,9 @@ end
         # standard errors: right length, finite
         se = stderror(ig)
         @test length(se) == length(coef(ig))
-        @test all(isfinite, se)
+        @test all(isfinite, se) && all(se .> 0)
+        # T159: sandwich ≈ Hessian within the 0.6–1.6 band (observed 1.00–1.44).
+        @test all(0.6 .<= se ./ stderror(ig; cov_type=:hessian) .<= 1.6)
     end
 
     @testset "IGARCH: EWMA / RiskMetrics-like small ω" begin
@@ -191,6 +193,11 @@ end
         @test dof(cg) == 6
         se = stderror(cg)
         @test length(se) == 6
+        # T159 [reworked for cross-platform CI]: sandwich-SE positivity/scale at the
+        # CGARCH optimum is optimizer-path-dependent (ubuntu CI lands at a different
+        # optimum with a non-positive sandwich diagonal and out-of-band ratios), so
+        # the portable contract is finiteness; value is pinned above (param bounds,
+        # persistence identities, variance reconstruction).
         @test all(isfinite, se)
     end
 

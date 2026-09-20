@@ -181,6 +181,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
         # Posterior summary should work
         ps = posterior_summary(result)
         @test haskey(ps, :alpha)
+        # T159: kept — 6-draw dispatch smoke under a -Inf likelihood (chain stuck); finiteness is the stable contract.
         @test isfinite(ps[:alpha][:mean])
 
         # #136: theta0 as a Dict (order-independent) is accepted through the HA method;
@@ -246,6 +247,7 @@ const _HUG_SS_M2 = compute_steady_state(_HUG_SPEC_M2; max_iter=FAST ? 80 : 200, 
                 :ssj, (T_horizon=30, n_reduced=10))
         @test solved_at === :posterior_mean
         @test theta_used ≈ [0.5]                    # built at the mean, not spec's 0.36
+        # T159: kept — provenance marking above is the test's pin; G1 smoke only.
         @test all(isfinite, linear_sol.G1)
 
         # No candidate solves (unsupported method ⇒ no HADSGESolution) ⇒ loud error, never a
@@ -268,6 +270,7 @@ end
     if !(FAST || NUMERICAL)
     ss = compute_steady_state(spec; r_bounds=(-0.02, 0.04), max_iter=100, tol=1e-3)
     @test ss.aggregates[:K] > 0
+    # T159: kept — the clearing + r*-bracket pins below guard the SS price.
     @test isfinite(ss.prices[:r])
     @test haskey(ss.prices, :w)                         # Cobb-Douglas wage still produced
     @test abs(ss.excess_demand) < 5e-3                  # market essentially clears
@@ -371,6 +374,7 @@ end
     dh = den_haan_test(ks; T_sim=150, T_burn=100)
     @test dh isa DenHaanAccuracy
     @test dh.aggregate === :K
+    # T159: kept — the ordering is the pin here; dh_max < 1.0 below guards accuracy.
     @test isfinite(dh.dh_max) && dh.dh_max >= dh.dh_mean >= 0
     @test dh.sigma_ref > 0 && dh.sigma_plm > 0
     @test length(dh.ref_path) == 150 && length(dh.plm_path) == 150
@@ -893,6 +897,7 @@ end
         thr = dcegm_threshold(sol, t, 2, 1; M_lo=0.5, M_hi=60.0)
         idx = findlast(i -> D_vfi[t, i, 2] == 2, 1:length(Mg))
         @test idx !== nothing
+        # T159: kept — the 2-step oracle agreement below guards the threshold.
         @test isfinite(thr)
         @test abs(thr - Mg[idx]) <= 2 * step
     end
@@ -967,6 +972,7 @@ end
     # Retirement is absorbing, so its share can only rise with age.
     @test issorted(dist.shares[:, 1])
     @test dist.shares[1, 2] ≈ 1.0                       # everyone starts working
+    # T159: kept — positivity is the real pin; exact-mass + absorbing-share pins surround it.
     @test all(isfinite, dist.consumption) && all(dist.consumption .> 0)
     @test all(dist.assets .>= -1e-12)
     report(dist)                                        # display smoke test
@@ -1542,6 +1548,7 @@ end # @testset "HA-DSGE Types"
             @test ss.euler.nodes.max < ss.euler.midpoints.max
             # mean < max, and both are finite and reported.
             @test ss.euler.midpoints.mean < ss.euler.midpoints.max
+            # T159: kept — mean < max above is the pin; max ≈ mid/nodes are pinned too.
             @test isfinite(ss.euler.midpoints.mean)
             @test ss.euler.midpoints.n_evaluated > 0
 

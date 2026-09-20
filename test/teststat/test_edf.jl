@@ -76,9 +76,11 @@ end
 
     @testset "AD ln-clamp guards against Inf at boundary PITs" begin
         # Extreme values push Φ to 0 / 1; A² must stay finite, never ±Inf/NaN.
+        # T159: kept as a genuine smoke path — adversarial-boundary data has no
+        # meaningful reference value; A²'s value pins live in the oracle testsets below.
         y = [-40.0, -20.0, 0.0, 20.0, 40.0]
         r = edf_test(y; dist=:normal, test=:ad, params=:specified, theta=(0.0, 1.0))
-        @test isfinite(r.statistic)
+        @test isfinite(r.statistic)  # T159: (see note above)
         @test !isnan(r.statistic)
     end
 
@@ -137,7 +139,7 @@ end
         @test r.raw_statistic ≈ 0.028813951429759826 atol=1e-7
         n = length(EDF_VEC)
         @test r.statistic ≈ 0.028813951429759826 * (1 + 0.5/n) atol=1e-8
-        @test isfinite(r.pvalue) && 0.0 < r.pvalue <= 1.0
+        @test isfinite(r.pvalue) && 0.0 < r.pvalue <= 1.0  # T159: kept (oracle ≈ pins above; probability completes it)
     end
 
     @testset "Estimated normal — Lilliefors (statsmodels oracle, LIVE)" begin
@@ -179,7 +181,14 @@ end
                 # estimated route
                 re = edf_test(data; dist=dist, test=test, params=:estimate)
                 @test re isa EDFTestResult
+                # T159: exact definitional bounds — KS D ∈ [0,1] (sup |CDF gap|);
+                # CvM/AD/Watson are non-negative integrals (observed ≥ 0.029).
                 @test isfinite(re.statistic)
+                if test == :ks
+                    @test 0 <= re.statistic <= 1
+                else
+                    @test re.statistic >= 0
+                end
                 @test MacroEconometricModels.StatsAPI.nobs(re) == length(data)
                 # renders without error
                 @test (io = IOBuffer(); show(io, re); occursin("EDF Goodness-of-Fit", String(take!(io))))
@@ -191,7 +200,7 @@ end
                 # specified route (distribution-free asymptotics, always a p-value)
                 rs = edf_test(data; dist=dist, test=test, params=:specified,
                               theta=specified_theta[dist])
-                @test isfinite(rs.pvalue)
+                @test isfinite(rs.pvalue)   # T159: kept — subsumed by the [0,1] pin below.
                 @test 0.0 <= rs.pvalue <= 1.0
                 @test !isempty(rs.critical_values)
             end
@@ -241,6 +250,6 @@ end
         yi = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 2, 3, 4, 5, 6]
         r = edf_test(yi; dist=:normal, test=:ad, params=:estimate)
         @test r isa EDFTestResult{Float64}
-        @test isfinite(r.statistic)
+        @test isfinite(r.statistic) && r.statistic >= 0   # T159: AD A² ≥ 0 exact (0.22 here)
     end
 end

@@ -351,6 +351,9 @@ using Random
         # Forecasts should be finite
         @test all(isfinite, fc.observables)
         @test all(isfinite, fc.factors)
+        # T159: white-noise input ⇒ AR forecasts stay near zero (observed 4e-4/0.16).
+        @test maximum(abs, fc.factors) < 0.01
+        @test maximum(abs, fc.observables) < 0.5
     end
 
     @testset "Forecast Methods" begin
@@ -391,6 +394,7 @@ using Random
         factor_norm_start = norm(fc.factors[1, :])
         factor_norm_end = norm(fc.factors[end, :])
         # Not always true due to estimation uncertainty, so just check finiteness
+        # T159: kept — the decay property is MC-flaky by design (see comment); #256 territory.
         @test isfinite(factor_norm_start)
         @test isfinite(factor_norm_end)
     end
@@ -439,6 +443,7 @@ using Random
 
         @test size(model.factors) == (T_obs, q)
         @test all(isfinite, model.common_component)
+        @test model.idiosyncratic == model.X .- model.common_component  # T159: X = C + E by construction (bit-exact)
     end
 
     @testset "Wide Panel (N > T)" begin
@@ -480,6 +485,8 @@ using Random
 
         model = estimate_gdfm(X, q)
         @test all(isfinite, model.common_component)
+        @test model.idiosyncratic == model.X .- model.common_component  # T159: X = C + E by construction
+        # T159: kept — adversarial 1e-8-collinear input; no factor reference exists.
         @test all(isfinite, model.factors)
     end
 
@@ -491,11 +498,13 @@ using Random
         X_large = 1e6 * randn(rng, T_obs, N)
         model_large = estimate_gdfm(X_large, q; standardize=true)
         @test all(isfinite, model_large.common_component)
+        @test model_large.idiosyncratic == model_large.X .- model_large.common_component  # T159: X = C + E by construction
 
         # Very small values
         X_small = 1e-6 * randn(rng, T_obs, N)
         model_small = estimate_gdfm(X_small, q; standardize=true)
         @test all(isfinite, model_small.common_component)
+        @test model_small.idiosyncratic == model_small.X .- model_small.common_component  # T159: X = C + E by construction
     end
 
     @testset "Mixed Scaling" begin
@@ -508,7 +517,9 @@ using Random
 
         model = estimate_gdfm(X, q; standardize=true)
         @test all(isfinite, model.common_component)
+        @test model.idiosyncratic == model.X .- model.common_component  # T159: X = C + E by construction
         @test all(isfinite, r2(model))
+        @test all(0 .<= r2(model) .<= 1)  # T159: R² shares live in [0,1] (observed [0.18, 0.99])
     end
 
     @testset "Constant Column" begin
@@ -521,6 +532,7 @@ using Random
         model = estimate_gdfm(X, q; standardize=true)
         # Should handle constant column gracefully
         @test all(isfinite, model.common_component)
+        @test model.idiosyncratic == model.X .- model.common_component  # T159: X = C + E by construction
     end
 
     # ==========================================================================
@@ -653,6 +665,7 @@ using Random
         model = estimate_gdfm(X_int, q)
         @test model isa GeneralizedDynamicFactorModel{Float64}
         @test all(isfinite, model.common_component)
+        @test model.idiosyncratic == model.X .- model.common_component  # T159: X = C + E by construction
     end
 
     # ==========================================================================

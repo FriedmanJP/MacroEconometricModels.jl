@@ -212,6 +212,7 @@ end
 
     fc = forecast(post, 6)
     @test size(fc.forecast) == (6, 2)
+    # T159: kept — bands-contain-point ordering below guards the forecast level.
     @test all(isfinite, fc.forecast)
     @test all(isfinite, fc.ci_lower) && all(isfinite, fc.ci_upper)
     @test all(fc.ci_lower .<= fc.forecast .<= fc.ci_upper)
@@ -219,7 +220,12 @@ end
     r = irf(post, 8; method=:cholesky)
     @test size(r.point_estimate) == (8, 2, 2)
     @test all(isfinite, r.point_estimate)
+    # T159: Cholesky impact diagonals are positive per draw, hence positive in the posterior mean.
+    @test r.point_estimate[1, 1, 1] > 0
+    @test r.point_estimate[1, 2, 2] > 0
     @test all(isfinite, r.quantiles)
+    # T159: per-cell quantiles are sorted by construction.
+    @test all(r.quantiles[:, :, :, 1] .<= r.quantiles[:, :, :, end])
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -63,6 +63,7 @@ end
         @test d.N_obs == 753
         @test d.n_vars == 22
         # lwage / wage are NaN for the 325 non-participants.
+        # T159: exact-count pins (isfinite is the classifier, not the guard).
         @test count(isfinite, d[:, "lwage"]) == 428
         @test count(!isfinite, d[:, "lwage"]) == 325
         @test sum(d[:, "inlf"]) == 428
@@ -156,9 +157,10 @@ end
         @test mm.sigma ≈ mt.sigma atol=0.02
         @test 0 ≤ mm.rho < 0.1
         # MLE delivers rho/sigma standard errors directly (two-step does not).
+        # T159: positivity is the pin on all three SEs (already strong).
         @test isfinite(mm.rho_se) && mm.rho_se > 0
         @test isfinite(mm.sigma_se) && mm.sigma_se > 0
-        @test isfinite(mm.lambda_se) && mm.lambda_se > 0
+        @test isfinite(mm.lambda_se) && mm.lambda_se > 0  # T159: (see above)
         @test isnan(mt.rho_se) && isnan(mt.sigma_se)   # two-step: not identified directly
     end
 

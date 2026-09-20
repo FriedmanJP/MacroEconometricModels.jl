@@ -210,8 +210,7 @@ end
         @test m.nM == 4
         @test m.nQ == 1
         @test m.n_iter >= 1
-        @test m.loglik < 0 || m.loglik isa Float64  # loglik is finite
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: Gaussian DFM loglik on this DGP (observed -121.5; replaces the vacuous || -tautology)
     end
 
     @testset "EM convergence" begin
@@ -220,7 +219,7 @@ end
         m = nowcast_dfm(Y, 6, 2; r=2, p=1, max_iter=50, thresh=1e-4)
 
         @test m.n_iter <= 50
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: EM loglik on this DGP (observed -41.4)
     end
 
     @testset "All monthly (no quarterly)" begin
@@ -384,6 +383,7 @@ end
             rmse_model = sqrt(mean((m.X_sm[rows, 1:3] .- truth[rows, 1:3]) .^ 2))
             naive = repeat(Y[T_obs-k, 1:3]', k, 1)
             rmse_naive = sqrt(mean((naive .- truth[rows, 1:3]) .^ 2))
+            # T159: kept — the mean-ratio < 0.5 below guards nowcast accuracy.
             @test isfinite(rmse_model) && isfinite(rmse_naive)
             rmse_model / rmse_naive
         end
@@ -415,6 +415,7 @@ end
         log_pars = log.([m.lambda, m.theta, m.miu, m.alpha])
         @test m.converged == !any(x -> abs(x) >= 5 - 1e-3, log_pars)
         @test m.converged || occursin("WARNING", sprint(show, m))
+        # T159: kept — the sentinel guard is already the strong form (finite + > -1e9).
         @test isfinite(m.loglik) && m.loglik > -1e9   # not the degenerate -1e10 sentinel
         # A well-conditioned interior fit converges and does NOT warn.
         m2 = nowcast_bvar(randn(Random.Xoshiro(300), 100, 6), 4, 2; lags=3, max_iter=50)
@@ -488,6 +489,7 @@ end
         mls = [MEM._litterman_estimate(Y, lags, sar, lam, th, t, mu, al)[3]
                for t in (0.1, 0.5, 1.0, 3.0)]
         @test length(unique(round.(mls, digits=6))) == 4
+        # T159: kept — the 4-distinct-values pin above guards theta_cross identification.
         @test all(isfinite, mls)
 
         # (6) end-to-end through the public API (fresh stream, lint-accepted name)
@@ -499,6 +501,7 @@ end
         Yn[68:70, 4] .= NaN
         ml_fit = nowcast_bvar(Yn, 3, 1; lags=2, max_iter=120, prior=:litterman)
         @test ml_fit.prior == :litterman
+        # T159: kept — positivity + sentinel guard are already the strong forms.
         @test isfinite(ml_fit.theta_cross) && ml_fit.theta_cross > 0
         @test isfinite(ml_fit.loglik) && ml_fit.loglik > -1e9
         @test !any(isnan, ml_fit.X_sm)
@@ -551,7 +554,7 @@ end
         @test m.lags == 2
         @test m.nM == 3
         @test m.nQ == 2
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: BVAR loglik on this DGP (observed -626.7)
         @test m.lambda > 0
         @test m.theta > 0
     end
@@ -580,6 +583,7 @@ end
         Yn = zeros(6, 2); Yn[4, 1] = -3.0; Yn[4, 2] = NaN
         Xn = MacroEconometricModels._bvar_smooth_missing(Yn, beta, sigma, 1, 6)
         @test Xn[4, 2] ≈ -2.7 atol=1e-3          # sign follows the observed variable
+        # T159: kept — the exact/≈ conditioning pins above guard the smoother.
         @test all(isfinite, Xp) && all(isfinite, Xn)
     end
 
@@ -624,6 +628,7 @@ end
             @test count(!iszero, X_d[r, :]) == 1
         end
         @test rank(X_d) == k
+        # T159: kept — full rank above implies finite logdet; the ≈ scale pins below guard entries.
         @test isfinite(logdet(X_d' * X_d))
 
         # Row (lag, i) scale = sigma_i * lag^theta / lambda; only lag 1 carries the RW mean
@@ -660,9 +665,10 @@ end
         ml(lam, th) = MacroEconometricModels._bvar_estimate(Y, 2, sigma_ar, lam, th,
                                                             1.0, 2.0)[3]
 
+        # T159: kept — sentinel guards; the smoothness/monotonicity pins below guard the surface.
         @test isfinite(ml(0.2, 1.0)) && ml(0.2, 1.0) > -1e9
         for lam in (0.02, 0.05, 0.2), th in (0.5, 1.0, 1.1)
-            @test isfinite(ml(lam, th)) && ml(lam, th) > -1e9
+            @test isfinite(ml(lam, th)) && ml(lam, th) > -1e9  # T159: kept (see above)
         end
         # Smooth through theta = 1: the midpoint of the neighbours matches the value there
         @test ml(0.2, 1.0) ≈ (ml(0.2, 0.99) + ml(0.2, 1.01)) / 2 rtol=1e-4
@@ -694,7 +700,7 @@ end
 
         m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=30)
         @test m isa NowcastBVAR{Float64}
-        @test isfinite(m.loglik)
+        @test m.loglik < 0  # T159: loglik stays negative even on near-singular data (observed -8.3)
         @test !any(isnan, m.X_sm)
     end
 end
@@ -736,6 +742,7 @@ end
         @test length(m.Y_nowcast) == cld(T_obs, 3)
         @test length(m.Y_nowcast) == 31
         @test isfinite(m.Y_nowcast[end])    # the current partial quarter is actually nowcast
+        @test abs(m.Y_nowcast[end]) < 10  # T159: quarterly mean of randn data (observed -0.62); blowup guard
     end
 
     @testset "Equation combination" begin
@@ -803,8 +810,9 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         news = nowcast_news(Y, X_old, m, 58; target_var=5)
 
         @test news isa NowcastNews{Float64}
+        # T159: kept — the decomposition identity (next testset) pins old/new/impacts jointly.
         @test isfinite(news.old_nowcast)
-        @test isfinite(news.new_nowcast)
+        @test isfinite(news.new_nowcast)  # T159: kept (see above)
         @test length(news.impact_news) == count((isnan.(X_old)) .& (.!isnan.(Y)))
     end
 
@@ -979,6 +987,9 @@ end
         @test result.method == :dfm
         @test isfinite(result.nowcast)
         @test isfinite(result.forecast)
+        # T159: nowcast/forecast are O(1) on this DGP (observed 2.45 / -2.56); blowup guards.
+        @test abs(result.nowcast) < 10
+        @test abs(result.forecast) < 10
         @test result.target_index == 5
     end
 
@@ -993,6 +1004,7 @@ end
         @test result isa NowcastResult{Float64}
         @test result.method == :bvar
         @test isfinite(result.nowcast)
+        @test abs(result.nowcast) < 10  # T159: O(1) on this DGP (observed -0.25); blowup guard
     end
 
     @testset "nowcast() Bridge" begin

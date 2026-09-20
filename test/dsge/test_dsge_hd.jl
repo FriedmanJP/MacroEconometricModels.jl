@@ -457,9 +457,10 @@ end
     data_nan[1, 30] = NaN
 
     result = dsge_smoother(ss, data_nan)
+    # T159: kept — NaN-robustness IS this test's contract (Kalman skips missing obs); no clean-data reference in scope.
     @test isfinite(result.log_likelihood)
     @test all(isfinite, result.smoothed_states)
-    @test all(isfinite, result.smoothed_shocks)
+    @test all(isfinite, result.smoothed_shocks)  # T159: kept (NaN-robustness contract, see above)
 end
 
 @testset "HD — short sample (T=5)" begin
@@ -576,6 +577,7 @@ end
     @test hd.method === :ha_dsge
     @test size(hd.contributions) == (T_obs, 1, 1)
     @test verify_decomposition(hd; tol=1e-5)
+    # T159: kept — verify_decomposition above is the strong pin (additivity).
     @test all(isfinite, hd.contributions)
     err = try
         historical_decomposition(sol, data, [:not_a_price])
