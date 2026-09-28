@@ -87,16 +87,18 @@ _andrews_label(t::Symbol) = t === :supwald ? "sup-Wald" :
 # =============================================================================
 
 """
-    plot_result(r::AndrewsResult; title="", save_path=nothing)
+    plot_result(r::AndrewsResult; title="", save_path=nothing, level=5)
 
 Andrews (1993) / Andrews–Ploberger structural-break test: the full Wald
 `stat_sequence` over the candidate-break range (x = sample index), a solid vertical
-break line at the estimated `break_index`, and a dashed horizontal 5 % critical-value
-reference line (alert color). The x-axis spans exactly the trimmed candidate range,
+break line at the estimated `break_index`, and a dashed horizontal critical-value
+reference line (alert color) at the `level`% critical value (default 5; nearest
+stored level via `_cv_at`). The x-axis spans exactly the trimmed candidate range,
 so trimming is implicit. Integer x ticks.
 """
 function plot_result(r::AndrewsResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     seq = r.stat_sequence
     amax = isempty(seq) ? 1 : argmax(seq)
     xstart = r.break_index - (amax - 1)          # sample index of the first candidate
@@ -106,9 +108,9 @@ function plot_result(r::AndrewsResult{T}; title::String="",
                           [_PLOT_SERIES[1]]; keys=["stat"])
 
     reflist = String[]
-    cv5 = _cv_at(r.critical_values, 5)
-    cv5 !== nothing && push!(reflist,
-        "{\"value\":$(_json(cv5)),\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"6,4\"}")
+    cv = _cv_at(r.critical_values, level)
+    cv !== nothing && push!(reflist,
+        "{\"value\":$(_json(cv)),\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"6,4\"}")
     push!(reflist,
         "{\"value\":$(_json(r.break_index)),\"axis\":\"x\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"0\"}")
     refs = "[" * join(reflist, ",") * "]"
@@ -206,79 +208,89 @@ function _teststat_bar_panel(id::String, stat_label::AbstractString, stat, cv::A
 end
 
 """
-    plot_result(r::ZAResult; title="", save_path=nothing)
+    plot_result(r::ZAResult; title="", save_path=nothing, level=5)
 
 Zivot–Andrews test: a horizontal bar comparing the (single) test statistic to its
 1/5/10 % critical values. There is no stored per-date statistic path, so the break
-date and the 5 % reject decision are stated in the panel subtitle (no phantom
-series; plotrule C6).
+date and the reject decision at the `level`% critical value (default 5) are stated
+in the panel subtitle (no phantom series; plotrule C6).
 """
 function plot_result(r::ZAResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("za")
     js = _teststat_bar_panel(id, "ZA statistic", r.statistic, r.critical_values)
-    cv5 = _cv_at(r.critical_values, 5)
-    rej = cv5 === nothing ? "n/a" : (r.statistic < cv5 ? "reject H₀" : "fail to reject H₀")
+    cv = _cv_at(r.critical_values, level)
+    rej = cv === nothing ? "n/a" : (r.statistic < cv ? "reject H₀" : "fail to reject H₀")
     isempty(title) && (title = "Zivot–Andrews Unit-Root Test")
-    ptitle = "Break at obs $(r.break_index) (fraction $(_fmt(r.break_fraction; digits=3))) — 5%: $(rej)"
+    ptitle = "Break at obs $(r.break_index) (fraction $(_fmt(r.break_fraction; digits=3))) — $(level)%: $(rej)"
     p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
     save_path !== nothing && save_plot(p, save_path)
     p
 end
 
 """
-    plot_result(r::ADF2BreakResult; title="", save_path=nothing)
+    plot_result(r::ADF2BreakResult; title="", save_path=nothing, level=5)
 
 ADF test with two structural breaks (Narayan–Popp 2010): a horizontal bar of the
-test statistic vs its critical values, with the two estimated break dates stated in
-the subtitle (no stored statistic path; plotrule C6).
+test statistic vs its critical values, with the two estimated break dates and the
+reject decision at the `level`% critical value (default 5) stated in the subtitle
+(no stored statistic path; plotrule C6).
 """
 function plot_result(r::ADF2BreakResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("adf2b")
     js = _teststat_bar_panel(id, "ADF statistic", r.statistic, r.critical_values)
-    cv5 = _cv_at(r.critical_values, 5)
-    rej = cv5 === nothing ? "n/a" : (r.statistic < cv5 ? "reject H₀" : "fail to reject H₀")
+    cv = _cv_at(r.critical_values, level)
+    rej = cv === nothing ? "n/a" : (r.statistic < cv ? "reject H₀" : "fail to reject H₀")
     isempty(title) && (title = "ADF Two-Break Unit-Root Test")
-    ptitle = "Breaks at obs $(r.break1), $(r.break2) — 5%: $(rej)"
+    ptitle = "Breaks at obs $(r.break1), $(r.break2) — $(level)%: $(rej)"
     p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
     save_path !== nothing && save_plot(p, save_path)
     p
 end
 
 """
-    plot_result(r::FourierADFResult; title="", save_path=nothing)
+    plot_result(r::FourierADFResult; title="", save_path=nothing, level=5)
 
 Fourier ADF test (Enders–Lee 2012): a horizontal statistic-vs-CV bar. The fitted
 Fourier component is **not** stored on the result, so it is not drawn — the honest
-subtitle records the frequency `k` and the joint-significance F-statistic instead of
+subtitle records the frequency `k`, the joint-significance F-statistic, and the
+reject decision at the `level`% critical value (default 5) instead of
 fabricating a series (plotrule C6, anti-pattern "phantom original").
 """
 function plot_result(r::FourierADFResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("fadf")
     js = _teststat_bar_panel(id, "Fourier ADF statistic", r.statistic, r.critical_values)
+    cv = _cv_at(r.critical_values, level)
+    rej = cv === nothing ? "n/a" : (r.statistic < cv ? "reject H₀" : "fail to reject H₀")
     isempty(title) && (title = "Fourier ADF Unit-Root Test")
-    ptitle = "k=$(r.frequency), F=$(_fmt(r.f_statistic; digits=3)) — fitted Fourier component not stored"
+    ptitle = "k=$(r.frequency), F=$(_fmt(r.f_statistic; digits=3)) — $(level)%: $(rej)"
     p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
     save_path !== nothing && save_plot(p, save_path)
     p
 end
-
 """
-    plot_result(r::FourierKPSSResult; title="", save_path=nothing)
+    plot_result(r::FourierKPSSResult; title="", save_path=nothing, level=5)
 
 Fourier KPSS stationarity test (Becker–Enders–Lee 2006): a horizontal statistic-vs-CV
 bar. As with the Fourier ADF, no fitted Fourier component is stored, so the subtitle
-reports the frequency and F-statistic honestly rather than drawing a phantom series
-(plotrule C6).
+reports the frequency, the F-statistic, and the reject decision at the `level`%
+critical value (default 5; right-tailed: statistic above CV rejects stationarity)
+rather than drawing a phantom series (plotrule C6).
 """
 function plot_result(r::FourierKPSSResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("fkpss")
     js = _teststat_bar_panel(id, "Fourier KPSS statistic", r.statistic, r.critical_values)
+    cv = _cv_at(r.critical_values, level)
+    rej = cv === nothing ? "n/a" : (r.statistic > cv ? "reject H₀" : "fail to reject H₀")
     isempty(title) && (title = "Fourier KPSS Stationarity Test")
-    ptitle = "k=$(r.frequency), F=$(_fmt(r.f_statistic; digits=3)) — fitted Fourier component not stored"
+    ptitle = "k=$(r.frequency), F=$(_fmt(r.f_statistic; digits=3)) — $(level)%: $(rej)"
     p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -289,23 +301,24 @@ end
 # =============================================================================
 
 """
-    plot_result(r::GregoryHansenResult; title="", save_path=nothing)
+    plot_result(r::GregoryHansenResult; title="", save_path=nothing, level=5)
 
 Gregory–Hansen cointegration test with a structural break: a grouped bar comparing
-each of the ADF*, Zt* and Za* statistics to its 5 % critical value (the ADF and Zt
-statistics share the ADF critical-value table; Za uses its own). The estimated break
-date is annotated in the subtitle.
+each of the ADF*, Zt* and Za* statistics to its `level`% critical value (default 5;
+the ADF and Zt statistics share the ADF critical-value table; Za uses its own).
+The estimated break date is annotated in the subtitle.
 """
 function plot_result(r::GregoryHansenResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("gh")
-    adf_cv5 = _cv_at(r.adf_critical_values, 5)
-    za_cv5 = _cv_at(r.za_critical_values, 5)
+    adf_cv = _cv_at(r.adf_critical_values, level)
+    za_cv = _cv_at(r.za_critical_values, level)
     labels = ["ADF*", "Zt*", "Za*"]
     stats = [r.adf_statistic, r.zt_statistic, r.za_statistic]
-    cvs = [adf_cv5, adf_cv5, za_cv5]
+    cvs = [adf_cv, adf_cv, za_cv]
     data_json = _grouped_stat_cv_json(labels, stats, cvs)
-    s_json = _series_json(["Statistic", "5% CV"], [_PLOT_SERIES[1], _PLOT_ALERT];
+    s_json = _series_json(["Statistic", "$(level)% CV"], [_PLOT_SERIES[1], _PLOT_ALERT];
                           keys=["stat", "cv"])
     js = _render_bar_js(id, data_json, s_json; mode="grouped", orientation="v",
                         xlabel="Statistic", ylabel="Value")
@@ -317,22 +330,24 @@ function plot_result(r::GregoryHansenResult{T}; title::String="",
 end
 
 """
-    plot_result(r::JohansenResult; title="", save_path=nothing)
+    plot_result(r::JohansenResult; title="", save_path=nothing, level=5)
 
 Johansen cointegration test: a grouped bar of the trace statistic per null rank
-`r ≤ k` against the corresponding 5 % critical value. The estimated cointegration
-rank is annotated in the subtitle.
+`r ≤ k` against the corresponding `level`% critical value (default 5; trace table
+cols are 10/5/1%). The estimated cointegration rank is annotated in the subtitle.
 """
 function plot_result(r::JohansenResult{T}; title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
     id = _next_plot_id("johansen")
     nranks = length(r.trace_stats)
     ncv = size(r.critical_values_trace, 1)
+    col = level == 1 ? 3 : level == 10 ? 1 : 2
     labels = ["r≤$(k-1)" for k in 1:nranks]
     stats = collect(r.trace_stats)
-    cvs = [k <= ncv ? r.critical_values_trace[k, 2] : T(NaN) for k in 1:nranks]  # col 2 = 5%
+    cvs = [k <= ncv ? r.critical_values_trace[k, col] : T(NaN) for k in 1:nranks]
     data_json = _grouped_stat_cv_json(labels, stats, cvs)
-    s_json = _series_json(["Trace statistic", "5% CV"], [_PLOT_SERIES[1], _PLOT_ALERT];
+    s_json = _series_json(["Trace statistic", "$(level)% CV"], [_PLOT_SERIES[1], _PLOT_ALERT];
                           keys=["stat", "cv"])
     js = _render_bar_js(id, data_json, s_json; mode="grouped", orientation="v",
                         xlabel="Null rank", ylabel="Statistic")

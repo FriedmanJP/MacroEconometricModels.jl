@@ -15,7 +15,7 @@ live here for parallel-lane file isolation:
 - `KalmanSmootherResult` — smoothed state means ± 1.96·√diag(cov) bands, with the
   observed data overlaid when supplied. The struct carries no names, so `varnames`
   is a **required** keyword.
-- `DSGEEstimation` — a parameter dot-and-whisker (`θ ± 1.96·stderror`) with a J-test
+- `DSGEEstimation` — a parameter dot-and-whisker (`θ ± z·stderror`, `conf_level`) with a J-test
   annotation (an honest parameter plot; the struct stores no moments, plotrule C6).
 
 (`BayesianDSGESimulation` is plotted by the Bayesian nested-fan dispatch in
@@ -213,17 +213,20 @@ end
 """
     plot_result(est::DSGEEstimation; title="", save_path=nothing)
 
-Parameter coefficient plot for a GMM-estimated DSGE: `θ ± 1.96·stderror(est)` as a
+Parameter coefficient plot for a GMM-estimated DSGE: `θ ± z·stderror(est)` at
+confidence level `conf_level` (default 0.95) as a
 horizontal dot-and-whisker over `param_names`, with the Hansen J-test annotated in
 the panel title (`J = … (p = …)`, rounded via `_fmt`/`_format_pvalue`, plotrule C9).
 This is a **parameter** plot — the struct stores no empirical/model moments, so no
 moment-fit exhibit is drawn (plotrule C6; moment fit lives in the GMM/SMM plot).
 """
 function plot_result(est::DSGEEstimation{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     title::String="", save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
     id = _next_plot_id("dsge_est")
+    z = _conf_z(conf_level)
     se = StatsAPI.stderror(est)
-    data_json = _dsge_coef_json(est.param_names, est.theta, se)
+    data_json = _dsge_coef_json(est.param_names, est.theta, se; z=z)
     js = _render_coef_plot_js(id, data_json; ref_value=0, xlabel="Estimate", ylabel="")
     ptitle = "Estimated Parameters ($(est.method)); J = $(_fmt(est.J_stat; digits=3)) (p = $(_format_pvalue(est.J_pvalue)))"
     panel = _PanelSpec(id, ptitle, js)

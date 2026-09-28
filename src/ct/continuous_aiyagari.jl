@@ -245,8 +245,18 @@ function ct_kfe(A::SparseMatrixCSC{T,Int}, I::Int, da::T) where {T<:AbstractFloa
     AT[1, 1] = one(T)
     b[1] = one(T)
     # Sparse LU on the SparseMatrixCSC directly — never materialise the dense
-    # 2I×2I matrix (#242).
-    g_vec = lu(AT) \ b
+    # 2I×2I matrix (#242). A degenerate coarse-grid generator can be exactly
+    # singular here (platform-dependent factorization path, #837): surface a
+    # typed error instead of leaking the raw `SingularException`.
+    g_vec = try
+        lu(AT) \ b
+    catch e
+        e isa LinearAlgebra.SingularException || rethrow()
+        throw(SingularSystemError(
+            "ct_kfe: KFE matrix is singular on a grid with I=$I" *
+            " (coarse grids can yield a degenerate generator;" *
+            " try a finer asset grid)"))
+    end
     g_vec = max.(g_vec, zero(T))
     mass = sum(g_vec) * da
     g_vec ./= mass
@@ -258,7 +268,7 @@ end
 # =============================================================================
 
 """
-    ct_steady_state(m::CTAiyagari; r_bounds=(0.001, m.rho-1e-4), max_iter=100, tol=1e-6,
+    ct_steady_state(m::CTAiyagari; r_bounds=(0.0001, m.rho-1e-4), max_iter=100, tol=1e-6,
                     hjb_kwargs...) → CTSteadyState
 
 Compute the stationary general equilibrium by bisecting on the interest rate `r` until the

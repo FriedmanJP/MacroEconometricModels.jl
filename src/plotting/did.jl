@@ -292,3 +292,59 @@ function plot_result(hd::HonestDiDResult{T};
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# Weight / pretrend diagnostics (#841 PR7)
+# =============================================================================
+
+"""
+    plot_result(r::NegativeWeightResult; title="", save_path=nothing)
+
+Negative-weights diagnostic: two-way-fixed-effects weights by cohort–time
+pair as bars (capped at 12 pairs with a cap note), with a zero reference line.
+Whether any weights are negative, how many, and their total are stated in the
+panel subtitle — the verdict, not just the picture. There is no test level on
+this diagnostic, so no `level` keyword applies.
+"""
+function plot_result(r::NegativeWeightResult{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    nshow = min(length(r.weights), 12)
+    labels = ["$(g),$(t)" for (g, t) in r.cohort_time_pairs[1:nshow]]
+    rows = [["x" => _json(labels[i]), "w" => _json(r.weights[i])]
+            for i in 1:nshow]
+    id = _next_plot_id("negw")
+    js = _render_bar_js(id, _json_array_of_objects(rows),
+                        _series_json(["Weight"], [_PLOT_COLORS[1]]; keys=["w"]);
+                        xlabel="Cohort, time", ylabel="Weight")
+    capnote = length(r.weights) > nshow ?
+        " (showing $(nshow) of $(length(r.weights)) pairs)" : ""
+    verdict = r.has_negative_weights ? "NEGATIVE ($(r.n_negative), total $(_fmt(r.total_negative_weight; digits=3)))" : "none"
+    ptitle = "TWFE weights$(capnote) — negative: $(verdict)"
+    isempty(title) && (title = "Negative-Weights Diagnostic")
+    p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::PretrendTestResult; title="", save_path=nothing, conf_level=0.95)
+
+Pretrend (parallel-trends placebo) test: pre-treatment coefficients as a
+dot-and-whisker (`β ± z·SE` at confidence level `conf_level`, default 0.95),
+with a zero reference line. The joint test statistic, p-value, and test type
+are stated in the panel subtitle.
+"""
+function plot_result(r::PretrendTestResult{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
+    z = _conf_z(conf_level)
+    names = ["lead $i" for i in eachindex(r.pre_coefficients)]
+    panel = _coef_panel("pretrend", names, r.pre_coefficients, r.pre_se;
+                        z=z, ptitle="Pre-trends ($(r.test_type): " *
+                        "χ²=$(_fmt(r.statistic; digits=3)), " *
+                        "p=$(_fmt(r.pvalue; digits=3)), $(_ci_pct(conf_level))% CI)")
+    ftitle = isempty(title) ? "Pretrend Placebo Test" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

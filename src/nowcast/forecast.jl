@@ -172,3 +172,42 @@ function forecast(model::NowcastBVAR{T}, h::Int;
     end
     return NowcastForecast{T}(fc, h, nothing, nothing)
 end
+
+"""
+    forecast(model::NowcastBridge, h; target_var=nothing) -> NowcastForecast
+
+Generate h-step ahead forecast from bridge nowcasting model.
+
+A bridge equation maps observed monthly indicators onto the quarterly target, so it
+has no multi-step dynamics of its own: the forecast carries the current quarterly
+nowcast forward (flat path), matching `nowcast(::NowcastBridge)` next-quarter semantics.
+
+# Arguments
+- `model::NowcastBridge` — estimated model
+- `h::Int` — forecast horizon (quarters)
+
+# Keyword Arguments
+- `target_var::Union{Int,Nothing}` — variable to forecast (default: all)
+
+# Returns
+`NowcastForecast` wrapping a length-`h` vector (if `target_var` given) or an `h × N` matrix.
+"""
+function forecast(model::NowcastBridge{T}, h::Int;
+                  target_var::Union{Int,Nothing}=nothing) where {T}
+    h >= 1 || throw(ArgumentError("h must be >= 1"))
+    N = size(model.X_sm, 2)
+    n_quarters = length(model.Y_nowcast)
+    now_val = model.Y_nowcast[n_quarters]
+    fc_val = if isnan(now_val)
+        q = findlast(!isnan, model.Y_nowcast)
+        q === nothing ? now_val : model.Y_nowcast[q]
+    else
+        now_val
+    end
+    fc = repeat(model.X_sm[end:end, :], h, 1)
+    fc[:, N] .= fc_val
+    if target_var !== nothing
+        return NowcastForecast{T}(Vector{T}(fc[:, target_var]), h, target_var, nothing)
+    end
+    return NowcastForecast{T}(Matrix{T}(fc), h, nothing, nothing)
+end

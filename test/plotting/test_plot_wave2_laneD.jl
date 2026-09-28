@@ -469,5 +469,64 @@ end
             tsls = estimate_3sls([(y1, X1), (y2, X2)], hcat(ones(Ts), randn(rng, Ts, 3)))
             @test length(panel_titles(plot_result(tsls).html)) == 2
         end
+
+        @testset "Models-A coef/bounds/paths (#841 PR6)" begin
+            n = 120
+            X = randn(rng, n, 2)
+            y = X * [0.8, -0.5] .+ randn(rng, n)
+            am = estimate_ardl(y, X; p=1, q=1, case=3)
+            bt = bounds_test(am)
+            lr = long_run(am)
+            for p in (plot_result(am), plot_result(bt), plot_result(lr))
+                check_plot(p)
+                assert_all_json_valid(p)
+            end
+            @test any(t -> occursin("case 3", t), panel_titles(plot_result(am).html))
+            @test any(t -> occursin("I(0)", t), series_names(plot_result(bt).html))
+            @test any(t -> occursin("Long-Run", t), panel_titles(plot_result(lr).html))
+            yp = max.(0, round.(Int, 2 .+ X * [0.5, -0.3] .+ 0.5 .* randn(rng, n)))
+            for p in (plot_result(estimate_poisson(yp, X)),
+                      plot_result(estimate_nbreg(yp, X)))
+                check_plot(p)
+                assert_all_json_valid(p)
+            end
+            qm = estimate_qreg(y, X, [0.25, 0.5, 0.75])
+            pq = plot_result(qm)
+            check_plot(pq); assert_all_json_valid(pq)
+            @test any(t -> occursin("Paths", t), panel_titles(pq.html))
+            pr = plot_result(estimate_robust(y, X))
+            check_plot(pr); assert_all_json_valid(pr)
+            @test length(panel_titles(pr.html)) == 2             # coef + weights
+            @test any(t -> occursin("90% CI", t),
+                      panel_titles(plot_result(am; conf_level=0.90).html))
+            ids = repeat(1:20; inner=6); ts = repeat(1:6; outer=20)
+            x1 = randn(rng, 120)
+            yb = Int.(x1 .+ randn(rng, 120) .> 0)
+            pd = xtset(DataFrame(id=ids, t=ts, x1=x1, y=yb), :id, :t)
+            for p in (plot_result(estimate_xtlogit(pd, :y, [:x1])),
+                      plot_result(estimate_xtprobit(pd, :y, [:x1])))
+                check_plot(p)
+                assert_all_json_valid(p)
+            end
+            xc = cumsum(randn(rng, 60))
+            id2 = repeat(1:3; inner=20); t2 = repeat(1:20; outer=3)
+            pc = estimate_xtcointreg(cumsum(randn(rng, 60)), cumsum(randn(rng, 60)),
+                                     id2, t2)
+            ppc = plot_result(pc)
+            check_plot(ppc); assert_all_json_valid(ppc)
+            @test any(t -> occursin("N=3", t), panel_titles(ppc.html))
+        end
+
+        @testset "NARDL symmetry p-values (#841 PR7)" begin
+            ns = NARDLSymmetryTest([1], ["x1"], [5.0], [0.025], [0.03],
+                                   [1.2], [0.27], [0.28], [0.8], [0.3], 1, 90)
+            pns = plot_result(ns)
+            check_plot(pns); assert_all_json_valid(pns)
+            @test any(t -> occursin("2/4 reject", t), panel_titles(pns.html))
+            @test any(t -> occursin("θ", t), panel_titles(pns.html))
+            yn = cumsum(randn(rng, 120))
+            nm = estimate_nardl(yn, randn(rng, 120, 1); p=1, q=1)
+            check_plot(plot_result(symmetry_test(nm)))
+        end
     end
 end

@@ -54,7 +54,7 @@ _arima_fit_target(m::AbstractARIMAModel) =
     hasproperty(m, :y_diff) ? Float64[Float64(v) for v in m.y_diff] : Float64[Float64(v) for v in m.y]
 
 """
-    plot_result(m::AbstractARIMAModel; view=:fit, title="", ncols=0, save_path=nothing)
+    plot_result(m::AbstractARIMAModel; view=:fit, title="", ncols=0, save_path=nothing, lags=0)
 
 Diagnostic plots for an ARIMA-family model. `view` selects:
 
@@ -62,7 +62,8 @@ Diagnostic plots for an ARIMA-family model. `view` selects:
   panel, integer observation axis; the integrated model is shown on its differenced
   scale, noted in the panel title).
 - `:resid` — residual ACF and PACF as two vertical-bar panels (`_render_vbar_js` +
-  `acf`/`pacf`), lags from 1 with ±CI reference lines.
+  `acf`/`pacf`), lags from 1 with ±CI reference lines. `lags=0` (default) uses the
+  automatic `max(1, min(24, T÷4))` rule; pass a positive `lags` to override.
 - `:roots` — inverse roots of the AR and MA polynomials on the complex plane with a
   unit-circle reference (`_render_scatter_js` + `ref_shapes_json`); any root outside
   the circle is drawn in the alert color and the panel title is flagged UNSTABLE.
@@ -72,11 +73,12 @@ Diagnostic plots for an ARIMA-family model. `view` selects:
 Unknown `view` throws `ArgumentError`.
 """
 function plot_result(m::AbstractARIMAModel; view::Symbol=:fit, title::String="",
-                     ncols::Int=0, save_path::Union{String,Nothing}=nothing)
+                     ncols::Int=0, save_path::Union{String,Nothing}=nothing,
+                     lags::Int=0)
     if view === :fit
         p = _plot_arima_fit(m; title=title, ncols=ncols)
     elseif view === :resid
-        p = _plot_arima_resid(m; title=title, ncols=ncols)
+        p = _plot_arima_resid(m; title=title, ncols=ncols, lags=lags)
     elseif view === :roots
         p = _plot_arima_roots(m; title=title, ncols=ncols)
     elseif view === :diagnostics
@@ -132,11 +134,11 @@ function _correlogram_vbar_panel(prefix::String, lags::AbstractVector,
     _PanelSpec(id, ptitle, js)
 end
 
-function _plot_arima_resid(m::AbstractARIMAModel; title::String, ncols::Int)
+function _plot_arima_resid(m::AbstractARIMAModel; title::String, ncols::Int, lags::Int=0)
     r = Float64[Float64(v) for v in m.residuals if isfinite(v)]
     panels = _PanelSpec[]
     if length(r) >= 3
-        nlags = max(1, min(24, fld(length(r), 4)))
+        nlags = lags > 0 ? lags : max(1, min(24, fld(length(r), 4)))
         ar = acf(r; lags=nlags)
         pa = pacf(r; lags=nlags)
         push!(panels, _correlogram_vbar_panel("arima_acf", ar.lags, ar.acf, ar.ci,

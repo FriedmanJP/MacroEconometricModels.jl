@@ -71,12 +71,13 @@ end
         lr = long_run(ardl)
         lr2 = _assert_roundtrip(lr)
         _assert_report_equal(lr, lr2)
+        _assert_plot_equal(lr, lr2)
         @test lr2.theta == lr.theta && lr2.se == lr.se
 
         bt = bounds_test(ardl)
         bt2 = _assert_roundtrip(bt)
         _assert_report_equal(bt, bt2)
-        @test bt2.f_decision === bt.f_decision
+        _assert_plot_equal(bt, bt2)
         ardl2 = _roundtrip(ardl)
         @test _deep_equal(long_run(ardl2), long_run(ardl))
         @test _deep_equal(bounds_test(ardl2), bounds_test(ardl))
