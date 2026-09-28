@@ -74,7 +74,7 @@ function _regions_json(shade::Union{AbstractVector,Nothing})
 end
 
 """
-    _dist_panels(data, idxs, varnames; density=false, n_bins=0, id_prefix="dist")
+    _dist_panels(data, idxs, varnames; density=false, n_bins=0, id_prefix="dist", bw=0, n_grid=200)
         -> Vector{_PanelSpec}
 
 One histogram panel per selected column (`:hist`), or a histogram + KDE-overlay
@@ -83,14 +83,15 @@ panel (`:density`), via `_render_histogram_js` + the frozen `_histogram_bins` /
 distribution views.
 """
 function _dist_panels(data::AbstractMatrix, idxs::Vector{Int}, varnames::Vector{String};
-                      density::Bool=false, n_bins::Int=0, id_prefix::String="dist")
+                      density::Bool=false, n_bins::Int=0, id_prefix::String="dist",
+                      bw::Real=0, n_grid::Int=200)
     panels = _PanelSpec[]
     for vi in idxs
         col = @view data[:, vi]
         id = _next_plot_id(id_prefix)
         bins_json = _histogram_bins(col; n_bins=n_bins, density=density)
         if density
-            dens_json = _kde_line_json(col)
+            dens_json = _kde_line_json(col; n_grid=n_grid, bw=bw)
             s_json = _series_json([varnames[vi], "Density"],
                                   [_palette(1), _palette(2)]; keys=["bar", "d"])
             js = _render_histogram_js(id, bins_json, s_json;
@@ -214,6 +215,7 @@ function plot_result(d::TimeSeriesData{T};
                      save_path::Union{String,Nothing}=nothing,
                      shade::Union{AbstractVector,Nothing}=nothing,
                      fit::Symbol=:ols, n_bins::Int=0,
+                     bw::Real=0, n_grid::Int=200,
                      tcodes::Union{Vector{Int},Int,Nothing}=nothing,
                      x=nothing, y=nothing,
                      controls::Union{Vector,Nothing}=nothing) where {T}
@@ -241,7 +243,7 @@ function plot_result(d::TimeSeriesData{T};
         total = length(idxs)
         shown = min(total, 12)
         panels = _dist_panels(d.data, idxs[1:shown], d.varnames;
-                              density=(view === :density), n_bins=n_bins, id_prefix="ts")
+                              density=(view === :density), n_bins=n_bins, id_prefix="ts", bw=bw, n_grid=n_grid)
         isempty(title) && (title = view === :density ? "Densities" : "Distributions")
         note = _cap_note("variables", shown, total, "vars")
         return _noted_plot(panels, title, ncols, note, save_path)

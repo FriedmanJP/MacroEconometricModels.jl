@@ -541,6 +541,16 @@ const _MPDTA = load_example(:mpdta)
         p_bd = plot_result(bd)
         @test p_bd isa PlotOutput
         @test occursin("Bacon", p_bd.html)
+
+        # NegativeWeight + Pretrend plots (#841 PR7)
+        nw = negative_weight_check(pd, "treat_time")
+        p_nw = plot_result(nw)
+        @test p_nw isa PlotOutput
+        @test occursin("negative", p_nw.html)
+        ptr = pretrend_test(did)
+        p_ptr = plot_result(ptr)
+        @test p_ptr isa PlotOutput
+        @test occursin("Pretrend", p_ptr.html)
     end
 
     # =========================================================================

@@ -556,3 +556,23 @@ end
     @test all(isfinite, fv.proportions)
     @test all(==(1), fv.proportions)  # T159: single-shock FEVD ⇒ every share is exactly 1 (observed bit-exact)
 end
+
+@testset "#837: coarse-grid KFE singularity surfaces a typed error" begin
+    # Structurally singular generator → deterministic SingularSystemError on all
+    # platforms (zero rows beyond the normalization row ⇒ rank 1).
+    I0 = 8
+    A0 = spzeros(Float64, 2 * I0, 2 * I0)
+    @test_throws _CT.SingularSystemError _CT.ct_kfe(A0, I0, 1.0)
+
+    # The issue's I=12 repro is platform-dependent (throws on Linux x86_64,
+    # converges on macOS ARM), but the contract holds everywhere: either a
+    # converged `CTSteadyState` or a typed error — never a raw `SingularException`.
+    m12 = CTAiyagari(; alpha=0.36, rho=0.05, sigma=2.0, delta=0.05, Z=1.0,
+                       a_min=0.0, a_max=30.0, I=12)
+    try
+        ss12 = ct_steady_state(m12; max_iter=40, tol=1e-5)
+        @test ss12 isa CTSteadyState
+    catch e
+        @test e isa _CT.SingularSystemError
+    end
+end

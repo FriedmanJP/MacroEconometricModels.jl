@@ -6,6 +6,34 @@ output, not just documentation.
 
 ---
 
+## v1.0.1
+
+Plot-option and coverage release (closes `#836`–`#843`, `#845`–`#849`). No
+exported names added or removed; no struct fields changed. One user-visible
+default flip: spectral-density plots now default to a linear scale
+(`plot_result(r; log_scale=true)` restores log10).
+
+**New**
+
+- Seven plot families accept new keywords (all backward-compatible defaults):
+  spectral `log_scale`, density `bw`/`n_grid`, ARIMA `:resid` `lags`,
+  Logit/Probit `:classification` `threshold`, penalized `log_scale`, every
+  dot-and-whisker plot `conf_level`, break-test plots `level`.
+- 52 new `plot_result` dispatches: unit-root, panel unit-root, panel and
+  residual cointegration, portmanteau, causality, specification, count /
+  quantile / robust / panel models, and DiD diagnostics — plus a stacked-bar
+  view for Bayesian historical decompositions.
+- `forecast(::NowcastBridge)`, mirroring the DFM/BVAR forecast interface.
+
+**Fixes**
+
+- `ct_kfe` raises a typed `SingularSystemError` (with a finer-grid hint)
+  instead of leaking a raw `SingularException` on degenerate coarse grids.
+- Built-in dataset count corrected to thirteen (`:mp_shocks`); StatsAPI
+  statistic-field exceptions (`ERSResult.P_T`, Ng-Perron multi-statistics)
+  documented; MRIO download verification documented as opt-in until checksums
+  are registered.
+
 ## v1.0.0
 
 First major release. **Breaking**: downstream `[compat]` of `MacroEconometricModels = "0.9"` no longer resolves — move the bound to `MacroEconometricModels = "1"`.

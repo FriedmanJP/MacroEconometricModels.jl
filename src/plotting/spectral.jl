@@ -111,7 +111,7 @@ end
 """Convert spectral density to JSON [{x, density, ci_lo, ci_hi}, ...]."""
 function _spectral_data_json(freq::AbstractVector{T}, density::AbstractVector{T},
                              ci_lo::AbstractVector{T}, ci_hi::AbstractVector{T};
-                             log_scale::Bool=true) where {T}
+                             log_scale::Bool=false) where {T}
     rows = Vector{Pair{String,String}}[]
     for i in eachindex(freq)
         d_val = log_scale ? log10(max(density[i], T(1e-30))) : density[i]
@@ -132,22 +132,25 @@ end
 # =============================================================================
 
 """
-    plot_result(r::SpectralDensityResult; title="", save_path=nothing)
+    plot_result(r::SpectralDensityResult; title="", save_path=nothing, log_scale=false)
 
-Plot log-spectral density line with CI shading band.
+Plot spectral density line with CI shading band (linear scale by default; `log_scale=true` for log10).
 """
 function plot_result(r::SpectralDensityResult{T};
                      title::String="",
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     log_scale::Bool=false) where {T}
     id = _next_plot_id("spec")
-    data_json = _spectral_data_json(r.freq, r.density, r.ci_lower, r.ci_upper)
+    data_json = _spectral_data_json(r.freq, r.density, r.ci_lower, r.ci_upper; log_scale=log_scale)
 
-    s_json = _series_json(["Log Spectral Density"], [_PLOT_COLORS[1]]; keys=["density"])
+    series_label = log_scale ? "Log Spectral Density" : "Spectral Density"
+    ylabel = log_scale ? "log₁₀ Spectral Density" : "Spectral Density"
+    s_json = _series_json([series_label], [_PLOT_COLORS[1]]; keys=["density"])
     bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"color\":\"$(_PLOT_COLORS[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
 
     js = _render_line_js(id, data_json, s_json;
                          bands_json=bands,
-                         xlabel="Frequency (radians)", ylabel="log₁₀ Spectral Density")
+                         xlabel="Frequency (radians)", ylabel=ylabel)
     panels = [_PanelSpec(id, "Spectral Density ($(r.method))", js)]
 
     if isempty(title)
