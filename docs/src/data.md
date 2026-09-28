@@ -3,7 +3,7 @@
 **MacroEconometricModels.jl** provides typed data containers that carry metadata alongside the numbers, validate inputs, transform series to stationarity, and dispatch directly to every estimation function. The data module removes the manual bookkeeping between a raw data file and a fitted model.
 
 - **Containers**: `TimeSeriesData`, `PanelData`, and `CrossSectionData` wrap a numeric matrix with variable names, frequency, FRED transformation codes, descriptions, and bibliographic references
-- **Built-in datasets**: twelve curated datasets --- the two FRED databases, three research panels, and seven textbook teaching sets --- load with a single `load_example` call
+- **Built-in datasets**: thirteen curated datasets --- the two FRED databases, four research panels, and seven textbook teaching sets --- load with a single `load_example` call
 - **Transformations**: FRED transformation codes 1--7 map raw levels to stationary series; `inverse_tcode` reconstructs the original levels
 - **Validation**: `diagnose` reports NaN, Inf, constant columns, and short samples; `fix`, `dropna`, and `keeprows` repair or subset the sample
 - **Panel operations**: Stata-style `xtset`, within-group lag/lead/difference, group extraction, balance detection, and DFM-based gap filling
@@ -234,7 +234,7 @@ d_dt[["2020Q1", "2020Q2"], :]   # sub-container; d_dt["2020Q1", :] returns one r
 
 ## Built-in Datasets
 
-`load_example(name)` returns a fully populated container --- data, variable names, transformation codes, descriptions, and reference keys --- read from a TOML file shipped with the package. Twelve datasets are available; an unknown name throws an `ArgumentError` listing the valid set.
+`load_example(name)` returns a fully populated container --- data, variable names, transformation codes, descriptions, and reference keys --- read from a TOML file shipped with the package. Thirteen datasets are available; an unknown name throws an `ArgumentError` listing the valid set.
 
 | Key | Returns | Size | Content |
 |-----|---------|------|---------|
@@ -250,8 +250,9 @@ d_dt[["2020Q1", "2020Q2"], :]   # sub-container; d_dt["2020Q1", :] returns one r
 | `:gnp_hamilton` | `TimeSeriesData` | 135 × 1, Quarterly | US real GNP growth, 1951Q2-1984Q4 (Hamilton 1989) --- the Markov-switching business-cycle series |
 | `:denmark` | `TimeSeriesData` | 55 × 5, Quarterly | Danish money demand, 1974Q1-1987Q3 (Johansen & Juselius 1990) --- the cointegration set |
 | `:wiot` | `IOData` | 2 sectors | Hypothetical two-sector input-output table (Miller & Blair 2009) |
-
-The first five are the working datasets for the macro methods on this site; the rest are the textbook sets the univariate, cross-sectional, and cointegration pages estimate against. `:wiot` returns an `IOData` rather than one of the three containers --- see [Input-Output Analysis](@ref io_page).
+| `:mp_shocks` | `TimeSeriesData` | 240 × 8, Quarterly | US monetary panel with policy shocks, 1960Q1-2019Q4 (McKay & Wolf 2023) --- the policy-counterfactual series |
++
+The first five plus `:mp_shocks` are the working datasets for the macro methods on this site; the rest are the textbook sets the univariate, cross-sectional, and cointegration pages estimate against. `:wiot` returns an `IOData` rather than one of the three containers --- see [Input-Output Analysis](@ref io_page).
 
 ### The FRED Databases
 

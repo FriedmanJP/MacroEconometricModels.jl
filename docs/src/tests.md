@@ -119,7 +119,7 @@ Specification tests that validate the assumptions underlying inference. See [Mod
 
 ## StatsAPI Interface
 
-All test result types implement the StatsAPI.jl interface, providing a uniform way to extract test statistics, p-values, and degrees of freedom regardless of the specific test.
+All test result types implement the StatsAPI.jl interface, providing a uniform way to extract test statistics, p-values, and degrees of freedom regardless of the specific test. The statistic field name is not uniform: most results carry `statistic`, while `ERSResult` carries `P_T` and `NgPerronResult` carries `MZa`/`MZt`/`MSB`/`MPT`.
 
 ```@example tests_overview
 fred = load_example(:fred_md)

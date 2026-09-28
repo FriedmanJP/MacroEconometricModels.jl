@@ -68,4 +68,24 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
         check_plot(p); assert_all_json_valid(p)
         assert_escapes(p)                                # hostile regressor name (A7/A8)
     end
+
+    @testset "RDD + regression diagnostics (#841 PR7)" begin
+        x = randn(200)
+        y = (x .> 0) .* 0.5 .+ randn(200)
+        rd = estimate_rdd(y, x; cutoff=0.0)
+        prd = plot_result(rd)
+        check_plot(prd); assert_all_json_valid(prd)
+        @test any(t -> occursin("Treatment Effect", t), panel_titles(prd.html))
+        @test any(t -> occursin("90% CI", t),
+                  panel_titles(plot_result(rd; conf_level=0.90).html))
+        Xd = randn(200, 2)
+        ed = randn(200)
+        for r in (white_test(ed, Xd), breusch_godfrey_test(ed, Xd))
+            p = plot_result(r)
+            check_plot(p); assert_all_json_valid(p)
+        end
+        pw = plot_result(white_test(ed, Xd))
+        @test any(t -> occursin("1/1 reject", t) || occursin("0/1 reject", t),
+                  panel_titles(pw.html))
+    end
 end

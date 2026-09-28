@@ -18,9 +18,10 @@
 # vertical reference line at the observed value (axis:"x", PLT-05 support).
 function _predictive_hist_panel(prefix::String, ptitle::String, vals::AbstractVector;
                                 barname::String="Draws",
-                                observed::Union{Nothing,Real}=nothing)
+                                observed::Union{Nothing,Real}=nothing,
+                                bw::Real=0, n_grid::Int=200)
     bins = _histogram_bins(vals; density=true)
-    dens = _kde_line_json(vals)
+    dens = _kde_line_json(vals; n_grid=n_grid, bw=bw)
     series = "[{\"name\":$(_json(barname)),\"color\":$(_json(_PLOT_COLORS[1]))}," *
              "{\"name\":$(_json("Density")),\"color\":$(_json(_PLOT_COLORS[2]))}]"
     refs = "[]"
@@ -74,7 +75,8 @@ Histogram + KDE of each prior-predictive summary statistic (one panel per column
 `view=:density` is defined; any other view throws `ArgumentError`.
 """
 function plot_result(r::PriorPredictiveResult{T}; view::Symbol=:density, title::String="",
-                     ncols::Int=0, save_path::Union{String,Nothing}=nothing) where {T}
+                     ncols::Int=0, save_path::Union{String,Nothing}=nothing,
+                     bw::Real=0, n_grid::Int=200) where {T}
     view === :density ||
         throw(ArgumentError("unknown view :$view; valid views: :density"))
     names = r.stat_names
@@ -84,7 +86,7 @@ function plot_result(r::PriorPredictiveResult{T}; view::Symbol=:density, title::
     panels = _PanelSpec[]
     for j in 1:shown
         col = Float64[Float64(v) for v in @view r.stats[:, j]]
-        push!(panels, _predictive_hist_panel("prior_pred", names[j], col; barname="Prior draws"))
+        push!(panels, _predictive_hist_panel("prior_pred", names[j], col; barname="Prior draws", bw=bw, n_grid=n_grid))
     end
     capnote = nstat > cap ? " (showing $(shown) of $(nstat) statistics)" : ""
     ft = isempty(title) ? "Prior Predictive Distribution$(capnote)" : title * capnote
@@ -105,7 +107,8 @@ vertical line at the observed value (axis:"x"); the posterior-predictive p-value
 `_fmt`'d into the panel title (C9). Capped at 12 statistics with the cap noted (C7).
 """
 function plot_result(ppc::PosteriorPredictiveCheck{T}; title::String="", ncols::Int=0,
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     bw::Real=0, n_grid::Int=200) where {T}
     names = ppc.stat_names
     nstat = length(names)
     cap = 12
@@ -118,7 +121,7 @@ function plot_result(ppc::PosteriorPredictiveCheck{T}; title::String="", ncols::
         pvs = isnan(pv) ? "n/a" : _fmt(pv)
         ptitle = "$(names[j]) (p = $(pvs))"
         push!(panels, _predictive_hist_panel("post_pred", ptitle, col;
-                                             barname="Replicated", observed=obs))
+                                             barname="Replicated", observed=obs, bw=bw, n_grid=n_grid))
     end
     capnote = nstat > cap ? " (showing $(shown) of $(nstat) statistics)" : ""
     ft = isempty(title) ? "Posterior Predictive Check$(capnote)" : title * capnote
@@ -160,22 +163,25 @@ end
 """
     plot_result(pm::PosteriorMode; title="", ncols=0, save_path=nothing)
 
-Horizontal dot-and-whisker of each parameter's posterior mode with its Laplace 95%
-interval (`mode ± 1.96·√diag(inv_hessian)`), zero reference line. A non-positive
+Horizontal dot-and-whisker of each parameter's posterior mode with its Laplace interval
+(`mode ± z·√diag(inv_hessian)`) at confidence level `conf_level` (default 0.95),
+zero reference line. A non-positive
 diagonal of the inverse Hessian yields a `NaN` (→ `null`) interval end rather than a
 crash.
 """
 function plot_result(pm::PosteriorMode{T}; title::String="", ncols::Int=0,
-                     save_path::Union{String,Nothing}=nothing) where {T}
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
     labels = String[string(p) for p in pm.param_names]
     mode = Float64[Float64(v) for v in pm.mode]
     dv = diag(pm.inv_hessian)
     se = Float64[d >= 0 ? sqrt(Float64(d)) : NaN for d in dv]
-    lo = mode .- 1.96 .* se
-    hi = mode .+ 1.96 .* se
-    panel = _threshold_coef_panel("post_mode", "Posterior mode (95% Laplace)", labels,
+    z = _conf_z(conf_level)
+    lo = mode .- z .* se
+    hi = mode .+ z .* se
+    panel = _threshold_coef_panel("post_mode", "Posterior mode ($(_ci_pct(conf_level))% Laplace)", labels,
                                   mode, lo, hi, 0.0; flag=:none)
-    ft = isempty(title) ? "Posterior Mode (Laplace 95% intervals)" : title
+    ft = isempty(title) ? "Posterior Mode (Laplace $(_ci_pct(conf_level))% intervals)" : title
     p = _make_plot([panel]; title=ft, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
     p

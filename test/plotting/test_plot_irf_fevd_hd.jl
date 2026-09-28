@@ -135,6 +135,12 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
         p = plot_result(hd_res)
         check_plot(p); assert_all_json_valid(p)
         @test occursin("Bayesian", p.html)
+        # stacked view mirrors the frequentist exhibit (bars + actual line)
+        ps = plot_result(hd_res; view=:stacked)
+        check_plot(ps); assert_all_json_valid(ps)
+        @test occursin("Shock Contributions", ps.html)
+        @test occursin("Actual vs Decomposition", ps.html)
+        @test_throws ArgumentError plot_result(hd_res; view=:bogus)
     end
 
     # =========================================================================

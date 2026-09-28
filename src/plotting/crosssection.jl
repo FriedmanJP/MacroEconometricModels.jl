@@ -45,6 +45,7 @@ function plot_result(d::CrossSectionData{T};
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing,
                      fit::Symbol=:ols, n_bins::Int=0,
+                     bw::Real=0, n_grid::Int=200,
                      x=nothing, y=nothing,
                      controls::Union{Vector,Nothing}=nothing) where {T}
     view in _CS_VIEWS || throw(ArgumentError(
@@ -69,7 +70,7 @@ function plot_result(d::CrossSectionData{T};
         idxs = _resolve_vars(vars, d.varnames)
         total = length(idxs); shown = min(total, 12)
         panels = _dist_panels(d.data, idxs[1:shown], d.varnames;
-                              density=(view === :density), n_bins=n_bins, id_prefix="cs")
+                              density=(view === :density), n_bins=n_bins, id_prefix="cs", bw=bw, n_grid=n_grid)
         isempty(title) && (title = view === :density ? "Densities" : "Distributions")
         note = _cap_note("variables", shown, total, "vars")
         p = _make_plot(panels; title=title, ncols=ncols, note=note)

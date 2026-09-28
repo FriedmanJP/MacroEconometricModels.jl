@@ -114,20 +114,22 @@ end
 # =============================================================================
 
 """
-    plot_result(m::LogitModel{T}; view=:default, title="", save_path=nothing)
+    plot_result(m::LogitModel{T}; view=:default, title="", save_path=nothing, threshold=0.5, thresholds=nothing)
 
 Plot logit model diagnostics.
 
 # Views
 - `:default` — sorted predicted probabilities by outcome + distribution by group
-- `:classification` — confusion-style counts at threshold 0.5 and accuracy / sensitivity /
-  specificity vs classification threshold (#593)
+- `:classification` — confusion-style counts at `threshold` (default 0.5) and accuracy / sensitivity /
+  specificity vs classification threshold (`thresholds` grid, default `range(0.05, 0.95; length=19)`)
 """
 function plot_result(m::LogitModel{T};
                      view::Symbol=:default,
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     title::String="", save_path::Union{String,Nothing}=nothing,
+                     threshold::Real=0.5, thresholds=nothing) where {T}
     if view === :classification
-        return _plot_binary_classification(m.y, m.fitted, "Logit"; title=title, save_path=save_path)
+        return _plot_binary_classification(m.y, m.fitted, "Logit"; title=title, save_path=save_path,
+                                           threshold=threshold, thresholds=thresholds)
     elseif view === :default
         return _plot_binary_choice(m.y, m.fitted, "Logit"; title=title, save_path=save_path)
     else
@@ -140,15 +142,17 @@ end
 # =============================================================================
 
 """
-    plot_result(m::ProbitModel{T}; view=:default, title="", save_path=nothing)
+    plot_result(m::ProbitModel{T}; view=:default, title="", save_path=nothing, threshold=0.5, thresholds=nothing)
 
 Plot probit model diagnostics. Same views as [`plot_result(::LogitModel)`](@ref).
 """
 function plot_result(m::ProbitModel{T};
                      view::Symbol=:default,
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     title::String="", save_path::Union{String,Nothing}=nothing,
+                     threshold::Real=0.5, thresholds=nothing) where {T}
     if view === :classification
-        return _plot_binary_classification(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
+        return _plot_binary_classification(m.y, m.fitted, "Probit"; title=title, save_path=save_path,
+                                           threshold=threshold, thresholds=thresholds)
     elseif view === :default
         return _plot_binary_choice(m.y, m.fitted, "Probit"; title=title, save_path=save_path)
     else
@@ -156,15 +160,16 @@ function plot_result(m::ProbitModel{T};
     end
 end
 
-"""Classification diagnostics: threshold sweep + confusion counts at 0.5 (#593)."""
+"""Classification diagnostics: threshold sweep + confusion counts at `threshold` (default 0.5)."""
 function _plot_binary_classification(y::AbstractVector, fitted::AbstractVector,
                                      model_name::String;
-                                     title::String="", save_path::Union{String,Nothing}=nothing)
+                                     title::String="", save_path::Union{String,Nothing}=nothing,
+                                     threshold::Real=0.5, thresholds=nothing)
     yb = [yi > 0.5 for yi in y]
     p_hat = collect(fitted)
     n = length(yb)
-    # Confusion at threshold 0.5
-    thr0 = 0.5
+    # Confusion at the operating threshold
+    thr0 = Float64(threshold)
     pred0 = p_hat .>= thr0
     tp = count(i -> pred0[i] && yb[i], 1:n)
     tn = count(i -> !pred0[i] && !yb[i], 1:n)
@@ -182,13 +187,13 @@ function _plot_binary_classification(y::AbstractVector, fitted::AbstractVector,
     s1 = _series_json(["Count"], [_PLOT_COLORS[1]]; keys=["s1"])
     js1 = _render_bar_js(id1, data1, s1; mode="stacked", xlabel="Cell", ylabel="Count")
     acc0 = (tp + tn) / max(n, 1)
-    p1 = _PanelSpec(id1, "Confusion @ 0.5 (acc=$(round(acc0; digits=3)))", js1)
+    p1 = _PanelSpec(id1, "Confusion @ $(thr0) (acc=$(round(acc0; digits=3)))", js1)
 
     # Threshold sweep
-    thresholds = range(0.05, 0.95; length=19)
+    sweep = thresholds === nothing ? range(0.05, 0.95; length=19) : thresholds
     id2 = _next_plot_id("clf_thr")
     rows2 = Vector{Pair{String,String}}[]
-    for thr in thresholds
+    for thr in sweep
         pred = p_hat .>= thr
         tp_ = count(i -> pred[i] && yb[i], 1:n)
         tn_ = count(i -> !pred[i] && !yb[i], 1:n)
@@ -346,4 +351,167 @@ function plot_result(s::InfluenceStats{T};
     p = _make_plot([p1, p2]; title = title, ncols = 1)
     save_path !== nothing && save_plot(p, save_path)
     p
+end
+
+# =============================================================================
+# Count / quantile / robust regression (#841 PR6)
+# =============================================================================
+
+"""
+    plot_result(m::PoissonModel; title="", save_path=nothing, conf_level=0.95)
+
+Poisson regression coefficients as a horizontal dot-and-whisker plot
+(`β ± z·SE` at confidence level `conf_level`, default 0.95; SE from
+`diag(vcov_mat)`), with a zero reference line. Covariance type and
+pseudo-R² are stated in the panel subtitle.
+"""
+function plot_result(m::PoissonModel{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
+    z = _conf_z(conf_level)
+    panel = _coef_panel("pois_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
+                        z=z, ptitle="Coefficients ($(_ci_pct(conf_level))% CI)")
+    ftitle = isempty(title) ? "Poisson Regression Coefficients" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(m::NegBinModel; title="", save_path=nothing, conf_level=0.95)
+
+Negative-binomial regression coefficients as a horizontal dot-and-whisker plot
+(`β ± z·SE` at `conf_level`, default 0.95; SE from the β block of the joint
+`(k+1)×(k+1)` `vcov_mat`, α last), with a zero reference line. The dispersion
+parameter and pseudo-R² are stated in the panel subtitle.
+"""
+function plot_result(m::NegBinModel{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
+    z = _conf_z(conf_level)
+    K = length(m.beta)
+    se_beta = _diag_se(m.vcov_mat)[1:K]
+    panel = _coef_panel("nb_coef", m.varnames, m.beta, se_beta;
+                        z=z, ptitle="Coefficients ($(_ci_pct(conf_level))% CI)")
+    ftitle = isempty(title) ? "Negative-Binomial Coefficients" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(m::QuantileRegModel; title="", save_path=nothing)
+
+Quantile-regression coefficient paths: each regressor's coefficient across the
+fitted quantiles `τ` (one line per regressor). Flat paths imply homogeneous
+effects; fanning paths reveal heterogeneity across the conditional distribution.
+There is no single whisker level on a multi-τ figure, so no `conf_level`
+keyword applies (use per-τ `stderr` for inference).
+"""
+function plot_result(m::QuantileRegModel{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    id = _next_plot_id("qreg_path")
+    taus = collect(m.taus)
+    K = length(m.varnames)
+    rows = Vector{Pair{String,String}}[]
+    for i in eachindex(taus)
+        row = Pair{String,String}["x" => _json(Float64(taus[i]))]
+        for j in 1:K
+            push!(row, "s$j" => _json(m.beta[j, i]))
+        end
+        push!(rows, row)
+    end
+    data = _json_array_of_objects(rows)
+    colors = [_PLOT_COLORS[mod1(j, length(_PLOT_COLORS))] for j in 1:K]
+    series = _series_json(m.varnames, colors; keys=["s$j" for j in 1:K])
+    js = _render_line_js(id, data, series; xlabel="Quantile τ", ylabel="Coefficient")
+    panel = _PanelSpec(id, "Coefficient Paths", js)
+    isempty(title) && (title = "Quantile Regression Coefficient Paths")
+    p = _make_plot([panel]; title=title, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(m::RobustRegModel; title="", save_path=nothing, conf_level=0.95)
+
+Robust regression: coefficient dot-and-whisker (`β ± z·SE` at `conf_level`,
+default 0.95) plus the estimation-weight profile over observations
+(downweighted points sit near zero). ψ function, method, and robust R² are
+stated in the coefficient subtitle.
+"""
+function plot_result(m::RobustRegModel{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
+    z = _conf_z(conf_level)
+    p1 = _coef_panel("rob_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
+                     z=z, ptitle="Coefficients ($(m.psi)/$(m.method), " *
+                     "$(_ci_pct(conf_level))% CI, R²=$(_fmt(m.robust_r2; digits=3)))")
+    id2 = _next_plot_id("rob_w")
+    rows = [["x" => _json(i), "w" => _json(m.weights[i])]
+            for i in eachindex(m.weights)]
+    js2 = _render_line_js(id2, _json_array_of_objects(rows),
+                          _series_json(["Weight"], [_PLOT_COLORS[2]]; keys=["w"]);
+                          xlabel="Observation", ylabel="Weight")
+    p2 = _PanelSpec(id2, "Estimation Weights", js2)
+    ftitle = isempty(title) ? "Robust Regression" : title
+    p = _make_plot([p1, p2]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+# =============================================================================
+# RDD / regression diagnostics (#841 PR7)
+# =============================================================================
+
+"""
+    plot_result(r::RDDResult; title="", save_path=nothing, conf_level=0.95)
+
+Regression-discontinuity treatment effect: conventional and bias-corrected
+estimates as a two-row dot-and-whisker (`τ ± z·SE` at confidence level
+`conf_level`, default 0.95), with a zero reference line. Cutoff, bandwidths,
+kernel, polynomial order, and both-side sample sizes are stated in the panel
+subtitle (first-stage estimate appended for fuzzy designs).
+"""
+function plot_result(r::RDDResult{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     conf_level::Real=0.95) where {T}
+    z = _conf_z(conf_level)
+    panel = _coef_panel("rdd_tau", ["Conventional", "Bias-corrected"],
+                        [r.tau_conventional, r.tau_bias_corrected],
+                        [r.se_conventional, r.se_robust];
+                        z=z, ptitle="Treatment Effect (h=$(_fmt(r.h; digits=3)), " *
+                        "b=$(_fmt(r.b; digits=3)), $(r.kernel), " *
+                        "n=$(r.n_left)+$(r.n_right), $(_ci_pct(conf_level))% CI)")
+    fs = r.first_stage === nothing ? "" : ", first-stage=$(_fmt(r.first_stage; digits=3))"
+    ftitle = isempty(title) ?
+        "RDD Treatment Effect (cutoff=$(_fmt(r.cutoff; digits=3))$(fs))" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::RegDiagnosticResult; title="", save_path=nothing, level=5)
+
+Regression diagnostic (RESET/White/Breusch–Godfrey/…): χ² and (when available)
+F p-values as bars against `α` (default 5%). Member diagnostics span
+heteroskedasticity, autocorrelation, and functional-form nulls, so p-values
+are the comparable quantity. Test name, H₀, degrees of freedom, auxiliary R²,
+and sample size are stated in the subtitle.
+"""
+function plot_result(r::RegDiagnosticResult{T}; title::String="",
+                     save_path::Union{String,Nothing}=nothing,
+                     level::Int=5) where {T}
+    labels = ["χ²"]
+    pvs = [r.pvalue]
+    if r.f_pvalue !== nothing
+        push!(labels, "F")
+        push!(pvs, r.f_pvalue)
+    end
+    dfstr = r.df isa Tuple ? "$(r.df[1]), $(r.df[2])" : string(r.df)
+    _pvalue_bar_plot("regdiag", labels, pvs, "Regression Diagnostic",
+        "$(r.test_name): $(r.h0) (df=$(dfstr), aux-R²=$(_fmt(r.aux_r2; digits=3)), " *
+        "n=$(r.n))";
+        title=title, save_path=save_path, level=level)
 end

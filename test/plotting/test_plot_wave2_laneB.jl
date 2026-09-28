@@ -288,8 +288,8 @@ _laneB_first_data_len(html::AbstractString) = length(_laneB_first_data(html))
         assert_all_json_valid(pmo)
         dm = _laneB_first_data(pmo.html)
         @test all(o -> o isa AbstractDict && haskey(o, "ci_lo") && haskey(o, "ci_hi"), dm)
-        # 95% interval half-width for a=0.5, var 0.01 ⇒ 1.96*0.1 = 0.196
+        # 95% interval half-width for a=0.5, var 0.01 ⇒ z_0.975*0.1
         row_a = first(x for x in dm if x isa AbstractDict && get(x, "name", "") == "a")
-        @test isapprox(Float64(row_a["ci_hi"]) - Float64(row_a["effect"]), 1.96 * 0.1; atol=1e-6)
+        @test isapprox(Float64(row_a["ci_hi"]) - Float64(row_a["effect"]), quantile(Normal(), 0.975) * 0.1; atol=1e-9)
     end
 end

@@ -84,7 +84,7 @@ end
 
 """
     plot_result(hd::BayesianHistoricalDecomposition; var=nothing, shock=nothing,
-                stat=:mean, ncols=0, title="", save_path=nothing)
+                stat=:mean, view=:fan, ncols=0, title="", save_path=nothing)
 
 Plot a Bayesian historical decomposition as nested posterior credible fans of each
 shock's contribution, one panel per `(variable, shock)` (PLT-28). Unlike the old
@@ -94,14 +94,23 @@ central line:
 - `:mean` (default) — `hd.point_estimate`;
 - `:median` — the 0.5 quantile from `hd.quantiles` (requires that level in
   `hd.quantile_levels`, else an `ArgumentError`).
+
+`view` selects the exhibit:
+- `:fan` (default) — per-`(variable, shock)` credible fans;
+- `:stacked` — per-variable stacked bars of the central estimates across shocks
+  plus an actual-vs-reconstructed line, mirroring the frequentist exhibit.
+  Stacking discards posterior uncertainty (sums of centrals, not central sums),
+  so the fan remains the default. Unknown `view` throws `ArgumentError`.
 """
 function plot_result(hd::BayesianHistoricalDecomposition{T};
                      var::Union{Int,String,Nothing}=nothing,
                      shock::Union{Int,String,Nothing}=nothing,
-                     stat::Symbol=:mean, ncols::Int=0, title::String="",
+                     stat::Symbol=:mean, view::Symbol=:fan, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     stat in (:mean, :median) ||
         throw(ArgumentError("stat must be :mean or :median, got :$stat"))
+    view in (:fan, :stacked) ||
+        throw(ArgumentError("view must be :fan or :stacked, got :$view"))
     T_eff = hd.T_eff
     n_vars = length(hd.variables)
     n_shocks = length(hd.shock_names)
@@ -120,16 +129,53 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
     shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, hd.shock_names)]
 
     panels = _PanelSpec[]
-    for vi in vars_to_plot
-        for si in shocks_to_plot
-            ptitle = "$(hd.variables[vi]) ← $(hd.shock_names[si])"
-            qmat = hd.quantiles[1:T_eff, vi, si, :]            # T_eff×nq contribution
-            central = stat == :median ? hd.quantiles[1:T_eff, vi, si, qidx] :
-                                        hd.point_estimate[1:T_eff, vi, si]
-            panel, _ = _bayes_fan_panel("bhd", ptitle, xs, qmat, levels,
-                                        central, central_label, nothing, 0;
-                                        xlabel="Period", ylabel="Contribution")
-            push!(panels, panel)
+    if view === :stacked
+        stat_word = stat == :median ? "posterior medians" : "posterior means"
+        for vi in vars_to_plot
+            snames = hd.shock_names[shocks_to_plot]
+            central = if stat == :median
+                [hd.quantiles[t, vi, si, qidx] for t in 1:T_eff, si in shocks_to_plot]
+            else
+                [hd.point_estimate[t, vi, si] for t in 1:T_eff, si in shocks_to_plot]
+            end
+            id_bar = _next_plot_id("bhd_bar")
+            data_bar = _hd_data_json(central, snames, T_eff)
+            s_bar = _series_json(snames, _colors_for(snames);
+                                 keys=["s$j" for j in eachindex(snames)])
+            js_bar = _render_bar_js(id_bar, data_bar, s_bar;
+                                    mode="stacked", xlabel="Period",
+                                    ylabel="Contribution")
+            push!(panels, _PanelSpec(id_bar,
+                "$(hd.variables[vi]) — Shock Contributions ($(stat_word))", js_bar))
+            id_line = _next_plot_id("bhd_line")
+            actual = hd.actual[1:T_eff, vi]
+            total = vec(sum(central, dims=2)) .+ hd.initial_point_estimate[1:T_eff, vi]
+            rows = Vector{Pair{String,String}}[]
+            for t in 1:T_eff
+                push!(rows, ["x" => _json(t), "actual" => _json(actual[t]),
+                             "recon" => _json(total[t])])
+            end
+            js_line = _render_line_js(id_line, _json_array_of_objects(rows),
+                _series_json(["Actual", "Reconstructed"],
+                             [_PLOT_COLORS[1], _PLOT_COLORS[2]];
+                             keys=["actual", "recon"], dash=["", "6,3"]);
+                ref_lines_json="[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]",
+                xlabel="Period", ylabel="Value")
+            push!(panels, _PanelSpec(id_line,
+                "$(hd.variables[vi]) — Actual vs Decomposition", js_line))
+        end
+    else
+        for vi in vars_to_plot
+            for si in shocks_to_plot
+                ptitle = "$(hd.variables[vi]) ← $(hd.shock_names[si])"
+                qmat = hd.quantiles[1:T_eff, vi, si, :]
+                central = stat == :median ? hd.quantiles[1:T_eff, vi, si, qidx] :
+                                            hd.point_estimate[1:T_eff, vi, si]
+                panel, _ = _bayes_fan_panel("bhd", ptitle, xs, qmat, levels,
+                                            central, central_label, nothing, 0;
+                                            xlabel="Period", ylabel="Contribution")
+                push!(panels, panel)
+            end
         end
     end
 
