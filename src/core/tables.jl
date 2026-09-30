@@ -880,6 +880,54 @@ function _coef_nt(r::BaiPerronResult)
     return c
 end
 
+# --- Battery suites (stacked member rows) + stability paths ---
+
+function _stack_test_rows!(c, nt)
+    append!(c.test, nt.test); append!(c.statistic, nt.statistic)
+    append!(c.p_value, nt.p_value); append!(c.decision, nt.decision)
+    append!(c.cv_1pct, nt.cv_1pct); append!(c.cv_5pct, nt.cv_5pct)
+    append!(c.cv_10pct, nt.cv_10pct)
+    return c
+end
+
+function _coef_nt(s::NormalityTestSuite)
+    c = _new_test_cols()
+    for r in s.results
+        _stack_test_rows!(c, _coef_nt(r))
+    end
+    return c
+end
+
+function _coef_nt(s::PanelUnitRootSummary)
+    c = _new_test_cols()
+    for m in (s.panic, s.cips, s.moon_perron, s.llc, s.ips, s.breitung, s.fisher, s.hadri)
+        m === nothing && continue
+        _stack_test_rows!(c, _coef_nt(m))
+    end
+    return c
+end
+
+# CUSUM path in (period) long shape with per-point band breaches.
+function _coef_nt(r::StabilityResult)
+    n = length(r.tindex)
+    stat = Float64.(collect(r.stat_path))
+    upper = Float64.(collect(r.upper))
+    lower = Float64.(collect(r.lower))
+    breached = Bool[!isnan(s) && (s < lo || s > up) for (s, lo, up) in zip(stat, lower, upper)]
+    return (period=collect(r.tindex), kind=fill(string(r.kind), n), stat=stat,
+        upper=upper, lower=lower, breached=breached)
+end
+
+# Companion eigenvalues in (eigen) long shape.
+function _coef_nt(r::VARStationarityResult)
+    n = length(r.eigenvalues)
+    return (test=fill("VAR stationarity", n), eigen_index=collect(1:n),
+        re=Float64[real(e) for e in r.eigenvalues],
+        im=Float64[imag(e) for e in r.eigenvalues],
+        modulus=Float64[abs(e) for e in r.eigenvalues],
+        is_stationary=fill(r.is_stationary, n))
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tables.jl source interface for coefficient-bearing types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -915,7 +963,8 @@ const _TEST_TABLE_TYPES = (ADFResult, KPSSResult, PPResult, ERSResult,
     DumitrescuHurlinResult, MincerZarnowitzResult, FourierADFResult,
     FourierKPSSResult, GregoryHansenResult, NgPerronResult, DFGLSResult,
     JohansenResult, FisherJohansenResult, PANICResult, HEGYResult,
-    VarianceRatioResult, BDSResult, BaiPerronResult)
+    VarianceRatioResult, BDSResult, BaiPerronResult, NormalityTestSuite,
+    PanelUnitRootSummary, StabilityResult, VARStationarityResult)
 
 for MT in _TEST_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true

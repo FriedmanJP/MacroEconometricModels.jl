@@ -810,6 +810,38 @@ end
         @test dbp.decision == ["reject", "reject", "fail to reject"]
     end
 
+    @testset "DataFrame(test suites and stability paths) (#860)" begin
+        MEM = MacroEconometricModels
+        rng = Xoshiro(29)
+        U = randn(rng, 200, 3)
+        suite = normality_test_suite(U)
+        ds = DataFrame(suite)
+        @test nrow(ds) == length(suite.results)
+        @test ds.test == MEM._normality_test_label.(suite.results)
+        @test all(in(("reject", "fail to reject")), skipmissing(ds.decision))
+        llc = MEM.LLCResult{Float64}(-2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
+        had = MEM.HadriResult{Float64}(2.0, 0.023, 5.0, 1.0, 2.0, false, :constant, 100, 2)
+        summ = MEM.PanelUnitRootSummary(nothing, nothing, nothing, llc, nothing, nothing, nothing, had, String[])
+        dsum = DataFrame(summ)
+        @test dsum.test == ["Levin-Lin-Chu", "Hadri"]
+        @test dsum.decision == ["reject", "reject"]
+        X = hcat(ones(80), randn(rng, 80, 2))
+        m = estimate_reg(randn(rng, 80), X)
+        cu = cusum_test(m)
+        dcu = DataFrame(cu)
+        @test names(dcu) == ["period", "kind", "stat", "upper", "lower", "breached"]
+        @test dcu.period == cu.tindex
+        @test dcu.breached == [!(lo <= s <= up) for (s, lo, up) in zip(cu.stat_path, cu.lower, cu.upper)]
+        @test cu.crossed == any(dcu.breached)
+        vm = estimate_var(randn(rng, 80, 2), 1)
+        st = is_stationary(vm)
+        dst = DataFrame(st)
+        @test nrow(dst) == length(st.eigenvalues)
+        @test dst.modulus ≈ abs.(st.eigenvalues)
+        @test dst.is_stationary == fill(st.is_stationary, nrow(dst))
+        @test st.is_stationary == all(dst.modulus .< 1)
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)
