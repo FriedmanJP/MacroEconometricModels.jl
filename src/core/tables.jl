@@ -11,9 +11,11 @@
 # and R/Python hand-off work uniformly.
 #
 #   1. Coefficient-bearing models (RegModel, Logit/Probit, Ordered/Multinomial,
-#      the PanelReg family, VARModel, MarginalEffects, DIDResult) implement the
-#      Tables.jl *source* interface — the natural coefficient table (term, estimate,
-#      std_error, stat, p_value, ci_lower, ci_upper) is the exposed table, so
+#      the PanelReg family, VARModel, MarginalEffects, DIDResult, count models,
+#      QuantileRegModel, RDDResult, SUR/3SLS, DiD event-study results,
+#      MultinomialMarginalEffects) implement the Tables.jl *source* interface —
+#      the natural coefficient table (term, estimate, std_error, stat, p_value,
+#      ci_lower, ci_upper, plus key columns) is the exposed table, so
 #      `DataFrame(m)` returns the same numbers `report(m)` prints.
 #   2. Array-valued results (IRF, FEVD, forecasts) expose a tidy/long table via
 #      `long_table(result)` — one row per cell, with explicit horizon/variable/shock
@@ -144,13 +146,160 @@ function _coef_nt(model::VARModel)
     return merge((equation = eqs,), base)
 end
 
+# ── TIDY batch (v1.0.2, #853 series) ──────────────────────────────────────────
+
+# Count models — z-based, mirroring `report()`. NegBin appends the dispersion
+# row tagged by `block`, like the ordered two-block shape. (#854)
+_coef_nt(m::PoissonModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
+function _coef_nt(m::NegBinModel)
+    k = length(m.beta)
+    base = _coef_nt_simple(vcat(String.(m.varnames), ["alpha"]),
+        vcat(Float64.(m.beta), [Float64(m.alpha)]),
+        vcat(Float64.(stderror(m)), [Float64(m.alpha_se)]), :z, 0)
+    block = vcat(fill("coef", k), ["dispersion"])
+    return merge((block = block,), base)
+end
+
+# Quantile regression — one block per tau tagged by a `tau` column; same
+# t-distributed inference (dof n-k) as each per-quantile `report()` table. (#855)
+function _coef_nt(m::QuantileRegModel)
+    dof_r = size(m.X, 1) - size(m.X, 2)
+    taus = Float64[]; terms = String[]; est = Float64[]; s = Float64[]
+    for (j, t) in enumerate(m.taus)
+        append!(taus, fill(Float64(t), length(m.varnames)))
+        append!(terms, String.(m.varnames))
+        append!(est, Float64.(m.beta[:, j]))
+        append!(s, Float64.(m.stderr[:, j]))
+    end
+    base = _coef_nt_simple(terms, est, s, :t, dof_r)
+    return merge((tau = taus,), base)
+end
+
+# RDD — conventional + robust treatment-effect rows at the stored level, with
+# the main/pilot bandwidths attached. (#855)
+function _coef_nt(r::RDDResult)
+    base = _coef_nt_simple(["Conventional", "Robust (bias-corrected)"],
+        [r.tau_conventional, r.tau_bias_corrected],
+        [r.se_conventional, r.se_robust], :z, 0; level=r.level)
+    return merge(base, (h = fill(Float64(r.h), 2), b = fill(Float64(r.b), 2)))
+end
+
+# SUR / 3SLS — one row per (equation, term); dof varies per equation so each
+# block is built separately, mirroring the per-equation `report()` tables. (#856)
+function _coef_nt_eqstack(eqnames, varnames, betas, ses, nobs)
+    eqs = String[]; terms = String[]; est = Float64[]; s = Float64[]
+    stat = Float64[]; pval = Float64[]; lo = Float64[]; hi = Float64[]
+    for j in eachindex(eqnames)
+        blk = _coef_nt_simple(varnames[j], betas[j], ses[j], :t,
+            max(nobs - length(betas[j]), 1))
+        append!(eqs, fill(eqnames[j], length(blk.term)))
+        append!(terms, blk.term); append!(est, blk.estimate); append!(s, blk.std_error)
+        append!(stat, blk.stat); append!(pval, blk.p_value)
+        append!(lo, blk.ci_lower); append!(hi, blk.ci_upper)
+    end
+    return (equation=eqs, term=terms, estimate=est, std_error=s, stat=stat,
+        p_value=pval, ci_lower=lo, ci_upper=hi)
+end
+
+function _coef_nt(m::SURModel)
+    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs)
+    n = length(base.term)
+    return merge(base, (nobs=fill(m.nobs, n), mcelroy_r2=fill(Float64(m.mcelroy_r2), n),
+        det_sigma=fill(Float64(m.det_sigma), n), loglik=fill(Float64(m.loglik), n)))
+end
+
+function _coef_nt(m::ThreeSLSModel)
+    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs)
+    n = length(base.term)
+    ni = Int[]
+    for j in eachindex(m.eqnames)
+        append!(ni, fill(m.n_instruments[j], length(m.betas[j])))
+    end
+    return merge(base, (nobs=fill(m.nobs, n), mcelroy_r2=fill(Float64(m.mcelroy_r2), n),
+        det_sigma=fill(Float64(m.det_sigma), n), n_instruments=ni))
+end
+
+# EventStudyLP — event-time coefficients keyed by event time; CIs are stored,
+# like `DIDResult`. (#866)
+function _coef_nt(r::EventStudyLP)
+    est = Float64.(collect(r.coefficients))
+    s = Float64.(collect(r.se))
+    stat = est ./ s
+    pval = Float64[2 * (1 - cdf(Normal(), abs(z))) for z in stat]
+    return (event_time = collect(r.event_times),
+            term = ["h=$(e)" for e in r.event_times],
+            estimate = est,
+            std_error = s,
+            stat = stat,
+            p_value = pval,
+            ci_lower = Float64.(collect(r.ci_lower)),
+            ci_upper = Float64.(collect(r.ci_upper)))
+end
+
+# LPDiDResult — dynamic rows plus pooled rows tagged by `block`; pooled rows
+# carry `missing` event times. (#866)
+function _coef_nt(r::LPDiDResult)
+    et = Union{Missing,Int}[e for e in r.event_times]
+    term = ["h=$(e)" for e in r.event_times]
+    est = Float64.(collect(r.coefficients))
+    s = Float64.(collect(r.se))
+    lo = Float64.(collect(r.ci_lower))
+    hi = Float64.(collect(r.ci_upper))
+    block = fill("dynamic", length(term))
+    for (nm, pool) in (("Pre-pooled", r.pooled_pre), ("Post-pooled", r.pooled_post))
+        pool === nothing && continue
+        push!(et, missing); push!(term, nm)
+        push!(est, Float64(pool.coef)); push!(s, Float64(pool.se))
+        push!(lo, Float64(pool.ci_lower)); push!(hi, Float64(pool.ci_upper))
+        push!(block, "pooled")
+    end
+    stat = est ./ s
+    pval = Float64[2 * (1 - cdf(Normal(), abs(z))) for z in stat]
+    return (block=block, event_time=et, term=term, estimate=est, std_error=s,
+        stat=stat, p_value=pval, ci_lower=lo, ci_upper=hi)
+end
+
+# BaconDecomposition — one row per 2x2 comparison. (#866)
+function _coef_nt(r::BaconDecomposition)
+    return (type=string.(r.comparison_type),
+            cohort_i=collect(r.cohort_i), cohort_j=collect(r.cohort_j),
+            estimate=Float64.(collect(r.estimates)),
+            weight=Float64.(collect(r.weights)))
+end
+
+# Per-category marginal effects — long (variable, category) rows with z-based
+# inference. `se === nothing` (model covariance unavailable) yields NaN
+# inference columns, matching the NaN fallback of the ordered AME. (#863)
+function _marginal_effects_long(effects::AbstractMatrix, se, varnames, categories;
+        skip_first::Bool)
+    keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, varnames)
+    isempty(keep) && (keep = collect(1:size(effects, 1)))
+    jrange = skip_first ? (2:size(effects, 2)) : (1:size(effects, 2))
+    variable = String[]; category = String[]; est = Float64[]; s = Float64[]
+    for j in jrange, i in keep
+        push!(variable, string(varnames[i])); push!(category, string(categories[j]))
+        push!(est, Float64(effects[i, j]))
+        push!(s, se === nothing ? NaN : Float64(se[i, j]))
+    end
+    base = _coef_nt_simple(variable, est, s, :z, 0)
+    return (variable=base.term, category=category, estimate=base.estimate,
+        std_error=base.std_error, stat=base.stat, p_value=base.p_value,
+        ci_lower=base.ci_lower, ci_upper=base.ci_upper)
+end
+
+# Multinomial AME skips the base category (column 1), mirroring `show()`.
+_coef_nt(me::MultinomialMarginalEffects) =
+    _marginal_effects_long(me.effects, me.se, me.varnames, me.categories; skip_first=true)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tables.jl source interface for coefficient-bearing types
 # ─────────────────────────────────────────────────────────────────────────────
 
 const _COEF_TABLE_TYPES = (RegModel, LogitModel, ProbitModel, PanelRegModel, PanelIVModel,
     PanelLogitModel, PanelProbitModel, MarginalEffects, OrderedLogitModel, OrderedProbitModel,
-    MultinomialLogitModel, VARModel, DIDResult)
+    MultinomialLogitModel, VARModel, DIDResult, PoissonModel, NegBinModel,
+    QuantileRegModel, RDDResult, SURModel, ThreeSLSModel, EventStudyLP, LPDiDResult,
+    BaconDecomposition, MultinomialMarginalEffects)
 
 for MT in _COEF_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true
@@ -181,6 +330,7 @@ carries explicit index columns so downstream scripts are uniform across result t
 | `BayesianHistoricalDecomposition` | `time, variable, shock, value, lower, upper` |
 | `AbstractForecastResult` (VAR/BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
 | `MidasForecast` | `horizon, variable, value, se, lower, upper` (horizon label is the direct `h`) |
+| ordered `marginal_effects` NamedTuple | `variable, category, estimate, std_error, stat, p_value, ci_lower, ci_upper` |
 
 Horizons are 1-based (matching [`table`](@ref)). `lower`/`upper` are `missing` when the
 result carries no uncertainty bands (`ci_type == :none` / `ci_method == :none`). The
@@ -340,6 +490,16 @@ function long_table(f::LPFEVD)
         push!(lower, f.ci_lower[v, s, h]); push!(upper, f.ci_upper[v, s, h])
     end
     return DataFrame(; horizon, variable, shock, value, se, lower, upper)
+end
+
+# Ordered-model `marginal_effects` returns a bare NamedTuple (no display struct),
+# so it cannot be a Tables.jl source (that would pirate Base.NamedTuple) — expose
+# the same long (variable, category) shape via `long_table` instead. All J
+# categories are kept: ordered AMEs have no base normalization. (#863)
+function long_table(nt::NamedTuple{(:effects, :se, :varnames, :categories)})
+    cols = _marginal_effects_long(nt.effects, nt.se, nt.varnames, nt.categories;
+        skip_first=false)
+    return DataFrame(; cols...)
 end
 
 # ─────────────────────────────────────────────────────────────────────────────

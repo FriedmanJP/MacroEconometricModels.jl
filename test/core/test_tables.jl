@@ -13,6 +13,28 @@ using Random
 using LinearAlgebra
 using DelimitedFiles
 
+# Tiny staggered panel for direct DiD-result construction (no estimation).
+function _tidy_minipanel()
+    rng = Xoshiro(7)
+    n_units, n_periods = 12, 10
+    treat_times = vcat(fill(4, 4), fill(7, 4), zeros(Int, 4))
+    N_obs = n_units * n_periods
+    data = Matrix{Float64}(undef, N_obs, 2)
+    group_id = Vector{Int}(undef, N_obs)
+    time_id = Vector{Int}(undef, N_obs)
+    row = 1
+    for i in 1:n_units, t in 1:n_periods
+        data[row, 1] = randn(rng) + (treat_times[i] > 0 && t >= treat_times[i] ? 2.0 : 0.0)
+        data[row, 2] = Float64(treat_times[i])
+        group_id[row] = i
+        time_id[row] = t
+        row += 1
+    end
+    PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+        group_id, time_id, nothing, ["unit_$i" for i in 1:n_units],
+        n_units, 2, N_obs, true, ["tiny"], Dict{String,String}(), Symbol[])
+end
+
 @testset "Tables.jl integration (T247/#346)" begin
 
     # ── Coefficient-bearing models: DataFrame(result) ───────────────────────────
@@ -215,6 +237,165 @@ using DelimitedFiles
         @test lt.value == [1.5]
         @test lt.se == [0.15]
         @test (lt.lower, lt.upper) == ([1.2], [1.8])
+    end
+
+    # ── TIDY coefficient families (v1.0.2, #853 series) ─────────────────────────
+    @testset "DataFrame(PoissonModel/NegBinModel) (#854)" begin
+        d = readdlm(joinpath(@__DIR__, "..", "reg", "data", "count_oracle.csv"), ',', Float64)
+        X = hcat(ones(size(d, 1)), d[:, 4], d[:, 5])
+        VN = ["const", "x1", "x2"]
+        mp = estimate_poisson(d[:, 1], X; varnames=VN)
+        df = DataFrame(mp)
+        @test names(df) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test df.estimate ≈ coef(mp)
+        @test df.std_error ≈ stderror(mp)
+        mn = estimate_nbreg(d[:, 2], X; varnames=VN)
+        dn = DataFrame(mn)
+        @test names(dn) == ["block", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test dn.block == ["coef", "coef", "coef", "dispersion"]
+        @test dn.term[end] == "alpha"
+        @test dn.estimate[end] ≈ mn.alpha
+        @test dn.std_error[end] ≈ mn.alpha_se
+    end
+
+    @testset "DataFrame(QuantileRegModel) (#855)" begin
+        rng = Xoshiro(22)
+        X = hcat(ones(200), randn(rng, 200, 2))
+        y = X * [1.0, 0.5, -0.3] .+ randn(rng, 200)
+        m = estimate_qreg(y, X, [0.25, 0.5, 0.75]; varnames=["const", "x1", "x2"])
+        df = DataFrame(m)
+        @test names(df) == ["tau", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test nrow(df) == 9
+        @test df.tau == repeat([0.25, 0.5, 0.75], inner=3)
+        @test df.estimate ≈ vec(m.beta)
+        @test df.std_error ≈ vec(m.stderr)
+        d05 = df[df.tau .== 0.5, :]
+        @test d05.term == ["const", "x1", "x2"]
+    end
+
+    @testset "DataFrame(RDDResult) (#855)" begin
+        rng = Xoshiro(23)
+        running = randn(rng, 600)
+        y = 0.5 .* running .+ 2.0 .* (running .>= 0) .+ randn(rng, 600)
+        r = estimate_rdd(y, running; cutoff=0.0)
+        df = DataFrame(r)
+        @test names(df) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper", "h", "b"]
+        @test df.term == ["Conventional", "Robust (bias-corrected)"]
+        @test df.estimate ≈ [r.tau_conventional, r.tau_bias_corrected]
+        @test df.std_error ≈ [r.se_conventional, r.se_robust]
+        @test df.h == fill(r.h, 2) && df.b == fill(r.b, 2)
+    end
+
+    @testset "DataFrame(SURModel/ThreeSLSModel) (#856)" begin
+        PD = load_example(:grunfeld)
+        GE = group_data(PD, "General Electric")
+        WH = group_data(PD, "Westinghouse")
+        T = 20
+        y1 = GE.data[:, 1]; X1 = hcat(ones(T), GE.data[:, 2], GE.data[:, 3])
+        y2 = WH.data[:, 1]; X2 = hcat(ones(T), WH.data[:, 2], WH.data[:, 3])
+        VN = ["const", "value", "capital"]
+        eqs = [(y1, X1, VN), (y2, X2, VN)]
+        ms = estimate_sur(eqs)
+        ds = DataFrame(ms)
+        @test names(ds) == ["equation", "term", "estimate", "std_error", "stat", "p_value",
+            "ci_lower", "ci_upper", "nobs", "mcelroy_r2", "det_sigma", "loglik"]
+        @test ds.equation == repeat(ms.eqnames, inner=3)
+        @test ds[ds.equation .== ms.eqnames[1], :estimate] ≈ ms.betas[1]
+        @test ds[ds.equation .== ms.eqnames[2], :estimate] ≈ ms.betas[2]
+        @test all(ds.mcelroy_r2 .≈ ms.mcelroy_r2)
+        @test all(ds.loglik .≈ ms.loglik)
+        Z = hcat(ones(T), GE.data[:, 3], WH.data[:, 3])
+        m3 = estimate_3sls(eqs, Z; eqnames=["GE", "Westinghouse"])
+        d3 = DataFrame(m3)
+        @test "n_instruments" in names(d3)
+        @test d3[d3.equation .== "GE", :estimate] ≈ m3.betas[1]
+        @test d3[d3.equation .== "Westinghouse", :estimate] ≈ m3.betas[2]
+        @test all(d3.n_instruments .== 3)
+    end
+
+    @testset "DataFrame(EventStudyLP/LPDiDResult/BaconDecomposition) (#866)" begin
+        MEM = MacroEconometricModels
+        pd = _tidy_minipanel()
+        et = [-2, -1, 0, 1, 2]
+        co = [0.1, 0.0, 1.0, 1.8, 2.2]
+        se = fill(0.3, 5)
+        eslp = MEM.EventStudyLP{Float64}(co, se, co .- 0.6, co .+ 0.6, et, -1,
+            Matrix{Float64}[], Matrix{Float64}[], Matrix{Float64}[], Int[],
+            "outcome", "treat_time", 120, 12, 1, 2, 2, false, :unit, 0.95, pd)
+        de = DataFrame(eslp)
+        @test names(de) == ["event_time", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test de.event_time == et
+        @test de.term == ["h=$e" for e in et]
+        @test de.estimate ≈ co
+        @test de.ci_lower ≈ co .- 0.6
+        lpd = MEM.LPDiDResult{Float64}(co, se, co .- 0.6, co .+ 0.6, et, -1, fill(100, 5),
+            (coef=1.9, se=0.2, ci_lower=1.5, ci_upper=2.3, nobs=300),
+            (coef=0.05, se=0.15, ci_lower=-0.25, ci_upper=0.35, nobs=200),
+            Matrix{Float64}[], "outcome", "treat_time", 1200, 12, :absorbing, nothing,
+            false, false, 1, 0, 2, 2, :unit, 0.95, pd)
+        dl = DataFrame(lpd)
+        @test dl.block == vcat(fill("dynamic", 5), fill("pooled", 2))
+        @test dl.term[6:7] == ["Pre-pooled", "Post-pooled"]
+        @test ismissing(dl.event_time[6]) && ismissing(dl.event_time[7])
+        @test collect(skipmissing(dl.event_time)) == et
+        @test dl.estimate[6:7] ≈ [0.05, 1.9]
+        bd = MEM.BaconDecomposition{Float64}([2.0, 1.5, 2.2], [0.5, 0.2, 0.3],
+            [:earlier_vs_later, :later_vs_earlier, :treated_vs_untreated],
+            [5, 8, 5], [8, 5, 0], 2.0)
+        db = DataFrame(bd)
+        @test names(db) == ["type", "cohort_i", "cohort_j", "estimate", "weight"]
+        @test db.weight ≈ [0.5, 0.2, 0.3]
+        @test db.cohort_j == [8, 5, 0]
+        @test db.type[3] == "treated_vs_untreated"
+    end
+
+    @testset "Tables form for per-category marginal effects (#863)" begin
+        MEM = MacroEconometricModels
+        rng = Xoshiro(24)
+        # Multinomial DGP: K=3 (const + 2), J=3.
+        n = 400
+        beta_true = [0.5 -0.3; 1.0 -0.5; -0.5 0.8]
+        X = [ones(n) randn(rng, n, 2)]
+        V = X * beta_true
+        y = Vector{Int}(undef, n)
+        for i in 1:n
+            w = [1.0, exp(V[i, 1]), exp(V[i, 2])]
+            p = w ./ sum(w)
+            u, cum = rand(rng), 0.0
+            y[i] = 3
+            for j in 1:3
+                cum += p[j]
+                if u < cum
+                    y[i] = j
+                    break
+                end
+            end
+        end
+        m = estimate_mlogit(y, X; varnames=["const", "x1", "x2"])
+        me = marginal_effects(m)
+        @test me isa MEM.MultinomialMarginalEffects
+        df = DataFrame(me)
+        @test names(df) == ["variable", "category", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test nrow(df) == length(me.varnames) * (length(me.categories) - 1)
+        @test Set(df.category) == Set(me.categories[2:end])     # base skipped
+        @test df.estimate[1] ≈ me.effects[1, 2]
+        # Ordered DGP: same long shape via long_table on the returned NamedTuple.
+        Xo = randn(rng, 400, 2)
+        xb = Xo * [1.0, -0.5]
+        cuts = [0.0, 1.5]
+        yo = Vector{Int}(undef, 400)
+        for i in 1:400
+            u = rand(rng)
+            yo[i] = u < 1 / (1 + exp(-(cuts[1] - xb[i]))) ? 1 :
+                    u < 1 / (1 + exp(-(cuts[2] - xb[i]))) ? 2 : 3
+        end
+        mo = estimate_ologit(yo, Xo; varnames=["x1", "x2"])
+        nto = marginal_effects(mo)
+        lt = long_table(nto)
+        @test names(lt) == ["variable", "category", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test nrow(lt) == 2 * 3                                  # all J kept
+        @test lt.estimate[1] ≈ nto.effects[1, 1]
+        @test lt.std_error[1] ≈ nto.se[1, 1]
     end
 
     # ── write_csv ───────────────────────────────────────────────────────────────
