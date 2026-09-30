@@ -105,6 +105,23 @@ function _pretty_table(io::IO, data; kwargs...)
             kw[:show_column_labels] = false
         end
     end
+    # Publication tables never show PrettyTables' eltype subheader row. In
+    # PrettyTables v3 there is no `show_subheader` switch: Tables.jl/dict inputs
+    # without explicit `column_labels` get a second header row of type names via
+    # `_guess_column_labels` — so pin single-row name labels here. Matrices are
+    # unaffected (they never get a type row). (#852)
+    if !haskey(kw, :column_labels) && !(data isa AbstractVecOrMat)
+        if data isa AbstractDict
+            kw[:column_labels] = ["Keys", "Values"]
+        elseif Tables.istable(data)
+            cnames = try
+                Tables.columnnames(data)
+            catch
+                nothing
+            end
+            cnames !== nothing && (kw[:column_labels] = string.(collect(cnames)))
+        end
+    end
     be = get_display_backend()
     # Latex/HTML backends reject text-only kwargs (`display_size` from PanelReg
     # show, fit-to-display flags). A leaked `set_display_backend(:latex)` from
