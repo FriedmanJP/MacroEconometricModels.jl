@@ -517,6 +517,155 @@ function _coef_nt(fp::RegionalFootprintResult)
         consumption=consumption)
 end
 
+# ── Test battery (#860) ───────────────────────────────────────────────────────
+# Uniform one-row-per-test (or per-hypothesis) tables: test label, statistic,
+# p-value, 5% decision mirroring show() (critical-value comparison with the
+# show() tail when the type carries CVs, else p < 0.05), and 1/5/10% CVs.
+# Test-specific findings (breaks, ranks, estimates) ride in extra columns;
+# spec metadata (lags, df, nobs, kernels) stays in fields.
+
+_new_test_cols() = (test=String[], statistic=Float64[],
+    p_value=Union{Missing,Float64}[], decision=Union{Missing,String}[],
+    cv_1pct=Union{Missing,Float64}[], cv_5pct=Union{Missing,Float64}[],
+    cv_10pct=Union{Missing,Float64}[])
+
+_test_p(p) = (p === nothing || p === missing || !isfinite(Float64(p))) ? missing : Float64(p)
+
+# Push one hypothesis row. `tail` is :left / :right for CV-based decisions
+# (mirroring show()) or :p to decide by p-value even when CVs are printed.
+function _test_push!(c, label, stat, p, cv, tail::Symbol)
+    push!(c.test, label)
+    push!(c.statistic, Float64(stat))
+    pv = _test_p(p)
+    push!(c.p_value, pv)
+    hascv = cv !== nothing && !isempty(cv)
+    if hascv
+        push!(c.cv_1pct, Float64(cv[1]))
+        push!(c.cv_5pct, Float64(cv[5]))
+        push!(c.cv_10pct, Float64(cv[10]))
+    else
+        push!(c.cv_1pct, missing); push!(c.cv_5pct, missing); push!(c.cv_10pct, missing)
+    end
+    dec = if hascv && tail !== :p
+        hit = tail === :left ? Float64(stat) < Float64(cv[5]) :
+                               Float64(stat) > Float64(cv[5])
+        hit ? "reject" : "fail to reject"
+    elseif pv !== missing
+        pv < 0.05 ? "reject" : "fail to reject"
+    else
+        missing
+    end
+    push!(c.decision, dec)
+    return c
+end
+
+# --- Single-hypothesis tests: unit roots, breaks, panel, serial, others ---
+
+_coef_nt(r::ADFResult) = _test_push!(_new_test_cols(), "ADF", r.statistic, r.pvalue, r.critical_values, :left)
+_coef_nt(r::KPSSResult) = _test_push!(_new_test_cols(), "KPSS", r.statistic, r.pvalue, r.critical_values, :right)
+_coef_nt(r::PPResult) = _test_push!(_new_test_cols(), "Phillips-Perron", r.statistic, r.pvalue, r.critical_values, :left)
+_coef_nt(r::ERSResult) = _test_push!(_new_test_cols(), "ERS point-optimal", r.P_T, r.pvalue, r.critical_values, :left)
+
+function _coef_nt(r::ZAResult)
+    c = _test_push!(_new_test_cols(), "Zivot-Andrews", r.statistic, r.pvalue, r.critical_values, :left)
+    return merge(c, (break_index=[r.break_index], break_fraction=[Float64(r.break_fraction)]))
+end
+
+function _coef_nt(r::AndrewsResult)
+    c = _test_push!(_new_test_cols(), "Andrews $(r.test_type)", r.statistic, r.pvalue, r.critical_values, :p)
+    return merge(c, (break_index=[r.break_index], break_fraction=[Float64(r.break_fraction)]))
+end
+
+function _coef_nt(r::ADF2BreakResult)
+    c = _test_push!(_new_test_cols(), "ADF two-break", r.statistic, r.pvalue, r.critical_values, :left)
+    return merge(c, (break_1=[r.break1], break_2=[r.break2],
+        breakfrac_1=[Float64(r.break1_fraction)], breakfrac_2=[Float64(r.break2_fraction)]))
+end
+
+function _coef_nt(r::LMUnitRootResult)
+    c = _test_push!(_new_test_cols(), "LM unit root", r.statistic, r.pvalue, r.critical_values, :left)
+    gd(i) = length(r.break_dates) >= i ? r.break_dates[i] : missing
+    gf(i) = length(r.break_fractions) >= i ? Float64(r.break_fractions[i]) : missing
+    return merge(c, (break_1=[gd(1)], break_2=[gd(2)], breakfrac_1=[gf(1)], breakfrac_2=[gf(2)]))
+end
+
+function _coef_nt(r::FactorBreakResult)
+    c = _test_push!(_new_test_cols(), "Factor break $(r.method)", r.statistic, r.pvalue, nothing, :p)
+    return merge(c, (break_index=[r.break_date === nothing ? missing : r.break_date],))
+end
+
+_coef_nt(r::LLCResult) = _test_push!(_new_test_cols(), "Levin-Lin-Chu", r.statistic, r.pvalue, _NORMAL_LEFT_CV, :left)
+_coef_nt(r::IPSResult) = _test_push!(_new_test_cols(), "Im-Pesaran-Shin", r.statistic, r.pvalue, _NORMAL_LEFT_CV, :left)
+_coef_nt(r::BreitungPanelResult) = _test_push!(_new_test_cols(), "Breitung", r.statistic, r.pvalue, _NORMAL_LEFT_CV, :left)
+_coef_nt(r::HadriResult) = _test_push!(_new_test_cols(), "Hadri", r.statistic, r.pvalue, _NORMAL_RIGHT_CV, :right)
+_coef_nt(r::PesaranCIPSResult) = _test_push!(_new_test_cols(), "Pesaran CIPS", r.cips_statistic, r.pvalue, r.critical_values, :left)
+
+_coef_nt(r::FisherTestResult) = merge(
+    _test_push!(_new_test_cols(), "Fisher periodicity", r.statistic, r.pvalue, nothing, :p),
+    (peak_freq=[Float64(r.peak_freq)],))
+_coef_nt(r::BartlettWhiteNoiseResult) = _test_push!(_new_test_cols(), "Bartlett white noise", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::LjungBoxResult) = _test_push!(_new_test_cols(), "Ljung-Box", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::BoxPierceResult) = _test_push!(_new_test_cols(), "Box-Pierce", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::DurbinWatsonResult) = _test_push!(_new_test_cols(), "Durbin-Watson", r.statistic, r.pvalue, nothing, :p)
+
+function _coef_nt(r::GrangerCausalityResult)
+    c = _test_push!(_new_test_cols(), "Granger causality", r.statistic, r.pvalue, nothing, :p)
+    return merge(c, (cause=[join(string.(r.cause), ",")], effect=[r.effect]))
+end
+
+_coef_nt(r::LRTestResult) = _test_push!(_new_test_cols(), "Likelihood ratio", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::LMTestResult) = _test_push!(_new_test_cols(), "Lagrange multiplier", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::EngleGrangerResult) = _test_push!(_new_test_cols(), "Engle-Granger", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::HansenInstabilityResult) = _test_push!(_new_test_cols(), "Hansen instability", r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::ParkAddedResult) = _test_push!(_new_test_cols(), "Park added variables", r.statistic, r.pvalue, nothing, :p)
+
+_coef_nt(r::BubbleResult) = _test_push!(_new_test_cols(), r.kind == :sadf ? "SADF" : "GSADF",
+    r.statistic, r.pvalue, r.critical_values, :right)
+
+function _coef_nt(r::EDFTestResult)
+    label = get(_EDF_TEST_LABEL, r.test, string(r.test)) * " (" *
+            get(_EDF_DIST_LABEL, r.dist, string(r.dist)) * ")"
+    c = _test_push!(_new_test_cols(), label, r.statistic, r.pvalue, r.critical_values, :p)
+    return merge(c, (raw_statistic=[Float64(r.raw_statistic)],))
+end
+
+_coef_nt(r::EqualityTestResult) = _test_push!(_new_test_cols(),
+    get(_EQ_TEST_LABELS, r.test_name, string(r.test_name)), r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::PanelTestResult) = _test_push!(_new_test_cols(), r.test_name, r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::PVARTestResult) = _test_push!(_new_test_cols(), r.test_name, r.statistic, r.pvalue, nothing, :p)
+_coef_nt(r::NormalityTestResult) = _test_push!(_new_test_cols(), _normality_test_label(r), r.statistic, r.pvalue, nothing, :p)
+
+function _coef_nt(r::CorTestResult)
+    method = r.method === :pearson ? "Pearson" : r.method === :spearman ? "Spearman" : "Kendall"
+    c = _test_push!(_new_test_cols(), "Correlation ($method)", r.statistic, r.pvalue, nothing, :p)
+    hasci = r.method === :pearson && isfinite(r.ci_lower) && isfinite(r.ci_upper)
+    return merge(c, (estimate=[Float64(r.estimate)],
+        ci_lower=[hasci ? Float64(r.ci_lower) : missing],
+        ci_upper=[hasci ? Float64(r.ci_upper) : missing]))
+end
+
+function _coef_nt(r::RegDiagnosticResult)
+    c = _test_push!(_new_test_cols(), r.test_name, r.statistic, r.pvalue, nothing, :p)
+    return merge(c, (f_stat=[r.f_stat === nothing ? missing : Float64(r.f_stat)],
+        f_pvalue=[r.f_pvalue === nothing ? missing : Float64(r.f_pvalue)],
+        aux_r2=[Float64(r.aux_r2)]))
+end
+
+function _coef_nt(r::DMTestResult)
+    c = _test_push!(_new_test_cols(), "Diebold-Mariano", r.statistic, r.pvalue, nothing, :p)
+    return merge(c, (dbar=[Float64(r.dbar)], lrvar=[Float64(r.lrvar)]))
+end
+
+function _coef_nt(r::ClarkWestResult)
+    c = _test_push!(_new_test_cols(), "Clark-West", r.statistic, r.pvalue, nothing, :p)
+    return merge(c, (fbar=[Float64(r.fbar)], lrvar=[Float64(r.lrvar)]))
+end
+
+function _coef_nt(r::ForecastEncompassingResult)
+    c = _test_push!(_new_test_cols(), "Forecast encompassing", r.tstat, r.pvalue, nothing, :p)
+    return merge(c, (b1=[Float64(r.b1)], b2=[Float64(r.b2)]))
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tables.jl source interface for coefficient-bearing types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -531,6 +680,25 @@ const _COEF_TABLE_TYPES = (RegModel, LogitModel, ProbitModel, PanelRegModel, Pan
     LinkageResult, IOMultipliers, FootprintResult, SDAResult, RegionalFootprintResult)
 
 for MT in _COEF_TABLE_TYPES
+    @eval Tables.istable(::Type{<:$MT}) = true
+    @eval Tables.columnaccess(::Type{<:$MT}) = true
+    @eval Tables.columns(m::$MT) = _coef_nt(m)
+    @eval Tables.schema(m::$MT) = Tables.schema(_coef_nt(m))
+end
+
+# Test-battery result types share the same Tables.jl wiring; their `_coef_nt`
+# builders emit the uniform one-row-per-hypothesis shape (#860).
+const _TEST_TABLE_TYPES = (ADFResult, KPSSResult, PPResult, ERSResult,
+    ZAResult, AndrewsResult, ADF2BreakResult, LMUnitRootResult, FactorBreakResult,
+    LLCResult, IPSResult, BreitungPanelResult, HadriResult, PesaranCIPSResult,
+    FisherTestResult, BartlettWhiteNoiseResult, LjungBoxResult, BoxPierceResult,
+    DurbinWatsonResult, GrangerCausalityResult, LRTestResult, LMTestResult,
+    EngleGrangerResult, HansenInstabilityResult, ParkAddedResult, BubbleResult,
+    EDFTestResult, EqualityTestResult, PanelTestResult, PVARTestResult,
+    NormalityTestResult, CorTestResult, RegDiagnosticResult, DMTestResult,
+    ClarkWestResult, ForecastEncompassingResult)
+
+for MT in _TEST_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true
     @eval Tables.columnaccess(::Type{<:$MT}) = true
     @eval Tables.columns(m::$MT) = _coef_nt(m)

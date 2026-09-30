@@ -523,6 +523,144 @@ end
         @test drf.production ≈ vec(rf.production)
     end
 
+    # ── Test battery, single-hypothesis rows (#860) ─────────────────────────────
+    @testset "DataFrame(unit-root tests) (#860)" begin
+        MEM = MacroEconometricModels
+        rng = Xoshiro(26)
+        y = randn(rng, 200)
+        for (res, label) in ((adf_test(y), "ADF"), (kpss_test(y), "KPSS"), (pp_test(y), "Phillips-Perron"))
+            df = DataFrame(res)
+            @test names(df) == ["test", "statistic", "p_value", "decision", "cv_1pct", "cv_5pct", "cv_10pct"]
+            @test df.test == [label]
+            @test all(isfinite, [df.cv_1pct[1], df.cv_5pct[1], df.cv_10pct[1]])
+            @test df.decision[1] in ("reject", "fail to reject")
+        end
+        za = MEM.ZAResult{Float64}(-4.5, 0.04, 50, 0.5, :both,
+            Dict(1 => -5.0, 5 => -4.4, 10 => -4.1), 2, 100)
+        dz = DataFrame(za)
+        @test dz.decision == ["reject"]                     # -4.5 < -4.4 (left)
+        @test (dz.break_index, dz.break_fraction) == ([50], [0.5])
+        aw = MEM.AndrewsResult{Float64}(15.0, 0.01, 60, 0.6, :supwald,
+            Dict(1 => 20.0, 5 => 15.5, 10 => 13.0), [1.0, 2.0], 0.15, 100, 3)
+        da = DataFrame(aw)
+        @test da.test == ["Andrews supwald"]
+        @test da.decision == ["reject"]                     # p-based, like show()
+        @test all(isfinite, [da.cv_1pct[1], da.cv_5pct[1], da.cv_10pct[1]])
+        b2 = MEM.ADF2BreakResult{Float64}(-5.0, 0.02, 30, 70, 0.3, 0.7, 2, :level,
+            Dict(1 => -5.5, 5 => -4.8, 10 => -4.5), 100)
+        db2 = DataFrame(b2)
+        @test db2.decision == ["reject"]
+        @test (db2.break_1, db2.break_2) == ([30], [70])
+        lm = MEM.LMUnitRootResult{Float64}(-3.0, 0.08, 1, [40], [0.4], 2, :constant,
+            Dict(1 => -3.5, 5 => -2.8, 10 => -2.5), 100)
+        dlm = DataFrame(lm)
+        @test dlm.decision == ["reject"]                    # -3.0 < -2.8
+        @test ismissing(dlm.break_2[1])                     # one break: padded
+        fb = MEM.FactorBreakResult{Float64}(-2.0, 0.03, nothing, :han_inoue, 2, 100, 10, nothing, nothing)
+        dfb = DataFrame(fb)
+        @test dfb.test == ["Factor break han_inoue"]
+        @test ismissing(dfb.break_index[1])
+        ers = MEM.ERSResult{Float64}(2.5, 0.03, :constant, Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), 100)
+        @test DataFrame(ers).decision == ["reject"]         # 2.5 < 2.9 (left)
+    end
+
+    @testset "DataFrame(panel unit-root tests) (#860)" begin
+        MEM = MacroEconometricModels
+        llc = MEM.LLCResult{Float64}(-2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
+        dll = DataFrame(llc)
+        @test dll.test == ["Levin-Lin-Chu"]
+        @test dll.cv_5pct ≈ [-1.645]                        # N(0,1) CVs, like show()
+        @test dll.decision == ["reject"]
+        ips = MEM.IPSResult{Float64}(-1.0, 0.16, -1.8, [-1.7, -1.9], 0.0, 1.0, [1, 1], :constant, 100, 2)
+        @test DataFrame(ips).decision == ["fail to reject"]
+        br = MEM.BreitungPanelResult{Float64}(-2.5, 0.006, 1, :constant, 100, 2)
+        @test DataFrame(br).decision == ["reject"]
+        ha = MEM.HadriResult{Float64}(2.0, 0.023, 5.0, 1.0, 2.0, false, :constant, 100, 2)
+        dh = DataFrame(ha)
+        @test dh.cv_5pct ≈ [1.645]                          # right-tailed
+        @test dh.decision == ["reject"]
+        cips = MEM.PesaranCIPSResult{Float64}(-2.5, 0.01, [-2.4, -2.6],
+            Dict(1 => -2.6, 5 => -2.2, 10 => -2.0), 1, :constant, 100, 2)
+        dc = DataFrame(cips)
+        @test dc.test == ["Pesaran CIPS"]
+        @test dc.statistic == [-2.5]
+        @test dc.decision == ["reject"]
+    end
+
+    @testset "DataFrame(serial, causality, model comparison) (#860)" begin
+        MEM = MacroEconometricModels
+        rng = Xoshiro(27)
+        y = randn(rng, 200)
+        @test DataFrame(ljung_box_test(y)).test == ["Ljung-Box"]
+        @test DataFrame(box_pierce_test(y)).test == ["Box-Pierce"]
+        @test DataFrame(durbin_watson_test(y)).test == ["Durbin-Watson"]
+        @test DataFrame(fisher_test(y)).test == ["Fisher periodicity"]
+        @test isfinite(DataFrame(fisher_test(y)).peak_freq[1])
+        @test DataFrame(bartlett_white_noise_test(y)).test == ["Bartlett white noise"]
+        vm = estimate_var(randn(rng, 60, 2), 1)
+        g = granger_test(vm, 1, 2)
+        dg = DataFrame(g)
+        @test dg.cause == ["1"] && dg.effect == [2]
+        lrt = MEM.LRTestResult{Float64}(5.0, 0.08, 2, -100.0, -97.5, 3, 5, 100, 100)
+        @test DataFrame(lrt).decision == ["fail to reject"]
+        lmt = MEM.LMTestResult{Float64}(7.0, 0.03, 2, 100, 2.6)
+        @test DataFrame(lmt).decision == ["reject"]
+    end
+
+    @testset "DataFrame(cointegration stability tests) (#860)" begin
+        MEM = MacroEconometricModels
+        eg = MEM.EngleGrangerResult{Float64}(-3.5, 0.02, 2, :constant, 1, 2, 100)
+        @test DataFrame(eg).decision == ["reject"]
+        hi = MEM.HansenInstabilityResult{Float64}(0.8, 0.01, :constant, :none, 3, 1, 100)
+        @test DataFrame(hi).test == ["Hansen instability"]
+        pa = MEM.ParkAddedResult{Float64}(9.0, 0.03, 2, 1, :constant, :constant, 1, 100)
+        @test DataFrame(pa).decision == ["reject"]
+    end
+
+    @testset "DataFrame(test-battery singles) (#860)" begin
+        MEM = MacroEconometricModels
+        rng = Xoshiro(28)
+        bub = MEM.BubbleResult{Float64}(:gsadf, 2.5, 0.01, Dict(1 => 2.0, 5 => 1.5, 10 => 1.2),
+            [1.0, 2.0], [1.0, 1.5], [1, 2], [(5, 9)], 0.1, 1, :mc, 2000, 100)
+        db = DataFrame(bub)
+        @test db.test == ["GSADF"]
+        @test db.decision == ["reject"]                     # 2.5 > 1.5 (right)
+        ed = MEM.EDFTestResult{Float64}(:ad, :normal, :estimate, 1.2, 1.1, 0.04, 100,
+            [0.0, 1.0], Dict(1 => 1.5, 5 => 1.0, 10 => 0.8), "case A")
+        de = DataFrame(ed)
+        @test de.decision == ["reject"]                     # p-based
+        @test de.raw_statistic == [1.1]
+        ed2 = MEM.EDFTestResult{Float64}(:ks, :normal, :specified, 0.5, 0.5, NaN, 100,
+            Float64[], Dict{Int,Float64}(), "case B")
+        de2 = DataFrame(ed2)
+        @test ismissing(de2.p_value[1]) && ismissing(de2.decision[1]) && ismissing(de2.cv_5pct[1])
+        y = randn(rng, 100)
+        g = vcat(fill(1, 50), fill(2, 50))
+        @test DataFrame(equality_test(y, g; test=:t)).test == ["Two-Sample t-Test (pooled)"]
+        @test DataFrame(cor_test(y, randn(rng, 100))).test == ["Correlation (Pearson)"]
+        @test isfinite(DataFrame(cor_test(y, randn(rng, 100))).ci_lower[1])
+        X = hcat(ones(100), randn(rng, 100, 2))
+        w = white_test(randn(rng, 100), X)
+        dw = DataFrame(w)
+        @test dw.aux_r2[1] >= 0.0
+        dm = diebold_mariano(randn(rng, 100), randn(rng, 100))
+        dd = DataFrame(dm)
+        @test dd.test == ["Diebold-Mariano"]
+        @test isfinite(dd.dbar[1]) && isfinite(dd.lrvar[1])
+        pt = MEM.PanelTestResult{Float64}("Hausman test", 12.0, 0.01, 3, "reject RE")
+        @test DataFrame(pt).decision == ["reject"]
+        pv = MEM.PVARTestResult{Float64}("Hansen J-test", 5.0, 0.2, 4, 10, 6)
+        @test DataFrame(pv).decision == ["fail to reject"]
+        nt = MEM.NormalityTestResult{Float64}(:jarque_bera, 8.0, 0.02, 2, 3, 200, nothing, nothing)
+        @test endswith(DataFrame(nt).test[1], "(multivariate)")
+        cw = MEM.ClarkWestResult{Float64}(1.8, 0.036, 0.05, 0.001, 1, :greater, 200)
+        dcw = DataFrame(cw)
+        @test dcw.decision == ["reject"] && dcw.fbar == [0.05]
+        fe = MEM.ForecastEncompassingResult{Float64}(0.7, 0.3, 0.1, 3.0, 0.003, 2, :bartlett, 200)
+        dfe = DataFrame(fe)
+        @test dfe.statistic == [3.0] && dfe.b1 == [0.7]
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)
