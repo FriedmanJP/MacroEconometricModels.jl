@@ -140,6 +140,83 @@ using DelimitedFiles
         @test all(lt.shock .== "shock")
     end
 
+    @testset "long_table(HistoricalDecomposition) (#862)" begin
+        rng = Xoshiro(21)
+        vm = estimate_var(randn(rng, 60, 2), 1)
+        hd = historical_decomposition(vm, 20; method=:cholesky)
+        lt = long_table(hd)
+        @test names(lt) == ["time", "variable", "shock", "value"]
+        @test nrow(lt) == hd.T_eff * 2 * 2
+        @test Set(lt.time) == Set(1:hd.T_eff)
+        @test lt.value[1] ≈ hd.contributions[1, 1, 1]
+        @test lt.value[end] ≈ hd.contributions[end, end, end]
+        # write_csv routes HD through long_table.
+        path = tempname() * ".csv"
+        write_csv(hd, path)
+        raw, hdr = readdlm(path, ',', header=true)
+        @test vec(hdr) == ["time", "variable", "shock", "value"]
+
+        # Bayesian: point estimate plus outer-quantile interval.
+        MEM = MacroEconometricModels
+        pe = reshape(collect(1.0:24.0), 4, 3, 2)
+        q = cat(pe .- 1, pe, pe .+ 1; dims=4)
+        bhd = MEM.BayesianHistoricalDecomposition{Float64}(
+            q, pe, zeros(4, 3, 3), zeros(4, 3), zeros(4, 2), zeros(4, 3),
+            4, ["y1", "y2", "y3"], ["e1", "e2"], [0.16, 0.5, 0.84], :cholesky)
+        blt = long_table(bhd)
+        @test names(blt) == ["time", "variable", "shock", "value", "lower", "upper"]
+        @test nrow(blt) == 4 * 3 * 2
+        @test blt.value ≈ vec([pe[t, v, s] for t in 1:4 for v in 1:3 for s in 1:2])
+        @test blt.lower ≈ blt.value .- 1
+        @test blt.upper ≈ blt.value .+ 1
+    end
+
+    @testset "long_table(BayesianFEVD) (#864)" begin
+        MEM = MacroEconometricModels
+        pe = reshape(collect(1.0:24.0) ./ 100, 2, 2, 6)
+        q = cat(pe .- 0.01, pe, pe .+ 0.01; dims=4)
+        bf = MEM.BayesianFEVD{Float64}(q, pe, 6, ["y1", "y2"], ["e1", "e2"], [0.16, 0.5, 0.84])
+        lt = long_table(bf)
+        @test names(lt) == ["horizon", "variable", "shock", "value", "lower", "upper"]
+        @test nrow(lt) == 6 * 2 * 2
+        # Same (horizon, variable, shock) keys as long_table(::FEVD).
+        fevd_keys = Set(zip(lt.horizon, lt.variable, lt.shock))
+        @test fevd_keys == Set((h, "y$v", "e$s") for h in 1:6 for v in 1:2 for s in 1:2)
+        @test lt.value ≈ vec([pe[v, s, h] for h in 1:6 for v in 1:2 for s in 1:2])
+        @test lt.lower ≈ lt.value .- 0.01
+        @test lt.upper ≈ lt.value .+ 0.01
+    end
+
+    @testset "long_table(LPFEVD) (#865)" begin
+        MEM = MacroEconometricModels
+        raw = fill(0.25, 2, 2, 5)
+        bc = reshape(collect(1.0:20.0) ./ 100, 2, 2, 5)
+        se = fill(0.05, 2, 2, 5)
+        lp = MEM.LPFEVD{Float64}(raw, bc, se, bc .- 0.1, bc .+ 0.1,
+                                 :r2, 5, 200, 0.95, true, ["y1", "y2"], ["e1", "e2"])
+        lt = long_table(lp)
+        @test names(lt) == ["horizon", "variable", "shock", "value", "se", "lower", "upper"]
+        @test nrow(lt) == 5 * 2 * 2
+        @test Set(lt.horizon) == Set(1:5)
+        # Headline value is the bias-corrected estimate, not raw proportions.
+        @test lt.value ≈ vec([bc[v, s, h] for h in 1:5 for v in 1:2 for s in 1:2])
+        @test all(lt.se .≈ 0.05)
+        @test lt.lower ≈ lt.value .- 0.1
+        @test lt.upper ≈ lt.value .+ 0.1
+    end
+
+    @testset "long_table(MidasForecast) labels the direct horizon (#867)" begin
+        MEM = MacroEconometricModels
+        f = MEM.MidasForecast{Float64}([1.5], [1.2], [1.8], [0.15], 4, 0.95)
+        lt = long_table(f)
+        @test names(lt) == ["horizon", "variable", "value", "se", "lower", "upper"]
+        @test nrow(lt) == 1
+        @test lt.horizon == [4]                    # NOT 1 (the pre-#867 mislabel)
+        @test lt.value == [1.5]
+        @test lt.se == [0.15]
+        @test (lt.lower, lt.upper) == ([1.2], [1.8])
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)

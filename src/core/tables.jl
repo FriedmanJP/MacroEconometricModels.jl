@@ -174,8 +174,13 @@ carries explicit index columns so downstream scripts are uniform across result t
 |---|---|
 | `ImpulseResponse` / `BayesianImpulseResponse` | `horizon, variable, shock, value, lower, upper` |
 | `FEVD` | `horizon, variable, shock, value` |
+| `BayesianFEVD` | `horizon, variable, shock, value, lower, upper` |
 | `LPImpulseResponse` | `horizon, variable, shock, value, se, lower, upper` |
+| `LPFEVD` | `horizon, variable, shock, value, se, lower, upper` |
+| `HistoricalDecomposition` | `time, variable, shock, value` |
+| `BayesianHistoricalDecomposition` | `time, variable, shock, value, lower, upper` |
 | `AbstractForecastResult` (VAR/BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
+| `MidasForecast` | `horizon, variable, value, se, lower, upper` (horizon label is the direct `h`) |
 
 Horizons are 1-based (matching [`table`](@ref)). `lower`/`upper` are `missing` when the
 result carries no uncertainty bands (`ci_type == :none` / `ci_method == :none`). The
@@ -267,6 +272,76 @@ function long_table(f::AbstractForecastResult)
     return DataFrame(; horizon, variable, value, lower, upper)
 end
 
+# MidasForecast — direct h-step forecast: single-element vectors plus the TRUE direct
+# horizon. The generic method would size H from the array (length 1) and mislabel the
+# row horizon=1; label f.horizon instead and carry the prediction se. (#867)
+function long_table(f::MidasForecast)
+    n = length(f.forecast)
+    horizon = fill(Int(f.horizon), n)
+    variable = fill("y1", n)
+    value = Float64.(collect(f.forecast))
+    se = Float64.(collect(f.se))
+    lower = Float64.(collect(f.ci_lower))
+    upper = Float64.(collect(f.ci_upper))
+    return DataFrame(; horizon, variable, value, se, lower, upper)
+end
+
+# HistoricalDecomposition — shock contributions in the same (time, variable, shock,
+# value) long shape as FEVD. (#862)
+function long_table(hd::HistoricalDecomposition)
+    Teff, nv, ns = size(hd.contributions)     # (time, variable, shock)
+    time = Int[]; variable = String[]; shock = String[]; value = Float64[]
+    for t in 1:Teff, v in 1:nv, s in 1:ns
+        push!(time, t); push!(variable, hd.variables[v]); push!(shock, hd.shock_names[s])
+        push!(value, hd.contributions[t, v, s])
+    end
+    return DataFrame(; time, variable, shock, value)
+end
+
+function long_table(hd::BayesianHistoricalDecomposition)
+    Teff, nv, ns = size(hd.point_estimate)    # (time, variable, shock)
+    nq = size(hd.quantiles, 4)
+    time = Int[]; variable = String[]; shock = String[]
+    value = Float64[]; lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    for t in 1:Teff, v in 1:nv, s in 1:ns
+        push!(time, t); push!(variable, hd.variables[v]); push!(shock, hd.shock_names[s])
+        push!(value, hd.point_estimate[t, v, s])
+        push!(lower, nq > 0 ? hd.quantiles[t, v, s, 1] : missing)
+        push!(upper, nq > 0 ? hd.quantiles[t, v, s, nq] : missing)
+    end
+    return DataFrame(; time, variable, shock, value, lower, upper)
+end
+
+# BayesianFEVD — same (horizon, variable, shock) keys as FEVD plus the outer
+# posterior-quantile interval. (#864)
+function long_table(f::BayesianFEVD)
+    nv, ns, H = size(f.point_estimate)        # (variable, shock, horizon)
+    nq = size(f.quantiles, 4)
+    horizon = Int[]; variable = String[]; shock = String[]
+    value = Float64[]; lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    for h in 1:H, v in 1:nv, s in 1:ns
+        push!(horizon, h); push!(variable, f.variables[v]); push!(shock, f.shocks[s])
+        push!(value, f.point_estimate[v, s, h])
+        push!(lower, nq > 0 ? f.quantiles[v, s, h, 1] : missing)
+        push!(upper, nq > 0 ? f.quantiles[v, s, h, nq] : missing)
+    end
+    return DataFrame(; horizon, variable, shock, value, lower, upper)
+end
+
+# LPFEVD — same (horizon, variable, shock) keys as FEVD; value is the
+# bias-corrected headline estimate with bootstrap se/CI. (#865)
+function long_table(f::LPFEVD)
+    nv, ns, H = size(f.bias_corrected)        # (variable, shock, horizon)
+    horizon = Int[]; variable = String[]; shock = String[]
+    value = Float64[]; se = Float64[]; lower = Float64[]; upper = Float64[]
+    for h in 1:H, v in 1:nv, s in 1:ns
+        push!(horizon, h); push!(variable, f.variables[v]); push!(shock, f.shocks[s])
+        push!(value, f.bias_corrected[v, s, h]); push!(se, f.se[v, s, h])
+        push!(lower, f.ci_lower[v, s, h]); push!(upper, f.ci_upper[v, s, h])
+    end
+    return DataFrame(; horizon, variable, shock, value, se, lower, upper)
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # write_csv — export any Tables-compatible result or long_table to CSV
 # ─────────────────────────────────────────────────────────────────────────────
@@ -277,7 +352,11 @@ _tabular(x) = x
 _tabular(x::ImpulseResponse)         = long_table(x)
 _tabular(x::BayesianImpulseResponse) = long_table(x)
 _tabular(x::FEVD)                    = long_table(x)
+_tabular(x::BayesianFEVD)            = long_table(x)
 _tabular(x::LPImpulseResponse)       = long_table(x)
+_tabular(x::LPFEVD)                  = long_table(x)
+_tabular(x::HistoricalDecomposition) = long_table(x)
+_tabular(x::BayesianHistoricalDecomposition) = long_table(x)
 _tabular(x::AbstractForecastResult)  = long_table(x)
 
 _csv_cell(::Missing) = ""
