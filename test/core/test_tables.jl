@@ -398,6 +398,131 @@ end
         @test lt.std_error[1] ≈ nto.se[1, 1]
     end
 
+    @testset "DataFrame(ForecastEvaluation/ForecastCombination) (#857)" begin
+        rng = Xoshiro(25)
+        T = 100
+        actual = cumsum(randn(rng, T))
+        f1 = actual .+ randn(rng, T)
+        f2 = actual .+ 2 .* randn(rng, T)
+        ev = forecast_evaluate(actual, hcat(f1, f2); model_names=["AR", "RW"])
+        df = DataFrame(ev)
+        @test names(df) == ["model", "ME", "MAE", "RMSE", "MAPE", "sMAPE", "MASE",
+            "U1", "U2", "theil_bias", "theil_variance", "theil_covariance", "n"]
+        @test df.model == ["AR", "RW"]
+        @test df.n == [T, T]
+        @test df.ME ≈ ev.values[:, 1]
+        @test df.U2 ≈ ev.values[:, 8]
+        @test df.theil_bias .+ df.theil_variance .+ df.theil_covariance ≈ ones(2)
+        c = combine_forecasts(hcat(f1, f2), actual; method=:equal, model_names=["AR", "RW"])
+        dc = DataFrame(c)
+        @test names(dc) == ["model", "weight", "mse", "method"]
+        @test dc.weight ≈ [0.5, 0.5]
+        @test dc.method == ["equal", "equal"]
+        @test dc.mse ≈ c.mse
+    end
+
+    @testset "DataFrame(policy counterfactuals) (#858)" begin
+        MEM = MacroEconometricModels
+        pc = MEM.PolicyCounterfactual{Float64}([:y], [:r],
+            [[1.0, 2.0, 3.0]], [[0.1, 0.2, 0.3]], [[1.1, 2.1, 3.1]], [[0.15, 0.25, 0.35]],
+            [hcat([1.0, 2.0, 3.0], [1.2, 2.2, 3.2])], nothing,
+            [0.5], ["mp"], zeros(3), 0.01, nothing, true, "taylor", 3,
+            [0.16, 0.84], 100, 0)
+        dp = DataFrame(pc)
+        @test names(dp) == ["period", "variable", "role", "baseline", "counterfactual", "lower", "upper"]
+        @test nrow(dp) == 6
+        @test dp[dp.role .== "outcome", :variable] == fill("y", 3)
+        @test dp[dp.role .== "outcome", :counterfactual] ≈ [1.1, 2.1, 3.1]
+        @test dp[dp.role .== "outcome", :lower] ≈ [1.0, 2.0, 3.0]
+        @test all(ismissing, dp[dp.role .== "instrument", :lower])
+        cm = MEM.CounterfactualMoments{Float64}([:y, :r],
+            [1.0 0.2; 0.2 1.0], [0.8 0.1; 0.1 0.9], [1.0, 1.0], [0.9, 0.95],
+            [1.0 0.2; 0.2 1.0], [1.0 0.1; 0.1 1.0], nothing, zeros(4, 2, 2),
+            "rule", 4, 0.001, nothing)
+        dm = DataFrame(cm)
+        @test names(dm) == ["variable_i", "variable_j", "cov_base", "cov_cf", "corr_base", "corr_cf"]
+        @test nrow(dm) == 4
+        @test dm.cov_cf[2] ≈ 0.1
+        @test dm[(dm.variable_i .== "y") .& (dm.variable_j .== "y"), :corr_base] == [1.0]
+        ch = MEM.CounterfactualHistory{Float64}(["t1", "t2"], [:y, :r],
+            [1.0 2.0; 3.0 4.0], [1.1 2.1; 3.1 4.1],
+            cat([1.1 2.1; 3.1 4.1] .- 0.1, [1.1 2.1; 3.1 4.1] .+ 0.1; dims=3),
+            reshape([0.1, 0.2], 1, 2), [0.01, 0.02], "rule", 4,
+            [0.16, 0.84], 50, 1)
+        dh = DataFrame(ch)
+        @test names(dh) == ["date", "variable", "realized", "counterfactual", "cf_lower", "cf_upper", "rel_residual"]
+        @test nrow(dh) == 4
+        @test dh[dh.date .== "t2", :rel_residual] == [0.02, 0.02]
+        @test dh.cf_upper ≈ dh.counterfactual .+ 0.1
+        bp = MEM.BaselinePath{Float64}([:y], [:r], [[1.0, 2.0]], [[0.1, 0.2]],
+            nothing, nothing, 2, "base")
+        @test names(DataFrame(bp)) == ["period", "variable", "role", "value"]
+        @test nrow(DataFrame(bp)) == 4
+        pf = MEM.PolicyForecast{Float64}([:y, :r], [[1.0, 2.0], [3.0, 4.0]], nothing, 2, "2021Q2")
+        dpf = DataFrame(pf)
+        @test nrow(dpf) == 4
+        @test dpf[dpf.variable .== "r", :value] ≈ [3.0, 4.0]
+        sq = MEM.OPPSequence{Float64}(["t1", "t2"], reshape([1.0, 2.0], 1, 2),
+            reshape([1.0, 2.0], 1, 2), reshape([0.1, 0.2], 1, 2),
+            reshape([0.0, 0.0], 1, 2), reshape([0.0, 0.1], 1, 2),
+            nothing, nothing, ["mp"], "quad")
+        dsq = DataFrame(sq)
+        @test names(dsq) == ["date", "shock", "delta", "delta_tc", "news", "pref", "aging"]
+        @test dsq.delta ≈ [1.0, 2.0]
+        fs = MEM.ForecastSufficiency{Float64}([:y, :r], [1.1 1.2; 1.0 1.1; 1.0 1.0],
+            [1.05, 1.02], true, 3)
+        dfs = DataFrame(fs)
+        @test nrow(dfs) == 6
+        @test dfs[dfs.observable .== "r", :one_step_ratio] ≈ fill(1.02, 3)
+    end
+
+    @testset "DataFrame(input-output results) (#859)" begin
+        io = load_example(:wiot)
+        lm = leontief(io)
+        dl = DataFrame(lm)
+        @test names(dl) == ["sector_i", "sector_j", "A", "L"]
+        n = length(lm.x)
+        @test nrow(dl) == n * n
+        @test dl[(dl.sector_i .== io.sectors[1]) .& (dl.sector_j .== io.sectors[2]), :L] ≈ [lm.L[1, 2]]
+        gm = ghosh(io)
+        dg = DataFrame(gm)
+        @test names(dg) == ["sector_i", "sector_j", "B", "G"]
+        @test dg.G ≈ vec([gm.G[i, j] for i in 1:n for j in 1:n])
+        lr = linkages(io)
+        dlink = DataFrame(lr)
+        @test names(dlink) == ["sector", "backward", "forward", "Ui", "Uj", "classification"]
+        @test dlink.sector == io.sectors
+        @test dlink.backward ≈ lr.backward
+        mu = multipliers(io)
+        dmu = DataFrame(mu)
+        @test dmu.value ≈ mu.values
+        @test dmu.kind == fill("output", n) && dmu.type == fill("I", n)
+        fp = footprint(io, "CO2")
+        dfp = DataFrame(fp)
+        @test names(dfp) == ["stressor", "sector", "value", "total"]
+        @test dfp.total ≈ repeat([sum(fp.total[i, :]) for i in 1:size(fp.total, 1)],
+            inner=size(fp.by_sector, 2))
+        io1 = IOData(io.Z .* 1.1, io.Y .* 1.1, io.va .* 1.1; sectors=io.sectors,
+            regions=io.regions, fd_cats=io.fd_cats, va_cats=io.va_cats)
+        sd = sda(io, io1)
+        dsd = DataFrame(sd)
+        @test "factor" in names(dsd) && "effect" in names(dsd)
+        @test Set(dsd.factor) == Set(string.(keys(sd.effects)))
+        @test dsd[dsd.factor .== string(first(sd.factors)), :effect] ≈ sd.effects[first(sd.factors)]
+        # Regional footprint on a two-region toy.
+        Z2 = [100.0 50.0; 0.0 50.0]
+        Y2 = [30.0 20.0; 70.0 80.0]
+        va2 = reshape([100.0, 100.0], 1, 2)
+        io2 = IOData(Z2, Y2, va2; sectors=["USA_e", "CHN_e"], regions=["USA", "CHN"],
+            fd_cats=["USA_fd", "CHN_fd"], va_cats=["VA"])
+        add_extension!(io2, "co2", [5.0 8.0]; stressors=["CO2"], unit="Mt")
+        rf = footprint(io2, "co2"; by=:region)
+        drf = DataFrame(rf)
+        @test names(drf) == ["stressor", "region", "production", "consumption"]
+        @test nrow(drf) == 2
+        @test drf.production ≈ vec(rf.production)
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)

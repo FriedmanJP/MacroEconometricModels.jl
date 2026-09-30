@@ -10,13 +10,14 @@
 # Make result objects programmatically tabular so `DataFrame(result)`, CSV export,
 # and R/Python hand-off work uniformly.
 #
-#   1. Coefficient-bearing models (RegModel, Logit/Probit, Ordered/Multinomial,
-#      the PanelReg family, VARModel, MarginalEffects, DIDResult, count models,
+#   1. Single-shape results implement the Tables.jl *source* interface: coefficient
+#      tables for models (RegModel, Logit/Probit, Ordered/Multinomial, the
+#      PanelReg family, VARModel, MarginalEffects, DIDResult, count models,
 #      QuantileRegModel, RDDResult, SUR/3SLS, DiD event-study results,
-#      MultinomialMarginalEffects) implement the Tables.jl *source* interface —
-#      the natural coefficient table (term, estimate, std_error, stat, p_value,
-#      ci_lower, ci_upper, plus key columns) is the exposed table, so
-#      `DataFrame(m)` returns the same numbers `report(m)` prints.
+#      MultinomialMarginalEffects), metric/weight tables for forecast evaluation
+#      and combination, path/moment tables for policy counterfactuals, and
+#      sector tables for input-output results — so `DataFrame(m)` returns the
+#      same numbers `report(m)` prints.
 #   2. Array-valued results (IRF, FEVD, forecasts) expose a tidy/long table via
 #      `long_table(result)` — one row per cell, with explicit horizon/variable/shock
 #      keys — since a single rectangular shape is ambiguous.
@@ -291,6 +292,231 @@ end
 _coef_nt(me::MultinomialMarginalEffects) =
     _marginal_effects_long(me.effects, me.se, me.varnames, me.categories; skip_first=true)
 
+# ── Forecast evaluation & combination (#857) ──────────────────────────────────
+
+# One row per model: accuracy metrics plus the Theil decomposition shares.
+function _coef_nt(ev::ForecastEvaluation)
+    m = length(ev.models)
+    cols = Any[collect(ev.models)]
+    names = Symbol[:model]
+    for (k, mt) in enumerate(ev.metrics)
+        push!(names, Symbol(mt))
+        push!(cols, Float64.(ev.values[:, k]))
+    end
+    append!(names, [:theil_bias, :theil_variance, :theil_covariance, :n])
+    push!(cols, Float64.(ev.decomp[:, 1]))
+    push!(cols, Float64.(ev.decomp[:, 2]))
+    push!(cols, Float64.(ev.decomp[:, 3]))
+    push!(cols, fill(ev.n, m))
+    return NamedTuple{tuple(names...)}(tuple(cols...))
+end
+
+# One row per combined model: weight and individual MSE, method repeated.
+function _coef_nt(c::ForecastCombination)
+    n = length(c.models)
+    return (model=collect(c.models), weight=Float64.(collect(c.weights)),
+        mse=Float64.(collect(c.mse)), method=fill(string(c.method), n))
+end
+
+# ── Policy counterfactuals (#858) ─────────────────────────────────────────────
+
+# Long (period, variable) path rows for outcome/instrument paths with baselines,
+# counterfactuals, and first/last draw bands.
+function _cf_push_paths!(period, variable, role, baseline, counterfactual, lower, upper,
+        names, rolename, base, cf, bands)
+    for (i, nm) in enumerate(names)
+        b = base[i]
+        cc = cf[i]
+        Bd = bands === nothing ? nothing : bands[i]
+        nq = Bd === nothing ? 0 : size(Bd, 2)
+        for h in eachindex(b)
+            push!(period, h); push!(variable, string(nm)); push!(role, rolename)
+            push!(baseline, Float64(b[h])); push!(counterfactual, Float64(cc[h]))
+            push!(lower, nq > 0 ? Float64(Bd[h, 1]) : missing)
+            push!(upper, nq > 0 ? Float64(Bd[h, nq]) : missing)
+        end
+    end
+end
+
+function _coef_nt(pc::PolicyCounterfactual)
+    period = Int[]; variable = String[]; role = String[]
+    baseline = Float64[]; counterfactual = Float64[]
+    lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    _cf_push_paths!(period, variable, role, baseline, counterfactual, lower, upper,
+        pc.outcomes, "outcome", pc.x_base, pc.x_cf, pc.x_bands)
+    _cf_push_paths!(period, variable, role, baseline, counterfactual, lower, upper,
+        pc.instruments, "instrument", pc.z_base, pc.z_cf, pc.z_bands)
+    return (period=period, variable=variable, role=role, baseline=baseline,
+        counterfactual=counterfactual, lower=lower, upper=upper)
+end
+
+# Second moments in pair grain: covariances and correlations, baseline vs cf.
+function _coef_nt(cm::CounterfactualMoments)
+    n = length(cm.varnames)
+    vi = String[]; vj = String[]
+    cb = Float64[]; cc = Float64[]; rb = Float64[]; rc = Float64[]
+    for i in 1:n, j in 1:n
+        push!(vi, string(cm.varnames[i])); push!(vj, string(cm.varnames[j]))
+        push!(cb, Float64(cm.Sigma_base[i, j])); push!(cc, Float64(cm.Sigma_cf[i, j]))
+        push!(rb, Float64(cm.corr_base[i, j])); push!(rc, Float64(cm.corr_cf[i, j]))
+    end
+    return (variable_i=vi, variable_j=vj, cov_base=cb, cov_cf=cc,
+        corr_base=rb, corr_cf=rc)
+end
+
+# Realized vs counterfactual panel in (date, variable) long shape; the per-date
+# implementation residual repeats across variables.
+function _coef_nt(ch::CounterfactualHistory)
+    nd, nv = size(ch.realized)
+    date = String[]; variable = String[]
+    realized = Float64[]; counterfactual = Float64[]
+    lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    relres = Float64[]
+    nq = ch.cf_bands === nothing ? 0 : size(ch.cf_bands, 3)
+    for d in 1:nd, v in 1:nv
+        push!(date, ch.dates[d]); push!(variable, string(ch.varnames[v]))
+        push!(realized, Float64(ch.realized[d, v]))
+        push!(counterfactual, Float64(ch.cf[d, v]))
+        push!(lower, nq > 0 ? Float64(ch.cf_bands[d, v, 1]) : missing)
+        push!(upper, nq > 0 ? Float64(ch.cf_bands[d, v, nq]) : missing)
+        push!(relres, Float64(ch.rel_residual[d]))
+    end
+    return (date=date, variable=variable, realized=realized,
+        counterfactual=counterfactual, cf_lower=lower, cf_upper=upper,
+        rel_residual=relres)
+end
+
+function _coef_nt(bp::BaselinePath)
+    period = Int[]; variable = String[]; role = String[]; value = Float64[]
+    for (i, nm) in enumerate(bp.outcomes), h in eachindex(bp.x[i])
+        push!(period, h); push!(variable, string(nm)); push!(role, "outcome")
+        push!(value, Float64(bp.x[i][h]))
+    end
+    for (k, nm) in enumerate(bp.instruments), h in eachindex(bp.z[k])
+        push!(period, h); push!(variable, string(nm)); push!(role, "instrument")
+        push!(value, Float64(bp.z[k][h]))
+    end
+    return (period=period, variable=variable, role=role, value=value)
+end
+
+function _coef_nt(pf::PolicyForecast)
+    period = Int[]; variable = String[]; value = Float64[]
+    for (i, nm) in enumerate(pf.outcomes), h in eachindex(pf.values[i])
+        push!(period, h); push!(variable, string(nm))
+        push!(value, Float64(pf.values[i][h]))
+    end
+    return (period=period, variable=variable, value=value)
+end
+
+# OPP at every decision date with the news/preference/aging revision split.
+function _coef_nt(sq::OPPSequence)
+    ns, nd = size(sq.delta)
+    date = String[]; shock = String[]
+    delta = Float64[]; delta_tc = Float64[]
+    news = Float64[]; pref = Float64[]; aging = Float64[]
+    for t in 1:nd, s in 1:ns
+        push!(date, sq.dates[t]); push!(shock, sq.shock_labels[s])
+        push!(delta, Float64(sq.delta[s, t])); push!(delta_tc, Float64(sq.delta_tc[s, t]))
+        push!(news, Float64(sq.news_part[s, t])); push!(pref, Float64(sq.pref_part[s, t]))
+        push!(aging, Float64(sq.aging_part[s, t]))
+    end
+    return (date=date, shock=shock, delta=delta, delta_tc=delta_tc,
+        news=news, pref=pref, aging=aging)
+end
+
+function _coef_nt(fs::ForecastSufficiency)
+    H, no = size(fs.fev_ratio)
+    horizon = Int[]; observable = String[]
+    fev_ratio = Float64[]; one_step_ratio = Float64[]
+    for h in 1:H, o in 1:no
+        push!(horizon, h); push!(observable, string(fs.observables[o]))
+        push!(fev_ratio, Float64(fs.fev_ratio[h, o]))
+        push!(one_step_ratio, Float64(fs.one_step_ratio[o]))
+    end
+    return (horizon=horizon, observable=observable, fev_ratio=fev_ratio,
+        one_step_ratio=one_step_ratio)
+end
+
+# ── Input-output (#859) ───────────────────────────────────────────────────────
+
+function _coef_nt(m::LeontiefModel)
+    n = length(m.x)
+    si = String[]; sj = String[]; av = Float64[]; lv = Float64[]
+    for i in 1:n, j in 1:n
+        push!(si, string(m.io.sectors[i])); push!(sj, string(m.io.sectors[j]))
+        push!(av, Float64(m.A[i, j])); push!(lv, Float64(m.L[i, j]))
+    end
+    return (sector_i=si, sector_j=sj, A=av, L=lv)
+end
+
+function _coef_nt(m::GhoshModel)
+    n = length(m.x)
+    si = String[]; sj = String[]; bv = Float64[]; gv = Float64[]
+    for i in 1:n, j in 1:n
+        push!(si, string(m.io.sectors[i])); push!(sj, string(m.io.sectors[j]))
+        push!(bv, Float64(m.B[i, j])); push!(gv, Float64(m.G[i, j]))
+    end
+    return (sector_i=si, sector_j=sj, B=bv, G=gv)
+end
+
+function _coef_nt(r::LinkageResult)
+    return (sector=collect(r.sectors), backward=Float64.(collect(r.backward)),
+        forward=Float64.(collect(r.forward)), Ui=Float64.(collect(r.Ui)),
+        Uj=Float64.(collect(r.Uj)), classification=string.(r.classification))
+end
+
+function _coef_nt(m::IOMultipliers)
+    n = length(m.sectors)
+    return (sector=collect(m.sectors), value=Float64.(collect(m.values)),
+        kind=fill(string(m.kind), n), type=fill(string(m.type), n))
+end
+
+# Per-stressor, per-sector contributions; `total` repeats the show() headline
+# (consumption total summed over final-demand categories).
+function _coef_nt(fp::FootprintResult)
+    ns, nsec = size(fp.by_sector)
+    totals = [sum(@view fp.total[i, :]) for i in 1:ns]
+    stressor = String[]; sector = Int[]; value = Float64[]; total = Float64[]
+    for i in 1:ns, j in 1:nsec
+        push!(stressor, fp.stressors[i]); push!(sector, j)
+        push!(value, Float64(fp.by_sector[i, j])); push!(total, Float64(totals[i]))
+    end
+    return (stressor=stressor, sector=sector, value=value, total=total)
+end
+
+# One row per (factor, index); factor order mirrors `show()` (r.factors first,
+# then extra keys sorted). `total`/`residual` repeat across factors.
+function _coef_nt(r::SDAResult)
+    fkeys = [k for k in r.factors if haskey(r.effects, k)]
+    append!(fkeys, sort!(setdiff!(collect(keys(r.effects)), r.factors)))
+    factor = String[]; index = Int[]
+    effect = Float64[]; total = Float64[]; residual = Float64[]
+    for k in fkeys
+        v = r.effects[k]
+        for i in eachindex(v)
+            push!(factor, string(k)); push!(index, i)
+            push!(effect, Float64(v[i]))
+            push!(total, Float64(r.total[i])); push!(residual, Float64(r.residual[i]))
+        end
+    end
+    m = length(factor)
+    return (factor=factor, index=index, effect=effect, total=total,
+        residual=residual, method=fill(string(r.method), m), on=fill(string(r.on), m))
+end
+
+function _coef_nt(fp::RegionalFootprintResult)
+    ns, ng = size(fp.production)
+    stressor = String[]; region = String[]
+    production = Float64[]; consumption = Float64[]
+    for i in 1:ns, r in 1:ng
+        push!(stressor, fp.stressors[i]); push!(region, fp.regions[r])
+        push!(production, Float64(fp.production[i, r]))
+        push!(consumption, Float64(fp.consumption[i, r]))
+    end
+    return (stressor=stressor, region=region, production=production,
+        consumption=consumption)
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tables.jl source interface for coefficient-bearing types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,7 +525,10 @@ const _COEF_TABLE_TYPES = (RegModel, LogitModel, ProbitModel, PanelRegModel, Pan
     PanelLogitModel, PanelProbitModel, MarginalEffects, OrderedLogitModel, OrderedProbitModel,
     MultinomialLogitModel, VARModel, DIDResult, PoissonModel, NegBinModel,
     QuantileRegModel, RDDResult, SURModel, ThreeSLSModel, EventStudyLP, LPDiDResult,
-    BaconDecomposition, MultinomialMarginalEffects)
+    BaconDecomposition, MultinomialMarginalEffects, ForecastEvaluation, ForecastCombination,
+    PolicyCounterfactual, CounterfactualMoments, CounterfactualHistory, BaselinePath,
+    PolicyForecast, OPPSequence, ForecastSufficiency, LeontiefModel, GhoshModel,
+    LinkageResult, IOMultipliers, FootprintResult, SDAResult, RegionalFootprintResult)
 
 for MT in _COEF_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true
