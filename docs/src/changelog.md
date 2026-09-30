@@ -6,6 +6,35 @@ output, not just documentation.
 
 ---
 
+## v1.0.2
+
+Machine-readability release: `Tables.jl` / `long_table` coverage for the TIDY
+series (closes `#852`–`#867`). No exported names added or removed; no struct
+fields changed. One correctness fix changes `long_table` output
+(`MidasForecast` horizon labels); one display fix removes column-type rows
+from `report()` tables fed by `Tables.jl` inputs.
+
+**New**
+
+- Close to 100 newly-tabular result types: count / quantile / RDD /
+  SUR / 3SLS coefficients, DiD event-study results, per-category marginal
+  effects, forecast evaluation and combination, policy-counterfactual
+  paths and moments, input-output sector tables, the 60-type test battery
+  (one row per hypothesis with 5% decisions), and DSGE/HA solutions and
+  simulations.
+- `long_table` for historical decompositions (+Bayesian), `BayesianFEVD`,
+  `LPFEVD` (bias-corrected headline), and the ordered-model
+  `marginal_effects` table.
+
+**Fixes**
+
+- `long_table(::MidasForecast)` labels the true direct horizon `h` and
+  carries the prediction standard error; the generic method sized the
+  horizon from the length-1 array and mislabeled every row `horizon=1`.
+- `report()` tables never print column-type names or omit rows/columns:
+  the central table wrapper pins single-row name labels and no-crop
+  output on all three display backends.
+
 ## v1.0.1
 
 Plot-option and coverage release (closes `#836`–`#843`, `#845`–`#849`). No

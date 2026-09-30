@@ -728,15 +728,24 @@ write_csv(irf_var, joinpath(tempdir(), "var_irf.csv"))
 nothing # hide
 ```
 
-The column sets are uniform across result families so downstream scripts stay generic.
+The column sets are uniform within each result family so downstream scripts stay generic.
 
 | Result | Columns |
 |--------|---------|
-| Coefficient models (`RegModel`, `LogitModel`, panel/ordered/multinomial, `VARModel`, `MarginalEffects`, `DIDResult`) | `term, estimate, std_error, stat, p_value, ci_lower, ci_upper`, plus a block discriminator (`equation`, `alternative`) where applicable |
+| Coefficient models (`RegModel`, `LogitModel`/`ProbitModel`, panel, ordered/multinomial, `VARModel`, `MarginalEffects`, `DIDResult`, count, quantile, RDD, SUR/3SLS, DiD event-study, multinomial marginal effects) | `term, estimate, std_error, stat, p_value, ci_lower, ci_upper`, plus key columns (`equation`, `alternative`, `tau`, `event_time`, `category`, `block`) and family extras (RDD bandwidths, system diagnostics) |
+| `BaconDecomposition` | `type, cohort_i, cohort_j, estimate, weight` |
+| Forecast evaluation / combination | one row per model: accuracy metrics plus Theil shares / weights and MSE |
+| Policy counterfactuals | path tables (`period, variable, role, baseline, counterfactual`, bands) and second-moment pairs (`variable_i, variable_j, cov_base, cov_cf, corr_base, corr_cf`) |
+| Input-output | sector-pair coefficients, linkages, multipliers, footprints, SDA effects |
+| Test battery (60 types) | `test, statistic, p_value, decision, cv_1pct, cv_5pct, cv_10pct`, plus finding columns (breaks, ranks, estimates); CUSUM paths and VAR eigenvalues in long shape |
+| DSGE/HA solutions and simulations | policy rows (`block, equation, variable, coefficient`), steady-state scalars, simulation paths |
 | `ImpulseResponse` / `BayesianImpulseResponse` | `horizon, variable, shock, value, lower, upper` |
-| `FEVD` | `horizon, variable, shock, value` |
-| `LPImpulseResponse` | `horizon, variable, shock, value, se, lower, upper` |
+| `FEVD` / `BayesianFEVD` | `horizon, variable, shock, value` (Bayesian adds `lower, upper`) |
+| `LPImpulseResponse` / `LPFEVD` | `horizon, variable, shock, value, se, lower, upper` (`LPFEVD` value is bias-corrected) |
+| `HistoricalDecomposition` (+Bayesian) | `time, variable, shock, value` (Bayesian adds `lower, upper`) |
 | Forecasts (`VARForecast`, BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
+| `MidasForecast` | `horizon, variable, value, se, lower, upper` (horizon is the direct `h`) |
+| Ordered-model `marginal_effects` | `variable, category, estimate, ...` via `long_table` |
 
 ---
 
