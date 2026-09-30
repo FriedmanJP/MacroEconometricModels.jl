@@ -661,6 +661,155 @@ end
         @test dfe.statistic == [3.0] && dfe.b1 == [0.7]
     end
 
+    # ── Test battery, multi-hypothesis rows (#860) ──────────────────────────────
+    @testset "DataFrame(named panel-cointegration tests) (#860)" begin
+        MEM = MacroEconometricModels
+        kao = MEM.KaoResult{Float64}(["DFrho", "ADF"], [-1.0, -2.0], [0.16, 0.02],
+            -0.05, -1.0, -2.0, 1.0, 1.2, 1, 2, 1, 100, 5)
+        dk = DataFrame(kao)
+        @test dk.test == ["Kao DFrho", "Kao ADF"]
+        @test dk.decision == ["fail to reject", "reject"]
+        ped = MEM.PedroniResult{Float64}(["panel-v", "panel-ADF"], [1.5, -2.0], [1.8, -2.5],
+            [0.04, 0.006], [0.0, 0.0], [1.0, 1.0], :constant, 1, 3, 1, 100, 5)
+        dp = DataFrame(ped)
+        @test dp.raw ≈ [1.5, -2.0]
+        @test dp.decision == ["reject", "reject"]
+        wes = MEM.WesterlundResult{Float64}(["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
+            [0.03, 0.2], :constant, 1, 1, 1, 3, 100, 1, 100, 5)
+        dw = DataFrame(wes)
+        @test dw.bootstrap_p ≈ [0.03, 0.2]
+        wes0 = MEM.WesterlundResult{Float64}(["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
+            Float64[], :constant, 1, 1, 1, 3, 0, 1, 100, 5)
+        @test all(ismissing, DataFrame(wes0).bootstrap_p)
+    end
+
+    @testset "DataFrame(small multi-stat tests) (#860)" begin
+        MEM = MacroEconometricModels
+        fp = MEM.FisherPanelResult{Float64}(25.0, 0.01, 25.0, 0.01, -2.0, 0.02, -1.5, 0.07,
+            3.0, 0.001, [0.1, 0.2], :adf, :mw, 100, 2)
+        dfp = DataFrame(fp)
+        @test dfp.test == ["P (Maddala-Wu)", "Z (Choi)", "L* (Choi)", "Pm (Choi)"]
+        @test dfp.decision == ["reject", "reject", "fail to reject", "reject"]
+        mp = MEM.MoonPerronResult{Float64}(-2.5, -1.0, 0.006, 0.16, 2, 100, 5)
+        @test DataFrame(mp).decision == ["reject", "fail to reject"]
+        po = MEM.PhillipsOuliarisResult{Float64}(-3.0, 0.02, -15.0, 0.08, :constant, :bartlett, 3.0, 1, 2, 100)
+        dpo = DataFrame(po)
+        @test dpo.test == ["Phillips-Ouliaris Zt", "Phillips-Ouliaris Za"]
+        @test dpo.decision == ["reject", "fail to reject"]
+        dh = MEM.DumitrescuHurlinResult{Float64}(4.0, 2.5, 0.006, 2.0, 0.023, [4.0, 4.0], 1, 2,
+            100, 0, 0, 1, NaN, :x, :y)
+        ddh = DataFrame(dh)
+        @test ddh.Wbar == [4.0, 4.0]
+        @test all(ismissing, ddh.boot_p)
+        @test ddh.cause == ["x", "x"] && ddh.effect == ["y", "y"]
+        mz = MEM.MincerZarnowitzResult{Float64}(0.1, 0.95, [0.05, 0.03], 8.0, 0.018, 4.0, 0.02, 2, :bartlett, 100)
+        dmz = DataFrame(mz)
+        @test dmz.test == ["Mincer-Zarnowitz Wald", "Mincer-Zarnowitz F"]
+        @test dmz.a == [0.1, 0.1] && dmz.se_b ≈ [0.03, 0.03]
+    end
+
+    @testset "DataFrame(Fourier/GH/Ng-Perron/DF-GLS) (#860)" begin
+        MEM = MacroEconometricModels
+        fa = MEM.FourierADFResult{Float64}(-4.0, 0.01, 1, 8.0, 0.001, 2, :constant,
+            Dict(1 => -4.5, 5 => -3.8, 10 => -3.4), Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 100)
+        dfa = DataFrame(fa)
+        @test dfa.test == ["Fourier ADF", "Fourier ADF F"]
+        @test dfa.decision == ["reject", "reject"]          # -4.0 < -3.8; 8.0 > 7.0
+        @test dfa.frequency == [1, 1]
+        fk = MEM.FourierKPSSResult{Float64}(0.2, 0.02, 1, 3.0, 0.2, :constant,
+            Dict(1 => 0.25, 5 => 0.15, 10 => 0.1), Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 4, 100)
+        dfk = DataFrame(fk)
+        @test dfk.decision == ["reject", "fail to reject"]  # 0.2 > 0.15; 3.0 < 7.0
+        gh = MEM.GregoryHansenResult{Float64}(-5.0, 0.01, -4.5, 0.02, -40.0, 0.03,
+            30, 32, 31, :C, 1, Dict(1 => -5.5, 5 => -4.8, 10 => -4.5), Dict(1 => -45.0, 5 => -38.0, 10 => -33.0), 100)
+        dgh = DataFrame(gh)
+        @test dgh.test == ["Gregory-Hansen ADF*", "Gregory-Hansen Zt*", "Gregory-Hansen Za*"]
+        @test dgh.decision == ["reject", "fail to reject", "reject"]
+        @test dgh.break_index == [30, 32, 31]
+        @test dgh.cv_5pct[2] ≈ -4.8                            # Zt* shares ADF CVs
+        npcv = Dict(:MZa => Dict(1 => -13.8, 5 => -8.1, 10 => -5.7),
+            :MZt => Dict(1 => -2.58, 5 => -1.98, 10 => -1.62),
+            :MSB => Dict(1 => 0.174, 5 => 0.233, 10 => 0.275),
+            :MPT => Dict(1 => 1.78, 5 => 3.17, 10 => 4.45))
+        ng = MEM.NgPerronResult{Float64}(-10.0, -2.2, 0.2, 2.5, :constant, npcv, 100)
+        dng = DataFrame(ng)
+        @test dng.test == ["Ng-Perron MZa", "Ng-Perron MZt", "Ng-Perron MSB", "Ng-Perron MPT"]
+        @test all(ismissing, dng.p_value)
+        @test dng.decision == ["reject", "reject", "reject", "reject"]
+        dg = MEM.DFGLSResult{Float64}(-2.5, 0.01, 2.0, 0.02, -10.0, -2.2, 0.2, 2.5, 2, :constant,
+            Dict(1 => -2.6, 5 => -1.9, 10 => -1.6), Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), npcv, 100)
+        ddg = DataFrame(dg)
+        @test nrow(ddg) == 6
+        @test ddg.test[1:2] == ["DF-GLS τ", "ERS Pt"]
+        @test ddg.decision[1:2] == ["reject", "reject"]        # -2.5 < -1.9; 2.0 < 2.9
+        @test ismissing(ddg.p_value[3])
+    end
+
+    @testset "DataFrame(Johansen/Fisher-Johansen/PANIC/HEGY) (#860)" begin
+        MEM = MacroEconometricModels
+        jo = MEM.JohansenResult{Float64}([20.0, 3.0], [0.01, 0.4], [17.0, 3.0], [0.02, 0.4], 1,
+            Matrix{Float64}(I, 2, 2), Matrix{Float64}(I, 2, 2), [0.5, 0.05],
+            [9.0 12.0 15.0; 2.0 3.0 4.0], [8.0 11.0 14.0; 2.0 3.0 4.0], :constant, 2, 100)
+        dj = DataFrame(jo)
+        @test dj.test == ["Johansen trace (rank ≤ 0)", "Johansen max (rank = 0)",
+            "Johansen trace (rank ≤ 1)", "Johansen max (rank = 1)"]
+        @test dj.decision == ["reject", "reject", "fail to reject", "fail to reject"]
+        @test dj.rank == [0, 0, 1, 1] && dj.kind == ["trace", "max", "trace", "max"]
+        @test dj.cv_5pct[1] ≈ 12.0
+        fj = MEM.FisherJohansenResult{Float64}([0, 1], [25.0, 8.0], [0.001, 0.3], [20.0, 8.0],
+            [0.005, 0.3], [0.01 0.2; 0.05 0.4], [0.02 0.25; 0.06 0.45], :mw, :constant, 1, 1, 3, 2)
+        dfj = DataFrame(fj)
+        @test nrow(dfj) == 4
+        @test dfj.decision == ["reject", "reject", "fail to reject", "fail to reject"]
+        @test dfj.rank == [0, 0, 1, 1]
+        pa = MEM.PANICResult{Float64}([-2.5, -1.0], [0.01, 0.3], -3.0, 0.001,
+            [-2.0, -1.5], [0.05, 0.1], 2, :pooled, 100, 2)
+        dpa = DataFrame(pa)
+        @test dpa.test == ["PANIC factor 1", "PANIC factor 2", "PANIC pooled"]
+        @test dpa.decision == ["reject", "fail to reject", "reject"]
+        he = MEM.HEGYResult{Float64}(4, :const, 1, [0.1, 0.2, 0.3, 0.4], -3.0, -1.0,
+            Dict(1 => -3.5, 5 => -2.9, 10 => -2.6), Dict(1 => -3.5, 5 => -2.9, 10 => -2.6),
+            [pi / 2], [8.0], Dict(1 => 9.0, 5 => 6.5, 10 => 5.5), 7.0, 6.0, 100)
+        dhe = DataFrame(he)
+        @test dhe.test[1:2] == ["HEGY t(0)", "HEGY t(π)"]
+        @test dhe.decision[1:2] == ["reject", "fail to reject"]
+        @test dhe.decision[3] == "reject"                      # 8.0 > 6.5 (right)
+        @test ismissing(dhe.decision[4]) && ismissing(dhe.decision[5])
+    end
+
+    @testset "DataFrame(VR/BDS/Bai-Perron) (#860)" begin
+        MEM = MacroEconometricModels
+        vr = MEM.VarianceRatioResult{Float64}([2, 4], [1.1, 0.9], [1.0, -0.8], [0.9, -0.7],
+            [0.32, 0.42], [0.37, 0.48], 1.2, 0.5, 1.1, 0.55, :lomackinlay, true, false,
+            Float64[], Float64[], Float64[], Float64[], Float64[], Float64[],
+            0, :rademacher, 1, Float64[], NaN, 200)
+        dv = DataFrame(vr)
+        @test dv.test == ["VR Z(q=2)", "VR Z*(q=2)", "VR Z(q=4)", "VR Z*(q=4)",
+            "Chow-Denning CD", "Chow-Denning CD*"]
+        @test all(ismissing, dv.boot_p)
+        @test dv.q[5] |> ismissing
+        vrw = MEM.VarianceRatioResult{Float64}([2], [1.1], [1.0], [0.9], [0.32], [0.37],
+            1.2, 0.5, 1.1, 0.55, :wright, true, true,
+            [0.5], [0.6], [0.4], [0.6], [0.55], [0.7],
+            0, :rademacher, 1, Float64[], NaN, 200)
+        @test nrow(DataFrame(vrw)) == 2 + 3 + 2
+        @test DataFrame(vrw).test[3:5] == ["Wright R1(q=2)", "Wright R2(q=2)", "Wright S1(q=2)"]
+        bds = MEM.BDSResult{Float64}([2, 3], [0.5, 1.0], [0.5, 1.0], 1.0,
+            [1.0 2.0; 0.5 3.0], [0.3 0.04; 0.6 0.003], fill(NaN, 2, 2), ones(2, 2),
+            500, false, 0, 1)
+        dbds = DataFrame(bds)
+        @test nrow(dbds) == 4
+        @test dbds.decision == ["fail to reject", "reject", "fail to reject", "reject"]
+        @test dbds.m == [2, 2, 3, 3] && dbds.eps == [0.5, 1.0, 0.5, 1.0]
+        @test all(ismissing, dbds.boot_p)
+        bp = MEM.BaiPerronResult{Float64}(1, [50], [(45, 55)], [[1.0], [2.0]], [[0.1], [0.1]],
+            [12.0, 8.0], [0.001, 0.02], [5.0], [0.1], [100.0, 90.0, 92.0],
+            [101.0, 92.0, 95.0], 0.15, 100)
+        dbp = DataFrame(bp)
+        @test dbp.test == ["Bai-Perron sup-F(1)", "Bai-Perron sup-F(2)", "Bai-Perron seq(2|1)"]
+        @test dbp.decision == ["reject", "reject", "fail to reject"]
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)

@@ -666,6 +666,220 @@ function _coef_nt(r::ForecastEncompassingResult)
     return merge(c, (b1=[Float64(r.b1)], b2=[Float64(r.b2)]))
 end
 
+# --- Multi-hypothesis tests: named statistics, trace/max pairs, paths ---
+
+function _test_named_rows!(c, prefix, names, stats, pvals)
+    for s in eachindex(names, stats, pvals)
+        _test_push!(c, "$prefix $(names[s])", stats[s], pvals[s], nothing, :p)
+    end
+    return c
+end
+
+function _coef_nt(r::KaoResult)
+    return _test_named_rows!(_new_test_cols(), "Kao", r.names, r.statistics, r.pvalues)
+end
+
+function _coef_nt(r::PedroniResult)
+    c = _test_named_rows!(_new_test_cols(), "Pedroni", r.names, r.statistics, r.pvalues)
+    return merge(c, (raw=Float64.(collect(r.raw)),))
+end
+
+function _coef_nt(r::WesterlundResult)
+    c = _test_named_rows!(_new_test_cols(), "Westerlund", r.names, r.statistics, r.pvalues)
+    hasb = r.bootstrap > 0 && length(r.bootstrap_pvalues) == length(r.names)
+    bp = Union{Missing,Float64}[hasb ? Float64(r.bootstrap_pvalues[s]) : missing
+        for s in eachindex(r.names)]
+    return merge(c, (bootstrap_p=bp,))
+end
+
+function _coef_nt(r::FisherPanelResult)
+    c = _new_test_cols()
+    _test_push!(c, "P (Maddala-Wu)", r.P, r.P_pvalue, nothing, :p)
+    _test_push!(c, "Z (Choi)", r.Z, r.Z_pvalue, nothing, :p)
+    _test_push!(c, "L* (Choi)", r.Lstar, r.Lstar_pvalue, nothing, :p)
+    _test_push!(c, "Pm (Choi)", r.Pm, r.Pm_pvalue, nothing, :p)
+    return c
+end
+
+function _coef_nt(r::MoonPerronResult)
+    c = _new_test_cols()
+    _test_push!(c, "Moon-Perron t*_a", r.t_a_statistic, r.pvalue_a, nothing, :p)
+    _test_push!(c, "Moon-Perron t*_b", r.t_b_statistic, r.pvalue_b, nothing, :p)
+    return c
+end
+
+function _coef_nt(r::PhillipsOuliarisResult)
+    c = _new_test_cols()
+    _test_push!(c, "Phillips-Ouliaris Zt", r.statistic, r.pvalue, nothing, :p)
+    _test_push!(c, "Phillips-Ouliaris Za", r.z_alpha, r.z_alpha_pvalue, nothing, :p)
+    return c
+end
+
+function _coef_nt(r::DumitrescuHurlinResult)
+    c = _new_test_cols()
+    _test_push!(c, "Dumitrescu-Hurlin Zbar", r.Zbar, r.Zbar_pvalue, nothing, :p)
+    _test_push!(c, "Dumitrescu-Hurlin Ztilde", r.Ztilde, r.Ztilde_pvalue, nothing, :p)
+    bp = (r.bootstrap > 0 && isfinite(r.bootstrap_pvalue)) ? Float64(r.bootstrap_pvalue) : missing
+    return merge(c, (Wbar=[Float64(r.Wbar), Float64(r.Wbar)], boot_p=[bp, missing],
+        cause=[string(r.cause), string(r.cause)], effect=[string(r.effect), string(r.effect)]))
+end
+
+function _coef_nt(r::MincerZarnowitzResult)
+    c = _new_test_cols()
+    _test_push!(c, "Mincer-Zarnowitz Wald", r.wald, r.pvalue_wald, nothing, :p)
+    _test_push!(c, "Mincer-Zarnowitz F", r.fstat, r.pvalue_f, nothing, :p)
+    return merge(c, (a=[Float64(r.a), Float64(r.a)], b=[Float64(r.b), Float64(r.b)],
+        se_a=[Float64(r.se[1]), Float64(r.se[1])], se_b=[Float64(r.se[2]), Float64(r.se[2])]))
+end
+
+function _coef_nt(r::FourierADFResult)
+    c = _new_test_cols()
+    _test_push!(c, "Fourier ADF", r.statistic, r.pvalue, r.critical_values, :left)
+    _test_push!(c, "Fourier ADF F", r.f_statistic, r.f_pvalue, r.f_critical_values, :right)
+    return merge(c, (frequency=[r.frequency, r.frequency],))
+end
+
+function _coef_nt(r::FourierKPSSResult)
+    c = _new_test_cols()
+    _test_push!(c, "Fourier KPSS", r.statistic, r.pvalue, r.critical_values, :right)
+    _test_push!(c, "Fourier KPSS F", r.f_statistic, r.f_pvalue, r.f_critical_values, :right)
+    return merge(c, (frequency=[r.frequency, r.frequency],))
+end
+
+function _coef_nt(r::GregoryHansenResult)
+    c = _new_test_cols()
+    brk = Int[]
+    _test_push!(c, "Gregory-Hansen ADF*", r.adf_statistic, r.adf_pvalue, r.adf_critical_values, :left)
+    push!(brk, r.adf_break)
+    _test_push!(c, "Gregory-Hansen Zt*", r.zt_statistic, r.zt_pvalue, r.adf_critical_values, :left)
+    push!(brk, r.zt_break)
+    _test_push!(c, "Gregory-Hansen Za*", r.za_statistic, r.za_pvalue, r.za_critical_values, :left)
+    push!(brk, r.za_break)
+    return merge(c, (break_index=brk,))
+end
+
+function _coef_nt(r::NgPerronResult)
+    c = _new_test_cols()
+    for (nm, st) in (("MZa", r.MZa), ("MZt", r.MZt), ("MSB", r.MSB), ("MPT", r.MPT))
+        _test_push!(c, "Ng-Perron $nm", st, missing, r.critical_values[Symbol(nm)], :left)
+    end
+    return c
+end
+
+function _coef_nt(r::DFGLSResult)
+    c = _new_test_cols()
+    _test_push!(c, "DF-GLS τ", r.statistic, r.pvalue, r.critical_values, :left)
+    _test_push!(c, "ERS Pt", r.pt_statistic, r.pt_pvalue, r.pt_critical_values, :left)
+    for (nm, st) in (("MZa", r.MZa), ("MZt", r.MZt), ("MSB", r.MSB), ("MPT", r.MPT))
+        _test_push!(c, "DF-GLS $nm", st, missing, r.mgls_critical_values[Symbol(nm)], :left)
+    end
+    return c
+end
+
+function _coef_nt(r::JohansenResult)
+    c = _new_test_cols()
+    rk = Int[]; kd = String[]
+    for i in eachindex(r.trace_stats)
+        rank = i - 1
+        cvt = Dict(1 => r.critical_values_trace[i, 3], 5 => r.critical_values_trace[i, 2],
+            10 => r.critical_values_trace[i, 1])
+        _test_push!(c, "Johansen trace (rank ≤ $rank)", r.trace_stats[i], r.trace_pvalues[i], cvt, :right)
+        push!(rk, rank); push!(kd, "trace")
+        cvm = Dict(1 => r.critical_values_max[i, 3], 5 => r.critical_values_max[i, 2],
+            10 => r.critical_values_max[i, 1])
+        _test_push!(c, "Johansen max (rank = $rank)", r.max_eigen_stats[i], r.max_eigen_pvalues[i], cvm, :right)
+        push!(rk, rank); push!(kd, "max")
+    end
+    return merge(c, (rank=rk, kind=kd))
+end
+
+function _coef_nt(r::FisherJohansenResult)
+    c = _new_test_cols()
+    rk = Int[]; kd = String[]
+    for j in eachindex(r.ranks)
+        _test_push!(c, "Fisher-Johansen trace (rank ≤ $(r.ranks[j]))",
+            r.trace_statistics[j], r.trace_pvalues[j], nothing, :p)
+        push!(rk, r.ranks[j]); push!(kd, "trace")
+        _test_push!(c, "Fisher-Johansen max (rank = $(r.ranks[j]))",
+            r.max_statistics[j], r.max_pvalues[j], nothing, :p)
+        push!(rk, r.ranks[j]); push!(kd, "max")
+    end
+    return merge(c, (rank=rk, kind=kd))
+end
+
+function _coef_nt(r::PANICResult)
+    c = _new_test_cols()
+    for j in 1:r.n_factors
+        _test_push!(c, "PANIC factor $j", r.factor_adf_stats[j], r.factor_adf_pvalues[j], nothing, :p)
+    end
+    _test_push!(c, "PANIC pooled", r.pooled_statistic, r.pooled_pvalue, nothing, :p)
+    return c
+end
+
+function _coef_nt(r::HEGYResult)
+    c = _new_test_cols()
+    _test_push!(c, "HEGY t(0)", r.t_zero, missing, r.t_zero_cv, :left)
+    _test_push!(c, "HEGY t(π)", r.t_nyquist, missing, r.t_nyquist_cv, :left)
+    for (i, F) in enumerate(r.pair_F)
+        _test_push!(c, "HEGY F(ω=$(round(r.pair_freqs[i], digits=3)))", F, missing, r.pair_F_cv, :right)
+    end
+    _test_push!(c, "HEGY F seasonal", r.F_seasonal, missing, nothing, :p)
+    _test_push!(c, "HEGY F all", r.F_all, missing, nothing, :p)
+    return c
+end
+
+function _coef_nt(r::VarianceRatioResult)
+    c = _new_test_cols()
+    qv = Union{Missing,Int}[]; vrv = Union{Missing,Float64}[]; boot = Union{Missing,Float64}[]
+    nq = length(r.q)
+    for i in 1:nq
+        _test_push!(c, "VR Z(q=$(r.q[i]))", r.z[i], r.z_pvalue[i], nothing, :p)
+        push!(qv, r.q[i]); push!(vrv, Float64(r.vr[i])); push!(boot, missing)
+        zb = (r.bootstrap > 0 && length(r.z_star_boot_pvalue) >= i &&
+              isfinite(r.z_star_boot_pvalue[i])) ? Float64(r.z_star_boot_pvalue[i]) : missing
+        _test_push!(c, "VR Z*(q=$(r.q[i]))", r.z_star[i], r.z_star_pvalue[i], nothing, :p)
+        push!(qv, r.q[i]); push!(vrv, Float64(r.vr[i])); push!(boot, zb)
+    end
+    if r.wright
+        for i in 1:nq
+            for (nm, st, pv) in (("R1", r.R1, r.R1_pvalue), ("R2", r.R2, r.R2_pvalue),
+                    ("S1", r.S1, r.S1_pvalue))
+                _test_push!(c, "Wright $nm(q=$(r.q[i]))", st[i], pv[i], nothing, :p)
+                push!(qv, r.q[i]); push!(vrv, missing); push!(boot, missing)
+            end
+        end
+    end
+    cdb = isfinite(r.cd_boot_pvalue) ? Float64(r.cd_boot_pvalue) : missing
+    _test_push!(c, "Chow-Denning CD", r.cd_stat, r.cd_pvalue, nothing, :p)
+    push!(qv, missing); push!(vrv, missing); push!(boot, cdb)
+    _test_push!(c, "Chow-Denning CD*", r.cd_star_stat, r.cd_star_pvalue, nothing, :p)
+    push!(qv, missing); push!(vrv, missing); push!(boot, cdb)
+    return merge(c, (q=qv, vr=vrv, boot_p=boot))
+end
+
+function _coef_nt(r::BDSResult)
+    c = _new_test_cols()
+    mv = Int[]; ev = Float64[]; cvv = Float64[]; boot = Union{Missing,Float64}[]
+    for (im, m) in enumerate(r.m), (je, eps) in enumerate(r.eps)
+        _test_push!(c, "BDS", r.statistic[im, je], r.pvalue[im, je], nothing, :p)
+        push!(mv, m); push!(ev, Float64(eps)); push!(cvv, Float64(r.C[im, je]))
+        bp = r.boot_pvalue[im, je]
+        push!(boot, isfinite(bp) ? Float64(bp) : missing)
+    end
+    return merge(c, (m=mv, eps=ev, C_m=cvv, boot_p=boot))
+end
+
+function _coef_nt(r::BaiPerronResult)
+    c = _new_test_cols()
+    for l in eachindex(r.supf_stats)
+        _test_push!(c, "Bai-Perron sup-F($l)", r.supf_stats[l], r.supf_pvalues[l], nothing, :p)
+    end
+    for i in eachindex(r.sequential_stats)
+        _test_push!(c, "Bai-Perron seq($(i+1)|$i)", r.sequential_stats[i], r.sequential_pvalues[i], nothing, :p)
+    end
+    return c
+end
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tables.jl source interface for coefficient-bearing types
 # ─────────────────────────────────────────────────────────────────────────────
@@ -696,7 +910,12 @@ const _TEST_TABLE_TYPES = (ADFResult, KPSSResult, PPResult, ERSResult,
     EngleGrangerResult, HansenInstabilityResult, ParkAddedResult, BubbleResult,
     EDFTestResult, EqualityTestResult, PanelTestResult, PVARTestResult,
     NormalityTestResult, CorTestResult, RegDiagnosticResult, DMTestResult,
-    ClarkWestResult, ForecastEncompassingResult)
+    ClarkWestResult, ForecastEncompassingResult, KaoResult, PedroniResult,
+    WesterlundResult, FisherPanelResult, MoonPerronResult, PhillipsOuliarisResult,
+    DumitrescuHurlinResult, MincerZarnowitzResult, FourierADFResult,
+    FourierKPSSResult, GregoryHansenResult, NgPerronResult, DFGLSResult,
+    JohansenResult, FisherJohansenResult, PANICResult, HEGYResult,
+    VarianceRatioResult, BDSResult, BaiPerronResult)
 
 for MT in _TEST_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true
