@@ -842,6 +842,79 @@ end
         @test st.is_stationary == all(dst.modulus .< 1)
     end
 
+    # ── DSGE / HA-DSGE solutions and simulations (#861) ─────────────────────────
+    @testset "DataFrame(DSGE solutions) (#861)" begin
+        lin = @dsge begin
+            parameters: ρ = 0.8, κ = 0.5, σ = 1.0
+            endogenous: x, y
+            exogenous: ε
+            x[t] = ρ * x[t-1] + σ * ε[t]
+            y[t] = κ * x[t-1]
+        end
+        lin = compute_steady_state(lin)
+        sg = solve(lin; method=:gensys)
+        dg = DataFrame(sg)
+        @test names(dg) == ["block", "equation", "variable", "coefficient"]
+        @test Set(dg.block) == Set(["G1", "impact", "C"])
+        @test dg[(dg.block .== "G1") .& (dg.equation .== "x") .& (dg.variable .== "x"), :coefficient] ≈ [sg.G1[1, 1]]
+        @test dg[dg.block .== "impact", :variable] == fill("ε", 2)
+        @test dg[(dg.block .== "C") .& (dg.equation .== "y"), :coefficient] ≈ [sg.C_sol[2]]
+        sp = perturbation_solver(lin; order=1)
+        dp = DataFrame(sp)
+        @test Set(dp.block) == Set(["g", "h"])
+        nx = length(sp.state_indices)
+        @test dp[(dp.block .== "h") .& (dp.equation .== sp.spec.varnames[sp.state_indices[1]]) .&
+                 (dp.variable .== sp.spec.varnames[sp.state_indices[1]]), :coefficient] ≈ [sp.hx[1, 1]]
+        shockrows = dp[(dp.block .== "g") .& (dp.variable .== "ε"), :]
+        @test nrow(shockrows) == length(sp.control_indices)
+        @test shockrows.coefficient ≈ vec(sp.gx[:, nx+1:end])
+    end
+
+    @testset "DataFrame(HA steady state and DSGE simulations) (#861)" begin
+        MEM = MacroEconometricModels
+        grid = MEM.HAGrid(; assets=(0.0, 10.0, 5), income_states=2)
+        inc = MEM.IncomeProcess{Float64}([0.9 0.1; 0.2 0.8], [0.8, 1.2], [2 / 3, 1 / 3], :income)
+        hss = MEM.HASteadyState{Float64}(Dict(:savings => zeros(5, 2)), fill(0.1, 5, 2), zeros(5, 2),
+            Dict(:r => 0.02, :w => 1.0), Dict(:K => 10.0, :L => 0.9),
+            grid, inc, true, 50, -6.0, 1e-8)
+        dh = DataFrame(hss)
+        @test names(dh) == ["block", "name", "value"]
+        @test dh.block == ["price", "price", "aggregate", "aggregate"]
+        @test dh.name == ["r", "w", "K", "L"]
+        @test dh.value ≈ [0.02, 1.0, 10.0, 0.9]
+        pe = reshape(collect(1.0:12.0), 4, 3)
+        sim = MEM.BayesianDSGESimulation{Float64}(cat(pe .- 1, pe, pe .+ 1; dims=3), pe, 4,
+            ["y", "pi", "r"], [0.16, 0.5, 0.84], zeros(10, 4, 3))
+        dsim = DataFrame(sim)
+        @test names(dsim) == ["period", "variable", "value", "lower", "upper"]
+        @test nrow(dsim) == 12
+        @test dsim.lower ≈ dsim.value .- 1
+        @test dsim.upper ≈ dsim.value .+ 1
+        lin = @dsge begin
+            parameters: ρ = 0.8
+            endogenous: x
+            exogenous: ε
+            x[t] = ρ * x[t-1] + ε[t]
+        end
+        lin = compute_steady_state(lin)
+        pf = MEM.PerfectForesightPath{Float64}(reshape([1.0, 3.0], 2, 1), reshape([0.1, 0.3], 2, 1), true, 5, lin)
+        dpf = DataFrame(pf)
+        @test dpf.level ≈ [1.0, 3.0]
+        @test dpf.deviation ≈ [0.1, 0.3]
+        @test dpf.variable == ["x", "x"]
+        ob = MEM.OccBinSolution{Float64}([1.0 2.0; 3.0 4.0], [1.1 2.1; 3.1 4.1], [0.0, 0.0],
+            zeros(Int, 2, 1), true, 5, lin, ["x", "y"], MEM.OccBinConstraint{Float64}[])
+        dob = DataFrame(ob)
+        @test names(dob) == ["period", "variable", "linear", "piecewise"]
+        @test dob.piecewise ≈ [1.1, 2.1, 3.1, 4.1]
+        oi = MEM.OccBinIRF{Float64}([0.5 0.2; 0.3 0.1], [0.6 0.25; 0.35 0.12],
+            [0 0; 1 0], ["x", "y"], "eps")
+        doi = DataFrame(oi)
+        @test names(doi) == ["horizon", "variable", "shock", "linear", "piecewise"]
+        @test doi.shock == fill("eps", 4)
+        @test doi.linear ≈ [0.5, 0.2, 0.3, 0.1]
+    end
+
     # ── write_csv ───────────────────────────────────────────────────────────────
     @testset "write_csv round-trips through a co-author read-back" begin
         rng = Xoshiro(19)

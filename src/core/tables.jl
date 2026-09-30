@@ -907,6 +907,107 @@ function _coef_nt(s::PanelUnitRootSummary)
     return c
 end
 
+# --- DSGE / HA-DSGE solutions and simulations (#861) ---
+
+# First-order policy functions in long (block, equation, variable) shape;
+# v = [states; shocks] columns use state names then `spec.exog` shock names.
+# Higher-order tensors and the steady state keep their native shapes (fields).
+function _coef_nt(sol::PerturbationSolution)
+    states = sol.spec.varnames[sol.state_indices]
+    controls = sol.spec.varnames[sol.control_indices]
+    vnames = vcat(states, string.(sol.spec.exog))
+    block = String[]; equation = String[]; variable = String[]; coef = Float64[]
+    for i in axes(sol.gx, 1), j in axes(sol.gx, 2)
+        push!(block, "g"); push!(equation, controls[i]); push!(variable, vnames[j])
+        push!(coef, Float64(sol.gx[i, j]))
+    end
+    for i in axes(sol.hx, 1), j in axes(sol.hx, 2)
+        push!(block, "h"); push!(equation, states[i]); push!(variable, vnames[j])
+        push!(coef, Float64(sol.hx[i, j]))
+    end
+    return (block=block, equation=equation, variable=variable, coefficient=coef)
+end
+
+# Linear law of motion y = C + G1·y₋ + impact·ε in the same long shape; the
+# constant block completes the law (variable == "constant").
+function _coef_nt(sol::DSGESolution)
+    vn = sol.spec.varnames
+    sn = string.(sol.spec.exog)
+    block = String[]; equation = String[]; variable = String[]; coef = Float64[]
+    for i in axes(sol.G1, 1), j in axes(sol.G1, 2)
+        push!(block, "G1"); push!(equation, vn[i]); push!(variable, vn[j])
+        push!(coef, Float64(sol.G1[i, j]))
+    end
+    for i in axes(sol.impact, 1), j in axes(sol.impact, 2)
+        push!(block, "impact"); push!(equation, vn[i]); push!(variable, sn[j])
+        push!(coef, Float64(sol.impact[i, j]))
+    end
+    for i in eachindex(sol.C_sol)
+        push!(block, "C"); push!(equation, vn[i]); push!(variable, "constant")
+        push!(coef, Float64(sol.C_sol[i]))
+    end
+    return (block=block, equation=equation, variable=variable, coefficient=coef)
+end
+
+# Equilibrium scalars: prices and aggregates, name-sorted for determinism.
+function _coef_nt(ss::HASteadyState)
+    block = String[]; name = String[]; value = Float64[]
+    for (k, v) in sort!(collect(ss.prices), by=first)
+        push!(block, "price"); push!(name, string(k)); push!(value, Float64(v))
+    end
+    for (k, v) in sort!(collect(ss.aggregates), by=first)
+        push!(block, "aggregate"); push!(name, string(k)); push!(value, Float64(v))
+    end
+    return (block=block, name=name, value=value)
+end
+
+# Posterior simulation fan in (period, variable) long shape with outer bands.
+function _coef_nt(s::BayesianDSGESimulation)
+    Tp, nv = size(s.point_estimate)
+    nq = size(s.quantiles, 3)
+    period = Int[]; variable = String[]; value = Float64[]
+    lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    for t in 1:Tp, v in 1:nv
+        push!(period, t); push!(variable, s.variables[v])
+        push!(value, Float64(s.point_estimate[t, v]))
+        push!(lower, nq > 0 ? Float64(s.quantiles[t, v, 1]) : missing)
+        push!(upper, nq > 0 ? Float64(s.quantiles[t, v, nq]) : missing)
+    end
+    return (period=period, variable=variable, value=value, lower=lower, upper=upper)
+end
+
+function _coef_nt(pf::PerfectForesightPath)
+    Tp, nv = size(pf.path)
+    period = Int[]; variable = String[]; level = Float64[]; deviation = Float64[]
+    for t in 1:Tp, v in 1:nv
+        push!(period, t); push!(variable, pf.spec.varnames[v])
+        push!(level, Float64(pf.path[t, v])); push!(deviation, Float64(pf.deviations[t, v]))
+    end
+    return (period=period, variable=variable, level=level, deviation=deviation)
+end
+
+function _coef_nt(sol::OccBinSolution)
+    Tp, nv = size(sol.piecewise_path)
+    period = Int[]; variable = String[]; linear = Float64[]; piecewise = Float64[]
+    for t in 1:Tp, v in 1:nv
+        push!(period, t); push!(variable, sol.varnames[v])
+        push!(linear, Float64(sol.linear_path[t, v]))
+        push!(piecewise, Float64(sol.piecewise_path[t, v]))
+    end
+    return (period=period, variable=variable, linear=linear, piecewise=piecewise)
+end
+
+function _coef_nt(oirf::OccBinIRF)
+    H, nv = size(oirf.piecewise)
+    horizon = Int[]; variable = String[]; shock = String[]
+    linear = Float64[]; piecewise = Float64[]
+    for h in 1:H, v in 1:nv
+        push!(horizon, h); push!(variable, oirf.varnames[v]); push!(shock, oirf.shock_name)
+        push!(linear, Float64(oirf.linear[h, v])); push!(piecewise, Float64(oirf.piecewise[h, v]))
+    end
+    return (horizon=horizon, variable=variable, shock=shock, linear=linear, piecewise=piecewise)
+end
+
 # CUSUM path in (period) long shape with per-point band breaches.
 function _coef_nt(r::StabilityResult)
     n = length(r.tindex)
@@ -967,6 +1068,17 @@ const _TEST_TABLE_TYPES = (ADFResult, KPSSResult, PPResult, ERSResult,
     PanelUnitRootSummary, StabilityResult, VARStationarityResult)
 
 for MT in _TEST_TABLE_TYPES
+    @eval Tables.istable(::Type{<:$MT}) = true
+    @eval Tables.columnaccess(::Type{<:$MT}) = true
+    @eval Tables.columns(m::$MT) = _coef_nt(m)
+    @eval Tables.schema(m::$MT) = Tables.schema(_coef_nt(m))
+end
+
+# DSGE / HA-DSGE solutions and simulations (#861).
+const _DSGE_TABLE_TYPES = (PerturbationSolution, DSGESolution, HASteadyState,
+    BayesianDSGESimulation, PerfectForesightPath, OccBinSolution, OccBinIRF)
+
+for MT in _DSGE_TABLE_TYPES
     @eval Tables.istable(::Type{<:$MT}) = true
     @eval Tables.columnaccess(::Type{<:$MT}) = true
     @eval Tables.columns(m::$MT) = _coef_nt(m)
