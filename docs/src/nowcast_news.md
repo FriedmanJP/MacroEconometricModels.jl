@@ -2,7 +2,7 @@
 
 Every data release moves the nowcast, and the question a forecaster is actually asked is not *what is the number* but *why did it change*. The news decomposition (Bańbura & Modugno 2014) answers it by splitting the revision between two data vintages into a contribution from each newly published observation, weighted by how surprising that observation was relative to what the model already expected. Releases that merely confirm the model's forecast contribute nothing, however large the number itself.
 
-The decomposition is a property of the state-space representation, so it requires an estimated [DFM](@ref nowcast_dfm_page). For the shared data layout and the `nowcast()` interface, see [Nowcasting](@ref nowcast_page).
+The decomposition is a property of the state-space representation, so it requires an estimated [DFM](@ref nowcast_dfm_page) or [BVAR](@ref nowcast_bvar_page). For the shared data layout and the `nowcast()` interface, see [Nowcasting](@ref nowcast_page).
 
 ```@setup nc_news
 using MacroEconometricModels, Random
@@ -106,7 +106,7 @@ Solving jointly is what makes the attribution well posed: the weights split shar
 
 ## Usage
 
-`nowcast_news` takes the new vintage, the old vintage, an estimated `NowcastDFM`, and the period whose nowcast is being decomposed. The two vintages must have identical dimensions; the old one is the more incomplete of the pair.
+`nowcast_news` takes the new vintage, the old vintage, an estimated `NowcastDFM` or `NowcastBVAR`, and the period whose nowcast is being decomposed. The two vintages must have identical dimensions; the old one is the more incomplete of the pair. The BVAR method runs the same Bańbura–Modugno system on the companion state-space form (centred by the steady-state mean, like the ragged-edge fill), so every recipe below works unchanged with a `nowcast_bvar` fit in place of `dfm`.
 
 ```@example nc_news
 X_old = copy(Y)

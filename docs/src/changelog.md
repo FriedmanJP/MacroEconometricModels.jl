@@ -9,10 +9,13 @@ output, not just documentation.
 ## v1.0.2
 
 Machine-readability release: `Tables.jl` / `long_table` coverage for the TIDY
-series (closes `#852`–`#867`). No exported names added or removed; no struct
-fields changed. One correctness fix changes `long_table` output
-(`MidasForecast` horizon labels); one display fix removes column-type rows
-from `report()` tables fed by `Tables.jl` inputs.
+series (closes `#852`–`#867`), plus BVAR news decomposition, a sysimage-safe
+dataset path, and Uhlig penalty-scale normalization (closes `#868`–`#870`).
+No exported names added or removed; no struct fields changed. Two correctness
+fixes change numerical output: `long_table(::MidasForecast)` horizon labels,
+and the `identify_uhlig` default penalty scale (`:diff`, Uhlig 2005);
+one display fix removes column-type rows from `report()` tables fed by
+`Tables.jl` inputs.
 
 **New**
 
@@ -25,6 +28,12 @@ from `report()` tables fed by `Tables.jl` inputs.
 - `long_table` for historical decompositions (+Bayesian), `BayesianFEVD`,
   `LPFEVD` (bias-corrected headline), and the ordered-model
   `marginal_effects` table.
+- `nowcast_news` for `NowcastBVAR`: the Bańbura–Modugno decomposition on
+  the companion state-space form, with the same revision-vs-news semantics
+  and group aggregation as the DFM method.
+- `identify_uhlig(...; scale)`: penalty normalization `:diff` (default,
+  Uhlig 2005 first-difference std), `:residual` (legacy), `:none`, or a
+  custom vector.
 
 **Fixes**
 
@@ -34,6 +43,11 @@ from `report()` tables fed by `Tables.jl` inputs.
 - `report()` tables never print column-type names or omit rows/columns:
   the central table wrapper pins single-row name labels and no-crop
   output on all three display backends.
+- `load_example` resolves the bundled-data directory at runtime instead of
+  a precompile-baked depot path, so installed sysimages find the TOMLs.
+- `identify_uhlig` normalizes the penalty by first-difference std by
+  default (Uhlig 2005, p. 10) instead of residual std; pass
+  `scale=:residual` for the previous behavior.
 
 ## v1.0.1
 

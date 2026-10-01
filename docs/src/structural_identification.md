@@ -584,7 +584,7 @@ f(x) = \begin{cases} x & x \le 0 \\ 100\, x & x > 0 \end{cases}, \qquad
 where:
 - ``x_s > 0`` if and only if sign restriction ``s`` is violated
 - ``\mathrm{sign}_s \in \{+1,-1\}`` is the required sign direction
-- ``\sigma_s = \sqrt{\Sigma_{ii}}`` is the reduced-form residual standard deviation of the response variable
+- ``\sigma_s`` is the penalty scale of the response variable: by default (`scale=:diff`) the standard deviation of first differences, exactly as in Uhlig (2005, p. 10). `scale=:residual` restores the residual standard deviation ``\sqrt{\Sigma_{ii}}`` (Mountford & Uhlig 2009; pre-v1.0.2 behavior), `scale=:none` disables normalization, and a length-``n`` vector supplies custom scales
 
 Weight 1 applies when the restriction is satisfied and weight 100 when it is violated (Uhlig 2005, §3.3; Mountford & Uhlig 2009, §3). Minimization therefore makes violations prohibitively expensive rather than rewarding large already-admissible responses.
 
