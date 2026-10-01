@@ -695,3 +695,43 @@ end
     end
     set_display_backend(:text)
 end
+
+@testset "Publication tables: no type row, no omission (#852)" begin
+    MEM = MacroEconometricModels
+    # Tables.jl/dict inputs must not print the eltype subheader row, on any
+    # backend; explicit caller labels still win.
+    df = MEM.DataFrame(term=["a", "b"], estimate=[1.0, 2.0], n=[1, 2])
+    tables_inputs = (
+        df,
+        (term=["a", "b"], estimate=[1.0, 2.0], n=[1, 2]),
+        Dict("a" => 1, "b" => 2),
+    )
+    for be in (:text, :latex, :html)
+        set_display_backend(be)
+        try
+            for data in tables_inputs
+                s = sprint(io -> MEM._pretty_table(io, data))
+                @test !occursin("Int64", s)
+                @test !occursin("Float64", s)
+                # "String" also appears in legit content; only the type-row
+                # position matters — check the exact subheader row is gone.
+                @test !occursin(r"(?m)^\s*String\s+Float64\s+Int64\s*$", s)
+            end
+            s = sprint(io -> MEM._pretty_table(io, df; column_labels=["T", "E", "N"]))
+            @test !occursin("Int64", s)
+            @test !occursin("Float64", s)
+        finally
+            set_display_backend(:text)
+        end
+    end
+    # Large mixed-type matrix under limit + narrow displaysize: full print,
+    # no row/column cropping or omission markers.
+    big = Any["r$(i)c$(j)" for i in 1:200, j in 1:20]
+    s = sprint(io -> MEM._pretty_table(io, big);
+               context=(:limit => true, :displaysize => (15, 60)))
+    @test !occursin("⋮", s)
+    @test !occursin("…", s)
+    @test occursin("r1c1", s) && occursin("r200c20", s)
+    @test !occursin("Any", s)
+    set_display_backend(:text)
+end

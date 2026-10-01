@@ -568,21 +568,19 @@ end
 # =============================================================================
 
 """
-    _bvar_smooth_missing(Y, beta, sigma, lags, t_complete) -> Matrix
+    _bvar_companion_statespace(Y, beta, sigma, lags) -> (A, C, Q, R, x0, P0, mu)
 
-Fill the missing entries of the panel `Y` (interior NaNs and the ragged edge) with a genuine
-Kalman smoother. The estimated BVAR(`lags`) is cast in companion state-space form
-(state `[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`, state-noise `sigma`,
-observation `C = [I 0]`, tiny measurement ridge) and the missing-data filter/RTS smoother from
-`kalman_missing.jl` is run on the mean-centred panel. Because that smoother drops only the
-missing rows each period, contemporaneously OBSERVED variables update the unobserved states
-through the state covariance — so a released series informs the fill of an unreleased one,
-which the previous interpolation + deterministic-projection routine ignored. `t_complete` is
-retained for signature compatibility; the smoother fills every missing entry uniformly.
+Companion state-space form of an estimated BVAR for Kalman-smoother consumers
+(the ragged-edge fill and the news decomposition share this construction).
+State `[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`,
+state-noise `sigma`, observation `C = [I 0]`, tiny measurement ridge; the
+centring mean `mu` is the steady-state mean with an empirical fallback from
+`Y`. News callers must pass the model's fixed estimation panel (never a
+vintage) so all smoother passes share one centre.
 """
-function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
-                               lags::Int, t_complete::Int) where {T<:AbstractFloat}
-    T_obs, N = size(Y)
+function _bvar_companion_statespace(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
+                                    lags::Int) where {T<:AbstractFloat}
+    N = size(Y, 2)
     sd = N * lags
 
     # Companion state-space form of the BVAR. beta is (1 + N*lags) × N (row 1 = intercept,
@@ -606,10 +604,31 @@ function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
         (all(isfinite, ss) && maximum(abs, ss) < T(1e6)) ? ss : mu_emp
     end
 
-    Yc = Y .- mu'                                  # NaN stays NaN → dropped per period by _miss_data
     x0 = zeros(T, sd)
     P0 = _compute_unconditional_covariance(A, Q, sd)
     all(isfinite, P0) || (P0 = Matrix{T}(I, sd, sd) * T(1e6))
+    return A, C, Q, R, x0, P0, mu
+end
+
+"""
+    _bvar_smooth_missing(Y, beta, sigma, lags, t_complete) -> Matrix
+
+Fill the missing entries of the panel `Y` (interior NaNs and the ragged edge) with a genuine
+Kalman smoother. The estimated BVAR(`lags`) is cast in companion state-space form
+(state `[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`, state-noise `sigma`,
+observation `C = [I 0]`, tiny measurement ridge) and the missing-data filter/RTS smoother from
+`kalman_missing.jl` is run on the mean-centred panel. Because that smoother drops only the
+missing rows each period, contemporaneously OBSERVED variables update the unobserved states
+through the state covariance — so a released series informs the fill of an unreleased one,
+which the previous interpolation + deterministic-projection routine ignored. `t_complete` is
+retained for signature compatibility; the smoother fills every missing entry uniformly.
+"""
+function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
+                               lags::Int, t_complete::Int) where {T<:AbstractFloat}
+    T_obs, N = size(Y)
+    A, C, Q, R, x0, P0, mu = _bvar_companion_statespace(Y, beta, sigma, lags)
+
+    Yc = Y .- mu'                                  # NaN stays NaN → dropped per period by _miss_data
     x_smooth, _, _, _ = _kalman_smoother_missing(Matrix{T}(Yc'), A, C, Q, R, x0, P0)
 
     # Fill only the missing entries with the (un-centred) smoothed current-period state.

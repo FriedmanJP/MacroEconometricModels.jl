@@ -643,18 +643,19 @@ end
     L = MacroEconometricModels.safe_cholesky(m_corr.Sigma)
     θA = [π / 6 + 0.05]          # both signs satisfied
     θB = [0.0]                   # var 2 on impact is negative
-    penA_fn = MacroEconometricModels._uhlig_penalty(θA, r, Phi, L, m_corr, horizon, n)
-    penB_fn = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n)
+    sig_corr = MacroEconometricModels._uhlig_scale(m_corr, :residual)
+    penA_fn = MacroEconometricModels._uhlig_penalty(θA, r, Phi, L, m_corr, horizon, n; sigma=sig_corr)
+    penB_fn = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n; sigma=sig_corr)
     QA = MacroEconometricModels._uhlig_build_Q(θA, r, Phi, L, n)
     QB = MacroEconometricModels._uhlig_build_Q(θB, r, Phi, L, n)
     @test QA[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QA)[2, 1] > 0
     @test QB[1, 1] > 0 && (MacroEconometricModels.safe_cholesky(m_corr.Sigma) * QB)[2, 1] < 0
     @test penA_fn < penB_fn
     penB_heavy = MacroEconometricModels._uhlig_penalty(θB, r, Phi, L, m_corr, horizon, n;
-                                                      penalty_weight=1000)
+                                                      penalty_weight=1000, sigma=sig_corr)
     @test penB_heavy > penB_fn
-    spA = MacroEconometricModels._uhlig_shock_penalties(QA, r, Phi, L, m_corr, horizon)
-    spB = MacroEconometricModels._uhlig_shock_penalties(QB, r, Phi, L, m_corr, horizon)
+    spA = MacroEconometricModels._uhlig_shock_penalties(QA, r, Phi, L, m_corr, horizon; sigma=sig_corr)
+    spB = MacroEconometricModels._uhlig_shock_penalties(QB, r, Phi, L, m_corr, horizon; sigma=sig_corr)
     @test spA[1] < spB[1]
 
     # Unique admissible rotation: zero on (2,1) plus a positive impact sign on (1,1)
@@ -719,8 +720,9 @@ end
     if impact[1, 1] < 0
         Qsat, Qviol = Qviol, Qsat
     end
-    pen_sat = MacroEconometricModels._uhlig_penalty_from_Q(Qsat, r_uniq, Phi, L, m, 1)
-    pen_viol = MacroEconometricModels._uhlig_penalty_from_Q(Qviol, r_uniq, Phi, L, m, 1)
+    sig_uniq = MacroEconometricModels._uhlig_scale(m, :residual)
+    pen_sat = MacroEconometricModels._uhlig_penalty_from_Q(Qsat, r_uniq, Phi, L, m, 1; sigma=sig_uniq)
+    pen_viol = MacroEconometricModels._uhlig_penalty_from_Q(Qviol, r_uniq, Phi, L, m, 1; sigma=sig_uniq)
     @test pen_sat < 0
     @test pen_viol > 1          # violated sign is weighted, not 0
     @test pen_sat < pen_viol
@@ -837,8 +839,56 @@ end
     Lm = MacroEconometricModels.safe_cholesky(m.Sigma)
     La = LowerTriangular(Matrix(Matrix(Lm)')')
     Q = Matrix{Float64}(I, n, n)
-    @test MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, La, m, 1) ≈
-        MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, Lm, m, 1)
+    sig_chol = MacroEconometricModels._uhlig_scale(m, :residual)
+    @test MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, La, m, 1; sigma=sig_chol) ≈
+        MacroEconometricModels._uhlig_shock_penalties(Q, r, Phi, Lm, m, 1; sigma=sig_chol)
+end
+
+@testset "Penalty scale option (#870)" begin
+    MEM = MacroEconometricModels
+    rng = Xoshiro(870)
+    T_obs, n, p = 150, 2, 1
+    # Heteroskedastic scales: :diff and :residual must differ here.
+    Y = hcat(cumsum(randn(rng, T_obs)), randn(rng, T_obs))
+    model = estimate_var(Y, p)
+
+    @testset "scale vector values" begin
+        s_diff = MEM._uhlig_scale(model, :diff)
+        s_fd = MEM._uhlig_scale(model, :first_difference)
+        @test s_diff == s_fd
+        d = Y[2:end, :] .- Y[1:end-1, :]
+        @test s_diff ≈ [std(d[:, 1]), std(d[:, 2])]
+        s_res = MEM._uhlig_scale(model, :residual)
+        @test s_res == MEM._uhlig_scale(model, :sigma)
+        @test s_res ≈ sqrt.(diag(model.Sigma))
+        @test MEM._uhlig_scale(model, :none) == ones(2)
+        @test MEM._uhlig_scale(model, :unit) == ones(2)
+        @test s_diff != s_res
+        @test_throws ArgumentError MEM._uhlig_scale(model, :bogus)
+        @test_throws ArgumentError MEM._uhlig_scale(model, [1.0])
+        @test_throws ArgumentError MEM._uhlig_scale(model, [1.0, 0.0])
+        @test_throws ArgumentError MEM._uhlig_scale(model, [1.0, NaN])
+    end
+
+    @testset "default is :diff; :residual reproduces legacy" begin
+        signs = [sign_restriction(1, 1, :positive), sign_restriction(2, 2, :positive)]
+        r = SVARRestrictions(n; signs=signs)
+        kw = (; n_starts=4, n_refine=1, max_iter_coarse=50, max_iter_fine=100, seed=870)
+        res_default = identify_uhlig(model, r, 4; kw...)
+        res_diff = identify_uhlig(model, r, 4; kw..., scale=:diff)
+        @test res_default.Q ≈ res_diff.Q
+        @test res_default.penalty ≈ res_diff.penalty
+        res_resid = identify_uhlig(model, r, 4; kw..., scale=:residual)
+        res_none = identify_uhlig(model, r, 4; kw..., scale=:none)
+        # Different normalizations reweight the penalty surface: optima differ.
+        @test !(res_diff.penalty ≈ res_resid.penalty) || !(res_diff.Q ≈ res_resid.Q)
+        @test res_none.penalty isa Float64
+        # Custom vector equal to the :diff scale reproduces :diff.
+        res_vec = identify_uhlig(model, r, 4; kw..., scale=MEM._uhlig_scale(model, :diff))
+        @test res_vec.Q ≈ res_diff.Q
+        @test res_vec.penalty ≈ res_diff.penalty
+        @test_throws ArgumentError identify_uhlig(model, r, 4; kw..., scale=:bogus)
+    end
 end
 
 _tprint("Mountford-Uhlig (2009) tests completed.")
