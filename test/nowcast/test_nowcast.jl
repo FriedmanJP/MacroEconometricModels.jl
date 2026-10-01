@@ -797,6 +797,7 @@ end
 # valid for all reused News/Dispatch/Display testsets). Deduplicates 13 redundant EM refits.
 _NC_Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=700)
 _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+_NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
 
 @testset "News Decomposition" begin
     @testset "Basic news computation" begin
@@ -970,6 +971,102 @@ _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
         @test length(news.group_names) == 5  # one per variable
         @test news.group_names[1] == "Var1"
         @test news.group_names[5] == "Var5"
+    end
+end
+
+@testset "BVAR news decomposition (#868)" begin
+    Y = _NC_Y
+    m = _NC_MB
+
+    @testset "Basic news computation" begin
+        X_old = copy(Y)
+        X_old[58:60, 2] .= NaN
+
+        news = nowcast_news(Y, X_old, m, 58; target_var=5)
+
+        @test news isa NowcastNews{Float64}
+        @test isfinite(news.old_nowcast)
+        @test isfinite(news.new_nowcast)
+        @test length(news.impact_news) == count((isnan.(X_old)) .& (.!isnan.(Y)))
+    end
+
+    @testset "No-news case" begin
+        news = nowcast_news(Y, Y, m, 30; target_var=5)
+
+        @test length(news.impact_news) == 0
+        @test news.old_nowcast ≈ news.new_nowcast atol=1e-6
+    end
+
+    @testset "Decomposition identity" begin
+        X_old = copy(Y)
+        X_old[55:60, 1:2] .= NaN
+
+        news = nowcast_news(Y, X_old, m, 55; target_var=5)
+
+        total = news.new_nowcast - news.old_nowcast
+        decomp = sum(news.impact_news) + news.impact_revision + news.impact_reestimation
+
+        @test total ≈ decomp atol=1e-8
+    end
+
+    @testset "Joint news fully explains the revision" begin
+        X_old = copy(Y)
+        X_old[54:60, 1:3] .= NaN
+        news = nowcast_news(Y, X_old, m, 58; target_var=5)
+        @test length(news.impact_news) > 1
+        rev = news.new_nowcast - news.old_nowcast
+        @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
+    end
+
+    @testset "Revisions are not news" begin
+        # Pure revision: one cell observed in BOTH vintages changes value.
+        X_old = copy(Y)
+        X_new = copy(Y)
+        X_new[59, 2] += 0.5
+        news = nowcast_news(X_new, X_old, m, 59; target_var=5)
+        delta = news.new_nowcast - news.old_nowcast
+
+        @test length(news.impact_news) == 0
+        @test news.impact_revision ≈ delta atol=1e-10
+        @test abs(news.impact_reestimation) <= 1e-10
+        @test abs(delta) > 1e-8
+
+        # Sub-tolerance noise must not register as a revision.
+        X_noise = copy(Y) .+ 1e-13
+        news_noise = nowcast_news(X_noise, Y, m, 59; target_var=5)
+        @test news_noise.impact_revision == 0.0
+
+        # News and revisions together: the identity still holds.
+        X_old2 = copy(Y)
+        X_old2[56:60, 1:2] .= NaN
+        X_new2 = copy(Y)
+        X_new2[50, 3] += 0.3
+        news2 = nowcast_news(X_new2, X_old2, m, 58; target_var=5)
+        @test length(news2.impact_news) > 1
+        @test news2.new_nowcast - news2.old_nowcast ≈
+              sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation atol=1e-8
+    end
+
+    @testset "Group impacts" begin
+        X_old = copy(Y)
+        X_old[58:60, 1:2] .= NaN
+
+        groups = [1, 1, 2, 2, 3]
+        news = nowcast_news(Y, X_old, m, 58; target_var=5, groups=groups)
+
+        @test length(news.group_impacts) == 3
+        @test news.group_names == ["Group 1", "Group 2", "Group 3"]
+
+        news2 = nowcast_news(Y, X_old, m, 58; target_var=5, groups=groups,
+                             group_names=["Ind. Prod.", "Retail", "GDP"])
+        @test news2.group_names == ["Ind. Prod.", "Retail", "GDP"]
+    end
+
+    @testset "Input validation" begin
+        @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)
+        @test_throws ArgumentError nowcast_news(Y, Y, m, 0)
+        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; target_var=0)
+        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; groups=[1,1,2,2,3], group_names=["A", "B"])
     end
 end
 
