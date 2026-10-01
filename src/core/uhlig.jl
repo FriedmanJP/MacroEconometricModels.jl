@@ -211,7 +211,7 @@ end
 Uhlig (2005) penalty function.
 
 For each sign restriction, let `normalized` be the IRF in the required-sign
-direction divided by the residual standard deviation, and `x = -normalized`
+direction divided by the penalty scale `σ`, and `x = -normalized`
 (so `x > 0` ⇔ the restriction is violated). Then
 
 - weight 1 if satisfied (`x ≤ 0`): add `x` (small reward)
@@ -225,7 +225,8 @@ Reference: Uhlig (2005, JME 52, §3.3); Mountford & Uhlig (2009, JAE 24, §3).
 function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
                          Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                          model::VARModel{T}, horizon::Int, n::Int;
-                         penalty_weight::Real=100, C1=nothing) where {T<:AbstractFloat}
+                         penalty_weight::Real=100, C1=nothing,
+                         sigma::AbstractVector{T}) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     # Guard: return large penalty for degenerate inputs
     any(isnan, theta_all) && return T(1e10)
@@ -237,21 +238,44 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         return T(1e10)
     end
 
-    _uhlig_penalty_from_Q(Q, restrictions, Phi, L, model, horizon; penalty_weight=pw)
+    _uhlig_penalty_from_Q(Q, restrictions, Phi, L, model, horizon; penalty_weight=pw, sigma=sigma)
+end
+
+"""Penalty scale vector σ for the Uhlig (2005) penalty function (§3.3, p. 10)."""
+function _uhlig_scale(model::VARModel{T}, scale::Union{Symbol,AbstractVector{<:Real}}) where {T<:AbstractFloat}
+    n = nvars(model)
+    if scale isa AbstractVector
+        length(scale) == n || throw(ArgumentError(
+            "custom Uhlig scale vector has length $(length(scale)), expected $n"))
+        s = Vector{T}(scale)
+        all(x -> isfinite(x) && x > zero(T), s) || throw(ArgumentError(
+            "custom Uhlig scale vector must be positive and finite"))
+        return s
+    end
+    s = scale::Symbol
+    if s === :diff || s === :first_difference
+        Y = model.Y
+        size(Y, 1) >= 2 || throw(ArgumentError("Uhlig scale :diff needs at least 2 observations"))
+        d = Y[2:end, :] .- Y[1:end-1, :]
+        return Vector{T}([max(T(Statistics.std(@view d[:, j])), eps(T)) for j in 1:n])
+    elseif s === :residual || s === :sigma
+        return Vector{T}([sqrt(max(model.Sigma[i, i], eps(T))) for i in 1:n])
+    elseif s === :none || s === :unit
+        return ones(T, n)
+    else
+        throw(ArgumentError("unknown Uhlig scale :$s; use :diff, :residual, :none, or a length-$n vector"))
+    end
 end
 
 """Penalty of a candidate rotation `Q` (Uhlig 2005 §3.3). Lower is better."""
 function _uhlig_penalty_from_Q(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
                                 Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                 model::VARModel{T}, horizon::Int;
-                                penalty_weight::Real=100) where {T<:AbstractFloat}
+                                penalty_weight::Real=100,
+                                sigma::AbstractVector{T}) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     n = size(Q, 1)
     irf = structural_irf(Phi, L, Q, horizon)
-    sigma = zeros(T, n)
-    for i in 1:n
-        sigma[i] = sqrt(max(model.Sigma[i, i], eps(T)))
-    end
     total_penalty = zero(T)
     for sr in restrictions.signs
         sr isa SignRestriction || continue
@@ -274,17 +298,18 @@ always free. This is required when a column is uniquely determined
 function _uhlig_sign_normalize(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
                                 Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                 model::VARModel{T}, horizon::Int;
-                                penalty_weight::Real=100) where {T<:AbstractFloat}
+                                penalty_weight::Real=100,
+                                sigma::AbstractVector{T}) where {T<:AbstractFloat}
     shocks = unique(Int[sr.shock for sr in restrictions.signs if sr isa SignRestriction])
     isempty(shocks) && return Matrix{T}(Q)
     Qbest = Matrix{T}(Q)
     for j in shocks
         pen0 = _uhlig_penalty_from_Q(Qbest, restrictions, Phi, L, model, horizon;
-                                     penalty_weight=penalty_weight)
+                                     penalty_weight=penalty_weight, sigma=sigma)
         Qflip = copy(Qbest)
         Qflip[:, j] .*= -one(T)
         pen1 = _uhlig_penalty_from_Q(Qflip, restrictions, Phi, L, model, horizon;
-                                     penalty_weight=penalty_weight)
+                                     penalty_weight=penalty_weight, sigma=sigma)
         if pen1 < pen0
             Qbest = Qflip
         end
@@ -301,15 +326,11 @@ violated. Lower is better.
 function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
                                  Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
                                  model::VARModel{T}, horizon::Int;
-                                 penalty_weight::Real=100) where {T<:AbstractFloat}
+                                 penalty_weight::Real=100,
+                                 sigma::AbstractVector{T}) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     n = size(Q, 1)
     irf = structural_irf(Phi, L, Q, horizon)
-
-    sigma = zeros(T, n)
-    for i in 1:n
-        sigma[i] = sqrt(max(model.Sigma[i, i], eps(T)))
-    end
 
     shock_penalties = zeros(T, n)
     for sr in restrictions.signs
@@ -331,7 +352,8 @@ end
 """
     identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
         n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000,
-        tol_coarse=1e-4, tol_fine=1e-8, penalty_weight=100) -> UhligSVARResult{T}
+        tol_coarse=1e-4, tol_fine=1e-8, penalty_weight=100,
+        scale=:diff) -> UhligSVARResult{T}
 
 Identify SVAR using Mountford & Uhlig (2009) penalty function approach.
 
@@ -346,7 +368,10 @@ matrix ``Q`` that best satisfies sign restrictions, with zero restrictions
 enforced as hard constraints via null-space projection.
 
 The penalty is Uhlig (2005): `x = -normalized`, then `x` if satisfied and
-`penalty_weight * x` if violated. Lower `penalty` is better.
+`penalty_weight * x` if violated. Lower `penalty` is better. Responses are
+normalized by the penalty scale `σ` (see `scale`): the default is the
+per-variable standard deviation of first differences, exactly as in
+Uhlig (2005, p. 10).
 
 Columns that carry a sign restriction are sign-normalized after the search:
 a column sign flip preserves linear zero restrictions, so the uniquely
@@ -374,6 +399,11 @@ remain null-space constraints.
 - `tol_coarse::T=1e-4`: Convergence tolerance for Phase 1
 - `tol_fine::T=1e-8`: Convergence tolerance for Phase 2
 - `penalty_weight::T=T(100)`: Multiplier on violated sign restrictions (Uhlig 2005)
+- `scale::Union{Symbol,AbstractVector}=:diff`: Penalty normalization. `:diff`
+  (`:first_difference`) uses `std` of first differences (Uhlig 2005);
+  `:residual` (`:sigma`) uses residual std deviations (Mountford & Uhlig
+  2009; pre-v1.0.2 behavior); `:none` (`:unit`) uses ones; a length-`n`
+  positive vector supplies custom scales
 
 # Returns
 `UhligSVARResult{T}` with optimal rotation matrix, IRFs, penalty values,
@@ -397,11 +427,13 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
                          max_iter_coarse::Int=500, max_iter_fine::Int=2000,
                          tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
                          penalty_weight::Real=100,
+                         scale::Union{Symbol,AbstractVector{<:Real}}=:diff,
                          seed::Union{Integer,Nothing}=nothing,
                          rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
+    sig = _uhlig_scale(model, scale)
 
     # Need sign restrictions for penalty function
     any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
@@ -432,7 +464,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
         _uhlig_build_Q(T[], restrictions, Phi, L, n; B=model.B, C1=C1)
     else
         obj = theta -> _uhlig_penalty(theta, restrictions, Phi, L, model, max_h, n;
-                                      penalty_weight=pw, C1=C1)
+                                      penalty_weight=pw, C1=C1, sigma=sig)
         # =====================================================================
         # Phase 1: Coarse search from random starting points (multi-threaded)
         # =====================================================================
@@ -508,9 +540,9 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # =========================================================================
     # Build final result
     # =========================================================================
-    Q = _uhlig_sign_normalize(Q, restrictions, Phi, L, model, max_h; penalty_weight=pw)
+    Q = _uhlig_sign_normalize(Q, restrictions, Phi, L, model, max_h; penalty_weight=pw, sigma=sig)
     best_val = _uhlig_penalty_from_Q(Q, restrictions, Phi, L, model, max_h;
-                                     penalty_weight=pw)
+                                     penalty_weight=pw, sigma=sig)
     irf_full = structural_irf(Phi, L, Q, max_h)
 
     # Check convergence: all sign restrictions satisfied?
@@ -519,7 +551,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     # Per-shock penalty diagnostics
     shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h;
-                                             penalty_weight=pw)
+                                             penalty_weight=pw, sigma=sig)
 
     UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
                        copy(model.varnames), id_status)
