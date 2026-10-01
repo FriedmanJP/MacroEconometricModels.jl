@@ -1327,6 +1327,19 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     @testset "Example datasets" begin
         @test_throws ArgumentError load_example(:nonexistent)
 
+        @testset "Runtime data directory (#869)" begin
+            MEM = MacroEconometricModels
+            # The data dir must resolve at runtime (sysimage-safe), never from a
+            # precompile-baked `const … @__DIR__` path.
+            @test !isdefined(MEM, :_DATA_DIR)
+            @test MEM._data_dir() == joinpath(pkgdir(MEM), "data")
+            @test isdir(MEM._data_dir())
+            @test length(MEM._EXAMPLE_DATASETS) == 13
+            nile = load_example(:nile)
+            @test nile isa TimeSeriesData{Float64}
+            @test nobs(nile) == 100
+        end
+
         @testset "FRED-MD" begin
             md = load_example(:fred_md)
             @test md isa TimeSeriesData{Float64}

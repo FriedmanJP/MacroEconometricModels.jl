@@ -12,8 +12,15 @@ Loads built-in datasets stored as TOML files in the `data/` directory.
 
 using TOML
 
-# Path to the data directory (repo root / data)
-const _DATA_DIR = joinpath(dirname(dirname(@__DIR__)), "data")
+# Data directory (package root / data), resolved at RUNTIME on every call — never
+# frozen at precompile time. Baking the depot path into a sysimage breaks
+# `load_example` in installed sysimages (#869); `pkgdir` reads the live path.
+function _data_dir()
+    root = pkgdir(@__MODULE__)
+    root === nothing && throw(ErrorException(
+        "Cannot locate the MacroEconometricModels data directory (package path unavailable)"))
+    return joinpath(root, "data")
+end
 
 # Available datasets — maps name to (filename, type)
 const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
@@ -117,7 +124,7 @@ function load_example(name::Symbol)
         "Unknown dataset :$name. Available: $(sort(collect(keys(_EXAMPLE_DATASETS))))"))
 
     filename, dtype = _EXAMPLE_DATASETS[name]
-    toml_file = joinpath(_DATA_DIR, filename)
+    toml_file = joinpath(_data_dir(), filename)
     isfile(toml_file) || throw(ErrorException(
         "Dataset file not found: $toml_file"))
 
