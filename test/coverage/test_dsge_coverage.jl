@@ -1156,7 +1156,7 @@ function _make_sylvester_problem(n::Int, nvd::Int, rng)
     Mraw = randn(rng, nvd, nvd)
     Mkd = 0.3 .* Mraw ./ opnorm(Mraw)      # operator norm 0.3 (contraction)
     RHS = randn(rng, n, nvd)
-    (f_c, f_f, Mkd, RHS)
+    return (f_c, f_f, Mkd, RHS)
 end
 
 @testset "perturbation.jl: _solve_kronecker_sylvester dense path" begin
@@ -1215,7 +1215,7 @@ function _asset_pricing_spec()
         p[t] = (1.0 / (1.0 + r)) * p[t+1] + (r / (1.0 + r)) * d[t]
         d[t] = rho * d[t-1] + e[t]
     end
-    compute_steady_state(spec)
+    return compute_steady_state(spec)
 end
 
 @testset "forward-looking: gensys UC two-phase solves correctly" begin

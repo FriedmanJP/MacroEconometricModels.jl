@@ -1058,7 +1058,7 @@ end
                 for (k, ci) in enumerate(p.control_indices); dev[t, ci] = yv[k]; end
                 x = xn
             end
-            dev
+            return dev
         end
         function cubic_spec(a2_val, a3_val, sig)
             sp = @dsge begin
@@ -1452,7 +1452,7 @@ end
             end
         end
         fe[1, 1] = -1.0
-        (f0, f1, fl, fe)
+        return (f0, f1, fl, fe)
     end
 
     @testset "sparse route reproduces the dense route" begin
@@ -1565,7 +1565,7 @@ end
         elseif nunstab == 0
             eu = [1, 1]
         end
-        eu
+        return eu
     end
     sims_eu(G0, G1, Psi, Pi) = M.gensys(G0, G1, zeros(size(G0, 1)), Psi, Pi).eu
 
@@ -1575,7 +1575,7 @@ end
         f0[1, 1] = 1.0; f0[1, 3] = 1.0; fl[1, 1] = -1.0; fl[1, 2] = -1.0   # IS
         f0[2, 2] = -1.0; f0[2, 1] = kappa; fl[2, 2] = beta                  # Phillips
         f0[3, 3] = -1.0; f0[3, 2] = phi_pi; fe[3, 1] = 1.0                  # Taylor rule
-        (f0, f1, fl, fe)
+        return (f0, f1, fl, fe)
     end
 
     @testset "Taylor principle: determinate iff phi_pi > 1" begin
@@ -1876,7 +1876,7 @@ end
     function sylv_dense(A, B, C, D, d)
         nvd = size(C, 1)^d
         LHS = kron(Matrix{Float64}(I, nvd, nvd), A) + kron(M._kron_power(C, d)', B)
-        reshape(LHS \ vec(D), size(A, 1), nvd)
+        return reshape(LHS \ vec(D), size(A, 1), nvd)
     end
 
     @testset "matches the dense Kronecker solve, orders 1-3" begin
@@ -2913,10 +2913,13 @@ end
         vals = base.values; d = base._draws
         dev  = d .- reshape(vals, 1, size(vals)...)
         # Two targets with IDENTICAL point IRFs but bootstrap draws scaled by 0.5 vs 2.0.
-        mk(scale) = MacroEconometricModels.ImpulseResponse{Float64}(
-            vals, base.ci_lower, base.ci_upper, H,
-            base.variables, base.shocks, base.ci_type,
-            reshape(vals, 1, size(vals)...) .+ scale .* dev, base._conf_level)
+        function mk(scale)
+            return MacroEconometricModels.ImpulseResponse{Float64}(
+                vals, base.ci_lower, base.ci_upper, H,
+                base.variables, base.shocks, base.ci_type,
+                reshape(vals, 1, size(vals)...) .+ scale .* dev, base._conf_level,
+            )
+        end
         est_t = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
                               target_irfs=mk(0.5), irf_horizon=H, weighting=:efficient)
         est_w = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,

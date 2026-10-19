@@ -362,11 +362,15 @@ const TEST_GROUPS = [
 function _child_julia_cmd(code::String; group_name::String="_warmup")
     test_dir = replace(string(@__DIR__), '\\' => '/')
     cov_flag = Base.JLOptions().code_coverage != 0 ? `--code-coverage=user` : ``
-    checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
+    cb_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
     julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
-    addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
-           "JULIA_NUM_THREADS" => "1",
-           "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)))
+    proj = dirname(test_dir)
+    cmd = `$julia_exe $cov_flag $cb_flag --startup-file=no --project=$proj -e $code`
+    return addenv(
+        cmd,
+        "JULIA_NUM_THREADS" => "1",
+        "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)),
+    )
 end
 
 # Write compiled/*.ji once before the parallel children start. Four children
@@ -378,6 +382,7 @@ function _warm_compile_cache()
     t = @elapsed run(pipeline(_child_julia_cmd("using MacroEconometricModels");
                               stdout=stdout, stderr=stderr))
     println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t; digits=1))
+    return nothing
 end
 
 # Multi-process runner (fallback when threads unavailable)
