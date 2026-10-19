@@ -413,10 +413,10 @@ end
 #   5. else                     → sequential
 # =============================================================================
 
-serial = get(ENV, "MACRO_SERIAL_TESTS", "") == "1"
-multiprocess = get(ENV, "MACRO_MULTIPROCESS_TESTS", "") == "1"
+const SERIAL = get(ENV, "MACRO_SERIAL_TESTS", "") == "1"
+const MULTIPROCESS = get(ENV, "MACRO_MULTIPROCESS_TESTS", "") == "1"
 
-if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_THREADS >= 2))
+if !SERIAL && (MULTIPROCESS || (!SERIAL && Threads.nthreads() == 1 && Sys.CPU_THREADS >= 2))
     # ─────────────────────────────────────────────────────────────────────
     # Multi-process parallel testing
     # Each group runs in its own julia process — full isolation.
@@ -461,7 +461,7 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
 
     isempty(failed_groups) || error("Test groups failed: $(join(failed_groups, ", "))")
 
-elseif !serial && Threads.nthreads() > 1
+elseif !SERIAL && Threads.nthreads() > 1
     # ─────────────────────────────────────────────────────────────────────
     # Threaded single-process parallel testing
     # Loads MacroEconometricModels ONCE, then runs groups in tasks.
@@ -495,7 +495,14 @@ elseif !serial && Threads.nthreads() > 1
                     _with_group_blas(gn) do
                         @testset "$gn" begin
                             for f in fs
-                                t = @elapsed include(joinpath(test_dir, f))
+                                path = joinpath(test_dir, f)
+                                t = if f == "core/test_display_backends.jl"
+                                    @elapsed include(path)
+                                else
+                                    @elapsed with_display_backend(:text) do
+                                        include(path)
+                                    end
+                                end
                                 println("FILETIME\t$(gn)\t$(f)\t", round(t; digits=1))
                             end
                         end

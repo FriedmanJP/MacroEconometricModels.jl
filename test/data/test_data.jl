@@ -4,13 +4,13 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test
+using DataFrames
 using MacroEconometricModels
 using Random
-using DataFrames
 using Statistics
+using Test
 
-const _suppress_warnings = MacroEconometricModels._suppress_warnings
+_suppress_warnings(f) = MacroEconometricModels._suppress_warnings(f)
 
 @testset "Data Module" begin
 
@@ -20,8 +20,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     @testset "TimeSeriesData Construction" begin
         # From Matrix
         @testset "Matrix constructor" begin
-            Random.seed!(42)
-            mat = randn(100, 3)
+            rng = Xoshiro(42)
+            mat = randn(rng, 100, 3)
             d = TimeSeriesData(mat)
             @test nobs(d) == 100
             @test nvars(d) == 3
@@ -113,7 +113,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     # =========================================================================
     @testset "PanelData Construction" begin
         @testset "xtset balanced" begin
-            df = DataFrame(id=repeat(1:3, inner=50), t=repeat(1:50, 3),
+            df = DataFrame(id=repeat(1:3; inner=50), t=repeat(1:50, 3),
                           x=randn(150), y=randn(150))
             pd = xtset(df, :id, :t)
             @test nobs(pd) == 150
@@ -126,7 +126,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "xtset unbalanced" begin
-            df = DataFrame(id=[1,1,1,2,2], t=[1,2,3,1,2],
+            df = DataFrame(id=[1, 1, 1, 2, 2], t=[1, 2, 3, 1, 2],
                           x=randn(5))
             pd = xtset(df, :id, :t)
             @test nobs(pd) == 5
@@ -135,29 +135,29 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "xtset with frequency" begin
-            df = DataFrame(id=repeat(1:2, inner=4), t=repeat(1:4, 2), x=randn(8))
+            df = DataFrame(id=repeat(1:2; inner=4), t=repeat(1:4, 2), x=randn(8))
             pd = xtset(df, :id, :t; frequency=Quarterly)
             @test frequency(pd) == Quarterly
         end
 
         @testset "xtset validation" begin
-            df = DataFrame(id=[1,1], t=[1,1], x=[1.0, 2.0])
+            df = DataFrame(id=[1, 1], t=[1, 1], x=[1.0, 2.0])
             @test_throws ArgumentError xtset(df, :id, :t)  # duplicate pair
             @test_throws ArgumentError xtset(df, :nonexistent, :t)
             @test_throws ArgumentError xtset(df, :id, :nonexistent)
         end
 
         @testset "xtset no numeric columns" begin
-            df = DataFrame(id=[1,2], t=[1,2], name=["a","b"])
+            df = DataFrame(id=[1, 2], t=[1, 2], name=["a", "b"])
             @test_throws ArgumentError xtset(df, :id, :t)
         end
 
         @testset "xtset with cohort" begin
             df = DataFrame(
-                id = repeat(1:6, inner=10),
+                id = repeat(1:6; inner=10),
                 t = repeat(1:10, 6),
                 y = randn(60),
-                cohort = repeat([1, 1, 2, 2, 0, 0], inner=10)
+                cohort = repeat([1, 1, 2, 2, 0, 0]; inner=10),
             )
             pd = xtset(df, :id, :t; cohort=:cohort)
             @test pd.cohort_id !== nothing
@@ -185,10 +185,10 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
             # Calendar-year cohorts preserved against calendar time_id (#587)
             df_yr = DataFrame(
-                id = repeat(1:4, inner=5),
+                id = repeat(1:4; inner=5),
                 year = repeat(2003:2007, 4),
                 y = randn(20),
-                first_treat = repeat([0, 2004, 2007, 0], inner=5),
+                first_treat = repeat([0, 2004, 2007, 0]; inner=5),
             )
             pd_yr = xtset(df_yr, :id, :year; cohort=:first_treat)
             @test Set(unique(pd_yr.cohort_id)) == Set([0, 2004, 2007])
@@ -196,16 +196,16 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             # #587: a cohort period outside the sample (out-of-window adoption year,
             # categorical group label) is kept verbatim with one warning, not rejected —
             # absorb=:cohort consumes such columns.
-            df_out = DataFrame(id=[1,1], year=[2003,2004], y=[1.0,2.0],
-                               first_treat=[1999,1999])
+            df_out = DataFrame(id=[1, 1], year=[2003, 2004], y=[1.0, 2.0],
+                               first_treat=[1999, 1999])
             pd_out = @test_logs (:warn, r"do not match any period") xtset(
                 df_out, :id, :year; cohort=:first_treat)
             @test Set(unique(pd_out.cohort_id)) == Set([1999])
 
             # #587: negative adoption periods are real event-time cohorts, not
             # never-treated markers (only 0/missing mean never-treated)
-            df_evt = DataFrame(id=repeat(1:3, inner=5), t=repeat(-2:2, 3), y=randn(15),
-                               coh=repeat([0, -1, 1], inner=5))
+            df_evt = DataFrame(id=repeat(1:3; inner=5), t=repeat(-2:2, 3), y=randn(15),
+                               coh=repeat([0, -1, 1]; inner=5))
             # (this panel also trips the #598 ambiguity warning below: it has a period 0
             # and a never-treated unit)
             pd_evt = xtset(df_evt, :id, :t; cohort=:coh)
@@ -214,19 +214,19 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             # #598: 0 is the never-treated sentinel, so on a panel whose periods include 0
             # "adopted at 0" and "never treated" are the same stored value. Warn once —
             # silently treating those units as controls is how ATT collapses to 0.0.
-            df_amb = DataFrame(id=repeat(1:4, inner=5), t=repeat(-2:2, 4), y=randn(20),
-                               coh=repeat([0, 0, 1, 1], inner=5))
+            df_amb = DataFrame(id=repeat(1:4; inner=5), t=repeat(-2:2, 4), y=randn(20),
+                               coh=repeat([0, 0, 1, 1]; inner=5))
             pd_amb = @test_logs (:warn, r"never-treated sentinel") match_mode = :any xtset(
                 df_amb, :id, :t; cohort=:coh)
             @test Set(unique(pd_amb.cohort_id)) == Set([0, 1])
             # No period 0 in the sample -> no ambiguity, no warning.
-            df_ok = DataFrame(id=repeat(1:4, inner=5), t=repeat(1:5, 4), y=randn(20),
-                              coh=repeat([0, 0, 2, 2], inner=5))
+            df_ok = DataFrame(id=repeat(1:4; inner=5), t=repeat(1:5, 4), y=randn(20),
+                              coh=repeat([0, 0, 2, 2]; inner=5))
             @test_logs xtset(df_ok, :id, :t; cohort=:coh)
         end
 
         @testset "group_data extraction" begin
-            df = DataFrame(id=repeat(1:3, inner=20), t=repeat(1:20, 3),
+            df = DataFrame(id=repeat(1:3; inner=20), t=repeat(1:20, 3),
                           x=randn(60), y=randn(60))
             pd = xtset(df, :id, :t)
             g1 = group_data(pd, 1)
@@ -243,7 +243,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "panel_summary" begin
-            df = DataFrame(id=repeat(1:2, inner=30), t=repeat(1:30, 2),
+            df = DataFrame(id=repeat(1:2; inner=30), t=repeat(1:30, 2),
                           x=randn(60), y=randn(60))
             pd = xtset(df, :id, :t)
             io = IOBuffer()
@@ -291,8 +291,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     # 4. Accessors and Indexing
     # =========================================================================
     @testset "Accessors and Indexing" begin
-        Random.seed!(123)
-        mat = randn(100, 3)
+        rng = Xoshiro(123)
+        mat = randn(rng, 100, 3)
         d = TimeSeriesData(mat; varnames=["GDP", "CPI", "FFR"])
 
         @testset "Column indexing by name" begin
@@ -350,7 +350,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "rename_vars! PanelData" begin
-            df = DataFrame(id=[1,1,2,2], t=[1,2,1,2], x=randn(4), y=randn(4))
+            df = DataFrame(id=[1, 1, 2, 2], t=[1, 2, 1, 2], x=randn(4), y=randn(4))
             pd = xtset(df, :id, :t)
             rename_vars!(pd, "x" => "alpha")
             @test varnames(pd) == ["alpha", "y"]
@@ -503,12 +503,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "fix PanelData listwise" begin
-            using DataFrames
+            x_nan = vcat(
+                [1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20))
             df = DataFrame(
-                g = repeat(1:2, inner=10),
+                g = repeat(1:2; inner=10),
                 t = repeat(1:10, 2),
-                x = vcat([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20)),
-                y = Float64.(1:20)
+                x = x_nan,
+                y = Float64.(1:20),
             )
             pd = xtset(df, :g, :t)
             pd2 = fix(pd; method=:listwise)
@@ -517,12 +518,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "fix PanelData interpolate" begin
-            using DataFrames
+            x_nan = vcat(
+                [1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20))
             df = DataFrame(
-                g = repeat(1:2, inner=10),
+                g = repeat(1:2; inner=10),
                 t = repeat(1:10, 2),
-                x = vcat([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0], Float64.(11:20)),
-                y = Float64.(1:20)
+                x = x_nan,
+                y = Float64.(1:20),
             )
             pd = xtset(df, :g, :t)
             pd2 = fix(pd; method=:interpolate)
@@ -542,7 +544,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "fix CrossSectionData mean" begin
-            mat = reshape([1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], :, 1)
+            mat = reshape(
+                [1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], :, 1)
             cs = CrossSectionData(mat)
             cs2 = fix(cs; method=:mean)
             @test nobs(cs2) == 12
@@ -559,7 +562,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test nobs(d2) == 10
             @test !any(isnan, Matrix(d2))
             @test d2.time_index == [1, 3, 5, 6, 7, 8, 9, 10, 11, 12]
-            @test d2.dates == ["m1", "m3", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12"]
+            @test d2.dates ==
+                ["m1", "m3", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12"]
         end
 
         @testset "dropna TimeSeriesData with vars" begin
@@ -572,12 +576,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "dropna PanelData" begin
-            using DataFrames
             df = DataFrame(
-                g = repeat(1:2, inner=5),
+                g = repeat(1:2; inner=5),
                 t = repeat(1:5, 2),
                 x = [1.0, NaN, 3.0, 4.0, 5.0, 6.0, 7.0, NaN, 9.0, 10.0],
-                y = Float64.(1:10)
+                y = Float64.(1:10),
             )
             pd = xtset(df, :g, :t)
             pd2 = dropna(pd)
@@ -623,8 +626,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "keeprows PanelData" begin
-            using DataFrames
-            df = DataFrame(g=repeat(1:2, inner=5), t=repeat(1:5, 2),
+            df = DataFrame(g=repeat(1:2; inner=5), t=repeat(1:5, 2),
                            x=Float64.(1:10))
             pd = xtset(df, :g, :t)
             pd2 = keeprows(pd, [1, 2, 3, 6, 7, 8])
@@ -742,7 +744,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @testset "Non-positive column demoted from tcode 4 (#588)" begin
             # tcode 4 loses no rows but its non-positive fallback (tcode 2) loses one, so
             # the row budget must come from the EFFECTIVE codes. Taken from the declared
-            # codes it stayed at T_obs and the aligned copy indexed col[0:end] — BoundsError.
+            # codes it stayed at T_obs and the aligned copy indexed col[0:end] -> error.
             X = hcat(rand(20) .+ 1.0, rand(20) .+ 1.0, rand(20) .+ 1.0)
             X[7, 2] = 0.0            # kills tcode 4 on column 2
             X[3, 3] = -1.5           # and on column 3
@@ -767,10 +769,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode per-variable" begin
-            df = DataFrame(id=repeat(1:3, inner=50),
-                           t=repeat(1:50, 3),
-                           x=rand(150) .+ 1.0,
-                           y=rand(150) .+ 1.0)
+            df = DataFrame(
+                id=repeat(1:3; inner=50),
+                t=repeat(1:50, 3),
+                x=rand(150) .+ 1.0,
+                y=rand(150) .+ 1.0,
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_tcode(pd, [5, 5])
             @test pd2 isa PanelData
@@ -783,9 +787,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode uniform" begin
-            df = DataFrame(id=repeat(1:2, inner=30),
-                           t=repeat(1:30, 2),
-                           x=rand(60) .+ 1.0)
+            df = DataFrame(
+                id=repeat(1:2; inner=30),
+                t=repeat(1:30, 2),
+                x=rand(60) .+ 1.0,
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_tcode(pd, 5)
             @test nobs(pd2) == 58  # 2 * 29
@@ -793,10 +799,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode mixed codes" begin
-            df = DataFrame(id=repeat(1:2, inner=50),
-                           t=repeat(1:50, 2),
-                           x=rand(100) .+ 1.0,
-                           y=randn(100))
+            df = DataFrame(
+                id=repeat(1:2; inner=50),
+                t=repeat(1:50, 2),
+                x=rand(100) .+ 1.0,
+                y=randn(100),
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_tcode(pd, [5, 1])  # log-diff x, leave y in levels
             # tcode 5 loses 1 row per group, tcode 1 loses 0
@@ -806,10 +814,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode second diff" begin
-            df = DataFrame(id=repeat(1:2, inner=50),
-                           t=repeat(1:50, 2),
-                           x=rand(100) .+ 1.0,
-                           y=rand(100) .+ 1.0)
+            df = DataFrame(
+                id=repeat(1:2; inner=50),
+                t=repeat(1:50, 2),
+                x=rand(100) .+ 1.0,
+                y=rand(100) .+ 1.0,
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_tcode(pd, [6, 5])  # tcode 6 loses 2, tcode 5 loses 1
             # max_lost = 2 per group → 48 obs per group
@@ -817,10 +827,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode metadata propagation" begin
-            df = DataFrame(id=repeat(1:2, inner=30),
-                           t=repeat(1:30, 2),
-                           x=rand(60) .+ 1.0,
-                           y=rand(60) .+ 1.0)
+            df = DataFrame(
+                id=repeat(1:2; inner=30),
+                t=repeat(1:30, 2),
+                x=rand(60) .+ 1.0,
+                y=rand(60) .+ 1.0,
+            )
             vd = Dict("x" => "X variable", "y" => "Y variable")
             pd = xtset(df, :id, :t; desc="Test panel", vardesc=vd)
             pd2 = apply_tcode(pd, [5, 1])
@@ -831,10 +843,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData apply_tcode validation" begin
-            df = DataFrame(id=repeat(1:2, inner=10),
-                           t=repeat(1:10, 2),
-                           x=rand(20) .+ 1.0,
-                           y=rand(20) .+ 1.0)
+            df = DataFrame(
+                id=repeat(1:2; inner=10),
+                t=repeat(1:10, 2),
+                x=rand(20) .+ 1.0,
+                y=rand(20) .+ 1.0,
+            )
             pd = xtset(df, :id, :t)
             @test_throws ArgumentError apply_tcode(pd, [1])  # wrong length
         end
@@ -911,18 +925,23 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     @testset "Summary Statistics" begin
         @testset "population skew/kurtosis convention (T062 C-15)" begin
             # x = [2,4,4,4,5,5,7,9]: mean 5, m2=32/8=4, m3=42/8=5.25, m4=356/8=44.5.
-            # population skew = m3/m2^1.5 = 5.25/8 = 0.65625; excess kurt = m4/m2² − 3 = −0.21875.
+            # population skew = m3/m2^1.5 = 5.25/8 = 0.65625;
+            # excess kurt = m4/m2² − 3 = −0.21875.
             x = [2.0, 4, 4, 4, 5, 5, 7, 9]
             s = describe_data(TimeSeriesData(reshape(x, :, 1); varnames=["x"]))
-            @test s.skewness[1] ≈ 5.25 / 4^1.5 atol = 1e-10
-            @test s.kurtosis[1] ≈ 44.5 / 4^2 - 3.0 atol = 1e-10
-            @test s.std[1] ≈ std(x)   # reported Std column stays the sample SD (divisor n-1)
+            @test s.skewness[1] ≈ 5.25 / 4^1.5 atol=1e-10
+            @test s.kurtosis[1] ≈ 44.5 / 4^2 - 3.0 atol=1e-10
+            # reported Std column stays the sample SD (divisor n-1)
+            @test s.std[1] ≈ std(x)
         end
 
         @testset "describe_data basic" begin
-            Random.seed!(42)
-            d = TimeSeriesData(randn(200, 3); varnames=["GDP", "CPI", "FFR"],
-                              frequency=Quarterly)
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                randn(rng, 200, 3);
+                varnames=["GDP", "CPI", "FFR"],
+                frequency=Quarterly,
+            )
             s = describe_data(d)
             @test s isa DataSummary
             @test s.n_vars == 3
@@ -967,8 +986,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         @testset "describe_data PanelData" begin
             redirect_stdout(devnull) do
-                df = DataFrame(id=repeat(1:2, inner=30), t=repeat(1:30, 2),
-                              x=randn(60), y=randn(60))
+                df = DataFrame(
+                    id=repeat(1:2; inner=30),
+                    t=repeat(1:30, 2),
+                    x=randn(60),
+                    y=randn(60),
+                )
                 pd = xtset(df, :id, :t)
                 s = describe_data(pd)
                 @test s isa DataSummary
@@ -1021,30 +1044,30 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "estimate_var dispatch" begin
-            Random.seed!(42)
-            d = TimeSeriesData(randn(100, 3); varnames=["y1", "y2", "y3"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(randn(rng, 100, 3); varnames=["y1", "y2", "y3"])
             model = estimate_var(d, 2)
             @test model isa VARModel
             @test nobs(model) > 0
         end
 
         @testset "estimate_ar dispatch" begin
-            Random.seed!(42)
-            d = TimeSeriesData(randn(100); varname="gdp")
+            rng = Xoshiro(42)
+            d = TimeSeriesData(randn(rng, 100); varname="gdp")
             model = estimate_ar(d, 2)
             @test model isa ARModel
         end
 
         @testset "hp_filter dispatch" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(100)); varname="gdp")
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 100)); varname="gdp")
             result = hp_filter(d)
             @test result isa HPFilterResult
         end
 
         @testset "adf_test dispatch" begin
-            Random.seed!(42)
-            d = TimeSeriesData(randn(100); varname="y")
+            rng = Xoshiro(42)
+            d = TimeSeriesData(randn(rng, 100); varname="y")
             result = adf_test(d)
             @test result isa ADFResult
         end
@@ -1075,12 +1098,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "TimeSeriesData from DataFrame with only string cols" begin
-            df = DataFrame(a=["x","y","z"], b=["a","b","c"])
+            df = DataFrame(a=["x", "y", "z"], b=["a", "b", "c"])
             @test_throws ArgumentError TimeSeriesData(df)
         end
 
         @testset "CrossSectionData from DataFrame with only string cols" begin
-            df = DataFrame(a=["x","y","z"])
+            df = DataFrame(a=["x", "y", "z"])
             @test_throws ArgumentError CrossSectionData(df)
         end
 
@@ -1115,8 +1138,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     # =========================================================================
     @testset "Display" begin
         @testset "TimeSeriesData show" begin
-            d = TimeSeriesData(randn(100, 3); varnames=["GDP", "CPI", "FFR"],
-                              frequency=Quarterly)
+            d = TimeSeriesData(
+                randn(100, 3);
+                varnames=["GDP", "CPI", "FFR"],
+                frequency=Quarterly,
+            )
             io = IOBuffer()
             show(io, d)
             s = String(take!(io))
@@ -1136,7 +1162,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData show" begin
-            df = DataFrame(id=repeat(1:2, inner=10), t=repeat(1:10, 2), x=randn(20))
+            df = DataFrame(id=repeat(1:2; inner=10), t=repeat(1:10, 2), x=randn(20))
             pd = xtset(df, :id, :t)
             io = IOBuffer()
             show(io, pd)
@@ -1170,9 +1196,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
     # =========================================================================
     @testset "Descriptions" begin
         @testset "desc at construction" begin
-            d = TimeSeriesData(randn(50, 2);
+            d = TimeSeriesData(
+                randn(50, 2);
                 varnames=["GDP", "CPI"],
-                desc="US macro data")
+                desc="US macro data",
+            )
             @test desc(d) == "US macro data"
         end
 
@@ -1191,8 +1219,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         @testset "vardesc at construction" begin
             vd = Dict("GDP" => "Real GDP growth", "CPI" => "Consumer prices")
-            d = TimeSeriesData(randn(50, 2);
-                varnames=["GDP", "CPI"], vardesc=vd)
+            d = TimeSeriesData(
+                randn(50, 2);
+                varnames=["GDP", "CPI"],
+                vardesc=vd,
+            )
             @test vardesc(d) == vd
             @test vardesc(d, "GDP") == "Real GDP growth"
             @test vardesc(d, "CPI") == "Consumer prices"
@@ -1221,9 +1252,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         @testset "desc propagates through subsetting" begin
             vd = Dict("GDP" => "Real GDP", "CPI" => "Consumer prices", "FFR" => "Fed rate")
-            d = TimeSeriesData(randn(50, 3);
+            d = TimeSeriesData(
+                randn(50, 3);
                 varnames=["GDP", "CPI", "FFR"],
-                desc="US macro", vardesc=vd)
+                desc="US macro",
+                vardesc=vd,
+            )
             sub = d[:, ["GDP", "FFR"]]
             @test desc(sub) == "US macro"
             @test vardesc(sub, "GDP") == "Real GDP"
@@ -1233,8 +1267,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         @testset "desc propagates through apply_tcode" begin
             vd = Dict("a" => "Variable a", "b" => "Variable b")
-            d = TimeSeriesData(rand(50, 2) .+ 1.0;
-                varnames=["a", "b"], desc="test data", vardesc=vd)
+            d = TimeSeriesData(
+                rand(50, 2) .+ 1.0;
+                varnames=["a", "b"],
+                desc="test data",
+                vardesc=vd,
+            )
             d2 = apply_tcode(d, [5, 1])
             @test desc(d2) == "test data"
             @test vardesc(d2, "a") == "Variable a"
@@ -1242,9 +1280,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "desc propagates through fix" begin
-            mat = [1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 7.0; 8.0 9.0;
-                   10.0 11.0; 12.0 13.0; 14.0 15.0; 16.0 17.0; 18.0 19.0;
-                   20.0 21.0; 22.0 23.0]
+            mat = [
+                1.0 2.0; NaN 3.0; 4.0 5.0; 6.0 7.0; 8.0 9.0;
+                10.0 11.0; 12.0 13.0; 14.0 15.0; 16.0 17.0; 18.0 19.0;
+                20.0 21.0; 22.0 23.0
+            ]
             vd = Dict("x1" => "First var", "x2" => "Second var")
             d = TimeSeriesData(mat; desc="with desc", vardesc=vd)
             d_fixed = fix(d; method=:listwise)
@@ -1253,8 +1293,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "desc propagates through group_data" begin
-            df = DataFrame(id=repeat(1:2, inner=10), t=repeat(1:10, 2),
-                          x=randn(20), y=randn(20))
+            df = DataFrame(
+                id=repeat(1:2; inner=10),
+                t=repeat(1:10, 2),
+                x=randn(20),
+                y=randn(20),
+            )
             vd = Dict("x" => "X variable", "y" => "Y variable")
             pd = xtset(df, :id, :t; desc="Panel dataset", vardesc=vd)
             @test desc(pd) == "Panel dataset"
@@ -1280,8 +1324,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         @testset "CrossSectionData desc/vardesc" begin
             vd = Dict("inc" => "Income", "age" => "Age in years")
-            d = CrossSectionData(randn(30, 2);
-                varnames=["inc", "age"], desc="Survey data", vardesc=vd)
+            d = CrossSectionData(
+                randn(30, 2);
+                varnames=["inc", "age"],
+                desc="Survey data",
+                vardesc=vd,
+            )
             @test desc(d) == "Survey data"
             @test vardesc(d, "inc") == "Income"
             set_desc!(d, "Updated survey")
@@ -1289,8 +1337,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "desc in show output" begin
-            d = TimeSeriesData(randn(50, 2);
-                varnames=["GDP", "CPI"], desc="Quarterly US data")
+            d = TimeSeriesData(
+                randn(50, 2);
+                varnames=["GDP", "CPI"],
+                desc="Quarterly US data",
+            )
             io = IOBuffer()
             show(io, d)
             s = String(take!(io))
@@ -1306,16 +1357,23 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Vector constructor with desc" begin
-            d = TimeSeriesData(randn(50); varname="GDP", desc="GDP series",
-                vardesc=Dict("GDP" => "Real GDP"))
+            d = TimeSeriesData(
+                randn(50);
+                varname="GDP",
+                desc="GDP series",
+                vardesc=Dict("GDP" => "Real GDP"),
+            )
             @test desc(d) == "GDP series"
             @test vardesc(d, "GDP") == "Real GDP"
         end
 
         @testset "DataFrame constructor with desc" begin
             df = DataFrame(x=randn(20), y=randn(20))
-            d = TimeSeriesData(df; desc="From DataFrame",
-                vardesc=Dict("x" => "X col", "y" => "Y col"))
+            d = TimeSeriesData(
+                df;
+                desc="From DataFrame",
+                vardesc=Dict("x" => "X col", "y" => "Y col"),
+            )
             @test desc(d) == "From DataFrame"
             @test vardesc(d, "x") == "X col"
         end
@@ -1346,7 +1404,9 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
             @test nobs(md) == 804
             @test nvars(md) == 126
             @test frequency(md) == Monthly
-            @test desc(md) == "FRED-MD Monthly Database, January 2026 Vintage (McCracken & Ng 2016)"
+            expected_desc =
+                "FRED-MD Monthly Database, January 2026 Vintage (McCracken & Ng 2016)"
+            @test desc(md) == expected_desc
             @test length(md.tcode) == 126
             @test all(t -> 1 <= t <= 7, md.tcode)
 
@@ -1490,8 +1550,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- TimeSeriesData: single symbol for all variables ---
         @testset "Single symbol all vars — HP cycle" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1); varnames=["GDP","CPI","FFR"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 3); dims=1);
+                varnames=["GDP", "CPI", "FFR"],
+            )
             d_hp = apply_filter(d, :hp; component=:cycle)
             @test d_hp isa TimeSeriesData
             @test nobs(d_hp) == 200  # HP preserves length
@@ -1502,16 +1565,16 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Single symbol all vars — HP trend" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 3); dims=1))
             d_trend = apply_filter(d, :hp; component=:trend)
             @test nobs(d_trend) == 200
             @test nvars(d_trend) == 3
         end
 
         @testset "Single symbol — Hamilton" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 3); dims=1))
             d_ham = apply_filter(d, :hamilton; component=:cycle)
             # Hamilton drops h+p-1 obs from start
             @test nobs(d_ham) < 200
@@ -1520,16 +1583,16 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Single symbol — Baxter-King" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 3); dims=1))
             d_bk = apply_filter(d, :bk; component=:cycle)
             @test nobs(d_bk) < 200  # BK loses 2K obs
             @test nvars(d_bk) == 3
         end
 
         @testset "Single symbol — Boosted HP" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 3); dims=1))
             d_bhp = apply_filter(d, :boosted_hp; component=:cycle)
             @test nobs(d_bhp) == 200
             @test nvars(d_bhp) == 3
@@ -1537,16 +1600,22 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Per-variable symbol specs ---
         @testset "Per-variable symbols" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1); varnames=["GDP","CPI","FFR"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 3); dims=1);
+                varnames=["GDP", "CPI", "FFR"],
+            )
             d2 = apply_filter(d, [:hp, :hp, :hp]; component=:cycle)
             @test nobs(d2) == 200
             @test nvars(d2) == 3
         end
 
         @testset "Per-variable with nothing pass-through" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1); varnames=["GDP","CPI","FFR"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 3); dims=1);
+                varnames=["GDP", "CPI", "FFR"],
+            )
             d2 = apply_filter(d, [:hp, nothing, :hp]; component=:cycle)
             @test nobs(d2) == 200
             @test nvars(d2) == 3
@@ -1555,8 +1624,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "All nothing — identity" begin
-            Random.seed!(42)
-            d = TimeSeriesData(randn(100, 2))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(randn(rng, 100, 2))
             d2 = apply_filter(d, [nothing, nothing])
             @test d2.data ≈ d.data
             @test nobs(d2) == 100
@@ -1564,8 +1633,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Tuple component overrides ---
         @testset "Tuple per-variable overrides" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1); varnames=["GDP","CPI","FFR"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 3); dims=1);
+                varnames=["GDP", "CPI", "FFR"],
+            )
             d2 = apply_filter(d, [(:hp, :trend), (:hp, :cycle), nothing])
             @test nobs(d2) == 200
             @test nvars(d2) == 3
@@ -1573,8 +1645,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- vars keyword ---
         @testset "vars keyword with String" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1); varnames=["GDP","CPI","FFR"])
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 3); dims=1);
+                varnames=["GDP", "CPI", "FFR"],
+            )
             d2 = apply_filter(d, :hp; vars=["GDP", "CPI"], component=:cycle)
             @test nobs(d2) == 200
             # FFR should be pass-through
@@ -1582,8 +1657,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "vars keyword with Int" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 3), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 3); dims=1))
             d2 = apply_filter(d, :hp; vars=[1, 3], component=:cycle)
             @test nobs(d2) == 200
             # Column 2 should be pass-through
@@ -1603,8 +1678,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Pre-computed filter results ---
         @testset "Pre-computed filter result" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 2); dims=1))
             r1 = hp_filter(d.data[:, 1])
             d2 = apply_filter(d, [r1, :hp]; component=:cycle)
             @test nobs(d2) == 200
@@ -1612,8 +1687,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Pre-computed Hamilton result" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 2); dims=1))
             r1 = hamilton_filter(d.data[:, 1])
             d2 = apply_filter(d, [r1, nothing])
             # Hamilton trims, nothing doesn't — common range from Hamilton
@@ -1622,8 +1697,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Mixed specs with trimming ---
         @testset "Mixed HP + Hamilton — common range trimming" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 2); dims=1))
             d2 = apply_filter(d, [:hp, :hamilton]; component=:cycle)
             # Should trim to Hamilton's valid range (shorter)
             r_ham = hamilton_filter(d.data[:, 2])
@@ -1631,8 +1706,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Mixed HP + BK — common range trimming" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 2); dims=1))
             d2 = apply_filter(d, [:hp, :bk]; component=:cycle)
             r_bk = baxter_king(d.data[:, 2])
             @test nobs(d2) == length(r_bk.valid_range)
@@ -1640,12 +1715,16 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Metadata propagation ---
         @testset "Metadata propagation" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             vd = Dict("GDP" => "Real GDP", "CPI" => "Consumer prices")
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1);
-                varnames=["GDP", "CPI"], frequency=Quarterly,
-                desc="Test data", vardesc=vd,
-                source_refs=[:mccracken_ng2016])
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 2); dims=1);
+                varnames=["GDP", "CPI"],
+                frequency=Quarterly,
+                desc="Test data",
+                vardesc=vd,
+                source_refs=[:mccracken_ng2016],
+            )
             d2 = apply_filter(d, :hp; component=:cycle)
             @test desc(d2) == "Test data"
             @test vardesc(d2, "GDP") == "Real GDP"
@@ -1656,9 +1735,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Time index trimmed correctly" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1);
-                time_index=collect(1:200))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(
+                cumsum(randn(rng, 200, 2); dims=1);
+                time_index=collect(1:200),
+            )
             d2 = apply_filter(d, :hamilton; component=:cycle)
             # Time index should start after Hamilton's initial obs loss
             @test d2.time_index[1] > 1
@@ -1668,8 +1749,8 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- Single variable ---
         @testset "Single variable" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200)); varname="GDP")
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200)); varname="GDP")
             d2 = apply_filter(d, :hp; component=:cycle)
             @test nobs(d2) == 200
             @test nvars(d2) == 1
@@ -1687,14 +1768,14 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "Invalid component" begin
-            d = TimeSeriesData(cumsum(randn(50, 1), dims=1))
+            d = TimeSeriesData(cumsum(randn(50, 1); dims=1))
             @test_throws ArgumentError apply_filter(d, [:hp]; component=:invalid)
         end
 
         # --- kwargs forwarding ---
         @testset "kwargs forwarded to filter — HP lambda" begin
-            Random.seed!(42)
-            d = TimeSeriesData(cumsum(randn(200, 2), dims=1))
+            rng = Xoshiro(42)
+            d = TimeSeriesData(cumsum(randn(rng, 200, 2); dims=1))
             d_default = apply_filter(d, :hp; component=:cycle)
             d_smooth = apply_filter(d, :hp; component=:cycle, lambda=100.0)
             # Different lambda should produce different cycles
@@ -1703,12 +1784,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
 
         # --- PanelData ---
         @testset "PanelData — single symbol" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             df = DataFrame(
-                id=repeat(1:3, inner=100),
+                id=repeat(1:3; inner=100),
                 t=repeat(1:100, 3),
-                x=cumsum(randn(300)),
-                y=cumsum(randn(300)))
+                x=cumsum(randn(rng, 300)),
+                y=cumsum(randn(rng, 300)),
+            )
             pd = xtset(df, :id, :t)
             pd_hp = apply_filter(pd, :hp; component=:cycle)
             @test pd_hp isa PanelData
@@ -1720,11 +1802,12 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData — Hamilton (shorter)" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             df = DataFrame(
-                id=repeat(1:2, inner=100),
+                id=repeat(1:2; inner=100),
                 t=repeat(1:100, 2),
-                x=cumsum(randn(200)))
+                x=cumsum(randn(rng, 200)),
+            )
             pd = xtset(df, :id, :t)
             pd_ham = apply_filter(pd, :hamilton; component=:cycle)
             @test pd_ham isa PanelData
@@ -1733,12 +1816,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData — vars keyword" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             df = DataFrame(
-                id=repeat(1:2, inner=100),
+                id=repeat(1:2; inner=100),
                 t=repeat(1:100, 2),
-                x=cumsum(randn(200)),
-                y=randn(200))
+                x=cumsum(randn(rng, 200)),
+                y=randn(rng, 200),
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_filter(pd, :hp; vars=["x"], component=:cycle)
             @test nvars(pd2) == 2
@@ -1746,12 +1830,13 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData — per-variable specs vector" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             df = DataFrame(
-                id=repeat(1:2, inner=100),
+                id=repeat(1:2; inner=100),
                 t=repeat(1:100, 2),
-                x=cumsum(randn(200)),
-                y=cumsum(randn(200)))
+                x=cumsum(randn(rng, 200)),
+                y=cumsum(randn(rng, 200)),
+            )
             pd = xtset(df, :id, :t)
             pd2 = apply_filter(pd, [:hp, nothing]; component=:cycle)
             @test nvars(pd2) == 2
@@ -1759,13 +1844,17 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         end
 
         @testset "PanelData metadata propagation" begin
-            Random.seed!(42)
+            rng = Xoshiro(42)
             df = DataFrame(
-                id=repeat(1:2, inner=50),
+                id=repeat(1:2; inner=50),
                 t=repeat(1:50, 2),
-                x=cumsum(randn(100)))
-            pd = xtset(df, :id, :t; desc="Test panel",
-                       vardesc=Dict("x" => "X variable"))
+                x=cumsum(randn(rng, 100)),
+            )
+            pd = xtset(
+                df, :id, :t;
+                desc="Test panel",
+                vardesc=Dict("x" => "X variable"),
+            )
             pd2 = apply_filter(pd, :hp; component=:cycle)
             @test desc(pd2) == "Test panel"
             @test vardesc(pd2, "x") == "X variable"
@@ -1782,13 +1871,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @test d.source_refs == Symbol[]
 
         # Set at construction
-        d2 = TimeSeriesData(randn(50, 2);
-            source_refs=[:mccracken_ng2016])
+        d2 = TimeSeriesData(randn(50, 2); source_refs=[:mccracken_ng2016])
         @test d2.source_refs == [:mccracken_ng2016]
 
         # Propagation through apply_tcode
-        d3 = TimeSeriesData(rand(50, 2) .+ 1.0;
-            source_refs=[:mccracken_ng2016])
+        d3 = TimeSeriesData(rand(50, 2) .+ 1.0; source_refs=[:mccracken_ng2016])
         d3t = apply_tcode(d3, [5, 5])
         @test d3t.source_refs == [:mccracken_ng2016]
 
@@ -1800,9 +1887,11 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @test d4f.source_refs == [:mccracken_ng2016]
 
         # Propagation through subsetting
-        d5 = TimeSeriesData(randn(50, 3);
+        d5 = TimeSeriesData(
+            randn(50, 3);
             varnames=["a", "b", "c"],
-            source_refs=[:mccracken_ng2016])
+            source_refs=[:mccracken_ng2016],
+        )
         sub = d5[:, ["a", "b"]]
         @test sub.source_refs == [:mccracken_ng2016]
 
@@ -1810,8 +1899,7 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @test_throws ArgumentError refs(d)
 
         # CrossSectionData with source_refs
-        cs = CrossSectionData(randn(30, 2);
-            source_refs=[:mccracken_ng2016])
+        cs = CrossSectionData(randn(30, 2); source_refs=[:mccracken_ng2016])
         @test cs.source_refs == [:mccracken_ng2016]
     end
 
@@ -1868,5 +1956,4 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         # set_dates! with wrong length should error
         @test_throws ArgumentError set_dates!(d2, ["a", "b"])
     end
-
 end

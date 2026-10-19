@@ -4,12 +4,12 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test
+using DataFrames
+using LinearAlgebra
 using MacroEconometricModels
 using Random
-using LinearAlgebra
 using Statistics
-using DataFrames
+using Test
 
 # =============================================================================
 # Test Data Generation
@@ -69,8 +69,8 @@ end
         end
 
         # No missing data
-        x_pred, P_pred, x_filt, P_filt, loglik = MacroEconometricModels._kalman_filter_missing(
-            y, A, C, Q, R, x0, P0)
+        x_pred, P_pred, x_filt, P_filt, loglik =
+            MacroEconometricModels._kalman_filter_missing(y, A, C, Q, R, x0, P0)
         @test size(x_filt) == (state_dim, T_obs)
         @test loglik < 0  # negative log-likelihood
         @test !any(isnan, x_filt)
@@ -210,7 +210,8 @@ end
         @test m.nM == 4
         @test m.nQ == 1
         @test m.n_iter >= 1
-        @test m.loglik < 0  # T159: Gaussian DFM loglik on this DGP (observed -121.5; replaces the vacuous || -tautology)
+        # T159: Gaussian DFM loglik on this DGP (observed -121.5; replaces vacuous ||)
+        @test m.loglik < 0
     end
 
     @testset "EM convergence" begin
@@ -571,15 +572,15 @@ end
 
     @testset "Ragged-edge fill conditions on observed variables (T105 #204)" begin
         # 2-var VAR(1), B_1 = diag(0.5), strong contemporaneous innovation correlation
-        # sigma_12 = 0.9. When var1 is observed and var2 missing, the Kalman-smoothed var2 equals
-        # the conditional expectation sigma_21/sigma_11 * u1 (= 0.9 * observed); the old
-        # interpolation + deterministic-projection fill ignored the observed var1 and gave 0.
+        # sigma_12 = 0.9. When var1 is observed and var2 missing, the Kalman-smoothed var2
+        # equals the conditional expectation sigma_21/sigma_11 * u1 (= 0.9 * observed); old
+        # interpolation + deterministic-projection fill ignored observed var1 and gave 0.
         beta = zeros(3, 2); beta[2, 1] = 0.5; beta[3, 2] = 0.5
         sigma = [1.0 0.9; 0.9 1.0]
         Yp = zeros(6, 2); Yp[4, 1] = 3.0; Yp[4, 2] = NaN
         Xp = MacroEconometricModels._bvar_smooth_missing(Yp, beta, sigma, 1, 6)
         @test Xp[4, 1] == 3.0                    # observed entries preserved exactly
-        @test Xp[4, 2] ≈ 2.7 atol=1e-3           # conditioned on the observed correlated variable
+        @test Xp[4, 2] ≈ 2.7 atol=1e-3           # conditioned on observed correlated var
         Yn = zeros(6, 2); Yn[4, 1] = -3.0; Yn[4, 2] = NaN
         Xn = MacroEconometricModels._bvar_smooth_missing(Yn, beta, sigma, 1, 6)
         @test Xn[4, 2] ≈ -2.7 atol=1e-3          # sign follows the observed variable
@@ -628,7 +629,7 @@ end
             @test count(!iszero, X_d[r, :]) == 1
         end
         @test rank(X_d) == k
-        # T159: kept — full rank above implies finite logdet; the ≈ scale pins below guard entries.
+        # T159: kept — full rank above implies finite logdet; ≈ scale pins below guard.
         @test isfinite(logdet(X_d' * X_d))
 
         # Row (lag, i) scale = sigma_i * lag^theta / lambda; only lag 1 carries the RW mean
@@ -662,10 +663,12 @@ end
         end
         Y = Yb[(T_burn + 1):end, :]
         sigma_ar = [std(diff(Y[:, j])) for j in 1:N]
-        ml(lam, th) = MacroEconometricModels._bvar_estimate(Y, 2, sigma_ar, lam, th,
-                                                            1.0, 2.0)[3]
+        function ml(lam, th)
+            return MacroEconometricModels._bvar_estimate(
+                Y, 2, sigma_ar, lam, th, 1.0, 2.0)[3]
+        end
 
-        # T159: kept — sentinel guards; the smoothness/monotonicity pins below guard the surface.
+        # T159: kept — sentinel guards; smoothness/monotonicity pins below guard surface.
         @test isfinite(ml(0.2, 1.0)) && ml(0.2, 1.0) > -1e9
         for lam in (0.02, 0.05, 0.2), th in (0.5, 1.0, 1.1)
             @test isfinite(ml(lam, th)) && ml(lam, th) > -1e9  # T159: kept (see above)
@@ -700,7 +703,8 @@ end
 
         m = nowcast_bvar(Y, 2, 1; lags=2, max_iter=30)
         @test m isa NowcastBVAR{Float64}
-        @test m.loglik < 0  # T159: loglik stays negative even on near-singular data (observed -8.3)
+        # T159: loglik stays negative even on near-singular data (observed -8.3)
+        @test m.loglik < 0
         @test !any(isnan, m.X_sm)
     end
 end
@@ -732,17 +736,18 @@ end
 
     @testset "Bridge nowcasts the incomplete current quarter (T104 #203)" begin
         rng = Random.Xoshiro(203)
-        T_obs = 92                          # NOT a multiple of 3 → a partial current quarter
+        T_obs = 92                          # NOT a multiple of 3 → partial current quarter
         Y = randn(rng, T_obs, 5)            # 3 monthly + 2 quarterly
         for t in 1:T_obs
             mod(t, 3) != 0 && (Y[t, 4:5] .= NaN)
         end
         m = nowcast_bridge(Y, 3, 2; lagM=1, lagQ=1, lagY=1)
-        # ceil-division emits a row for the incomplete quarter (floor ÷ dropped it: 30 → 31).
+        # ceil-division emits a row for the incomplete quarter (floor ÷ dropped it: 30 → 31)
         @test length(m.Y_nowcast) == cld(T_obs, 3)
         @test length(m.Y_nowcast) == 31
-        @test isfinite(m.Y_nowcast[end])    # the current partial quarter is actually nowcast
-        @test abs(m.Y_nowcast[end]) < 10  # T159: quarterly mean of randn data (observed -0.62); blowup guard
+        @test isfinite(m.Y_nowcast[end])    # current partial quarter is actually nowcast
+        # T159: quarterly mean of randn data (observed -0.62); blowup guard
+        @test abs(m.Y_nowcast[end]) < 10
     end
 
     @testset "Equation combination" begin
@@ -795,9 +800,9 @@ end
 
 # Shared T=60/nM=4/nQ=1/r=1 DFM fit (seed=700, heavier max_iter=20/thresh=1e-3 config
 # valid for all reused News/Dispatch/Display testsets). Deduplicates 13 redundant EM refits.
-_NC_Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=700)
-_NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
-_NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
+const _NC_Y, _, _, _ = _make_nowcast_data(T_obs=60, nM=4, nQ=1, r=1, seed=700)
+const _NC_M = nowcast_dfm(_NC_Y, 4, 1; r=1, p=1, max_iter=20, thresh=1e-3)
+const _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
 
 @testset "News Decomposition" begin
     @testset "Basic news computation" begin
@@ -811,7 +816,7 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
         news = nowcast_news(Y, X_old, m, 58; target_var=5)
 
         @test news isa NowcastNews{Float64}
-        # T159: kept — the decomposition identity (next testset) pins old/new/impacts jointly.
+        # T159: kept — decomposition identity (next testset) pins old/new/impacts jointly.
         @test isfinite(news.old_nowcast)
         @test isfinite(news.new_nowcast)  # T159: kept (see above)
         @test length(news.impact_news) == count((isnan.(X_old)) .& (.!isnan.(Y)))
@@ -847,12 +852,12 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
         Y, _, _, _ = _make_nowcast_data(T_obs=80, nM=4, nQ=1, r=1, seed=717)
         m = nowcast_dfm(Y, 4, 1; r=1, p=1, max_iter=30, thresh=1e-4)
         X_old = copy(Y)
-        X_old[74:80, 1:3] .= NaN                 # withhold several recent releases across periods
+        X_old[74:80, 1:3] .= NaN                 # withhold recent releases across periods
         news = nowcast_news(Y, X_old, m, 78; target_var=5)
         @test length(news.impact_news) > 1
-        # The joint weights B = Cov(F,I)·Var(I)^{-1} make the news explain the ENTIRE smoothed
-        # revision, so the re-estimation residual is ~0. The old per-release scalar gains split
-        # overlapping information wrongly and dumped a large residual into impact_reestimation.
+        # The joint weights B = Cov(F,I)·Var(I)^{-1} make news explain the ENTIRE smoothed
+        # revision, so re-estimation residual is ~0. The old per-release scalar gains split
+        # overlapping info wrongly and dumped a large residual into impact_reestimation.
         rev = news.new_nowcast - news.old_nowcast
         @test abs(news.impact_reestimation) <= 1e-6 * (abs(rev) + 1)
     end
@@ -892,9 +897,11 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
         X_new2[60, 3] += 0.3
         news2 = nowcast_news(X_new2, X_old2, m, 78; target_var=5)
         @test length(news2.impact_news) > 1
-        @test news2.new_nowcast - news2.old_nowcast ≈
-              sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation atol=1e-8
-        @test abs(news2.impact_reestimation) <= 1e-6 * (abs(news2.new_nowcast - news2.old_nowcast) + 1)
+        decomp2 =
+            sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation
+        @test news2.new_nowcast - news2.old_nowcast ≈ decomp2 atol=1e-8
+        rev2 = abs(news2.new_nowcast - news2.old_nowcast)
+        @test abs(news2.impact_reestimation) <= 1e-6 * (rev2 + 1)
     end
 
     @testset "Kalman lagged smoother cross-covariance recursion (T094 #194)" begin
@@ -907,7 +914,8 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
         x0 = [0.2, -0.1]; P0 = [1.0 0.2; 0.2 0.8]
         Tn, sd, N = 6, 2, 1
         y = randn(rng, N, Tn)
-        _, _, Plag, _ = MacroEconometricModels._kalman_smoother_lag(y, A, C, Q, R, x0, P0, Tn - 1)
+        _, _, Plag, _ =
+            MacroEconometricModels._kalman_smoother_lag(y, A, C, Q, R, x0, P0, Tn - 1)
         Vt = Vector{Matrix{Float64}}(undef, Tn); Vt[1] = A * P0 * A' + Q
         for t in 2:Tn; Vt[t] = A * Vt[t-1] * A' + Q; end
         SX = zeros(sd * Tn, sd * Tn)
@@ -918,7 +926,10 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
                 SX[(s-1)*sd+1:s*sd, (t-1)*sd+1:t*sd] = Mm'
             end
         end
-        H = zeros(N * Tn, sd * Tn); for t in 1:Tn; H[(t-1)*N+1:t*N, (t-1)*sd+1:t*sd] = C; end
+        H = zeros(N * Tn, sd * Tn)
+        for t in 1:Tn
+            H[(t-1)*N+1:t*N, (t-1)*sd+1:t*sd] = C
+        end
         Rb = zeros(N * Tn, N * Tn); for t in 1:Tn; Rb[(t-1)*N+1:t*N, (t-1)*N+1:t*N] = R; end
         Spost = SX - SX * H' * inv(H * SX * H' + Rb) * H * SX
         for j in 1:3, t in (j + 1):Tn
@@ -934,7 +945,8 @@ _NC_MB = nowcast_bvar(_NC_Y, 4, 1; lags=2, max_iter=30)
         @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)  # size mismatch
         @test_throws ArgumentError nowcast_news(Y, Y, m, 0)  # out of range
         @test_throws ArgumentError nowcast_news(Y, Y, m, 30; target_var=0)  # out of range
-        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; groups=[1,1,2,2,3], group_names=["A", "B"])
+        @test_throws ArgumentError nowcast_news(
+            Y, Y, m, 30; groups=[1, 1, 2, 2, 3], group_names=["A", "B"])
     end
 
     @testset "Group impacts" begin
@@ -1043,8 +1055,9 @@ end
         X_new2[50, 3] += 0.3
         news2 = nowcast_news(X_new2, X_old2, m, 58; target_var=5)
         @test length(news2.impact_news) > 1
-        @test news2.new_nowcast - news2.old_nowcast ≈
-              sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation atol=1e-8
+        decomp2 =
+            sum(news2.impact_news) + news2.impact_revision + news2.impact_reestimation
+        @test news2.new_nowcast - news2.old_nowcast ≈ decomp2 atol=1e-8
     end
 
     @testset "Group impacts" begin
@@ -1066,7 +1079,8 @@ end
         @test_throws ArgumentError nowcast_news(Y, Y[1:50, :], m, 30)
         @test_throws ArgumentError nowcast_news(Y, Y, m, 0)
         @test_throws ArgumentError nowcast_news(Y, Y, m, 30; target_var=0)
-        @test_throws ArgumentError nowcast_news(Y, Y, m, 30; groups=[1,1,2,2,3], group_names=["A", "B"])
+        @test_throws ArgumentError nowcast_news(
+            Y, Y, m, 30; groups=[1, 1, 2, 2, 3], group_names=["A", "B"])
     end
 end
 
@@ -1084,7 +1098,7 @@ end
         @test result.method == :dfm
         @test isfinite(result.nowcast)
         @test isfinite(result.forecast)
-        # T159: nowcast/forecast are O(1) on this DGP (observed 2.45 / -2.56); blowup guards.
+        # T159: nowcast/forecast are O(1) on this DGP (observed 2.45 / -2.56); blowup guards
         @test abs(result.nowcast) < 10
         @test abs(result.forecast) < 10
         @test result.target_index == 5
@@ -1101,7 +1115,8 @@ end
         @test result isa NowcastResult{Float64}
         @test result.method == :bvar
         @test isfinite(result.nowcast)
-        @test abs(result.nowcast) < 10  # T159: O(1) on this DGP (observed -0.25); blowup guard
+        # T159: O(1) on this DGP (observed -0.25); blowup guard
+        @test abs(result.nowcast) < 10
     end
 
     @testset "nowcast() Bridge" begin
@@ -1162,7 +1177,7 @@ end
         x_vals[85:90] .= missing
         y_vals[28:30] .= missing
         df = DataFrame(
-            id = repeat(1:3, inner=30),
+            id = repeat(1:3; inner=30),
             t = repeat(1:30, 3),
             x = x_vals,
             y = y_vals,
@@ -1179,7 +1194,7 @@ end
     @testset "Already balanced panel" begin
         rng = Random.Xoshiro(1900)
         df = DataFrame(
-            id = repeat(1:2, inner=20),
+            id = repeat(1:2; inner=20),
             t = repeat(1:20, 2),
             x = randn(rng, 40),
             y = randn(rng, 40),

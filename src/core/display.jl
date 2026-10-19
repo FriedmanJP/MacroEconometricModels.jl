@@ -11,9 +11,10 @@ Provides a unified borderless table format, backend switching (text/LaTeX/HTML),
 and common formatting helpers used across all show methods in the package.
 """
 
+import ScopedValues
+
 using PrettyTables
 using ScopedValues: ScopedValue
-import ScopedValues
 
 # =============================================================================
 # Display Backend Configuration
@@ -45,8 +46,9 @@ set_display_backend(:text)    # back to terminal-friendly text
 ```
 """
 function set_display_backend(backend::Symbol)
-    backend ∈ (:text, :latex, :html) || throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
-    _DISPLAY_BACKEND_DEFAULT[] = backend
+    backend ∈ (:text, :latex, :html) ||
+        throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
+    return _DISPLAY_BACKEND_DEFAULT[] = backend
 end
 
 """
@@ -74,14 +76,15 @@ end
 ```
 """
 function with_display_backend(f, backend::Symbol)
-    backend ∈ (:text, :latex, :html) || throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
-    ScopedValues.with(f, _DISPLAY_BACKEND => backend)
+    backend ∈ (:text, :latex, :html) ||
+        throw(ArgumentError("backend must be :text, :latex, or :html, got :$backend"))
+    return ScopedValues.with(f, _DISPLAY_BACKEND => backend)
 end
 
 # Shared borderless text table format (Stata-style)
 const _TEXT_TABLE_FORMAT = TextTableFormat(
-    borders = text_table_borders__borderless,
-    horizontal_line_after_column_labels = true
+    borders=text_table_borders__borderless,
+    horizontal_line_after_column_labels=true,
 )
 
 """
@@ -135,20 +138,36 @@ function _pretty_table(io::IO, data; kwargs...)
         # Disable PrettyTables v3 fit-to-display cropping so significance/CI columns and
         # note rows are never silently dropped in non-TTY output (files, pipes, Documenter,
         # CI logs). A publication table must never truncate its own stars column. (S1/T161)
-        pretty_table(io, data; backend = :text, table_format = _TEXT_TABLE_FORMAT,
-                     fit_table_in_display_horizontally = false,
-                     fit_table_in_display_vertically = false, kw...)
+        pretty_table(
+            io, data;
+            backend=:text,
+            table_format=_TEXT_TABLE_FORMAT,
+            fit_table_in_display_horizontally=false,
+            fit_table_in_display_vertically=false,
+            kw...,
+        )
     elseif be == :latex
         # Booktabs rules (no vertical bars, matching the borderless text aesthetic),
         # math-mode any OT1-unsafe header, and math-mode p-value cells. (S10/T175)
-        haskey(kw, :column_labels) && (kw[:column_labels] = map(_latex_header, kw[:column_labels]))
+        if haskey(kw, :column_labels)
+            kw[:column_labels] = map(_latex_header, kw[:column_labels])
+        end
         _f = get(kw, :formatters, nothing)
-        kw[:formatters] = _f === nothing ? Any[_latex_mathify_cell] : vcat(_f, _latex_mathify_cell)
-        pretty_table(io, data; backend = :latex,
-                     table_format = PrettyTables.latex_table_format__booktabs, kw...)
+        kw[:formatters] = if _f === nothing
+            Any[_latex_mathify_cell]
+        else
+            vcat(_f, _latex_mathify_cell)
+        end
+        pretty_table(
+            io, data;
+            backend=:latex,
+            table_format=PrettyTables.latex_table_format__booktabs,
+            kw...,
+        )
     else
-        pretty_table(io, data; backend = :html, kw...)
+        pretty_table(io, data; backend=:html, kw...)
     end
+    return nothing
 end
 
 # =============================================================================
@@ -183,12 +202,12 @@ function _fmt(x::Real; digits::Int=4)
     end
     return s
 end
-_fmt_pct(x::Real; digits::Int=1) = string(round(x * 100, digits=digits), "%")
+_fmt_pct(x::Real; digits::Int=1) = string(round(x * 100; digits=digits), "%")
 
 function _format_pvalue(pval::Real)
     pval < 0.001 && return "<0.001"
     pval > 0.999 && return ">0.999"
-    return string(round(pval, digits=4))
+    return string(round(pval; digits=4))
 end
 
 function _significance_stars(pvalue::Real)
@@ -203,14 +222,18 @@ end
 # =============================================================================
 
 const _LABELS = Dict{Symbol,String}(
-    :hc0 => "HC0 (robust)", :hc1 => "HC1 (robust)", :hc2 => "HC2 (robust)", :hc3 => "HC3 (robust)",
-    :ols => "OLS", :cluster => "Cluster-robust", :newey_west => "Newey–West (HAC)", :robust => "Robust (QMLE)",
+    :hc0 => "HC0 (robust)", :hc1 => "HC1 (robust)",
+    :hc2 => "HC2 (robust)", :hc3 => "HC3 (robust)",
+    :ols => "OLS", :cluster => "Cluster-robust",
+    :newey_west => "Newey–West (HAC)", :robust => "Robust (QMLE)",
     # Panel-only covariance types (#407). ":twoway" is two-way *clustering*, which the bare
-    # "Two-way" would confuse with the two-way fixed effects already shown on the Method row.
+    # "Two-way" would confuse with the two-way fixed effects already shown on the Method
+    # row.
     :twoway => "Two-way cluster-robust", :driscoll_kraay => "Driscoll–Kraay (HAC)",
     :pcse => "Panel-corrected (Beck–Katz)",
     :css => "CSS", :mle => "MLE", :css_mle => "CSS-MLE",
-    :normal => "Normal", :direct => "Direct (NIW)", :gibbs => "Gibbs", :minnesota => "Minnesota",
+    :normal => "Normal", :direct => "Direct (NIW)",
+    :gibbs => "Gibbs", :minnesota => "Minnesota",
     :ar1 => "AR(1)", :iid => "i.i.d.", :none => "None",
     :jarque_bera => "Jarque–Bera", :doornik_hansen => "Doornik–Hansen",
     :mardia_skewness => "Mardia skewness", :mardia_kurtosis => "Mardia kurtosis",
@@ -237,19 +260,25 @@ const _fmt_pvalue = _format_pvalue
 # Intercept display convention (S8/T166): show "(Intercept)" everywhere. Internal tokens
 # ("const"/"_cons") stay intact for margins/detection logic — map only at render time.
 const _INTERCEPT_LABEL = "(Intercept)"
-_display_intercept(name::AbstractString) =
-    name in ("const", "_cons", "Intercept (c)", "(Intercept)") ? _INTERCEPT_LABEL : name
+function _display_intercept(name::AbstractString)
+    return name in ("const", "_cons", "Intercept (c)", "(Intercept)") ?
+        _INTERCEPT_LABEL : name
+end
 
 # ---- LaTeX-safe rendering (S10/T175) ----
 # `<`, `>`, `|` misrender under OT1 (as ¡ ¿ —); wrap any header/cell containing them in
 # math mode so the :latex backend compiles. LatexCell is a raw passthrough that bypasses
 # PrettyTables' own escaping (which correctly handles % & _ #).
 _needs_math(s::AbstractString) = occursin('<', s) || occursin('>', s) || occursin('|', s)
-_latex_header(s::AbstractString) = _needs_math(s) ? PrettyTables.LatexCell("\$" * s * "\$") : s
+function _latex_header(s::AbstractString)
+    return _needs_math(s) ? PrettyTables.LatexCell("\$" * s * "\$") : s
+end
 _latex_header(s) = s
 # PrettyTables cell formatter (v, i, j): math-mode p-value cells like "<0.001"/">0.999".
-_latex_mathify_cell(v, _i, _j) = (v isa AbstractString && _needs_math(v)) ?
-    PrettyTables.LatexCell("\$" * v * "\$") : v
+function _latex_mathify_cell(v, _i, _j)
+    return (v isa AbstractString && _needs_math(v)) ?
+        PrettyTables.LatexCell("\$" * v * "\$") : v
+end
 
 """Select representative horizons for display.
 
@@ -261,9 +290,13 @@ doubled row in forecast/IRF tables); it preserves first-occurrence order and nev
 reorders. (B2/T165)"""
 function _select_horizons(H::Int)
     H <= 5 && return collect(1:H)
-    anchors = H <= 12 ? [1, 4, 8] :
-              H <= 24 ? [1, 4, 8, 12] :
-                        [1, 4, 8, 12, 24]
+    anchors = if H <= 12
+        [1, 4, 8]
+    elseif H <= 24
+        [1, 4, 8, 12]
+    else
+        [1, 4, 8, 12, 24]
+    end
     return unique(vcat(filter(<=(H), anchors), H))
 end
 
@@ -281,8 +314,8 @@ function _coef_table(io::IO, title::String, names::Vector{String},
                      coef_label::String="Coef.") where {T}
     n = length(names)
     alpha = 1 - level
-    z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha/2)) :
-                          T(quantile(TDist(dof_r), 1 - alpha/2))
+    z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha / 2)) :
+                          T(quantile(TDist(dof_r), 1 - alpha / 2))
     stat_label = dist == :z ? "z" : "t"
     tol = sqrt(eps(T))
 
@@ -301,7 +334,8 @@ function _coef_table(io::IO, title::String, names::Vector{String},
                 !isfinite(est) || !isfinite(se_i)
         if degen
             data[i, 1] = is_ref ? names[i] * " (ref)" : names[i]
-            data[i, 2] = is_ref ? "—" : _fmt(est)   # ref rows carry no estimate; keep raw dust otherwise
+            # ref rows carry no estimate; keep raw dust otherwise
+            data[i, 2] = is_ref ? "—" : _fmt(est)
             data[i, 3] = is_ref ? "—" : _fmt(se_i)
             data[i, 4] = "—"        # stat
             data[i, 5] = "—"        # p-value
@@ -323,17 +357,24 @@ function _coef_table(io::IO, title::String, names::Vector{String},
         end
     end
 
-    _pretty_table(io, data;
-        title = title,
-        column_labels = ["", coef_label, "Std.Err.", stat_label, "P>|$stat_label|", "CI lower", "CI upper", ""],
-        alignment = [:l, :r, :r, :r, :r, :r, :r, :l],
+    col_labels = [
+        "", coef_label, "Std.Err.", stat_label,
+        "P>|$stat_label|", "CI lower", "CI upper", "",
+    ]
+    _pretty_table(
+        io, data;
+        title=title,
+        column_labels=col_labels,
+        alignment=[:l, :r, :r, :r, :r, :r, :r, :l],
     )
+    return nothing
 end
 
 """Print the significance legend as a plain text line — never a table, so it cannot
 inherit the empty-header band or the horizontal-crop truncation. (S7/T162)"""
 function _sig_legend(io::IO)
     println(io, "Significance: *** p<0.01, ** p<0.05, * p<0.10")
+    return nothing
 end
 
 """Emit a one-line degenerate-fit warning when any coefficient is non-finite or exploded
@@ -344,9 +385,13 @@ boundary-pinned GMM/SMM parameters); the exploded/non-finite coefficient is the 
 signal. (S6/T164)"""
 function _degenerate_fit_banner(io::IO, coefs::AbstractVector)
     if any(!isfinite, coefs) || any(c -> abs(c) > 1e10, coefs)
-        println(io, "WARNING: degenerate fit — non-finite or exploded coefficients " *
-                    "(possible perfect separation / collinearity); standard errors unreliable.")
+        println(
+            io,
+            "WARNING: degenerate fit — non-finite or exploded coefficients " *
+            "(possible perfect separation / collinearity); standard errors unreliable.",
+        )
     end
+    return nothing
 end
 
 """Representative IRF/forecast horizons including the impact period `h=0`. (S4/T168)"""
@@ -368,14 +413,19 @@ function _irf_horizon_table(io::IO, values::AbstractMatrix, se::AbstractMatrix,
     for r in 1:n_row
         data[r, 1] = row_labels[r]
         for (c, h) in enumerate(horizons)
-            v = values[h+1, r]; s = se[h+1, r]
+            v = values[h + 1, r]
+            s = se[h + 1, r]
             star = (isfinite(s) && s > 0 && abs(v) > z * s) ? "*" : ""
-            data[r, c+1] = string(_fmt(v), star)
+            data[r, c + 1] = string(_fmt(v), star)
         end
     end
-    _pretty_table(io, data; title = title,
-        column_labels = vcat([""], ["h=$h" for h in horizons]),
-        alignment = vcat([:l], fill(:r, length(horizons))))
+    _pretty_table(
+        io, data;
+        title=title,
+        column_labels=vcat([""], ["h=$h" for h in horizons]),
+        alignment=vcat([:l], fill(:r, length(horizons))),
+    )
+    return nothing
 end
 
 """Values-only horizon-summary renderer (no SE, no significance marks) — for point IRFs
@@ -388,12 +438,16 @@ function _irf_points_table(io::IO, values::AbstractMatrix,
     for r in 1:n_row
         data[r, 1] = row_labels[r]
         for (c, h) in enumerate(horizons)
-            data[r, c+1] = _fmt(values[h+1, r])
+            data[r, c + 1] = _fmt(values[h + 1, r])
         end
     end
-    _pretty_table(io, data; title = title,
-        column_labels = vcat([""], ["h=$h" for h in horizons]),
-        alignment = vcat([:l], fill(:r, length(horizons))))
+    _pretty_table(
+        io, data;
+        title=title,
+        column_labels=vcat([""], ["h=$h" for h in horizons]),
+        alignment=vcat([:l], fill(:r, length(horizons))),
+    )
+    return nothing
 end
 
 """Print a labeled matrix as a PrettyTables table."""
@@ -406,12 +460,15 @@ function _matrix_table(io::IO, M::AbstractMatrix, title::String;
     for i in 1:n
         data[i, 1] = row_labels[i]
         for j in 1:m
-            data[i, j+1] = _fmt(M[i, j]; digits=digits)   # share the fixed-decimal convention (S2/T163)
+            # Share the fixed-decimal convention (S2/T163)
+            data[i, j + 1] = _fmt(M[i, j]; digits=digits)
         end
     end
-    _pretty_table(io, data;
-        title = title,
-        column_labels = vcat([""], col_labels),
-        alignment = vcat([:l], fill(:r, m))
+    _pretty_table(
+        io, data;
+        title=title,
+        column_labels=vcat([""], col_labels),
+        alignment=vcat([:l], fill(:r, m)),
     )
+    return nothing
 end

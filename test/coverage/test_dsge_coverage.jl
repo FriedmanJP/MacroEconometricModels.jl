@@ -26,15 +26,17 @@ const _suppress = MacroEconometricModels._suppress_warnings
     spec = compute_steady_state(spec)
 
     # -- Text backend (baseline) --
-    MacroEconometricModels.set_display_backend(:text)
-    s_text = sprint(show, spec)
+    s_text = with_display_backend(:text) do
+        sprint(show, spec)
+    end
     @test occursin("DSGE Model Specification", s_text)
     @test occursin("Endogenous", s_text)
     @test occursin("Steady State", s_text)
 
     # -- LaTeX backend --
-    MacroEconometricModels.set_display_backend(:latex)
-    s_latex = sprint(show, spec)
+    s_latex = with_display_backend(:latex) do
+        sprint(show, spec)
+    end
     @test occursin("\\begin{align}", s_latex)
     @test occursin("\\end{align}", s_latex)
     @test occursin("\\begin{tabular}", s_latex)
@@ -46,8 +48,9 @@ const _suppress = MacroEconometricModels._suppress_warnings
     @test occursin("\\bar{", s_latex)
 
     # -- HTML backend --
-    MacroEconometricModels.set_display_backend(:html)
-    s_html = sprint(show, spec)
+    s_html = with_display_backend(:html) do
+        sprint(show, spec)
+    end
     @test occursin("<div class=\"dsge-spec\">", s_html)
     @test occursin("<h3>", s_html)
     @test occursin("<table>", s_html)
@@ -55,9 +58,6 @@ const _suppress = MacroEconometricModels._suppress_warnings
     @test occursin("MathJax", s_html) || occursin("\\begin{align}", s_html)
     @test occursin("Steady State", s_html)
     @test occursin("</div>", s_html)
-
-    # Restore text backend
-    MacroEconometricModels.set_display_backend(:text)
 end
 
 @testset "display.jl: LaTeX/HTML for DSGESpec without steady state" begin
@@ -69,17 +69,17 @@ end
     end
     # No steady state computed -- should not show steady state section
 
-    MacroEconometricModels.set_display_backend(:latex)
-    s = sprint(show, spec_no_ss)
+    s = with_display_backend(:latex) do
+        sprint(show, spec_no_ss)
+    end
     @test occursin("\\begin{align}", s)
     @test !occursin("\\bar{", s)  # no steady state
 
-    MacroEconometricModels.set_display_backend(:html)
-    s2 = sprint(show, spec_no_ss)
+    s2 = with_display_backend(:html) do
+        sprint(show, spec_no_ss)
+    end
     @test occursin("<div class=\"dsge-spec\">", s2)
     @test !occursin("Steady State", s2)
-
-    MacroEconometricModels.set_display_backend(:text)
 end
 
 @testset "display.jl: LaTeX/HTML for forward-looking model" begin
@@ -93,16 +93,16 @@ end
     spec_fwd = compute_steady_state(spec_fwd)
 
     # LaTeX with forward-looking: should have \mathbb{E}
-    MacroEconometricModels.set_display_backend(:latex)
-    s = sprint(show, spec_fwd)
+    s = with_display_backend(:latex) do
+        sprint(show, spec_fwd)
+    end
     @test occursin("\\mathbb{E}", s) || occursin("E_t", s)
 
     # HTML with forward-looking
-    MacroEconometricModels.set_display_backend(:html)
-    s2 = sprint(show, spec_fwd)
+    s2 = with_display_backend(:html) do
+        sprint(show, spec_fwd)
+    end
     @test occursin("<div", s2)
-
-    MacroEconometricModels.set_display_backend(:text)
 end
 
 @testset "display.jl: expression converters edge cases" begin
@@ -904,8 +904,9 @@ end
 
     # DSGESolution
     sol_gensys = solve(spec; method=:gensys)
-    MacroEconometricModels.set_display_backend(:text)
-    s1 = sprint(show, sol_gensys)
+    s1 = with_display_backend(:text) do
+        sprint(show, sol_gensys)
+    end
     @test occursin("DSGE Solution", s1)
 
     # PerturbationSolution
@@ -1333,11 +1334,11 @@ end
     end
     @test spec.linear == true
 
-    MacroEconometricModels.set_display_backend(:text)
-    s = sprint(show, spec)
+    s = with_display_backend(:text) do
+        sprint(show, spec)
+    end
     @test occursin("Linear:", s)
     @test occursin("pre-linearized", s)
-    MacroEconometricModels.set_display_backend(:text)
 end
 
 # =========================================================================

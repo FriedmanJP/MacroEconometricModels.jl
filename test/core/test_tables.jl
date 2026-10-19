@@ -4,14 +4,14 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using MacroEconometricModels
-using Test
 using DataFrames
-using Tables
-using StatsAPI
-using Random
-using LinearAlgebra
 using DelimitedFiles
+using LinearAlgebra
+using MacroEconometricModels
+using Random
+using StatsAPI
+using Tables
+using Test
 
 # Tiny staggered panel for direct DiD-result construction (no estimation).
 function _tidy_minipanel()
@@ -30,7 +30,7 @@ function _tidy_minipanel()
         time_id[row] = t
         row += 1
     end
-    PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
+    return PanelData{Float64}(data, ["outcome", "treat_time"], Quarterly, [1, 1],
         group_id, time_id, nothing, ["unit_$i" for i in 1:n_units],
         n_units, 2, N_obs, true, ["tiny"], Dict{String,String}(), Symbol[])
 end
@@ -43,7 +43,8 @@ end
         X = randn(rng, 90, 3); y = X * [1.0, -0.5, 0.3] .+ randn(rng, 90)
         m = estimate_reg(y, X)
         df = DataFrame(m)
-        @test names(df) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(df) ==
+            ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
         @test nrow(df) == length(coef(m))
         @test df.estimate ≈ coef(m)
         @test df.std_error ≈ stderror(m)
@@ -85,7 +86,15 @@ end
     @testset "DataFrame(OrderedModel) — two blocks" begin
         rng = Xoshiro(14)
         n = 300; X = randn(rng, n, 2); latent = X * [1.0, -0.8] .+ randn(rng, n)
-        y = [v < -0.7 ? 1 : v < 0.7 ? 2 : 3 for v in latent]
+        y = map(latent) do v
+            if v < -0.7
+                return 1
+            elseif v < 0.7
+                return 2
+            else
+                return 3
+            end
+        end
         om = estimate_ologit(y, X)
         d = DataFrame(om)
         @test "block" in names(d)
@@ -118,7 +127,7 @@ end
         d = DataFrame(vm)
         @test "equation" in names(d)
         @test Set(d.equation) == Set(vm.varnames)
-        @test nrow(d) == length(vm.varnames) * (1 + 2 * 2)   # (intercept + n*p) per equation
+        @test nrow(d) == length(vm.varnames) * (1 + 2 * 2)  # (intercept + n*p) per eq
         # First equation's estimates equal B[:,1].
         d1 = d[d.equation .== vm.varnames[1], :]
         @test d1.estimate ≈ vm.B[:, 1]
@@ -153,12 +162,13 @@ end
 
     @testset "long_table(LPImpulseResponse) — direct construction" begin
         vals = reshape(collect(1.0:12.0), 6, 2)
-        lpir = MacroEconometricModels.LPImpulseResponse{Float64}(vals, vals .- 1, vals .+ 1,
-                                               fill(0.5, 6, 2), 5, ["y1", "y2"], "shock", :hac, 0.95)
+        lpir = MacroEconometricModels.LPImpulseResponse{Float64}(
+            vals, vals .- 1, vals .+ 1,
+            fill(0.5, 6, 2), 5, ["y1", "y2"], "shock", :hac, 0.95)
         lt = long_table(lpir)
         @test names(lt) == ["horizon", "variable", "shock", "value", "se", "lower", "upper"]
         @test nrow(lt) == 6 * 2
-        @test Set(lt.horizon) == Set(0:5)          # LP horizons are 0-based (impact included)
+        @test Set(lt.horizon) == Set(0:5)  # LP horizons are 0-based (impact included)
         @test all(lt.shock .== "shock")
     end
 
@@ -175,7 +185,7 @@ end
         # write_csv routes HD through long_table.
         path = tempname() * ".csv"
         write_csv(hd, path)
-        raw, hdr = readdlm(path, ',', header=true)
+        raw, hdr = readdlm(path, ','; header=true)
         @test vec(hdr) == ["time", "variable", "shock", "value"]
 
         # Bayesian: point estimate plus outer-quantile interval.
@@ -197,7 +207,8 @@ end
         MEM = MacroEconometricModels
         pe = reshape(collect(1.0:24.0) ./ 100, 2, 2, 6)
         q = cat(pe .- 0.01, pe, pe .+ 0.01; dims=4)
-        bf = MEM.BayesianFEVD{Float64}(q, pe, 6, ["y1", "y2"], ["e1", "e2"], [0.16, 0.5, 0.84])
+        bf = MEM.BayesianFEVD{Float64}(
+            q, pe, 6, ["y1", "y2"], ["e1", "e2"], [0.16, 0.5, 0.84])
         lt = long_table(bf)
         @test names(lt) == ["horizon", "variable", "shock", "value", "lower", "upper"]
         @test nrow(lt) == 6 * 2 * 2
@@ -241,17 +252,22 @@ end
 
     # ── TIDY coefficient families (v1.0.2, #853 series) ─────────────────────────
     @testset "DataFrame(PoissonModel/NegBinModel) (#854)" begin
-        d = readdlm(joinpath(@__DIR__, "..", "reg", "data", "count_oracle.csv"), ',', Float64)
+        csv_path = joinpath(@__DIR__, "..", "reg", "data", "count_oracle.csv")
+        d = readdlm(csv_path, ',', Float64)
         X = hcat(ones(size(d, 1)), d[:, 4], d[:, 5])
         VN = ["const", "x1", "x2"]
         mp = estimate_poisson(d[:, 1], X; varnames=VN)
         df = DataFrame(mp)
-        @test names(df) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(df) ==
+            ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
         @test df.estimate ≈ coef(mp)
         @test df.std_error ≈ stderror(mp)
         mn = estimate_nbreg(d[:, 2], X; varnames=VN)
         dn = DataFrame(mn)
-        @test names(dn) == ["block", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(dn) == [
+            "block", "term", "estimate", "std_error",
+            "stat", "p_value", "ci_lower", "ci_upper",
+        ]
         @test dn.block == ["coef", "coef", "coef", "dispersion"]
         @test dn.term[end] == "alpha"
         @test dn.estimate[end] ≈ mn.alpha
@@ -264,9 +280,12 @@ end
         y = X * [1.0, 0.5, -0.3] .+ randn(rng, 200)
         m = estimate_qreg(y, X, [0.25, 0.5, 0.75]; varnames=["const", "x1", "x2"])
         df = DataFrame(m)
-        @test names(df) == ["tau", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(df) == [
+            "tau", "term", "estimate", "std_error",
+            "stat", "p_value", "ci_lower", "ci_upper",
+        ]
         @test nrow(df) == 9
-        @test df.tau == repeat([0.25, 0.5, 0.75], inner=3)
+        @test df.tau == repeat([0.25, 0.5, 0.75]; inner=3)
         @test df.estimate ≈ vec(m.beta)
         @test df.std_error ≈ vec(m.stderr)
         d05 = df[df.tau .== 0.5, :]
@@ -279,7 +298,10 @@ end
         y = 0.5 .* running .+ 2.0 .* (running .>= 0) .+ randn(rng, 600)
         r = estimate_rdd(y, running; cutoff=0.0)
         df = DataFrame(r)
-        @test names(df) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper", "h", "b"]
+        @test names(df) == [
+            "term", "estimate", "std_error", "stat",
+            "p_value", "ci_lower", "ci_upper", "h", "b",
+        ]
         @test df.term == ["Conventional", "Robust (bias-corrected)"]
         @test df.estimate ≈ [r.tau_conventional, r.tau_bias_corrected]
         @test df.std_error ≈ [r.se_conventional, r.se_robust]
@@ -299,7 +321,7 @@ end
         ds = DataFrame(ms)
         @test names(ds) == ["equation", "term", "estimate", "std_error", "stat", "p_value",
             "ci_lower", "ci_upper", "nobs", "mcelroy_r2", "det_sigma", "loglik"]
-        @test ds.equation == repeat(ms.eqnames, inner=3)
+        @test ds.equation == repeat(ms.eqnames; inner=3)
         @test ds[ds.equation .== ms.eqnames[1], :estimate] ≈ ms.betas[1]
         @test ds[ds.equation .== ms.eqnames[2], :estimate] ≈ ms.betas[2]
         @test all(ds.mcelroy_r2 .≈ ms.mcelroy_r2)
@@ -323,7 +345,10 @@ end
             Matrix{Float64}[], Matrix{Float64}[], Matrix{Float64}[], Int[],
             "outcome", "treat_time", 120, 12, 1, 2, 2, false, :unit, 0.95, pd)
         de = DataFrame(eslp)
-        @test names(de) == ["event_time", "term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(de) == [
+            "event_time", "term", "estimate", "std_error",
+            "stat", "p_value", "ci_lower", "ci_upper",
+        ]
         @test de.event_time == et
         @test de.term == ["h=$e" for e in et]
         @test de.estimate ≈ co
@@ -375,7 +400,10 @@ end
         me = marginal_effects(m)
         @test me isa MEM.MultinomialMarginalEffects
         df = DataFrame(me)
-        @test names(df) == ["variable", "category", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(df) == [
+            "variable", "category", "estimate", "std_error",
+            "stat", "p_value", "ci_lower", "ci_upper",
+        ]
         @test nrow(df) == length(me.varnames) * (length(me.categories) - 1)
         @test Set(df.category) == Set(me.categories[2:end])     # base skipped
         @test df.estimate[1] ≈ me.effects[1, 2]
@@ -386,13 +414,21 @@ end
         yo = Vector{Int}(undef, 400)
         for i in 1:400
             u = rand(rng)
-            yo[i] = u < 1 / (1 + exp(-(cuts[1] - xb[i]))) ? 1 :
-                    u < 1 / (1 + exp(-(cuts[2] - xb[i]))) ? 2 : 3
+            if u < 1 / (1 + exp(-(cuts[1] - xb[i])))
+                yo[i] = 1
+            elseif u < 1 / (1 + exp(-(cuts[2] - xb[i])))
+                yo[i] = 2
+            else
+                yo[i] = 3
+            end
         end
         mo = estimate_ologit(yo, Xo; varnames=["x1", "x2"])
         nto = marginal_effects(mo)
         lt = long_table(nto)
-        @test names(lt) == ["variable", "category", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        @test names(lt) == [
+            "variable", "category", "estimate", "std_error",
+            "stat", "p_value", "ci_lower", "ci_upper",
+        ]
         @test nrow(lt) == 2 * 3                                  # all J kept
         @test lt.estimate[1] ≈ nto.effects[1, 1]
         @test lt.std_error[1] ≈ nto.se[1, 1]
@@ -429,7 +465,10 @@ end
             [0.5], ["mp"], zeros(3), 0.01, nothing, true, "taylor", 3,
             [0.16, 0.84], 100, 0)
         dp = DataFrame(pc)
-        @test names(dp) == ["period", "variable", "role", "baseline", "counterfactual", "lower", "upper"]
+        @test names(dp) == [
+            "period", "variable", "role", "baseline",
+            "counterfactual", "lower", "upper",
+        ]
         @test nrow(dp) == 6
         @test dp[dp.role .== "outcome", :variable] == fill("y", 3)
         @test dp[dp.role .== "outcome", :counterfactual] ≈ [1.1, 2.1, 3.1]
@@ -440,7 +479,8 @@ end
             [1.0 0.2; 0.2 1.0], [1.0 0.1; 0.1 1.0], nothing, zeros(4, 2, 2),
             "rule", 4, 0.001, nothing)
         dm = DataFrame(cm)
-        @test names(dm) == ["variable_i", "variable_j", "cov_base", "cov_cf", "corr_base", "corr_cf"]
+        @test names(dm) ==
+            ["variable_i", "variable_j", "cov_base", "cov_cf", "corr_base", "corr_cf"]
         @test nrow(dm) == 4
         @test dm.cov_cf[2] ≈ 0.1
         @test dm[(dm.variable_i .== "y") .& (dm.variable_j .== "y"), :corr_base] == [1.0]
@@ -450,7 +490,10 @@ end
             reshape([0.1, 0.2], 1, 2), [0.01, 0.02], "rule", 4,
             [0.16, 0.84], 50, 1)
         dh = DataFrame(ch)
-        @test names(dh) == ["date", "variable", "realized", "counterfactual", "cf_lower", "cf_upper", "rel_residual"]
+        @test names(dh) == [
+            "date", "variable", "realized", "counterfactual",
+            "cf_lower", "cf_upper", "rel_residual",
+        ]
         @test nrow(dh) == 4
         @test dh[dh.date .== "t2", :rel_residual] == [0.02, 0.02]
         @test dh.cf_upper ≈ dh.counterfactual .+ 0.1
@@ -458,7 +501,8 @@ end
             nothing, nothing, 2, "base")
         @test names(DataFrame(bp)) == ["period", "variable", "role", "value"]
         @test nrow(DataFrame(bp)) == 4
-        pf = MEM.PolicyForecast{Float64}([:y, :r], [[1.0, 2.0], [3.0, 4.0]], nothing, 2, "2021Q2")
+        pf = MEM.PolicyForecast{Float64}(
+            [:y, :r], [[1.0, 2.0], [3.0, 4.0]], nothing, 2, "2021Q2")
         dpf = DataFrame(pf)
         @test nrow(dpf) == 4
         @test dpf[dpf.variable .== "r", :value] ≈ [3.0, 4.0]
@@ -483,14 +527,16 @@ end
         @test names(dl) == ["sector_i", "sector_j", "A", "L"]
         n = length(lm.x)
         @test nrow(dl) == n * n
-        @test dl[(dl.sector_i .== io.sectors[1]) .& (dl.sector_j .== io.sectors[2]), :L] ≈ [lm.L[1, 2]]
+        sel_12 = (dl.sector_i .== io.sectors[1]) .& (dl.sector_j .== io.sectors[2])
+        @test dl[sel_12, :L] ≈ [lm.L[1, 2]]
         gm = ghosh(io)
         dg = DataFrame(gm)
         @test names(dg) == ["sector_i", "sector_j", "B", "G"]
         @test dg.G ≈ vec([gm.G[i, j] for i in 1:n for j in 1:n])
         lr = linkages(io)
         dlink = DataFrame(lr)
-        @test names(dlink) == ["sector", "backward", "forward", "Ui", "Uj", "classification"]
+        @test names(dlink) ==
+            ["sector", "backward", "forward", "Ui", "Uj", "classification"]
         @test dlink.sector == io.sectors
         @test dlink.backward ≈ lr.backward
         mu = multipliers(io)
@@ -500,7 +546,7 @@ end
         fp = footprint(io, "CO2")
         dfp = DataFrame(fp)
         @test names(dfp) == ["stressor", "sector", "value", "total"]
-        @test dfp.total ≈ repeat([sum(fp.total[i, :]) for i in 1:size(fp.total, 1)],
+        @test dfp.total ≈ repeat([sum(fp.total[i, :]) for i in 1:size(fp.total, 1)];
             inner=size(fp.by_sector, 2))
         io1 = IOData(io.Z .* 1.1, io.Y .* 1.1, io.va .* 1.1; sectors=io.sectors,
             regions=io.regions, fd_cats=io.fd_cats, va_cats=io.va_cats)
@@ -508,7 +554,8 @@ end
         dsd = DataFrame(sd)
         @test "factor" in names(dsd) && "effect" in names(dsd)
         @test Set(dsd.factor) == Set(string.(keys(sd.effects)))
-        @test dsd[dsd.factor .== string(first(sd.factors)), :effect] ≈ sd.effects[first(sd.factors)]
+        f1 = first(sd.factors)
+        @test dsd[dsd.factor .== string(f1), :effect] ≈ sd.effects[f1]
         # Regional footprint on a two-region toy.
         Z2 = [100.0 50.0; 0.0 50.0]
         Y2 = [30.0 20.0; 70.0 80.0]
@@ -528,9 +575,17 @@ end
         MEM = MacroEconometricModels
         rng = Xoshiro(26)
         y = randn(rng, 200)
-        for (res, label) in ((adf_test(y), "ADF"), (kpss_test(y), "KPSS"), (pp_test(y), "Phillips-Perron"))
+        ur_cases = (
+            (adf_test(y), "ADF"),
+            (kpss_test(y), "KPSS"),
+            (pp_test(y), "Phillips-Perron"),
+        )
+        for (res, label) in ur_cases
             df = DataFrame(res)
-            @test names(df) == ["test", "statistic", "p_value", "decision", "cv_1pct", "cv_5pct", "cv_10pct"]
+            @test names(df) == [
+                "test", "statistic", "p_value", "decision",
+                "cv_1pct", "cv_5pct", "cv_10pct",
+            ]
             @test df.test == [label]
             @test all(isfinite, [df.cv_1pct[1], df.cv_5pct[1], df.cv_10pct[1]])
             @test df.decision[1] in ("reject", "fail to reject")
@@ -556,22 +611,26 @@ end
         dlm = DataFrame(lm)
         @test dlm.decision == ["reject"]                    # -3.0 < -2.8
         @test ismissing(dlm.break_2[1])                     # one break: padded
-        fb = MEM.FactorBreakResult{Float64}(-2.0, 0.03, nothing, :han_inoue, 2, 100, 10, nothing, nothing)
+        fb = MEM.FactorBreakResult{Float64}(
+            -2.0, 0.03, nothing, :han_inoue, 2, 100, 10, nothing, nothing)
         dfb = DataFrame(fb)
         @test dfb.test == ["Factor break han_inoue"]
         @test ismissing(dfb.break_index[1])
-        ers = MEM.ERSResult{Float64}(2.5, 0.03, :constant, Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), 100)
+        ers = MEM.ERSResult{Float64}(
+            2.5, 0.03, :constant, Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), 100)
         @test DataFrame(ers).decision == ["reject"]         # 2.5 < 2.9 (left)
     end
 
     @testset "DataFrame(panel unit-root tests) (#860)" begin
         MEM = MacroEconometricModels
-        llc = MEM.LLCResult{Float64}(-2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
+        llc = MEM.LLCResult{Float64}(
+            -2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
         dll = DataFrame(llc)
         @test dll.test == ["Levin-Lin-Chu"]
         @test dll.cv_5pct ≈ [-1.645]                        # N(0,1) CVs, like show()
         @test dll.decision == ["reject"]
-        ips = MEM.IPSResult{Float64}(-1.0, 0.16, -1.8, [-1.7, -1.9], 0.0, 1.0, [1, 1], :constant, 100, 2)
+        ips = MEM.IPSResult{Float64}(
+            -1.0, 0.16, -1.8, [-1.7, -1.9], 0.0, 1.0, [1, 1], :constant, 100, 2)
         @test DataFrame(ips).decision == ["fail to reject"]
         br = MEM.BreitungPanelResult{Float64}(-2.5, 0.006, 1, :constant, 100, 2)
         @test DataFrame(br).decision == ["reject"]
@@ -620,7 +679,8 @@ end
     @testset "DataFrame(test-battery singles) (#860)" begin
         MEM = MacroEconometricModels
         rng = Xoshiro(28)
-        bub = MEM.BubbleResult{Float64}(:gsadf, 2.5, 0.01, Dict(1 => 2.0, 5 => 1.5, 10 => 1.2),
+        bub = MEM.BubbleResult{Float64}(
+            :gsadf, 2.5, 0.01, Dict(1 => 2.0, 5 => 1.5, 10 => 1.2),
             [1.0, 2.0], [1.0, 1.5], [1, 2], [(5, 9)], 0.1, 1, :mc, 2000, 100)
         db = DataFrame(bub)
         @test db.test == ["GSADF"]
@@ -633,7 +693,9 @@ end
         ed2 = MEM.EDFTestResult{Float64}(:ks, :normal, :specified, 0.5, 0.5, NaN, 100,
             Float64[], Dict{Int,Float64}(), "case B")
         de2 = DataFrame(ed2)
-        @test ismissing(de2.p_value[1]) && ismissing(de2.decision[1]) && ismissing(de2.cv_5pct[1])
+        @test ismissing(de2.p_value[1]) &&
+            ismissing(de2.decision[1]) &&
+            ismissing(de2.cv_5pct[1])
         y = randn(rng, 100)
         g = vcat(fill(1, 50), fill(2, 50))
         @test DataFrame(equality_test(y, g; test=:t)).test == ["Two-Sample t-Test (pooled)"]
@@ -651,12 +713,14 @@ end
         @test DataFrame(pt).decision == ["reject"]
         pv = MEM.PVARTestResult{Float64}("Hansen J-test", 5.0, 0.2, 4, 10, 6)
         @test DataFrame(pv).decision == ["fail to reject"]
-        nt = MEM.NormalityTestResult{Float64}(:jarque_bera, 8.0, 0.02, 2, 3, 200, nothing, nothing)
+        nt = MEM.NormalityTestResult{Float64}(
+            :jarque_bera, 8.0, 0.02, 2, 3, 200, nothing, nothing)
         @test endswith(DataFrame(nt).test[1], "(multivariate)")
         cw = MEM.ClarkWestResult{Float64}(1.8, 0.036, 0.05, 0.001, 1, :greater, 200)
         dcw = DataFrame(cw)
         @test dcw.decision == ["reject"] && dcw.fbar == [0.05]
-        fe = MEM.ForecastEncompassingResult{Float64}(0.7, 0.3, 0.1, 3.0, 0.003, 2, :bartlett, 200)
+        fe = MEM.ForecastEncompassingResult{Float64}(
+            0.7, 0.3, 0.1, 3.0, 0.003, 2, :bartlett, 200)
         dfe = DataFrame(fe)
         @test dfe.statistic == [3.0] && dfe.b1 == [0.7]
     end
@@ -674,11 +738,13 @@ end
         dp = DataFrame(ped)
         @test dp.raw ≈ [1.5, -2.0]
         @test dp.decision == ["reject", "reject"]
-        wes = MEM.WesterlundResult{Float64}(["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
+        wes = MEM.WesterlundResult{Float64}(
+            ["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
             [0.03, 0.2], :constant, 1, 1, 1, 3, 100, 1, 100, 5)
         dw = DataFrame(wes)
         @test dw.bootstrap_p ≈ [0.03, 0.2]
-        wes0 = MEM.WesterlundResult{Float64}(["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
+        wes0 = MEM.WesterlundResult{Float64}(
+            ["Gt", "Pt"], [0.0, 0.0], [-2.0, -1.0], [0.02, 0.16],
             Float64[], :constant, 1, 1, 1, 3, 0, 1, 100, 5)
         @test all(ismissing, DataFrame(wes0).bootstrap_p)
     end
@@ -692,17 +758,20 @@ end
         @test dfp.decision == ["reject", "reject", "fail to reject", "reject"]
         mp = MEM.MoonPerronResult{Float64}(-2.5, -1.0, 0.006, 0.16, 2, 100, 5)
         @test DataFrame(mp).decision == ["reject", "fail to reject"]
-        po = MEM.PhillipsOuliarisResult{Float64}(-3.0, 0.02, -15.0, 0.08, :constant, :bartlett, 3.0, 1, 2, 100)
+        po = MEM.PhillipsOuliarisResult{Float64}(
+            -3.0, 0.02, -15.0, 0.08, :constant, :bartlett, 3.0, 1, 2, 100)
         dpo = DataFrame(po)
         @test dpo.test == ["Phillips-Ouliaris Zt", "Phillips-Ouliaris Za"]
         @test dpo.decision == ["reject", "fail to reject"]
-        dh = MEM.DumitrescuHurlinResult{Float64}(4.0, 2.5, 0.006, 2.0, 0.023, [4.0, 4.0], 1, 2,
+        dh = MEM.DumitrescuHurlinResult{Float64}(
+            4.0, 2.5, 0.006, 2.0, 0.023, [4.0, 4.0], 1, 2,
             100, 0, 0, 1, NaN, :x, :y)
         ddh = DataFrame(dh)
         @test ddh.Wbar == [4.0, 4.0]
         @test all(ismissing, ddh.boot_p)
         @test ddh.cause == ["x", "x"] && ddh.effect == ["y", "y"]
-        mz = MEM.MincerZarnowitzResult{Float64}(0.1, 0.95, [0.05, 0.03], 8.0, 0.018, 4.0, 0.02, 2, :bartlett, 100)
+        mz = MEM.MincerZarnowitzResult{Float64}(
+            0.1, 0.95, [0.05, 0.03], 8.0, 0.018, 4.0, 0.02, 2, :bartlett, 100)
         dmz = DataFrame(mz)
         @test dmz.test == ["Mincer-Zarnowitz Wald", "Mincer-Zarnowitz F"]
         @test dmz.a == [0.1, 0.1] && dmz.se_b ≈ [0.03, 0.03]
@@ -711,19 +780,24 @@ end
     @testset "DataFrame(Fourier/GH/Ng-Perron/DF-GLS) (#860)" begin
         MEM = MacroEconometricModels
         fa = MEM.FourierADFResult{Float64}(-4.0, 0.01, 1, 8.0, 0.001, 2, :constant,
-            Dict(1 => -4.5, 5 => -3.8, 10 => -3.4), Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 100)
+            Dict(1 => -4.5, 5 => -3.8, 10 => -3.4),
+            Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 100)
         dfa = DataFrame(fa)
         @test dfa.test == ["Fourier ADF", "Fourier ADF F"]
         @test dfa.decision == ["reject", "reject"]          # -4.0 < -3.8; 8.0 > 7.0
         @test dfa.frequency == [1, 1]
         fk = MEM.FourierKPSSResult{Float64}(0.2, 0.02, 1, 3.0, 0.2, :constant,
-            Dict(1 => 0.25, 5 => 0.15, 10 => 0.1), Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 4, 100)
+            Dict(1 => 0.25, 5 => 0.15, 10 => 0.1),
+            Dict(1 => 9.0, 5 => 7.0, 10 => 5.8), 4, 100)
         dfk = DataFrame(fk)
         @test dfk.decision == ["reject", "fail to reject"]  # 0.2 > 0.15; 3.0 < 7.0
         gh = MEM.GregoryHansenResult{Float64}(-5.0, 0.01, -4.5, 0.02, -40.0, 0.03,
-            30, 32, 31, :C, 1, Dict(1 => -5.5, 5 => -4.8, 10 => -4.5), Dict(1 => -45.0, 5 => -38.0, 10 => -33.0), 100)
+            30, 32, 31, :C, 1,
+            Dict(1 => -5.5, 5 => -4.8, 10 => -4.5),
+            Dict(1 => -45.0, 5 => -38.0, 10 => -33.0), 100)
         dgh = DataFrame(gh)
-        @test dgh.test == ["Gregory-Hansen ADF*", "Gregory-Hansen Zt*", "Gregory-Hansen Za*"]
+        @test dgh.test ==
+            ["Gregory-Hansen ADF*", "Gregory-Hansen Zt*", "Gregory-Hansen Za*"]
         @test dgh.decision == ["reject", "fail to reject", "reject"]
         @test dgh.break_index == [30, 32, 31]
         @test dgh.cv_5pct[2] ≈ -4.8                            # Zt* shares ADF CVs
@@ -733,11 +807,14 @@ end
             :MPT => Dict(1 => 1.78, 5 => 3.17, 10 => 4.45))
         ng = MEM.NgPerronResult{Float64}(-10.0, -2.2, 0.2, 2.5, :constant, npcv, 100)
         dng = DataFrame(ng)
-        @test dng.test == ["Ng-Perron MZa", "Ng-Perron MZt", "Ng-Perron MSB", "Ng-Perron MPT"]
+        @test dng.test ==
+            ["Ng-Perron MZa", "Ng-Perron MZt", "Ng-Perron MSB", "Ng-Perron MPT"]
         @test all(ismissing, dng.p_value)
         @test dng.decision == ["reject", "reject", "reject", "reject"]
-        dg = MEM.DFGLSResult{Float64}(-2.5, 0.01, 2.0, 0.02, -10.0, -2.2, 0.2, 2.5, 2, :constant,
-            Dict(1 => -2.6, 5 => -1.9, 10 => -1.6), Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), npcv, 100)
+        dg = MEM.DFGLSResult{Float64}(
+            -2.5, 0.01, 2.0, 0.02, -10.0, -2.2, 0.2, 2.5, 2, :constant,
+            Dict(1 => -2.6, 5 => -1.9, 10 => -1.6),
+            Dict(1 => 1.9, 5 => 2.9, 10 => 3.9), npcv, 100)
         ddg = DataFrame(dg)
         @test nrow(ddg) == 6
         @test ddg.test[1:2] == ["DF-GLS τ", "ERS Pt"]
@@ -747,7 +824,8 @@ end
 
     @testset "DataFrame(Johansen/Fisher-Johansen/PANIC/HEGY) (#860)" begin
         MEM = MacroEconometricModels
-        jo = MEM.JohansenResult{Float64}([20.0, 3.0], [0.01, 0.4], [17.0, 3.0], [0.02, 0.4], 1,
+        jo = MEM.JohansenResult{Float64}(
+            [20.0, 3.0], [0.01, 0.4], [17.0, 3.0], [0.02, 0.4], 1,
             Matrix{Float64}(I, 2, 2), Matrix{Float64}(I, 2, 2), [0.5, 0.05],
             [9.0 12.0 15.0; 2.0 3.0 4.0], [8.0 11.0 14.0; 2.0 3.0 4.0], :constant, 2, 100)
         dj = DataFrame(jo)
@@ -756,8 +834,10 @@ end
         @test dj.decision == ["reject", "reject", "fail to reject", "fail to reject"]
         @test dj.rank == [0, 0, 1, 1] && dj.kind == ["trace", "max", "trace", "max"]
         @test dj.cv_5pct[1] ≈ 12.0
-        fj = MEM.FisherJohansenResult{Float64}([0, 1], [25.0, 8.0], [0.001, 0.3], [20.0, 8.0],
-            [0.005, 0.3], [0.01 0.2; 0.05 0.4], [0.02 0.25; 0.06 0.45], :mw, :constant, 1, 1, 3, 2)
+        fj = MEM.FisherJohansenResult{Float64}(
+            [0, 1], [25.0, 8.0], [0.001, 0.3], [20.0, 8.0],
+            [0.005, 0.3], [0.01 0.2; 0.05 0.4], [0.02 0.25; 0.06 0.45],
+            :mw, :constant, 1, 1, 3, 2)
         dfj = DataFrame(fj)
         @test nrow(dfj) == 4
         @test dfj.decision == ["reject", "reject", "fail to reject", "fail to reject"]
@@ -793,7 +873,8 @@ end
             [0.5], [0.6], [0.4], [0.6], [0.55], [0.7],
             0, :rademacher, 1, Float64[], NaN, 200)
         @test nrow(DataFrame(vrw)) == 2 + 3 + 2
-        @test DataFrame(vrw).test[3:5] == ["Wright R1(q=2)", "Wright R2(q=2)", "Wright S1(q=2)"]
+        @test DataFrame(vrw).test[3:5] ==
+            ["Wright R1(q=2)", "Wright R2(q=2)", "Wright S1(q=2)"]
         bds = MEM.BDSResult{Float64}([2, 3], [0.5, 1.0], [0.5, 1.0], 1.0,
             [1.0 2.0; 0.5 3.0], [0.3 0.04; 0.6 0.003], fill(NaN, 2, 2), ones(2, 2),
             500, false, 0, 1)
@@ -802,11 +883,13 @@ end
         @test dbds.decision == ["fail to reject", "reject", "fail to reject", "reject"]
         @test dbds.m == [2, 2, 3, 3] && dbds.eps == [0.5, 1.0, 0.5, 1.0]
         @test all(ismissing, dbds.boot_p)
-        bp = MEM.BaiPerronResult{Float64}(1, [50], [(45, 55)], [[1.0], [2.0]], [[0.1], [0.1]],
+        bp = MEM.BaiPerronResult{Float64}(
+            1, [50], [(45, 55)], [[1.0], [2.0]], [[0.1], [0.1]],
             [12.0, 8.0], [0.001, 0.02], [5.0], [0.1], [100.0, 90.0, 92.0],
             [101.0, 92.0, 95.0], 0.15, 100)
         dbp = DataFrame(bp)
-        @test dbp.test == ["Bai-Perron sup-F(1)", "Bai-Perron sup-F(2)", "Bai-Perron seq(2|1)"]
+        @test dbp.test ==
+            ["Bai-Perron sup-F(1)", "Bai-Perron sup-F(2)", "Bai-Perron seq(2|1)"]
         @test dbp.decision == ["reject", "reject", "fail to reject"]
     end
 
@@ -819,9 +902,11 @@ end
         @test nrow(ds) == length(suite.results)
         @test ds.test == MEM._normality_test_label.(suite.results)
         @test all(in(("reject", "fail to reject")), skipmissing(ds.decision))
-        llc = MEM.LLCResult{Float64}(-2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
+        llc = MEM.LLCResult{Float64}(
+            -2.0, 0.023, -1.5, -0.05, 1.1, 0.5, 1.0, 95.5, [1, 1], :constant, 100, 2)
         had = MEM.HadriResult{Float64}(2.0, 0.023, 5.0, 1.0, 2.0, false, :constant, 100, 2)
-        summ = MEM.PanelUnitRootSummary(nothing, nothing, nothing, llc, nothing, nothing, nothing, had, String[])
+        summ = MEM.PanelUnitRootSummary(
+            nothing, nothing, nothing, llc, nothing, nothing, nothing, had, String[])
         dsum = DataFrame(summ)
         @test dsum.test == ["Levin-Lin-Chu", "Hadri"]
         @test dsum.decision == ["reject", "reject"]
@@ -831,7 +916,8 @@ end
         dcu = DataFrame(cu)
         @test names(dcu) == ["period", "kind", "stat", "upper", "lower", "breached"]
         @test dcu.period == cu.tindex
-        @test dcu.breached == [!(lo <= s <= up) for (s, lo, up) in zip(cu.stat_path, cu.lower, cu.upper)]
+        @test dcu.breached ==
+            [!(lo <= s <= up) for (s, lo, up) in zip(cu.stat_path, cu.lower, cu.upper)]
         @test cu.crossed == any(dcu.breached)
         vm = estimate_var(randn(rng, 80, 2), 1)
         st = is_stationary(vm)
@@ -856,15 +942,17 @@ end
         dg = DataFrame(sg)
         @test names(dg) == ["block", "equation", "variable", "coefficient"]
         @test Set(dg.block) == Set(["G1", "impact", "C"])
-        @test dg[(dg.block .== "G1") .& (dg.equation .== "x") .& (dg.variable .== "x"), :coefficient] ≈ [sg.G1[1, 1]]
+        sel_g1 = (dg.block .== "G1") .& (dg.equation .== "x") .& (dg.variable .== "x")
+        @test dg[sel_g1, :coefficient] ≈ [sg.G1[1, 1]]
         @test dg[dg.block .== "impact", :variable] == fill("ε", 2)
         @test dg[(dg.block .== "C") .& (dg.equation .== "y"), :coefficient] ≈ [sg.C_sol[2]]
         sp = perturbation_solver(lin; order=1)
         dp = DataFrame(sp)
         @test Set(dp.block) == Set(["g", "h"])
         nx = length(sp.state_indices)
-        @test dp[(dp.block .== "h") .& (dp.equation .== sp.spec.varnames[sp.state_indices[1]]) .&
-                 (dp.variable .== sp.spec.varnames[sp.state_indices[1]]), :coefficient] ≈ [sp.hx[1, 1]]
+        vn1 = sp.spec.varnames[sp.state_indices[1]]
+        sel_h = (dp.block .== "h") .& (dp.equation .== vn1) .& (dp.variable .== vn1)
+        @test dp[sel_h, :coefficient] ≈ [sp.hx[1, 1]]
         shockrows = dp[(dp.block .== "g") .& (dp.variable .== "ε"), :]
         @test nrow(shockrows) == length(sp.control_indices)
         @test shockrows.coefficient ≈ vec(sp.gx[:, nx+1:end])
@@ -873,8 +961,10 @@ end
     @testset "DataFrame(HA steady state and DSGE simulations) (#861)" begin
         MEM = MacroEconometricModels
         grid = MEM.HAGrid(; assets=(0.0, 10.0, 5), income_states=2)
-        inc = MEM.IncomeProcess{Float64}([0.9 0.1; 0.2 0.8], [0.8, 1.2], [2 / 3, 1 / 3], :income)
-        hss = MEM.HASteadyState{Float64}(Dict(:savings => zeros(5, 2)), fill(0.1, 5, 2), zeros(5, 2),
+        inc = MEM.IncomeProcess{Float64}(
+            [0.9 0.1; 0.2 0.8], [0.8, 1.2], [2 / 3, 1 / 3], :income)
+        hss = MEM.HASteadyState{Float64}(
+            Dict(:savings => zeros(5, 2)), fill(0.1, 5, 2), zeros(5, 2),
             Dict(:r => 0.02, :w => 1.0), Dict(:K => 10.0, :L => 0.9),
             grid, inc, true, 50, -6.0, 1e-8)
         dh = DataFrame(hss)
@@ -897,7 +987,8 @@ end
             x[t] = ρ * x[t-1] + ε[t]
         end
         lin = compute_steady_state(lin)
-        pf = MEM.PerfectForesightPath{Float64}(reshape([1.0, 3.0], 2, 1), reshape([0.1, 0.3], 2, 1), true, 5, lin)
+        pf = MEM.PerfectForesightPath{Float64}(
+            reshape([1.0, 3.0], 2, 1), reshape([0.1, 0.3], 2, 1), true, 5, lin)
         dpf = DataFrame(pf)
         @test dpf.level ≈ [1.0, 3.0]
         @test dpf.deviation ≈ [0.1, 0.3]
@@ -922,8 +1013,9 @@ end
         m = estimate_reg(y, X)
         path = tempname() * ".csv"
         @test write_csv(m, path) == path
-        raw, hdr = readdlm(path, ',', header=true)
-        @test vec(hdr) == ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
+        raw, hdr = readdlm(path, ','; header=true)
+        @test vec(hdr) ==
+            ["term", "estimate", "std_error", "stat", "p_value", "ci_lower", "ci_upper"]
         @test size(raw, 1) == length(coef(m))
         @test Float64.(raw[:, 2]) ≈ coef(m)
 
@@ -931,7 +1023,7 @@ end
         vm = estimate_var(randn(rng, 100, 2), 2)
         ipath = tempname() * ".csv"
         write_csv(irf(vm, 5; method=:cholesky), ipath)
-        iraw, ihdr = readdlm(ipath, ',', header=true)
+        iraw, ihdr = readdlm(ipath, ','; header=true)
         @test vec(ihdr) == ["horizon", "variable", "shock", "value", "lower", "upper"]
         @test size(iraw, 1) == 5 * 2 * 2
     end

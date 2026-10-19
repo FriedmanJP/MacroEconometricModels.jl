@@ -179,14 +179,14 @@ const MEM_IH = MacroEconometricModels
         orig = MEM_IH.get_display_backend()
         @test orig == :text
 
-        # Switch to LaTeX and back
-        MEM_IH.set_display_backend(:latex)
-        @test MEM_IH.get_display_backend() == :latex
-        MEM_IH.set_display_backend(:html)
-        @test MEM_IH.get_display_backend() == :html
+        # Switch to LaTeX and HTML in scoped blocks
+        MEM_IH.with_display_backend(:latex) do
+            @test MEM_IH.get_display_backend() == :latex
+        end
+        MEM_IH.with_display_backend(:html) do
+            @test MEM_IH.get_display_backend() == :html
+        end
 
-        # Reset
-        MEM_IH.set_display_backend(:text)
         @test MEM_IH.get_display_backend() == :text
     end
 

@@ -18,7 +18,9 @@ releases (news), data revisions, and parameter re-estimation.
 # Identify new releases (NaN in old, observed in new) and revisions (observed in
 # both, value moved), and patch the revised-old baseline. Operates on raw levels;
 # each method scales to its own working units afterwards.
-function _news_vintage_sets(X_new_mat::Matrix{T}, X_old_mat::Matrix{T}) where {T<:AbstractFloat}
+function _news_vintage_sets(
+    X_new_mat::Matrix{T}, X_old_mat::Matrix{T},
+) where {T<:AbstractFloat}
     # Identify new data releases: positions where old is NaN but new is not
     i_new = findall((isnan.(X_old_mat)) .& (.!isnan.(X_new_mat)))
     # Identify revisions: cells observed in BOTH vintages whose value actually moved.
@@ -58,7 +60,9 @@ function _news_kernel(y_new::Matrix{T}, y_old::Matrix{T}, y_base::Matrix{T},
     release_times = [idx[1] for idx in i_new]
     all_times = vcat(target_period, release_times)
     kmax = max(min(maximum(all_times) - minimum(all_times), T_obs - 1), 1)
-    x_smooth_base, P_smooth_base, Plag_base, _ = _kalman_smoother_lag(y_base', A, C, Q, R, x0, P0, kmax)
+    x_smooth_base, P_smooth_base, Plag_base, _ = _kalman_smoother_lag(
+        y_base', A, C, Q, R, x0, P0, kmax,
+    )
     x_smooth_new, _, _, _ = _kalman_smoother_missing(y_new', A, C, Q, R, x0, P0)
 
     # Nowcast implied by a smoothed state path (in levels)
@@ -130,7 +134,10 @@ function _news_kernel(y_new::Matrix{T}, y_old::Matrix{T}, y_base::Matrix{T},
             end
         end
         if group_names !== nothing && length(group_names) != n_groups
-            throw(ArgumentError("group_names length ($(length(group_names))) must match number of groups ($n_groups)"))
+            throw(ArgumentError(
+                "group_names length ($(length(group_names))) must match " *
+                "number of groups ($n_groups)",
+            ))
         end
         gn = group_names !== nothing ? group_names : ["Group $i" for i in 1:n_groups]
     else
@@ -141,13 +148,16 @@ function _news_kernel(y_new::Matrix{T}, y_old::Matrix{T}, y_base::Matrix{T},
             group_impacts[v_k] += impact_news[k]
         end
         if group_names !== nothing && length(group_names) != N
-            throw(ArgumentError("group_names length ($(length(group_names))) must match number of variables ($N)"))
+            throw(ArgumentError(
+                "group_names length ($(length(group_names))) must match " *
+                "number of variables ($N)",
+            ))
         end
         gn = group_names !== nothing ? group_names : ["Var$i" for i in 1:N]
     end
 
-    NowcastNews{T}(now_old, now_new, impact_news, impact_revision,
-                   impact_reestimation, group_impacts, gn, variable_names)
+    return NowcastNews{T}(now_old, now_new, impact_news, impact_revision,
+                          impact_reestimation, group_impacts, gn, variable_names)
 end
 
 # =============================================================================
@@ -177,7 +187,8 @@ revision terms leave unexplained is attributed to parameter re-estimation.
 # Keyword Arguments
 - `target_var::Int` — target variable index (default: last column)
 - `groups::Union{Vector{Int},Nothing}` — group assignment per variable (for aggregation)
-- `group_names::Union{Vector{String},Nothing}` — labels for each group (auto-generated if omitted)
+- `group_names::Union{Vector{String},Nothing}` — labels for each group
+  (auto-generated if omitted)
 
 # Returns
 `NowcastNews{T}` with per-release impacts and total decomposition.
@@ -186,11 +197,15 @@ revision terms leave unexplained is attributed to parameter re-estimation.
 - Bańbura, M. & Modugno, M. (2014). Maximum Likelihood Estimation of Factor
   Models on Datasets with Arbitrary Pattern of Missing Data.
 """
-function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
-                      model::NowcastDFM{T}, target_period::Int;
-                      target_var::Int=size(X_new, 2),
-                      groups::Union{Vector{Int},Nothing}=nothing,
-                      group_names::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
+function nowcast_news(
+    X_new::AbstractMatrix,
+    X_old::AbstractMatrix,
+    model::NowcastDFM{T},
+    target_period::Int;
+    target_var::Int=size(X_new, 2),
+    groups::Union{Vector{Int},Nothing}=nothing,
+    group_names::Union{Vector{String},Nothing}=nothing,
+) where {T<:AbstractFloat}
     T_obs, N = size(X_new)
     size(X_old) == (T_obs, N) || throw(ArgumentError("X_new and X_old must have same size"))
     1 <= target_period <= T_obs || throw(ArgumentError("target_period out of range"))
@@ -236,7 +251,8 @@ handled by the missing-data smoother exactly as monthly ones.
 # Keyword Arguments
 - `target_var::Int` — target variable index (default: last column)
 - `groups::Union{Vector{Int},Nothing}` — group assignment per variable (for aggregation)
-- `group_names::Union{Vector{String},Nothing}` — labels for each group (auto-generated if omitted)
+- `group_names::Union{Vector{String},Nothing}` — labels for each group
+  (auto-generated if omitted)
 
 # Returns
 `NowcastNews{T}` with per-release impacts and total decomposition.
@@ -245,11 +261,15 @@ handled by the missing-data smoother exactly as monthly ones.
 - Bańbura, M. & Modugno, M. (2014). Maximum Likelihood Estimation of Factor
   Models on Datasets with Arbitrary Pattern of Missing Data.
 """
-function nowcast_news(X_new::AbstractMatrix, X_old::AbstractMatrix,
-                      model::NowcastBVAR{T}, target_period::Int;
-                      target_var::Int=size(X_new, 2),
-                      groups::Union{Vector{Int},Nothing}=nothing,
-                      group_names::Union{Vector{String},Nothing}=nothing) where {T<:AbstractFloat}
+function nowcast_news(
+    X_new::AbstractMatrix,
+    X_old::AbstractMatrix,
+    model::NowcastBVAR{T},
+    target_period::Int;
+    target_var::Int=size(X_new, 2),
+    groups::Union{Vector{Int},Nothing}=nothing,
+    group_names::Union{Vector{String},Nothing}=nothing,
+) where {T<:AbstractFloat}
     T_obs, N = size(X_new)
     size(X_old) == (T_obs, N) || throw(ArgumentError("X_new and X_old must have same size"))
     1 <= target_period <= T_obs || throw(ArgumentError("target_period out of range"))

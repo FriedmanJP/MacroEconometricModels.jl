@@ -78,7 +78,9 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
                       prior::Symbol=:conjugate,
                       theta_cross0::Union{Real,Nothing}=nothing)
     T_obs, N = size(Y)
-    N == nM + nQ || throw(ArgumentError("nM ($nM) + nQ ($nQ) must equal number of columns ($N)"))
+    if N != nM + nQ
+        throw(ArgumentError("nM ($nM) + nQ ($nQ) must equal number of columns ($N)"))
+    end
     lags >= 1 || throw(ArgumentError("lags must be >= 1, got $lags"))
     prior in (:conjugate, :litterman) ||
         throw(ArgumentError("prior must be :conjugate or :litterman, got :$prior"))
@@ -139,10 +141,12 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
 
     # Optimize hyperparameters via marginal log-likelihood. The Litterman path carries a
     # fifth coordinate, log(theta_cross) — the knob the conjugate prior cannot express.
-    par0 = prior == :litterman ?
-        [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(theta_cross0 === nothing ? 1.0 : theta_cross0)),
-         log(Tf(miu0)), log(Tf(alpha0))] :
+    tc0 = theta_cross0 === nothing ? 1.0 : theta_cross0
+    par0 = if prior == :litterman
+        [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(tc0)), log(Tf(miu0)), log(Tf(alpha0))]
+    else
         [log(Tf(lambda0)), log(Tf(theta0)), log(Tf(miu0)), log(Tf(alpha0))]
+    end
 
     log_ml = prior == :litterman ? _litterman_log_ml : _bvar_log_ml
     obj = par -> begin
@@ -180,9 +184,9 @@ function nowcast_bvar(Y::AbstractMatrix, nM::Int, nQ::Int;
     # Use Kalman smoother to fill missing data
     X_sm = _bvar_smooth_missing(Ymat, beta, sigma, lags, t_complete)
 
-    NowcastBVAR{Tf}(X_sm, beta, sigma, lambda_opt, theta_opt, miu_opt,
-                     alpha_opt, lags, ml, nM, nQ, Ymat, converged,
-                     Tf(theta_cross_opt), prior)
+    return NowcastBVAR{Tf}(X_sm, beta, sigma, lambda_opt, theta_opt, miu_opt,
+                           alpha_opt, lags, ml, nM, nQ, Ymat, converged,
+                           Tf(theta_cross_opt), prior)
 end
 
 # =============================================================================
@@ -443,7 +447,7 @@ function _litterman_prior_rows(m::Int, N::Int, lags::Int, sigma_ar::Vector{T},
         (j == m && lag == 1) && (c[row] = w)                        # random-walk prior mean
     end
 
-    # --- Sum-of-coefficients: own lags of variable i sum to 1 (target ȳ_m only for i == m) ---
+    # --- Sum-of-coefficients: own lags of variable i sum to 1 (target ȳ_m if i == m) ---
     if miu > 0
         for i in 1:N
             r = n_mn + i
@@ -528,22 +532,22 @@ function _litterman_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
         y_m = @view Y_dep[:, m]
         g = P * b + (X_reg' * y_m) / s2
 
-        chol_M = try
-            cholesky(Hermitian(M))
+        L_M = try
+            safe_cholesky(Hermitian(M))
         catch
             return beta, sigma, -T(1e10)
         end
-        bm = chol_M \ g
+        bm = L_M' \ (L_M \ g)
         beta[:, m] = bm
 
-        chol_P = try
-            cholesky(Hermitian(P))
+        L_P = try
+            safe_cholesky(Hermitian(P))
         catch
             return beta, sigma, -T(1e10)
         end
         quad = dot(y_m, y_m) / s2 + dot(b, P * b) - dot(g, bm)
         logml += -T(0.5) * T_eff * log(2 * T(π) * s2) +
-                 T(0.5) * logdet(chol_P) - T(0.5) * logdet(chol_M) -
+                 logdet(L_P) - logdet(L_M) -
                  T(0.5) * quad
     end
 
@@ -554,7 +558,8 @@ function _litterman_estimate(Y::Matrix{T}, lags::Int, sigma_ar::Vector{T},
 end
 
 """Log marginal likelihood of the Litterman prior at log-hyperparameters `par`
-(`[log λ, log θ, log θ_cross, log μ, log α]`), boxed to `|par| ≤ 5` like the conjugate path."""
+(`[log λ, log θ, log θ_cross, log μ, log α]`), boxed to `|par| ≤ 5` like the conjugate
+path."""
 function _litterman_log_ml(par::AbstractVector{T}, Y::Matrix{T}, lags::Int,
                            sigma_ar::Vector{T}) where {T<:AbstractFloat}
     any(x -> abs(x) > T(5), par) && return -T(1e10)
@@ -594,11 +599,16 @@ function _bvar_companion_statespace(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix
     lags > 1 && (A[(N + 1):sd, 1:(sd - N)] = Matrix{T}(I, sd - N, sd - N))
     Q = zeros(T, sd, sd); Q[1:N, 1:N] = T(0.5) * (sigma + sigma')
     C = zeros(T, N, sd); C[1:N, 1:N] = Matrix{T}(I, N, N)
-    R = Matrix{T}(I, N, N) * T(1e-8)              # observed series measured (nearly) exactly
+    R = Matrix{T}(I, N, N) * T(1e-8)  # observed series measured (nearly) exactly
 
     # Centre by the steady-state mean so the centred VAR is intercept-free (mean-zero);
     # fall back to per-column observed means if I - ΣBᵢ is near-singular (near unit root).
-    mu_emp = [begin v = filter(!isnan, @view Y[:, j]); isempty(v) ? zero(T) : T(mean(v)) end for j in 1:N]
+    mu_emp = [
+        begin
+            v = filter(!isnan, @view Y[:, j])
+            isempty(v) ? zero(T) : T(mean(v))
+        end for j in 1:N
+    ]
     Imb = Matrix{T}(I, N, N) - sum(B)
     mu = let ss = try Imb \ c catch; fill(T(Inf), N) end
         (all(isfinite, ss) && maximum(abs, ss) < T(1e6)) ? ss : mu_emp
@@ -614,21 +624,22 @@ end
     _bvar_smooth_missing(Y, beta, sigma, lags, t_complete) -> Matrix
 
 Fill the missing entries of the panel `Y` (interior NaNs and the ragged edge) with a genuine
-Kalman smoother. The estimated BVAR(`lags`) is cast in companion state-space form
-(state `[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`, state-noise `sigma`,
-observation `C = [I 0]`, tiny measurement ridge) and the missing-data filter/RTS smoother from
-`kalman_missing.jl` is run on the mean-centred panel. Because that smoother drops only the
-missing rows each period, contemporaneously OBSERVED variables update the unobserved states
-through the state covariance — so a released series informs the fill of an unreleased one,
-which the previous interpolation + deterministic-projection routine ignored. `t_complete` is
-retained for signature compatibility; the smoother fills every missing entry uniformly.
+Kalman smoother. The estimated BVAR(`lags`) is cast in companion state-space form (state
+`[y_t; …; y_{t-lags+1}]`, transition from the lag blocks of `beta`, state-noise `sigma`,
+observation `C = [I 0]`, tiny measurement ridge) and the missing-data filter/RTS smoother
+from `kalman_missing.jl` is run on the mean-centred panel. Because that smoother drops only
+the missing rows each period, contemporaneously OBSERVED variables update the unobserved
+states through the state covariance — so a released series informs the fill of an unreleased
+one, which the previous interpolation + deterministic-projection routine ignored.
+`t_complete` is retained for signature compatibility; the smoother fills every missing entry
+uniformly.
 """
 function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
-                               lags::Int, t_complete::Int) where {T<:AbstractFloat}
+                              lags::Int, t_complete::Int) where {T<:AbstractFloat}
     T_obs, N = size(Y)
     A, C, Q, R, x0, P0, mu = _bvar_companion_statespace(Y, beta, sigma, lags)
 
-    Yc = Y .- mu'                                  # NaN stays NaN → dropped per period by _miss_data
+    Yc = Y .- mu'  # NaN stays NaN → dropped per period by _miss_data
     x_smooth, _, _, _ = _kalman_smoother_missing(Matrix{T}(Yc'), A, C, Q, R, x0, P0)
 
     # Fill only the missing entries with the (un-centred) smoothed current-period state.
@@ -636,5 +647,5 @@ function _bvar_smooth_missing(Y::Matrix{T}, beta::Matrix{T}, sigma::Matrix{T},
     @inbounds for t in 1:T_obs, j in 1:N
         isnan(Y[t, j]) && (X_sm[t, j] = mu[j] + x_smooth[j, t])
     end
-    X_sm
+    return X_sm
 end
