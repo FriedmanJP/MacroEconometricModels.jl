@@ -50,6 +50,9 @@ function MacroEconometricModels._path_compute_steady_state(
     end
 
     JuMP.optimize!(model)
+    # Run young-gen GC outside c_api_Path_Solve so PATHSolver.Options C finalizers
+    # (c_api_Options_Destroy) never fire re-entrantly inside the next solve's callbacks.
+    GC.gc(false)
 
     status = JuMP.termination_status(model)
     if status != JuMP.LOCALLY_SOLVED && status != JuMP.OPTIMAL
@@ -120,6 +123,9 @@ function MacroEconometricModels._path_perfect_foresight(
     end
 
     JuMP.optimize!(model)
+    # Run young-gen GC outside c_api_Path_Solve so PATHSolver.Options C finalizers
+    # (c_api_Options_Destroy) never fire re-entrantly inside the next solve's callbacks.
+    GC.gc(false)
 
     status = JuMP.termination_status(model)
     converged = (status == JuMP.LOCALLY_SOLVED || status == JuMP.OPTIMAL)

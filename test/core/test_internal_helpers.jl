@@ -399,6 +399,9 @@ const MEM_IH = MacroEconometricModels
         saw = Ref(0)
         ret = _with_group_blas("HA-DSGE") do
             saw[] = BLAS.get_num_threads()
+            _with_group_blas("DSGE Core") do
+                @test BLAS.get_num_threads() == 2
+            end
             42
         end
         @test ret == 42

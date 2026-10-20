@@ -10,8 +10,6 @@ using Random
 using Statistics
 using Test
 
-_suppress_warnings(f) = MacroEconometricModels._suppress_warnings(f)
-
 @testset "Data Module" begin
 
     # =========================================================================
@@ -488,7 +486,7 @@ _suppress_warnings(f) = MacroEconometricModels._suppress_warnings(f)
         end
 
         @testset "fix drops constant columns" begin
-            _suppress_warnings() do
+            MacroEconometricModels._suppress_warnings() do
                 mat = hcat(ones(20), randn(20))
                 d = TimeSeriesData(mat; varnames=["const_col", "good_col"])
                 d_fixed = fix(d)
@@ -1108,7 +1106,7 @@ _suppress_warnings(f) = MacroEconometricModels._suppress_warnings(f)
         end
 
         @testset "fix all constant" begin
-            _suppress_warnings() do
+            MacroEconometricModels._suppress_warnings() do
                 mat = hcat(ones(20), 2.0 .* ones(20))
                 d = TimeSeriesData(mat)
                 @test_throws ArgumentError fix(d)
@@ -1123,7 +1121,7 @@ _suppress_warnings(f) = MacroEconometricModels._suppress_warnings(f)
         end
 
         @testset "Interpolate all NaN column" begin
-            _suppress_warnings() do
+            MacroEconometricModels._suppress_warnings() do
                 mat = fill(NaN, 20, 1)
                 d = TimeSeriesData(mat)
                 # All NaN → constant after interpolation → error
