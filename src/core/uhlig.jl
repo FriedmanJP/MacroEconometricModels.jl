@@ -16,7 +16,9 @@ Mountford, A. & Uhlig, H. (2009). "What Are the Effects of Fiscal Policy Shocks?
 Journal of Applied Econometrics 24(6): 960–992.
 """
 
-using LinearAlgebra, Random, Statistics
+using LinearAlgebra
+using Random
+using Statistics
 
 # =============================================================================
 # Result Type
@@ -52,15 +54,19 @@ end
 function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
                             converged) where {T<:AbstractFloat}
     nv = restrictions.n_vars
-    UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions, converged,
-                       ["var$i" for i in 1:nv])
+    return UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        ["var$i" for i in 1:nv],
+    )
 end
 
 function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
                             converged, varnames) where {T<:AbstractFloat}
     n = restrictions.n_vars
-    UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions, converged,
-                       varnames, check_identification(restrictions, n))
+    return UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        varnames, check_identification(restrictions, n),
+    )
 end
 
 # =============================================================================
@@ -75,20 +81,22 @@ For m=1, returns [1.0]. For m≥2, uses the standard hyperspherical parameteriza
   x_k = cos(θ_k) * prod(sin(θ_j) for j=1:k-1),  k=2,...,m-1
   x_m = prod(sin(θ_j) for j=1:m-1)
 """
-function _spherical_to_unit_vector(theta::AbstractVector{T}, m::Int) where {T<:AbstractFloat}
+function _spherical_to_unit_vector(
+    theta::AbstractVector{T}, m::Int,
+) where {T<:AbstractFloat}
     m == 1 && return ones(T, 1)
-    @assert length(theta) == m - 1 "Need $(m-1) angles for R^$m, got $(length(theta))"
+    @assert length(theta) == m - 1 "Need $(m - 1) angles for R^$m, got $(length(theta))"
 
     x = zeros(T, m)
     x[1] = cos(theta[1])
     sin_prod = one(T)
-    for k in 2:m-1
-        sin_prod *= sin(theta[k-1])
+    for k in 2:(m - 1)
+        sin_prod *= sin(theta[k - 1])
         x[k] = cos(theta[k]) * sin_prod
     end
-    sin_prod *= sin(theta[m-1])
+    sin_prod *= sin(theta[m - 1])
     x[m] = sin_prod
-    x
+    return x
 end
 
 """
@@ -98,15 +106,15 @@ columns and zero restrictions via Gram-Schmidt projection into null space.
 Returns a unit vector in the null space of [Q_prev columns; zero constraint rows].
 """
 function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matrix{T},
-                                restrictions::SVARRestrictions,
-                                Phi::Vector{Matrix{T}},
-                                L::LowerTriangular{T,<:AbstractMatrix{T}},
-                                n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
+                               restrictions::SVARRestrictions,
+                               Phi::Vector{Matrix{T}},
+                               L::LowerTriangular{T,<:AbstractMatrix{T}},
+                               n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     # Build constraint matrix: orthogonality to previous columns + zero restrictions
     constraint_rows = Vector{Vector{T}}()
 
     # Orthogonality constraints from previous columns
-    for k in 1:j-1
+    for k in 1:(j - 1)
         push!(constraint_rows, Q_prev[:, k])
     end
 
@@ -121,7 +129,8 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
 
     # Over-constrained check (count, then SVD null space)
     free_dim <= 0 && throw(IdentificationError(
-        "Zero restrictions over-constrain shock $j (n=$n, constraints=$n_constraints)"))
+        "Zero restrictions over-constrain shock $j (n=$n, constraints=$n_constraints)",
+    ))
 
     # Find null space basis
     if n_constraints == 0
@@ -129,13 +138,15 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
         N = Matrix{T}(I, n, n)
     else
         C = reduce(vcat, [c' for c in constraint_rows])
-        svd_result = svd(C, full=true)
+        svd_result = svd(C; full=true)
         V = transpose(svd_result.Vt)
-        tol = max(size(C)...) * eps(T) * (isempty(svd_result.S) ? one(T) : maximum(svd_result.S))
+        s_max = isempty(svd_result.S) ? one(T) : maximum(svd_result.S)
+        tol = max(size(C)...) * eps(T) * s_max
         rank_C = sum(svd_result.S .> tol)
         N = V[:, (rank_C + 1):n]
         size(N, 2) == 0 && throw(IdentificationError(
-            "Zero restrictions over-constrain shock $j (empty null space)"))
+            "Zero restrictions over-constrain shock $j (empty null space)",
+        ))
     end
 
     # Convert spherical coordinates to unit vector in free_dim space
@@ -148,7 +159,7 @@ function _uhlig_build_q_column(theta_j::AbstractVector{T}, j::Int, Q_prev::Matri
 
     # Map back to R^n via null space basis
     q = N * u
-    q / norm(q)  # Ensure unit norm
+    return q / norm(q)  # Ensure unit norm
 end
 
 """
@@ -157,8 +168,8 @@ Build full Q matrix from concatenated angle parameters.
 Returns an n×n orthogonal matrix satisfying all zero restrictions.
 """
 function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
-                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
-                         n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
+                        Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
+                        n::Int; B=nothing, C1=nothing) where {T<:AbstractFloat}
     Q = zeros(T, n, n)
     offset = 0
 
@@ -167,16 +178,19 @@ function _uhlig_build_Q(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         n_zeros_j = count(zr -> zr.shock == j, restrictions.zeros)
         n_constraints = (j - 1) + n_zeros_j
         free_dim = n - n_constraints
-        free_dim <= 0 && throw(IdentificationError("Zero restrictions over-constrain shock $j"))
+        free_dim <= 0 &&
+            throw(IdentificationError("Zero restrictions over-constrain shock $j"))
 
         n_angles = max(free_dim - 1, 0)
-        theta_j = theta_all[offset+1:offset+n_angles]
+        theta_j = theta_all[(offset + 1):(offset + n_angles)]
         offset += n_angles
 
-        Q[:, j] = _uhlig_build_q_column(theta_j, j, Q, restrictions, Phi, L, n; B=B, C1=C1)
+        Q[:, j] = _uhlig_build_q_column(
+            theta_j, j, Q, restrictions, Phi, L, n; B=B, C1=C1,
+        )
     end
 
-    Q
+    return Q
 end
 
 """
@@ -187,10 +201,11 @@ function _uhlig_n_params(n::Int, restrictions::SVARRestrictions)
     for j in 1:n
         n_zeros_j = count(zr -> zr.shock == j, restrictions.zeros)
         free_dim = n - (j - 1) - n_zeros_j
-        free_dim <= 0 && throw(IdentificationError("Zero restrictions over-constrain shock $j"))
+        free_dim <= 0 &&
+            throw(IdentificationError("Zero restrictions over-constrain shock $j"))
         total += max(free_dim - 1, 0)
     end
-    total
+    return total
 end
 
 """Uhlig's penalty is defined only for IRF sign restrictions."""
@@ -200,7 +215,8 @@ function _uhlig_assert_sign_only_rejections(restrictions::SVARRestrictions)
     throw(ArgumentError(
         "identify_uhlig only evaluates SignRestriction; got $(join(string.(bad), ", ")). " *
         "Use identify_arias for elasticity, magnitude, FEVD, cumulative, and A₀/A₊ sign " *
-        "restrictions. A₀/A₊ and long-run zeros remain valid null-space constraints."))
+        "restrictions. A₀/A₊ and long-run zeros remain valid null-space constraints.",
+    ))
 end
 
 # =============================================================================
@@ -211,7 +227,7 @@ end
 Uhlig (2005) penalty function.
 
 For each sign restriction, let `normalized` be the IRF in the required-sign
-direction divided by the residual standard deviation, and `x = -normalized`
+direction divided by the penalty scale `σ`, and `x = -normalized`
 (so `x > 0` ⇔ the restriction is violated). Then
 
 - weight 1 if satisfied (`x ≤ 0`): add `x` (small reward)
@@ -223,9 +239,10 @@ expensive rather than rewarding large satisfied responses.
 Reference: Uhlig (2005, JME 52, §3.3); Mountford & Uhlig (2009, JAE 24, §3).
 """
 function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrictions,
-                         Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
-                         model::VARModel{T}, horizon::Int, n::Int;
-                         penalty_weight::Real=100, C1=nothing) where {T<:AbstractFloat}
+                        Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
+                        model::VARModel{T}, horizon::Int, n::Int;
+                        penalty_weight::Real=100, C1=nothing,
+                        sigma::AbstractVector{T}) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     # Guard: return large penalty for degenerate inputs
     any(isnan, theta_all) && return T(1e10)
@@ -237,21 +254,58 @@ function _uhlig_penalty(theta_all::AbstractVector{T}, restrictions::SVARRestrict
         return T(1e10)
     end
 
-    _uhlig_penalty_from_Q(Q, restrictions, Phi, L, model, horizon; penalty_weight=pw)
+    return _uhlig_penalty_from_Q(
+        Q, restrictions, Phi, L, model, horizon; penalty_weight=pw, sigma=sigma,
+    )
+end
+
+"""Penalty scale vector σ for the Uhlig (2005) penalty function (§3.3, p. 10)."""
+function _uhlig_scale(
+    model::VARModel{T}, scale::Union{Symbol,AbstractVector{<:Real}},
+) where {T<:AbstractFloat}
+    n = nvars(model)
+    if scale isa AbstractVector
+        length(scale) == n || throw(ArgumentError(
+            "custom Uhlig scale vector has length $(length(scale)), expected $n",
+        ))
+        s = Vector{T}(scale)
+        all(x -> isfinite(x) && x > zero(T), s) || throw(ArgumentError(
+            "custom Uhlig scale vector must be positive and finite",
+        ))
+        return s
+    end
+    s = scale::Symbol
+    if s === :diff || s === :first_difference
+        Y = model.Y
+        size(Y, 1) >= 2 ||
+            throw(ArgumentError("Uhlig scale :diff needs at least 2 observations"))
+        d = Y[2:end, :] .- Y[1:(end - 1), :]
+        return Vector{T}([max(T(Statistics.std(@view d[:, j])), eps(T)) for j in 1:n])
+    elseif s === :residual || s === :sigma
+        return Vector{T}([sqrt(max(model.Sigma[i, i], eps(T))) for i in 1:n])
+    elseif s === :none || s === :unit
+        return ones(T, n)
+    else
+        throw(ArgumentError(
+            "unknown Uhlig scale :$s; use :diff, :residual, :none, or a length-$n vector",
+        ))
+    end
 end
 
 """Penalty of a candidate rotation `Q` (Uhlig 2005 §3.3). Lower is better."""
-function _uhlig_penalty_from_Q(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
-                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
-                                model::VARModel{T}, horizon::Int;
-                                penalty_weight::Real=100) where {T<:AbstractFloat}
+function _uhlig_penalty_from_Q(
+    Q::AbstractMatrix{T},
+    restrictions::SVARRestrictions,
+    Phi::Vector{Matrix{T}},
+    L::LowerTriangular{T,<:AbstractMatrix{T}},
+    model::VARModel{T},
+    horizon::Int;
+    penalty_weight::Real=100,
+    sigma::AbstractVector{T},
+) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     n = size(Q, 1)
     irf = structural_irf(Phi, L, Q, horizon)
-    sigma = zeros(T, n)
-    for i in 1:n
-        sigma[i] = sqrt(max(model.Sigma[i, i], eps(T)))
-    end
     total_penalty = zero(T)
     for sr in restrictions.signs
         sr isa SignRestriction || continue
@@ -261,7 +315,7 @@ function _uhlig_penalty_from_Q(Q::AbstractMatrix{T}, restrictions::SVARRestricti
         x = -normalized                    # >0 ⇔ violated
         total_penalty += x <= zero(T) ? x : pw * x
     end
-    total_penalty
+    return total_penalty
 end
 
 """
@@ -271,25 +325,35 @@ always free. This is required when a column is uniquely determined
 (`free_dim == 1`): the SVD null-space basis has an arbitrary sign, and a
 0-parameter Nelder–Mead run never evaluates the objective (reports 0.0).
 """
-function _uhlig_sign_normalize(Q::AbstractMatrix{T}, restrictions::SVARRestrictions,
-                                Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
-                                model::VARModel{T}, horizon::Int;
-                                penalty_weight::Real=100) where {T<:AbstractFloat}
+function _uhlig_sign_normalize(
+    Q::AbstractMatrix{T},
+    restrictions::SVARRestrictions,
+    Phi::Vector{Matrix{T}},
+    L::LowerTriangular{T,<:AbstractMatrix{T}},
+    model::VARModel{T},
+    horizon::Int;
+    penalty_weight::Real=100,
+    sigma::AbstractVector{T},
+) where {T<:AbstractFloat}
     shocks = unique(Int[sr.shock for sr in restrictions.signs if sr isa SignRestriction])
     isempty(shocks) && return Matrix{T}(Q)
     Qbest = Matrix{T}(Q)
     for j in shocks
-        pen0 = _uhlig_penalty_from_Q(Qbest, restrictions, Phi, L, model, horizon;
-                                     penalty_weight=penalty_weight)
+        pen0 = _uhlig_penalty_from_Q(
+            Qbest, restrictions, Phi, L, model, horizon;
+            penalty_weight=penalty_weight, sigma=sigma,
+        )
         Qflip = copy(Qbest)
         Qflip[:, j] .*= -one(T)
-        pen1 = _uhlig_penalty_from_Q(Qflip, restrictions, Phi, L, model, horizon;
-                                     penalty_weight=penalty_weight)
+        pen1 = _uhlig_penalty_from_Q(
+            Qflip, restrictions, Phi, L, model, horizon;
+            penalty_weight=penalty_weight, sigma=sigma,
+        )
         if pen1 < pen0
             Qbest = Qflip
         end
     end
-    Qbest
+    return Qbest
 end
 
 """
@@ -298,18 +362,19 @@ Compute per-shock penalty diagnostics.
 Same `f(x)` as `_uhlig_penalty`: weight 1 if satisfied, `penalty_weight` if
 violated. Lower is better.
 """
-function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
-                                 Phi::Vector{Matrix{T}}, L::LowerTriangular{T,<:AbstractMatrix{T}},
-                                 model::VARModel{T}, horizon::Int;
-                                 penalty_weight::Real=100) where {T<:AbstractFloat}
+function _uhlig_shock_penalties(
+    Q::Matrix{T},
+    restrictions::SVARRestrictions,
+    Phi::Vector{Matrix{T}},
+    L::LowerTriangular{T,<:AbstractMatrix{T}},
+    model::VARModel{T},
+    horizon::Int;
+    penalty_weight::Real=100,
+    sigma::AbstractVector{T},
+) where {T<:AbstractFloat}
     pw = T(penalty_weight)
     n = size(Q, 1)
     irf = structural_irf(Phi, L, Q, horizon)
-
-    sigma = zeros(T, n)
-    for i in 1:n
-        sigma[i] = sqrt(max(model.Sigma[i, i], eps(T)))
-    end
 
     shock_penalties = zeros(T, n)
     for sr in restrictions.signs
@@ -321,7 +386,7 @@ function _uhlig_shock_penalties(Q::Matrix{T}, restrictions::SVARRestrictions,
         shock_penalties[sr.shock] += x <= zero(T) ? x : pw * x
     end
 
-    shock_penalties
+    return shock_penalties
 end
 
 # =============================================================================
@@ -331,7 +396,8 @@ end
 """
     identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
         n_starts=50, n_refine=10, max_iter_coarse=500, max_iter_fine=2000,
-        tol_coarse=1e-4, tol_fine=1e-8, penalty_weight=100) -> UhligSVARResult{T}
+        tol_coarse=1e-4, tol_fine=1e-8, penalty_weight=100,
+        scale=:diff) -> UhligSVARResult{T}
 
 Identify SVAR using Mountford & Uhlig (2009) penalty function approach.
 
@@ -346,7 +412,10 @@ matrix ``Q`` that best satisfies sign restrictions, with zero restrictions
 enforced as hard constraints via null-space projection.
 
 The penalty is Uhlig (2005): `x = -normalized`, then `x` if satisfied and
-`penalty_weight * x` if violated. Lower `penalty` is better.
+`penalty_weight * x` if violated. Lower `penalty` is better. Responses are
+normalized by the penalty scale `σ` (see `scale`): the default is the
+per-variable standard deviation of first differences, exactly as in
+Uhlig (2005, p. 10).
 
 Columns that carry a sign restriction are sign-normalized after the search:
 a column sign flip preserves linear zero restrictions, so the uniquely
@@ -362,7 +431,8 @@ remain null-space constraints.
 
 # Algorithm
 1. Precompute MA coefficients and Cholesky factor ``L``
-2. **Phase 1** (coarse): `n_starts` Nelder-Mead runs from random ``\\theta_0 \\in [0, 2\\pi]``
+2. **Phase 1** (coarse): `n_starts` Nelder-Mead runs from random
+   ``\\theta_0 \\in [0, 2\\pi]``
 3. **Phase 2** (refinement): `n_refine` local re-optimizations from best solution
 4. Build final ``Q``, compute IRFs, check convergence
 
@@ -374,6 +444,11 @@ remain null-space constraints.
 - `tol_coarse::T=1e-4`: Convergence tolerance for Phase 1
 - `tol_fine::T=1e-8`: Convergence tolerance for Phase 2
 - `penalty_weight::T=T(100)`: Multiplier on violated sign restrictions (Uhlig 2005)
+- `scale::Union{Symbol,AbstractVector}=:diff`: Penalty normalization. `:diff`
+  (`:first_difference`) uses `std` of first differences (Uhlig 2005);
+  `:residual` (`:sigma`) uses residual std deviations (Mountford & Uhlig
+  2009; pre-v1.0.2 behavior); `:none` (`:unit`) uses ones; a length-`n`
+  positive vector supplies custom scales
 
 # Returns
 `UhligSVARResult{T}` with optimal rotation matrix, IRFs, penalty values,
@@ -393,26 +468,39 @@ result = identify_uhlig(model, restrictions, 20)
 **Reference**: Mountford & Uhlig (2009)
 """
 function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
-                         n_starts::Int=50, n_refine::Int=10,
-                         max_iter_coarse::Int=500, max_iter_fine::Int=2000,
-                         tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
-                         penalty_weight::Real=100,
-                         seed::Union{Integer,Nothing}=nothing,
-                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                        n_starts::Int=50, n_refine::Int=10,
+                        max_iter_coarse::Int=500, max_iter_fine::Int=2000,
+                        tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
+                        penalty_weight::Real=100,
+                        scale::Union{Symbol,AbstractVector{<:Real}}=:diff,
+                        seed::Union{Integer,Nothing}=nothing,
+                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
-    @assert restrictions.n_vars == n "Restriction dimension ($( restrictions.n_vars)) must match model ($n)"
+    @assert restrictions.n_vars == n (
+        "Restriction dimension ($(restrictions.n_vars)) must match model ($n)"
+    )
+    sig = _uhlig_scale(model, scale)
 
     # Need sign restrictions for penalty function
     any(s -> s isa SignRestriction, restrictions.signs) || throw(ArgumentError(
-        "identify_uhlig requires at least one sign restriction"))
+        "identify_uhlig requires at least one sign restriction",
+    ))
     _uhlig_assert_sign_only_rejections(restrictions)
     id_status = _assert_rwz_identified(restrictions, model; rng=rng)
 
     # Determine required horizon for restrictions
-    max_h = max(horizon,
-        isempty(restrictions.zeros) ? 0 : maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1,
-        isempty(restrictions.signs) ? 0 : maximum(_restriction_horizon(sr) for sr in restrictions.signs) + 1)
+    max_z = if isempty(restrictions.zeros)
+        0
+    else
+        maximum(_restriction_horizon(zr) for zr in restrictions.zeros) + 1
+    end
+    max_s = if isempty(restrictions.signs)
+        0
+    else
+        maximum(_restriction_horizon(sr) for sr in restrictions.signs) + 1
+    end
+    max_h = max(horizon, max_z, max_s)
     C1 = any(z -> z isa LongRunZeroRestriction, restrictions.zeros) ?
          first(_long_run_multiplier(model.B, model.Sigma, n, model.p)) : nothing
 
@@ -432,11 +520,11 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
         _uhlig_build_Q(T[], restrictions, Phi, L, n; B=model.B, C1=C1)
     else
         obj = theta -> _uhlig_penalty(theta, restrictions, Phi, L, model, max_h, n;
-                                      penalty_weight=pw, C1=C1)
+                                      penalty_weight=pw, C1=C1, sigma=sig)
         # =====================================================================
         # Phase 1: Coarse search from random starting points (multi-threaded)
         # =====================================================================
-        results_phase1 = Vector{Tuple{T, Vector{T}}}(undef, n_starts)
+        results_phase1 = Vector{Tuple{T,Vector{T}}}(undef, n_starts)
         fill!(results_phase1, (T(Inf), zeros(T, n_params)))
 
         seeds1 = rand(rng, UInt64, n_starts)
@@ -445,9 +533,10 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
             theta0 = rand(local_rng, T, n_params) .* T(2π)
 
             res = try
-                Optim.optimize(obj, theta0, Optim.NelderMead(),
-                    Optim.Options(iterations=max_iter_coarse,
-                                  f_reltol=tol_coarse))
+                Optim.optimize(
+                    obj, theta0, Optim.NelderMead(),
+                    Optim.Options(iterations=max_iter_coarse, f_reltol=tol_coarse),
+                )
             catch err
                 _is_rejectable_draw_error(err) ? nothing : rethrow(err)
             end
@@ -467,7 +556,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
         # =====================================================================
         # Phase 2: Local refinement from best solution (multi-threaded)
         # =====================================================================
-        results_phase2 = Vector{Tuple{T, Vector{T}}}(undef, n_refine)
+        results_phase2 = Vector{Tuple{T,Vector{T}}}(undef, n_refine)
         fill!(results_phase2, (T(Inf), zeros(T, n_params)))
         best_theta_snap = copy(best_theta)
 
@@ -481,9 +570,10 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
             end
 
             res = try
-                Optim.optimize(obj, theta0, Optim.NelderMead(),
-                    Optim.Options(iterations=max_iter_fine,
-                                  f_reltol=tol_fine))
+                Optim.optimize(
+                    obj, theta0, Optim.NelderMead(),
+                    Optim.Options(iterations=max_iter_fine, f_reltol=tol_fine),
+                )
             catch err
                 _is_rejectable_draw_error(err) ? nothing : rethrow(err)
             end
@@ -508,9 +598,11 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
     # =========================================================================
     # Build final result
     # =========================================================================
-    Q = _uhlig_sign_normalize(Q, restrictions, Phi, L, model, max_h; penalty_weight=pw)
+    Q = _uhlig_sign_normalize(
+        Q, restrictions, Phi, L, model, max_h; penalty_weight=pw, sigma=sig,
+    )
     best_val = _uhlig_penalty_from_Q(Q, restrictions, Phi, L, model, max_h;
-                                     penalty_weight=pw)
+                                     penalty_weight=pw, sigma=sig)
     irf_full = structural_irf(Phi, L, Q, max_h)
 
     # Check convergence: all sign restrictions satisfied?
@@ -519,19 +611,29 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     # Per-shock penalty diagnostics
     shock_penalties = _uhlig_shock_penalties(Q, restrictions, Phi, L, model, max_h;
-                                             penalty_weight=pw)
+                                             penalty_weight=pw, sigma=sig)
 
-    UhligSVARResult{T}(Q, irf, best_val, shock_penalties, restrictions, converged,
-                       copy(model.varnames), id_status)
+    return UhligSVARResult{T}(
+        Q, irf, best_val, shock_penalties, restrictions, converged,
+        copy(model.varnames), id_status,
+    )
 end
 
 # SID-17: a penalty-optimal rotation is a one-draw set. No fake bands.
 median_target(r::UhligSVARResult) = (Q=r.Q, irf=r.irf, index=1)
-modal_model(r::UhligSVARResult; bandwidth::Union{Nothing,Real}=nothing) = (Q=r.Q, irf=r.irf, index=1)
-joint_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
-    "UhligSVARResult is a single penalty rotation; joint bands are not defined"))
-sup_t_band(::UhligSVARResult; kwargs...) = throw(ArgumentError(
-    "UhligSVARResult is a single penalty rotation; sup-t bands are not defined"))
+function modal_model(r::UhligSVARResult; bandwidth::Union{Nothing,Real}=nothing)
+    return (Q=r.Q, irf=r.irf, index=1)
+end
+function joint_band(::UhligSVARResult; kwargs...)
+    throw(ArgumentError(
+        "UhligSVARResult is a single penalty rotation; joint bands are not defined",
+    ))
+end
+function sup_t_band(::UhligSVARResult; kwargs...)
+    throw(ArgumentError(
+        "UhligSVARResult is a single penalty rotation; sup-t bands are not defined",
+    ))
+end
 
 """
     structural_shocks(model, u::UhligSVARResult; quantiles=[0.16, 0.5, 0.84])
@@ -540,8 +642,10 @@ Point structural shocks of the penalty-optimal rotation, in the same NamedTuple
 shape as the set-identified methods: `median`, `lower`, `upper`, and `quantiles`
 are the unique path `compute_structural_shocks(model, u.Q)`.
 """
-function structural_shocks(model::VARModel{T}, u::UhligSVARResult{T};
-                          quantiles::Vector{Float64}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
+function structural_shocks(
+    model::VARModel{T}, u::UhligSVARResult{T};
+    quantiles::AbstractVector{<:Real}=[0.16, 0.5, 0.84],
+) where {T<:AbstractFloat}
     shocks = compute_structural_shocks(model, u.Q)
     T_eff, n = size(shocks)
     nq = length(quantiles)
@@ -549,5 +653,5 @@ function structural_shocks(model::VARModel{T}, u::UhligSVARResult{T};
     @inbounds for qi in 1:nq
         qarr[:, :, qi] = shocks
     end
-    (median=shocks, lower=shocks, upper=shocks, quantiles=qarr)
+    return (median=shocks, lower=shocks, upper=shocks, quantiles=qarr)
 end

@@ -373,9 +373,9 @@ end
         [0.85, 0.02], [0.01 0.0; 0.0 0.001], [:ρ, :σ],
         :euler_gmm, 2.1, 0.35, sol, true, spec
     )
-    # report() writes to stdout — redirect to devnull, just verify no error
-    @test redirect_stdout(devnull) do; report(est) end === nothing
-    @test redirect_stdout(devnull) do; report(sol) end === nothing
+    # report() writes to io — route to devnull, just verify no error
+    @test report(devnull, est) === nothing
+    @test report(devnull, sol) === nothing
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1058,9 +1058,9 @@ end
                 for (k, ci) in enumerate(p.control_indices); dev[t, ci] = yv[k]; end
                 x = xn
             end
-            dev
+            return dev
         end
-        function cubic_spec(a2, a3, sig)
+        function cubic_spec(a2_val, a3_val, sig)
             sp = @dsge begin
                 parameters: ρ = 0.7, a2 = 0.15, a3 = 0.05, κ = 0.5, σ = 0.3
                 endogenous: x, y
@@ -1068,10 +1068,10 @@ end
                 x[t] = ρ * x[t-1] + a2 * x[t-1]^2 + a3 * x[t-1]^3 + σ * ε[t]
                 y[t] = κ * x[t-1] + 0.2 * x[t-1]^2
             end
-            sp.param_values[:a2] = a2
-            sp.param_values[:a3] = a3
+            sp.param_values[:a2] = a2_val
+            sp.param_values[:a3] = a3_val
             sp.param_values[:σ] = sig
-            compute_steady_state(sp)
+            return compute_steady_state(sp)
         end
 
         # Mild nonlinearity. Starting from the steady state the second-order component is zero
@@ -1452,7 +1452,7 @@ end
             end
         end
         fe[1, 1] = -1.0
-        (f0, f1, fl, fe)
+        return (f0, f1, fl, fe)
     end
 
     @testset "sparse route reproduces the dense route" begin
@@ -1565,7 +1565,7 @@ end
         elseif nunstab == 0
             eu = [1, 1]
         end
-        eu
+        return eu
     end
     sims_eu(G0, G1, Psi, Pi) = M.gensys(G0, G1, zeros(size(G0, 1)), Psi, Pi).eu
 
@@ -1575,7 +1575,7 @@ end
         f0[1, 1] = 1.0; f0[1, 3] = 1.0; fl[1, 1] = -1.0; fl[1, 2] = -1.0   # IS
         f0[2, 2] = -1.0; f0[2, 1] = kappa; fl[2, 2] = beta                  # Phillips
         f0[3, 3] = -1.0; f0[3, 2] = phi_pi; fe[3, 1] = 1.0                  # Taylor rule
-        (f0, f1, fl, fe)
+        return (f0, f1, fl, fe)
     end
 
     @testset "Taylor principle: determinate iff phi_pi > 1" begin
@@ -1876,7 +1876,7 @@ end
     function sylv_dense(A, B, C, D, d)
         nvd = size(C, 1)^d
         LHS = kron(Matrix{Float64}(I, nvd, nvd), A) + kron(M._kron_power(C, d)', B)
-        reshape(LHS \ vec(D), size(A, 1), nvd)
+        return reshape(LHS \ vec(D), size(A, 1), nvd)
     end
 
     @testset "matches the dense Kronecker solve, orders 1-3" begin
@@ -2913,10 +2913,13 @@ end
         vals = base.values; d = base._draws
         dev  = d .- reshape(vals, 1, size(vals)...)
         # Two targets with IDENTICAL point IRFs but bootstrap draws scaled by 0.5 vs 2.0.
-        mk(scale) = MacroEconometricModels.ImpulseResponse{Float64}(
-            vals, base.ci_lower, base.ci_upper, H,
-            base.variables, base.shocks, base.ci_type,
-            reshape(vals, 1, size(vals)...) .+ scale .* dev, base._conf_level)
+        function mk(scale)
+            return MacroEconometricModels.ImpulseResponse{Float64}(
+                vals, base.ci_lower, base.ci_upper, H,
+                base.variables, base.shocks, base.ci_type,
+                reshape(vals, 1, size(vals)...) .+ scale .* dev, base._conf_level,
+            )
+        end
         est_t = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
                               target_irfs=mk(0.5), irf_horizon=H, weighting=:efficient)
         est_w = estimate_dsge(spec, Y, [:ρ]; method=:irf_matching,
@@ -3413,7 +3416,7 @@ end
     @test occursin("Yes", str)
 
     # report dispatches to show (test that it doesn't error)
-    @test redirect_stdout(devnull) do; report(sol) end === nothing
+    @test report(devnull, sol) === nothing
 
     # OccBinIRF
     H = 20
@@ -3664,7 +3667,7 @@ end
     str = String(take!(io))
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
-    @test redirect_stdout(devnull) do; report(sol) end === nothing
+    @test report(devnull, sol) === nothing
     end
 end
 
@@ -3905,7 +3908,7 @@ end
     str = String(take!(io))
     @test occursin("OccBin Piecewise-Linear Solution", str)
     @test occursin("Converged", str)
-    @test redirect_stdout(devnull) do; report(sol) end === nothing
+    @test report(devnull, sol) === nothing
     end
 end
 
@@ -4149,8 +4152,8 @@ end
     @test occursin("Yes", output)
 
     # report should not error
-    @test redirect_stdout(devnull) do; report(sol) end === nothing
-    end # _suppress_warnings
+    @test report(devnull, sol) === nothing
+    end  # _suppress_warnings
 end
 
 @testset "OccBin: constraint parsing edge cases" begin
@@ -4421,54 +4424,53 @@ end
 
     # ── show() text backend ──
     @testset "show text backend" begin
-        set_display_backend(:text)
-        io = IOBuffer()
-        show(io, spec)
-        output = String(take!(io))
+        with_display_backend(:text) do
+            io = IOBuffer()
+            show(io, spec)
+            output = String(take!(io))
 
-        @test occursin("DSGE Model", output)
-        @test occursin("4", output)  # 4 equations
-        @test occursin("Calibration", output)
-        @test occursin("β", output)
-        @test occursin("Equations", output)
-        @test occursin("(1)", output)
-        @test occursin("(4)", output)
-        @test occursin("E_t", output)
+            @test occursin("DSGE Model", output)
+            @test occursin("4", output)  # 4 equations
+            @test occursin("Calibration", output)
+            @test occursin("β", output)
+            @test occursin("Equations", output)
+            @test occursin("(1)", output)
+            @test occursin("(4)", output)
+            @test occursin("E_t", output)
 
-        # report() should not error
-        @test redirect_stdout(devnull) do; report(spec) end === nothing
+            # report() should not error
+            @test report(devnull, spec) === nothing
+        end
     end
 
     # ── show() LaTeX backend ──
     @testset "show latex backend" begin
-        set_display_backend(:latex)
-        io = IOBuffer()
-        show(io, spec)
-        output = String(take!(io))
+        with_display_backend(:latex) do
+            io = IOBuffer()
+            show(io, spec)
+            output = String(take!(io))
 
-        @test occursin("\\begin{align}", output)
-        @test occursin("\\end{align}", output)
-        @test occursin("\\mathbb{E}_t", output)
-        @test occursin("\\beta", output)
-        @test occursin("\\frac", output)
-        @test occursin("\\begin{tabular}", output)
-
-        set_display_backend(:text)  # restore
+            @test occursin("\\begin{align}", output)
+            @test occursin("\\end{align}", output)
+            @test occursin("\\mathbb{E}_t", output)
+            @test occursin("\\beta", output)
+            @test occursin("\\frac", output)
+            @test occursin("\\begin{tabular}", output)
+        end
     end
 
     # ── show() HTML backend ──
     @testset "show html backend" begin
-        set_display_backend(:html)
-        io = IOBuffer()
-        show(io, spec)
-        output = String(take!(io))
+        with_display_backend(:html) do
+            io = IOBuffer()
+            show(io, spec)
+            output = String(take!(io))
 
-        @test occursin("<div", output)
-        @test occursin("\\begin{align}", output)
-        @test occursin("<table>", output)
-        @test occursin("\\mathbb{E}_t", output)
-
-        set_display_backend(:text)  # restore
+            @test occursin("<div", output)
+            @test occursin("\\begin{align}", output)
+            @test occursin("<table>", output)
+            @test occursin("\\mathbb{E}_t", output)
+        end
     end
 
     # ── Spec without steady state ──
@@ -4622,23 +4624,22 @@ end
     @test occursin("Augmented state dim", output)
 
     # LaTeX display
-    set_display_backend(:latex)
-    io2 = IOBuffer()
-    show(io2, spec)
-    latex_output = String(take!(io2))
+    latex_output = with_display_backend(:latex) do
+        io2 = IOBuffer()
+        show(io2, spec)
+        String(take!(io2))
+    end
     @test occursin("Augmented state dimension", latex_output)
     @test !occursin("__news", latex_output)
 
     # HTML display
-    set_display_backend(:html)
-    io3 = IOBuffer()
-    show(io3, spec)
-    html_output = String(take!(io3))
+    html_output = with_display_backend(:html) do
+        io3 = IOBuffer()
+        show(io3, spec)
+        String(take!(io3))
+    end
     @test occursin("Augmented state dim", html_output)
     @test !occursin("__news", html_output)
-
-    # Reset
-    set_display_backend(:text)
 
     # Non-augmented model should NOT show augmented state dim
     spec2 = @dsge begin
@@ -7069,7 +7070,7 @@ end
 # Nested 1-control restriction of the labor model (labor pinned at lbar) for
 # the #818 Euler-error comparison. `lbar` enters as a parameter pinned via
 # `_respec` (`$`-interpolation is not supported inside `@dsge`).
-function _vfi_nested_spec(lbar::Real, guess::AbstractVector)
+function _vfi_nested_spec(lbar_val::Real, guess::AbstractVector)
     spec = @dsge begin
         parameters: β = 0.99, α = 0.36, δ = 0.025, ρ = 0.95, σ = 0.007, lbar = 0.3
         endogenous: c, k, a
@@ -7079,7 +7080,7 @@ function _vfi_nested_spec(lbar::Real, guess::AbstractVector)
         a[t] = ρ * a[t-1] + σ * ε[t]
     end
     pv = copy(spec.param_values)
-    pv[:lbar] = Float64(lbar)
+    pv[:lbar] = Float64(lbar_val)
     spec = MacroEconometricModels._respec(spec, pv)
     return compute_steady_state(spec; initial_guess=collect(Float64, guess))
 end

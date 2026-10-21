@@ -362,11 +362,15 @@ const TEST_GROUPS = [
 function _child_julia_cmd(code::String; group_name::String="_warmup")
     test_dir = replace(string(@__DIR__), '\\' => '/')
     cov_flag = Base.JLOptions().code_coverage != 0 ? `--code-coverage=user` : ``
-    checkbounds_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
+    cb_flag = get(ENV, "MACRO_CHECK_BOUNDS", "") == "1" ? `--check-bounds=yes` : ``
     julia_exe = joinpath(Sys.BINDIR, Base.julia_exename())
-    addenv(`$julia_exe $cov_flag $checkbounds_flag --startup-file=no --project=$(dirname(test_dir)) -e $code`,
-           "JULIA_NUM_THREADS" => "1",
-           "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)))
+    proj = dirname(test_dir)
+    cmd = `$julia_exe $cov_flag $cb_flag --startup-file=no --project=$proj -e $code`
+    return addenv(
+        cmd,
+        "JULIA_NUM_THREADS" => "1",
+        "OPENBLAS_NUM_THREADS" => string(_blas_threads_for_group(group_name)),
+    )
 end
 
 # Write compiled/*.ji once before the parallel children start. Four children
@@ -378,6 +382,7 @@ function _warm_compile_cache()
     t = @elapsed run(pipeline(_child_julia_cmd("using MacroEconometricModels");
                               stdout=stdout, stderr=stderr))
     println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t; digits=1))
+    return nothing
 end
 
 # Multi-process runner (fallback when threads unavailable)
@@ -413,10 +418,10 @@ end
 #   5. else                     → sequential
 # =============================================================================
 
-serial = get(ENV, "MACRO_SERIAL_TESTS", "") == "1"
-multiprocess = get(ENV, "MACRO_MULTIPROCESS_TESTS", "") == "1"
+const SERIAL = get(ENV, "MACRO_SERIAL_TESTS", "") == "1"
+const MULTIPROCESS = get(ENV, "MACRO_MULTIPROCESS_TESTS", "") == "1"
 
-if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_THREADS >= 2))
+if !SERIAL && (MULTIPROCESS || (!SERIAL && Threads.nthreads() == 1 && Sys.CPU_THREADS >= 2))
     # ─────────────────────────────────────────────────────────────────────
     # Multi-process parallel testing
     # Each group runs in its own julia process — full isolation.
@@ -461,7 +466,7 @@ if !serial && (multiprocess || (!serial && Threads.nthreads() == 1 && Sys.CPU_TH
 
     isempty(failed_groups) || error("Test groups failed: $(join(failed_groups, ", "))")
 
-elseif !serial && Threads.nthreads() > 1
+elseif !SERIAL && Threads.nthreads() > 1
     # ─────────────────────────────────────────────────────────────────────
     # Threaded single-process parallel testing
     # Loads MacroEconometricModels ONCE, then runs groups in tasks.
@@ -485,35 +490,55 @@ elseif !serial && Threads.nthreads() > 1
     println("FILETIME\t__runner__\tusing MacroEconometricModels\t", round(t_load; digits=1))
 
     max_conc = _runner_max_conc(Threads.nthreads())
-    work = _make_work_queue(run_groups)
+    threaded_groups = filter(p -> first(p) != "Extensions (JuMP/Ipopt/PATH)", run_groups)
+    isolated_groups = filter(p -> first(p) == "Extensions (JuMP/Ipopt/PATH)", run_groups)
     failed_groups = String[]
     failed_lock = ReentrantLock()
-    @sync for _ in 1:max_conc
-        Threads.@spawn begin
-            for (gn, fs) in work
-                try
-                    _with_group_blas(gn) do
-                        @testset "$gn" begin
-                            for f in fs
-                                t = @elapsed include(joinpath(test_dir, f))
-                                println("FILETIME\t$(gn)\t$(f)\t", round(t; digits=1))
-                            end
-                        end
-                    end
-                    @info "Test group '$gn' PASSED"
-                catch e
-                    inner = e isa TaskFailedException ? e.task.exception : e
-                    if inner isa Base.IOError
-                        @warn "Test group '$gn' hit IOError (stdout pipe closed) — treating as PASSED"
+    function _run_group!(gn::String, fs::Vector{String})
+        try
+            @testset "$gn" begin
+                for f in fs
+                    path = joinpath(test_dir, f)
+                    t = if f == "core/test_display_backends.jl"
+                        @elapsed include(path)
                     else
-                        @error "Test group '$gn' FAILED" exception=(e, catch_backtrace())
-                        lock(failed_lock) do
-                            push!(failed_groups, gn)
+                        @elapsed with_display_backend(:text) do
+                            include(path)
                         end
                     end
+                    println("FILETIME\t$(gn)\t$(f)\t", round(t; digits=1))
+                end
+            end
+            @info "Test group '$gn' PASSED"
+        catch e
+            inner = e isa TaskFailedException ? e.task.exception : e
+            if inner isa Base.IOError
+                @warn "Test group '$gn' hit IOError (pipe closed) — treating as PASSED"
+            else
+                @error "Test group '$gn' FAILED" exception=(e, catch_backtrace())
+                lock(failed_lock) do
+                    push!(failed_groups, gn)
                 end
             end
         end
+        return nothing
+    end
+    if !isempty(threaded_groups)
+        work = _make_work_queue(threaded_groups)
+        @sync for _ in 1:max_conc
+            Threads.@spawn begin
+                for (gn, fs) in work
+                    _run_group!(gn, fs)
+                end
+            end
+        end
+    end
+    # Run C-solver weakdep extensions (JuMP/Ipopt/PATHSolver) isolated after
+    # worker threads finish so `@eval import` and non-thread-safe libpath50 C
+    # state/finalizers never race with concurrent DSGE tasks or GC sweeps.
+    for (gn, fs) in isolated_groups
+        GC.gc()
+        _run_group!(gn, fs)
     end
 
     isempty(failed_groups) || error("Test groups failed: $(join(failed_groups, ", "))")

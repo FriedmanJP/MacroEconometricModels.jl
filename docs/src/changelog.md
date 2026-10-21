@@ -6,6 +6,49 @@ output, not just documentation.
 
 ---
 
+## v1.0.2
+
+Machine-readability release: `Tables.jl` / `long_table` coverage for the TIDY
+series (closes `#852`–`#867`), plus BVAR news decomposition, a sysimage-safe
+dataset path, and Uhlig penalty-scale normalization (closes `#868`–`#870`).
+No exported names added or removed; no struct fields changed. Two correctness
+fixes change numerical output: `long_table(::MidasForecast)` horizon labels,
+and the `identify_uhlig` default penalty scale (`:diff`, Uhlig 2005);
+one display fix removes column-type rows from `report()` tables fed by
+`Tables.jl` inputs.
+
+**New**
+
+- Close to 100 newly-tabular result types: count / quantile / RDD /
+  SUR / 3SLS coefficients, DiD event-study results, per-category marginal
+  effects, forecast evaluation and combination, policy-counterfactual
+  paths and moments, input-output sector tables, the 60-type test battery
+  (one row per hypothesis with 5% decisions), and DSGE/HA solutions and
+  simulations.
+- `long_table` for historical decompositions (+Bayesian), `BayesianFEVD`,
+  `LPFEVD` (bias-corrected headline), and the ordered-model
+  `marginal_effects` table.
+- `nowcast_news` for `NowcastBVAR`: the Bańbura–Modugno decomposition on
+  the companion state-space form, with the same revision-vs-news semantics
+  and group aggregation as the DFM method.
+- `identify_uhlig(...; scale)`: penalty normalization `:diff` (default,
+  Uhlig 2005 first-difference std), `:residual` (legacy), `:none`, or a
+  custom vector.
+
+**Fixes**
+
+- `long_table(::MidasForecast)` labels the true direct horizon `h` and
+  carries the prediction standard error; the generic method sized the
+  horizon from the length-1 array and mislabeled every row `horizon=1`.
+- `report()` tables never print column-type names or omit rows/columns:
+  the central table wrapper pins single-row name labels and no-crop
+  output on all three display backends.
+- `load_example` resolves the bundled-data directory at runtime instead of
+  a precompile-baked depot path, so installed sysimages find the TOMLs.
+- `identify_uhlig` normalizes the penalty by first-difference std by
+  default (Uhlig 2005, p. 10) instead of residual std; pass
+  `scale=:residual` for the previous behavior.
+
 ## v1.0.1
 
 Plot-option and coverage release (closes `#836`–`#843`, `#845`–`#849`). No
