@@ -79,10 +79,12 @@ The **transition equation** governs the dynamics of the augmented system:
 
 where:
 - ``F_t`` is the ``r \times 1`` vector of latent factors extracted from the panel
-- ``Y_t^{key}`` is the ``n_{key} \times 1`` vector of key observed variables, typically the policy rate
-- ``A_l`` are ``(r + n_{key}) \times (r + n_{key})`` coefficient matrices at lag ``l``
+- ``Y_t^{key}`` is the ``n_{key} \times 1`` vector of key observed macro variables (e.g. the policy interest rate)
 - ``c`` is the ``(r + n_{key}) \times 1`` intercept vector
-- ``u_t \sim N(0, \Sigma)`` is the reduced-form error vector
+- ``A_l`` are ``(r + n_{key}) \times (r + n_{key})`` coefficient matrices at lag ``l = 1, \ldots, p``
+- ``u_t`` is the ``(r + n_{key}) \times 1`` reduced-form innovation vector with covariance ``\Sigma``
+- ``\Sigma`` is the ``(r + n_{key}) \times (r + n_{key})`` reduced-form innovation covariance matrix
+- ``p`` is the autoregressive lag order
 
 The **observation equation** links the factors to all ``N`` panel variables:
 
@@ -91,9 +93,10 @@ X_t = \Lambda \, F_t + e_t
 ```
 
 where:
-- ``X_t`` is the ``N \times 1`` vector of panel variables at time ``t``
-- ``\Lambda`` is the ``N \times r`` loading matrix
-- ``e_t`` is the ``N \times 1`` vector of idiosyncratic errors
+- ``X_t`` is the ``N \times 1`` vector of informational panel variables at time ``t``
+- ``\Lambda`` is the ``N \times r`` factor loading matrix
+- ``F_t`` is the ``r \times 1`` vector of latent common factors
+- ``e_t`` is the ``N \times 1`` vector of idiosyncratic disturbances
 
 !!! note "Technical Note"
     The FAVAR nests a standard VAR at ``r = 0``. With ``r > 0`` the number of estimated
@@ -199,6 +202,15 @@ The measurement equation carries a direct loading on the key variables, which th
 X_t = \Lambda \, F_t + \Lambda_y \, Y_t^{key} + e_t, \qquad e_t \sim N(0, \operatorname{diag}(\sigma_e^2))
 ```
 
+where:
+- ``X_t`` is the ``N \times 1`` vector of panel variables at time ``t``
+- ``F_t`` is the ``r \times 1`` vector of latent common factors
+- ``Y_t^{key}`` is the ``n_{key} \times 1`` vector of observable key macroeconomic indicators
+- ``\Lambda`` is the ``N \times r`` factor loading matrix
+- ``\Lambda_y`` is the ``N \times n_{key}`` regression coefficient matrix on the key variables
+- ``e_t`` is the ``N \times 1`` idiosyncratic error vector with diagonal covariance ``\operatorname{diag}(\sigma_e^2)``
+- ``\operatorname{diag}(\sigma_e^2)`` is the ``N \times N`` diagonal covariance matrix of idiosyncratic errors
+
 The Gibbs sampler cycles three blocks:
 
 1. **Draw** ``(B, \Sigma) \mid F, Y^{key}``: Normal-Inverse-Wishart conjugate posterior from the VAR on the augmented system under a flat prior, in the tradition of Doan, Litterman & Sims (1984)
@@ -274,10 +286,12 @@ Tracing a structural shock through to every series in the panel is what the FAVA
 ```
 
 where:
-- ``\text{response}_i(h, j)`` is the response of panel variable ``i`` at horizon ``h`` to structural shock ``j``
+- ``\text{response}_i(h, j)`` is the impulse response of panel variable ``i`` at horizon ``h`` to structural shock ``j``
 - ``\Lambda_{ik}`` is the loading of variable ``i`` on factor ``k``
-- ``\Lambda_{y,im}`` is the implied direct loading of variable ``i`` on key variable ``m``
-- ``\text{IRF}_{F_k}`` and ``\text{IRF}_{Y_m}`` are augmented-VAR responses of factor ``k`` and key variable ``m``
+- ``\Lambda_{y,im}`` is the direct loading of variable ``i`` on key variable ``m``
+- ``\text{IRF}_{F_k}(h, j)`` is the augmented-VAR impulse response of factor ``k`` at horizon ``h`` to shock ``j``
+- ``\text{IRF}_{Y_m}(h, j)`` is the augmented-VAR impulse response of key variable ``m`` at horizon ``h`` to shock ``j``
+- ``r`` is the number of latent factors and ``n_{key}`` is the number of key observable variables
 
 Key observed variables skip the mapping entirely and keep their direct VAR responses, so the series the researcher chose to observe get exact structural answers.
 

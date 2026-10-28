@@ -83,8 +83,7 @@ U_2 = \sqrt{\frac{\sum_t \big((\hat y_{t+1}-y_{t+1})/y_t\big)^2}
                  {\sum_t \big((y_{t+1}-y_t)/y_t\big)^2}}
 ```
 
-where
-
+where:
 - ``e_t = y_t - \hat y_t`` is the forecast error,
 - ``m`` is `seasonal_period`, the lag of the naive benchmark that scales MASE (Hyndman & Koehler 2006),
 - ``U_2`` is Theil's inequality coefficient against the no-change forecast: ``U_2 = 1`` exactly for the naive forecast, ``U_2 < 1`` when the forecast beats it.
@@ -150,8 +149,7 @@ forecasts from their error series. With loss differential
 \hat V = \hat\gamma_0 + 2\sum_{j=1}^{h-1} w_j \hat\gamma_j
 ```
 
-where
-
+where:
 - ``g`` is the loss: squared (`loss=:se`), absolute (`loss=:ad`), or any user-supplied function of a scalar error,
 - ``\hat V`` is the truncated HAC long-run variance of ``d_t`` at lag ``h-1``, with ``w_j = 1`` under the default rectangular kernel and ``w_j = 1 - j/h`` under `kernel=:bartlett`,
 - ``h`` is the forecast horizon.
@@ -205,6 +203,14 @@ When the small (restricted) model is nested in the big (unrestricted) one,
 \hat f_t = e_{\text{small},t}^2
            - \Big(e_{\text{big},t}^2 - (\hat y_{\text{small},t} - \hat y_{\text{big},t})^2\Big)
 ```
+
+where:
+- ``\hat f_t`` is the adjusted loss differential at evaluation period ``t``
+- ``e_{\text{small},t} = y_t - \hat y_{\text{small},t}`` is the forecast error of the parsimonious (nested) benchmark model
+- ``e_{\text{big},t} = y_t - \hat y_{\text{big},t}`` is the forecast error of the larger (nesting) model
+- ``\hat y_{\text{small},t}`` and ``\hat y_{\text{big},t}`` are the point forecasts from the small and big models, respectively
+- ``(\hat y_{\text{small},t} - \hat y_{\text{big},t})^2`` is the Clark-West adjustment term that offsets the upward bias in the larger model's sample MSPE under the null hypothesis
+
 
 and tests ``E[\hat f] \le 0`` --- the big model does not improve MSPE --- against the
 one-sided `greater` alternative, referencing the standard normal (Clark & West 2007). The
@@ -434,24 +440,6 @@ typeof(ev2)
 
 ---
 
-## API
-
-```@docs
-forecast_evaluate
-diebold_mariano
-clark_west
-mincer_zarnowitz
-forecast_encompassing
-combine_forecasts
-ForecastEvaluation
-DMTestResult
-ClarkWestResult
-MincerZarnowitzResult
-ForecastEncompassingResult
-ForecastCombination
-```
-
----
 
 ## References
 

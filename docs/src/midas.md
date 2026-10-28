@@ -92,8 +92,7 @@ y_t = \beta_0 + \beta_1 \sum_{k=1}^{K} w_k(\theta)\, x_{t,k}
 \qquad \sum_{k=1}^{K} w_k(\theta) = 1,
 ```
 
-where
-
+where:
 - ``y_t`` is the low-frequency target in period ``t``,
 - ``x_{t,k}`` is the ``k``-th high-frequency lag within period ``t``, counted most-recent-first,
 - ``w_k(\theta)`` is the weight function, normalized to sum to one,
@@ -287,8 +286,7 @@ variance with parameter uncertainty:
 \widehat{\text{Var}}(\hat y_f) = \hat\sigma^2 + x_f' V x_f,
 ```
 
-where
-
+where:
 - ``x_f`` stacks the linear design row ``[1, s_f, y_{t-1}, \ldots]`` with the ``\theta``-gradient ``\beta_1 (\partial w/\partial\theta)' x^{hf}_f``,
 - ``V`` is the estimated covariance of ``[\beta; \theta]``,
 - ``s_f = \sum_k w_k(\hat\theta)\, x^{hf}_{f,k}`` is the weighted indicator for the forecast period.

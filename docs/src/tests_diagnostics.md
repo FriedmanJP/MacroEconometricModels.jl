@@ -235,6 +235,12 @@ The Doornik-Hansen omnibus test (Doornik & Hansen 2008) applies the Bowman-Shent
 DH = \sum_{j=1}^{k} (z_{1,j}^2 + z_{2,j}^2) \sim \chi^2(2k)
 ```
 
+where:
+- ``k`` is the dimension of the multivariate system (number of variables)
+- ``z_{1,j}`` is the transformed skewness measure for equation ``j`` under the Bowman-Shenton transformation
+- ``z_{2,j}`` is the transformed kurtosis measure for equation ``j``
+- ``DH`` is the Doornik-Hansen test statistic distributed asymptotically as ``\chi^2(2k)`` under the multivariate normality null
+
 The transformation improves finite-sample size relative to the raw Jarque-Bera statistic, which is why it is the default omnibus test in most modern software.
 
 ```@example test_diag
@@ -303,6 +309,13 @@ The ARCH-LM test (Engle 1982) regresses squared residuals on their own lags. Und
 ```math
 \varepsilon_t^2 = \alpha_0 + \alpha_1 \varepsilon_{t-1}^2 + \cdots + \alpha_q \varepsilon_{t-q}^2 + v_t
 ```
+
+where:
+- ``\varepsilon_t`` is the model residual at period ``t``
+- ``\alpha_0`` is an intercept term
+- ``\alpha_1, \ldots, \alpha_q`` are autoregressive coefficients on lagged squared residuals
+- ``q`` is the test lag order
+- ``v_t`` is the disturbance term
 
 has no explanatory power, and the statistic is:
 
@@ -377,6 +390,12 @@ The test compares the correlation integral of the ``m``-dimensional embedding of
 ```math
 C_m(\varepsilon) = \frac{2}{T_m(T_m-1)} \sum_{s < t} \prod_{k=0}^{m-1} \Theta_{s+k,\, t+k}, \qquad T_m = T - m + 1 ,
 ```
+
+where:
+- ``m`` is the embedding dimension
+- ``T_m = T - m + 1`` is the effective number of ``m``-histories constructed from a sample of size ``T``
+- ``\varepsilon`` is the spatial metric distance threshold
+- ``\Theta_{ij} = \mathbf{1}(|y_i - y_j| < \varepsilon)`` is the proximity indicator function
 
 and the standardized statistic is
 
@@ -501,6 +520,13 @@ The variance-ratio test evaluates the **random-walk (martingale) hypothesis** fo
 ```math
 VR(q) = \frac{\operatorname{Var}(y_t - y_{t-q})}{q \, \operatorname{Var}(y_t - y_{t-1})}.
 ```
+
+where:
+- ``y_t`` is the observed series in log levels
+- ``q`` is the sampling aggregation interval
+- ``\operatorname{Var}(y_t - y_{t-q})`` is the variance of the ``q``-period increment
+- ``\operatorname{Var}(y_t - y_{t-1})`` is the 1-period increment variance
+- ``VR(q) = 1`` holds identically under the random walk null hypothesis
 
 `variance_ratio_test` treats its argument as the **level** series and works internally with the first differences ``x_t = y_t - y_{t-1}``. It reports the overlapping Lo-MacKinlay (1988) estimator with the unbiased normalizer ``m = q(N-q+1)(1-q/N)``, the homoskedastic statistic ``Z(q)`` and the heteroskedasticity-robust ``Z^*(q)`` (both asymptotically ``N(0,1)``), and the Chow-Denning (1993) joint statistic ``\max_q |Z(q)|`` whose p-value comes from the studentized-maximum-modulus complement ``1 - (2\Phi(\cdot) - 1)^m``.
 

@@ -136,6 +136,12 @@ Iteration stops when the relative change in the log-likelihood falls below `thre
 \frac{|\ell^{(k)} - \ell^{(k-1)}|}{|\ell^{(k-1)}|} < \text{thresh}
 ```
 
+where:
+- ``\ell^{(k)}`` is the state-space log-likelihood evaluated at EM iteration ``k``
+- ``\ell^{(k-1)}`` is the log-likelihood evaluated at iteration ``k-1``
+- ``\text{thresh}`` is the relative convergence tolerance (keyword argument `thresh`, defaulting to ``10^{-4}``)
+
+
 !!! warning "`n_iter == max_iter` means the run did not converge"
     `n_iter` records the iteration the loop exited on. A converging run exits early, so `n_iter < max_iter`; a run that exhausts its budget reports `n_iter == max_iter` and returns whatever parameters it had reached. Compare the two before using the estimates.
 

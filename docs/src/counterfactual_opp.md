@@ -62,12 +62,14 @@ round.(out.result.delta, digits=4)
 With loss ``L = \tfrac{1}{2}\, E[Y' W Y]`` over stacked objective gaps, the optimal policy perturbation is
 
 ```math
-\delta^* = -\left(R_y' W R_y\right)^{-1} R_y' W \, E_t Y^0
+\delta^* = -\left(R_y' W R_y\right)^{-1} R_y' W \, \mathbb{E}_t Y^0
 ```
 
 where:
-- ``E_t Y^0`` is the variable-major stack of the baseline **gap** forecasts (deviations from target)
+- ``\delta^*`` is the optimal policy perturbation vector
+- ``\mathbb{E}_t Y^0`` is the variable-major stack of the baseline **gap** forecasts (deviations from target)
 - ``R_y`` stacks the objectives' impulse responses to the identified policy shocks (columns = shocks)
+- ``W`` is the block-diagonal positive semi-definite loss weighting matrix
 - ``\delta^*`` is literally *minus* the WLS regression coefficient of the forecast on the IRFs — dropping the sign worsens the loss
 
 The announced policy is optimal **iff** the gradient ``R_y' W\, E_t Y^0 = 0`` **iff** ``\delta^* = 0``: at the optimum, forecasts are orthogonal to IRFs — a model-free targeting rule. The empirically feasible version is the **subset OPP** (a thin container, e.g. level and slope shock dimensions): a nonzero subset OPP still rejects optimality; it improves but need not reach the full optimum.
@@ -109,12 +111,20 @@ The return carries KKT diagnostics: the binding set, the projected-gradient resi
 [`opp_sequence`](@ref) runs the OPP at every decision date — a policy-evaluation history. Revisions decompose exactly into three parts:
 
 ```math
-\delta_t - \delta_{t-1} = \underbrace{D_t\,(E_t Y - E_{t-1\to t} Y)}_{\text{news}}
- + \underbrace{(D_t - D_{t-1})\, E_{t-1\to t}Y}_{\text{preference}}
- + \underbrace{D_{t-1}\,(E_{t-1\to t}Y - E_{t-1}Y)}_{\text{aging}}
+\delta_t - \delta_{t-1} = \underbrace{D_t\,(\mathbb{E}_t Y - \mathbb{E}_{t-1\to t} Y)}_{\text{news}}
+ + \underbrace{(D_t - D_{t-1})\, \mathbb{E}_{t-1\to t}Y}_{\text{preference}}
+ + \underbrace{D_{t-1}\,(\mathbb{E}_{t-1\to t}Y - \mathbb{E}_{t-1}Y)}_{\text{aging}}
 ```
 
-where ``E_{t-1\to t}Y`` is the date-``t-1`` forecast advanced one period onto date-``t``'s calendar and ``D = -(R'WR)^{-1}R'W``. The **time-consistent OPP** removes the preference part: ``\delta^{tc} = \delta - \text{pref}``. With constant causal effects and weights the preference part is identically zero. [`opp_sensitivity`](@ref) reruns the sequence over a grid of loss weights, and [`robust_weights`](@ref) extracts the weights that make past policy look most optimal.
+where:
+- ``\delta_t, \delta_{t-1}`` are optimal policy perturbation vectors at decision dates ``t`` and ``t-1``
+- ``D_t = -(R_t' W_t R_t)^{-1} R_t' W_t`` is the date-``t`` projection operator
+- ``\mathbb{E}_t Y`` is the date-``t`` baseline forecast of stacked target gaps
+- ``\mathbb{E}_{t-1\to t} Y`` is the date-``t-1`` forecast advanced one period onto date-``t``'s calendar horizon
+- ``\mathbb{E}_{t-1} Y`` is the unadvanced date-``t-1`` forecast
+- ``\text{news}`` captures recommendation revisions from incoming macroeconomic information
+- ``\text{preference}`` captures recommendation revisions from changing policymaker loss weights or causal responses
+- ``\text{aging}`` captures recommendation revisions from the deterministic passage of time
 
 ```julia
 plot_result(sq; view=:fan)     # BM Figure-1 style fans over decision dates

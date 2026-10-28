@@ -199,6 +199,15 @@ For the RBC model above, the analytical steady state is:
 \bar{A} = 1, \quad \bar{K} = \left(\frac{\alpha\beta}{1 - \beta(1-\delta)}\right)^{\frac{1}{1-\alpha}}, \quad \bar{Y} = \bar{K}^\alpha, \quad \bar{C} = \bar{Y} - \delta\bar{K}
 ```
 
+where:
+- ``\bar{A}`` is steady-state total factor productivity (normalized to 1)
+- ``\bar{K}`` is the steady-state aggregate capital stock
+- ``\bar{Y}`` is steady-state aggregate output
+- ``\bar{C}`` is steady-state aggregate consumption
+- ``\alpha`` is the capital share of output
+- ``\beta`` is the subjective discount factor
+- ``\delta`` is the capital depreciation rate
+
 ### Numerical Computation
 
 `compute_steady_state` uses NonlinearSolve.jl to solve the system ``f(\bar{y}, \bar{y}, \bar{y}, 0, \theta) = 0``. The default algorithm is `TrustRegion()`, which is robust to poor starting points. Box constraints (e.g., non-negativity) are handled natively via NonlinearSolve's bounded problem formulation.

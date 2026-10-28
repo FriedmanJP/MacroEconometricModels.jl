@@ -12,24 +12,40 @@ Loads built-in datasets stored as TOML files in the `data/` directory.
 
 using TOML
 
-# Path to the data directory (repo root / data)
-const _DATA_DIR = joinpath(dirname(dirname(@__DIR__)), "data")
+# Data directory (package root / data), resolved at RUNTIME on every call — never
+# frozen at precompile time. Baking the depot path into a sysimage breaks
+# `load_example` in installed sysimages (#869); `pkgdir` reads the live path.
+function _data_dir()
+    root = pkgdir(@__MODULE__)
+    if root === nothing
+        throw(ErrorException(
+            "Cannot locate the MacroEconometricModels data directory " *
+            "(package path unavailable)",
+        ))
+    end
+    return joinpath(root, "data")
+end
 
 # Available datasets — maps name to (filename, type)
 const _EXAMPLE_DATASETS = Dict{Symbol, Tuple{String, Symbol}}(
     :fred_md => ("fred_md.toml", :timeseries),
     :fred_qd => ("fred_qd.toml", :timeseries),
-    :pwt     => ("pwt.toml",     :panel),
-    :ddcg    => ("ddcg.toml",    :panel),
-    :mpdta   => ("mpdta.toml",   :panel),
-    :wiot    => ("wiot.toml",    :io),
-    :nile    => ("nile.toml",    :timeseries),   # EV-13 (#421); shared with EV-37
-    :mroz    => ("mroz.toml",    :crosssection), # EV-18 (#426): Mroz (1987) labor supply
-    :gnp_hamilton => ("gnp_hamilton.toml", :timeseries), # EV-07 (#415): Hamilton (1989) GNP growth
-    :stackloss => ("stackloss.toml", :crosssection), # EV-40 (#448): Brownlee (1965) stack loss
-    :grunfeld => ("grunfeld.toml", :panel), # EV-35 (#443): Grunfeld (1958) 10-firm investment panel
-    :denmark => ("denmark.toml", :timeseries), # EV-38 (#446): Johansen & Juselius (1990) Danish money demand
-    :mp_shocks => ("mp_shocks.toml", :timeseries), # CF-20 (#400): US monetary panel + published policy-shock series
+    :pwt => ("pwt.toml", :panel),
+    :ddcg => ("ddcg.toml", :panel),
+    :mpdta => ("mpdta.toml", :panel),
+    :wiot => ("wiot.toml", :io),
+    :nile => ("nile.toml", :timeseries),  # EV-13 (#421); shared with EV-37
+    :mroz => ("mroz.toml", :crosssection),  # EV-18 (#426): Mroz (1987) labor supply
+    # EV-07 (#415): Hamilton (1989) GNP growth
+    :gnp_hamilton => ("gnp_hamilton.toml", :timeseries),
+    # EV-40 (#448): Brownlee (1965) stack loss
+    :stackloss => ("stackloss.toml", :crosssection),
+    # EV-35 (#443): Grunfeld (1958) 10-firm investment panel
+    :grunfeld => ("grunfeld.toml", :panel),
+    # EV-38 (#446): Johansen & Juselius (1990) Danish money demand
+    :denmark => ("denmark.toml", :timeseries),
+    # CF-20 (#400): US monetary panel + published policy-shock series
+    :mp_shocks => ("mp_shocks.toml", :timeseries),
 )
 
 # Parse frequency string to Frequency enum
@@ -47,36 +63,50 @@ end
 Load a built-in example dataset.
 
 # Available Datasets
-- `:fred_md` — FRED-MD Monthly Database, January 2026 vintage (126 variables × 804 months) → `TimeSeriesData`
-- `:fred_qd` — FRED-QD Quarterly Database, January 2026 vintage (245 variables × 268 quarters) → `TimeSeriesData`
-- `:pwt` — Penn World Table 10.01, 38 OECD countries (42 variables × 74 years, 1950–2023) → `PanelData`
-- `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
-- `:mpdta` — Callaway & Sant'Anna (2021) Minimum Wage Panel (3 variables × 2,500 obs, 500 counties × 5 years) → `PanelData`
-- `:wiot` — Hypothetical two-sector input-output table (Miller & Blair 2009, Table 2.3), with
-  `employment` and `CO2` satellite accounts attached → `IOData`. See [`IOData`](@ref).
-- `:nile` — Annual flow of the river Nile at Aswan, 1871–1970 (100 obs, 10^8 m^3) → `TimeSeriesData`
-- `:mroz` — Mroz (1987) female labor-supply extract (753 obs × 22 vars; `lwage`/`wage` are `NaN`
-  for the 325 non-participants) → `CrossSectionData`. Used for the Heckman selection model.
-- `:gnp_hamilton` — Hamilton (1989) US real GNP growth, 1951Q2–1984Q4 (135 obs, 100×quarterly
-  log-diff) → `TimeSeriesData`. The canonical Markov-switching AR business-cycle dataset.
-- `:stackloss` — Brownlee (1965) stack-loss plant data (21 obs × 4 vars: Air.Flow, Water.Temp,
-  Acid.Conc., stack.loss) → `CrossSectionData`. The canonical robust-regression outlier example.
-- `:grunfeld` — Grunfeld (1958) investment panel: 10 firms × 20 years (1935–1954), variables
-  `invest`, `value`, `capital` → `PanelData`. The canonical SUR/3SLS dataset; General Electric
-  and Westinghouse form the classic Zellner (1962) two-equation system.
-- `:denmark` — Johansen & Juselius (1990) Danish money demand, 1974Q1–1987Q3 (55 obs × 5 vars:
-  `LRM`, `LRY`, `LPY`, `IBO`, `IDE`) → `TimeSeriesData`. The canonical cointegration
-  money-demand dataset for VECM restriction testing (public domain; ships with R `urca`).
-- `:mp_shocks` — US quarterly monetary panel, 1960Q1–2019Q4 (240 obs × 8 vars), from the
-  McKay & Wolf (2023, ECMA) published data appendix → `TimeSeriesData`. Macro block:
-  `ygap` (HP-filtered log real GDP gap, %; from 1969Q1), `infl` (GDP-deflator inflation,
-  400×Δlog, %), `ffr` (federal funds rate, %), `lpcom` (log commodity prices). Shock block
-  (**`NaN` outside each series' published sample — NaN is NOT zero; zero is a valid shock
-  value**): `rr` (Romer–Romer narrative, Wieland–Yang update, 1969Q1–2007Q4), `mp1`
-  (Gertler–Karadi tight-window HF surprise, 1988Q4–2012Q2), `ad` (Aruoba–Drechsel, 1982Q4–2008Q3),
-  `bzk_ist` (Ben Zeev–Khan IST news — the McKay–Wolf baseline *non-policy* shock, through 2012Q1).
-  Raw units are kept; transformations (demeaning, filtering) belong in examples. Zero-filling
-  shock gaps is an estimation-time choice (the CMW IV-zero convention), not a data property.
+- `:fred_md` — FRED-MD Monthly Database, January 2026 vintage
+  (126 variables × 804 months) → `TimeSeriesData`
+- `:fred_qd` — FRED-QD Quarterly Database, January 2026 vintage
+  (245 variables × 268 quarters) → `TimeSeriesData`
+- `:pwt` — Penn World Table 10.01, 38 OECD countries
+  (42 variables × 74 years, 1950–2023) → `PanelData`
+- `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel
+  (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
+- `:mpdta` — Callaway & Sant'Anna (2021) Minimum Wage Panel
+  (3 variables × 2,500 obs, 500 counties × 5 years) → `PanelData`
+- `:wiot` — Hypothetical two-sector input-output table (Miller & Blair 2009,
+  Table 2.3), with `employment` and `CO2` satellite accounts attached → `IOData`.
+  See [`IOData`](@ref).
+- `:nile` — Annual flow of the river Nile at Aswan, 1871–1970
+  (100 obs, 10^8 m^3) → `TimeSeriesData`
+- `:mroz` — Mroz (1987) female labor-supply extract (753 obs × 22 vars;
+  `lwage`/`wage` are `NaN` for the 325 non-participants) → `CrossSectionData`.
+  Used for the Heckman selection model.
+- `:gnp_hamilton` — Hamilton (1989) US real GNP growth, 1951Q2–1984Q4
+  (135 obs, 100×quarterly log-diff) → `TimeSeriesData`. The canonical
+  Markov-switching AR business-cycle dataset.
+- `:stackloss` — Brownlee (1965) stack-loss plant data (21 obs × 4 vars:
+  Air.Flow, Water.Temp, Acid.Conc., stack.loss) → `CrossSectionData`.
+  The canonical robust-regression outlier example.
+- `:grunfeld` — Grunfeld (1958) investment panel: 10 firms × 20 years (1935–1954),
+  variables `invest`, `value`, `capital` → `PanelData`. The canonical SUR/3SLS
+  dataset; General Electric and Westinghouse form the classic Zellner (1962)
+  two-equation system.
+- `:denmark` — Johansen & Juselius (1990) Danish money demand, 1974Q1–1987Q3
+  (55 obs × 5 vars: `LRM`, `LRY`, `LPY`, `IBO`, `IDE`) → `TimeSeriesData`.
+  The canonical cointegration money-demand dataset for VECM restriction testing
+  (public domain; ships with R `urca`).
+- `:mp_shocks` — US quarterly monetary panel, 1960Q1–2019Q4 (240 obs × 8 vars),
+  from the McKay & Wolf (2023, ECMA) published data appendix → `TimeSeriesData`.
+  Macro block: `ygap` (HP-filtered log real GDP gap, %; from 1969Q1), `infl`
+  (GDP-deflator inflation, 400×Δlog, %), `ffr` (federal funds rate, %), `lpcom`
+  (log commodity prices). Shock block (**`NaN` outside each series' published
+  sample — NaN is NOT zero; zero is a valid shock value**): `rr` (Romer–Romer
+  narrative, Wieland–Yang update, 1969Q1–2007Q4), `mp1` (Gertler–Karadi
+  tight-window HF surprise, 1988Q4–2012Q2), `ad` (Aruoba–Drechsel, 1982Q4–2008Q3),
+  `bzk_ist` (Ben Zeev–Khan IST news — the McKay–Wolf baseline *non-policy* shock,
+  through 2012Q1). Raw units are kept; transformations (demeaning, filtering)
+  belong in examples. Zero-filling shock gaps is an estimation-time choice
+  (the CMW IV-zero convention), not a data property.
 
 For time series datasets, the returned `TimeSeriesData` includes variable names,
 transformation codes, frequency, per-variable descriptions (via `vardesc`),
@@ -117,20 +147,20 @@ function load_example(name::Symbol)
         "Unknown dataset :$name. Available: $(sort(collect(keys(_EXAMPLE_DATASETS))))"))
 
     filename, dtype = _EXAMPLE_DATASETS[name]
-    toml_file = joinpath(_DATA_DIR, filename)
+    toml_file = joinpath(_data_dir(), filename)
     isfile(toml_file) || throw(ErrorException(
         "Dataset file not found: $toml_file"))
 
     d = TOML.parsefile(toml_file)
 
     if dtype == :panel
-        _load_panel_example(d)
+        return _load_panel_example(d)
     elseif dtype == :io
-        _load_io_example(d)
+        return _load_io_example(d)
     elseif dtype == :crosssection
-        _load_crosssection_example(d)
+        return _load_crosssection_example(d)
     else
-        _load_timeseries_example(d)
+        return _load_timeseries_example(d)
     end
 end
 
@@ -140,7 +170,7 @@ function _toml_matrix(rows, r::Int, c::Int)
     for i in 1:r, j in 1:c
         M[i, j] = Float64(rows[i][j])
     end
-    M
+    return M
 end
 
 # Load an Input-Output example (:wiot). Builds an `IOData` with value added,
@@ -149,8 +179,8 @@ function _load_io_example(d::Dict)
     meta = d["metadata"]; dims = d["dims"]; flows = d["flows"]
     secs = String.(dims["sectors"])
     n = length(secs)
-    Z  = _toml_matrix(flows["Z"], n, n)
-    Y  = _toml_matrix(flows["Y"], n, length(dims["fd_cats"]))
+    Z = _toml_matrix(flows["Z"], n, n)
+    Y = _toml_matrix(flows["Y"], n, length(dims["fd_cats"]))
     va = _toml_matrix(flows["va"], length(dims["va_cats"]), n)
     io = IOData(Z, Y, va;
                 sectors=secs, regions=String.(dims["regions"]),
@@ -167,7 +197,7 @@ function _load_io_example(d::Dict)
             F, zeros(T, size(F, 1), size(io.Y, 2)), S,
             String.(ext["stressors"]), String.(ext["unit"]))
     end
-    io
+    return io
 end
 
 # Load a time series example (FRED-MD, FRED-QD)
@@ -196,13 +226,13 @@ function _load_timeseries_example(d::Dict)
     vardesc_dict = Dict{String,String}(String(k) => String(v) for (k, v) in descs)
     ds = get(meta, "desc", "")
 
-    TimeSeriesData(mat;
-                   varnames=varnames,
-                   frequency=freq,
-                   tcode=tcodes,
-                   desc=ds,
-                   vardesc=vardesc_dict,
-                   source_refs=sr)
+    return TimeSeriesData(mat;
+                          varnames=varnames,
+                          frequency=freq,
+                          tcode=tcodes,
+                          desc=ds,
+                          vardesc=vardesc_dict,
+                          source_refs=sr)
 end
 
 # Load a cross-sectional example (:mroz). Returns CrossSectionData; columns with
@@ -229,8 +259,8 @@ function _load_crosssection_example(d::Dict)
     vardesc_dict = Dict{String,String}(String(k) => String(v) for (k, v) in descs)
     ds = get(meta, "desc", "")
 
-    CrossSectionData(mat; varnames=varnames, desc=ds, vardesc=vardesc_dict,
-                     source_refs=sr)
+    return CrossSectionData(mat; varnames=varnames, desc=ds, vardesc=vardesc_dict,
+                            source_refs=sr)
 end
 
 # Load a panel example (Penn World Table)
@@ -276,8 +306,8 @@ function _load_panel_example(d::Dict)
     vardesc_dict = Dict{String,String}(String(k) => String(v) for (k, v) in descs)
     ds = get(meta, "desc", "")
 
-    PanelData{Float64}(mat, varnames, freq, ones(Int, n_vars),
-                        group_id, time_id, nothing, country_codes,
-                        n_countries, n_vars, n_total, true,
-                        [ds], vardesc_dict, sr)
+    return PanelData{Float64}(mat, varnames, freq, ones(Int, n_vars),
+                              group_id, time_id, nothing, country_codes,
+                              n_countries, n_vars, n_total, true,
+                              [ds], vardesc_dict, sr)
 end

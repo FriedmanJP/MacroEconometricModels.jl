@@ -143,13 +143,20 @@ Adding year effects absorbs the global technology trend that all countries share
 The **random effects** estimator treats entity effects as random draws from a distribution and uses GLS with the Swamy-Arora (1972) variance component estimator:
 
 ```math
-y_{it} - \hat{\theta} \bar{y}_i = (x_{it} - \hat{\theta} \bar{x}_i)' \beta + (1 - \hat{\theta}) \mu + \text{error}
+y_{it} - \hat{\theta} \bar{y}_i = (x_{it} - \hat{\theta} \bar{x}_i)' \beta + (1 - \hat{\theta}) \mu + v_{it}
 ```
 
 where:
+- ``y_{it}`` is the dependent variable for unit ``i`` at time ``t``
+- ``x_{it}`` is the regressor vector for unit ``i`` at time ``t``
+- ``\bar{y}_i`` and ``\bar{x}_i`` are entity-specific time averages
+- ``\beta`` is the GLS parameter vector
+- ``\mu`` is the overall model intercept
+- ``v_{it}`` is the homoskedastic quasi-demeaned disturbance term
 - ``\hat{\theta} = 1 - \sqrt{\hat{\sigma}_e^2 / (\hat{\sigma}_e^2 + T_i \hat{\sigma}_u^2)}`` is the quasi-demeaning parameter
-- ``\hat{\sigma}_e^2`` is from the within regression
-- ``\hat{\sigma}_u^2`` is from the between regression (Swamy-Arora 1972)
+- ``\hat{\sigma}_e^2`` is the idiosyncratic error variance estimated from the within regression
+- ``\hat{\sigma}_u^2`` is the individual effect variance estimated from the between regression (Swamy–Arora 1972)
+- ``T_i`` is the number of time periods observed for entity ``i``
 
 ```@example preg
 m_re = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:re)
@@ -166,6 +173,12 @@ The **first-difference** estimator removes entity effects by differencing consec
 \Delta y_{it} = \Delta x_{it}' \beta + \Delta e_{it}
 ```
 
+where:
+- ``\Delta y_{it} = y_{it} - y_{i,t-1}`` is the first-differenced outcome variable
+- ``\Delta x_{it} = x_{it} - x_{i,t-1}`` is the vector of first-differenced regressors
+- ``\beta`` is the parameter vector of interest
+- ``\Delta e_{it} = e_{it} - e_{i,t-1}`` is the first-differenced idiosyncratic error term
+
 ```@example preg
 m_fd = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:fd)
 report(m_fd)
@@ -181,6 +194,13 @@ The **between estimator** regresses entity means on entity-mean regressors:
 \bar{y}_i = \bar{x}_i' \beta + \bar{\alpha}_i + \bar{e}_i
 ```
 
+where:
+- ``\bar{y}_i = \frac{1}{T_i} \sum_{t=1}^{T_i} y_{it}`` is the individual-specific time average of the outcome
+- ``\bar{x}_i = \frac{1}{T_i} \sum_{t=1}^{T_i} x_{it}`` is the vector of individual-specific time averages of the regressors
+- ``\beta`` is the between-groups regression coefficient vector
+- ``\bar{\alpha}_i`` is the unobserved individual entity effect
+- ``\bar{e}_i = \frac{1}{T_i} \sum_{t=1}^{T_i} e_{it}`` is the averaged idiosyncratic disturbance term
+
 ```@example preg
 m_be = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:between, cov_type=:ols)
 report(m_be)
@@ -195,6 +215,15 @@ The **CRE** approach (Mundlak 1978) relaxes the RE exogeneity assumption by augm
 ```math
 y_{it} = x_{it}' \beta + \bar{x}_i' \gamma + \alpha_i + e_{it}
 ```
+
+where:
+- ``y_{it}`` is the outcome for entity ``i`` at time ``t``
+- ``x_{it}`` is the vector of time-varying regressors
+- ``\bar{x}_i`` is the vector of individual-specific time averages of ``x_{it}``
+- ``\beta`` is the within (fixed-effects) coefficient vector
+- ``\gamma`` captures the Mundlak correlation between entity effects and time averages
+- ``\alpha_i \sim \text{i.i.d.}(0, \sigma_\alpha^2)`` is the remaining random entity effect orthogonal to ``\bar{x}_i``
+- ``e_{it}`` is the idiosyncratic error term
 
 ```@example preg
 m_cre = estimate_xtreg(pd_pwt, :lngdppc, [:hc, :lnk]; model=:cre)
@@ -213,6 +242,12 @@ The `absorb` keyword removes any number of categorical fixed-effect dimensions b
 M = I - D(D'D)^{-}D'
 ```
 
+where:
+- ``M`` is the orthogonal projection matrix that sweeps out all absorbed fixed-effect dimensions
+- ``I`` is the ``n \times n`` identity matrix
+- ``D`` is the stacked dummy design matrix for all absorbed categorical dimensions
+- ``(D'D)^{-}`` is a generalized inverse of the cross-product matrix ``D'D``
+
 Forming ``D`` is impossible once the level counts are large — worker × firm, or firm × year × product. Alternating projections compute ``M v`` by cycling the single-dimension demeaning operators ``M_d = I - P_d``, each one O(n):
 
 ```math
@@ -220,8 +255,11 @@ v \leftarrow M_D \cdots M_2 M_1 v \qquad \text{(repeat until } v \text{ stops mo
 ```
 
 where:
-- ``P_d`` projects onto dimension ``d``'s dummy span, so ``M_d v`` subtracts each level's mean
-- ``M_d`` is an orthogonal projection, so by von Neumann–Halperin the cycle converges to the projection onto ``\bigcap_d \operatorname{range}(M_d) = \operatorname{range}(M)``
+- ``v`` is the variable vector being demeaned (dependent variable or regressor column)
+- ``M_d = I - P_d`` is the single-dimension demeaning operator for dimension ``d \in \{1, \ldots, D\}``
+- ``P_d`` projects onto dimension ``d``'s dummy span, subtracting level-specific means
+- ``D`` is the total number of absorbed categorical dimensions
+- Convergence follows by von Neumann–Halperin onto ``\bigcap_d \operatorname{range}(M_d) = \operatorname{range}(M)``
 
 OLS on the absorbed data is therefore the within-all-fixed-effects estimator, with no dummy ever materialized.
 

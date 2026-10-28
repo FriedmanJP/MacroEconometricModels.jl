@@ -16,12 +16,18 @@ TimeSeriesData, PanelData, CrossSectionData with constructors and accessors.
 """
     Frequency
 
-Data-frequency enum for [`TimeSeriesData`](@ref) / panel containers.
+Data-frequency enumeration for [`TimeSeriesData`](@ref) and [`PanelData`](@ref) containers.
+
+Used as informational metadata for dataset labeling, summary tables, and plot titles.
+Estimation routines and filter bandwidths remain explicitly parameterized.
 
 # Values
-- `Daily`, `Monthly`, `Quarterly`, `Yearly` — regular calendar frequencies
-- `Mixed` — mixed-frequency (e.g. monthly + quarterly in one container)
-- `Other` — unspecified / irregular
+- [`Daily`](@ref): Daily observation frequency (business days or calendar days)
+- [`Monthly`](@ref): Monthly observation frequency (e.g., FRED-MD)
+- [`Quarterly`](@ref): Quarterly observation frequency (e.g., FRED-QD)
+- [`Yearly`](@ref): Annual observation frequency (e.g., Penn World Table)
+- [`Mixed`](@ref): Mixed-frequency data combining series with different sampling intervals
+- [`Other`](@ref): Unspecified, irregular, or custom observation frequency (default)
 """
 @enum Frequency begin
     Daily
@@ -31,6 +37,68 @@ Data-frequency enum for [`TimeSeriesData`](@ref) / panel containers.
     Mixed
     Other
 end
+
+"""
+    Daily
+
+Daily observation frequency instance of [`Frequency`](@ref).
+
+Used for daily time series and panel datasets (e.g., business-day financial series or
+7-day calendar data).
+"""
+Daily
+
+"""
+    Monthly
+
+Monthly observation frequency instance of [`Frequency`](@ref).
+
+Used for monthly time series and panel datasets, such as the FRED-MD macroeconomic
+database loaded via [`load_example`](@ref)`(:fred_md)`.
+"""
+Monthly
+
+"""
+    Quarterly
+
+Quarterly observation frequency instance of [`Frequency`](@ref).
+
+Used for quarterly time series and panel datasets, such as the FRED-QD macroeconomic
+database loaded via [`load_example`](@ref)`(:fred_qd)`.
+"""
+Quarterly
+
+"""
+    Yearly
+
+Annual (yearly) observation frequency instance of [`Frequency`](@ref).
+
+Used for annual time series and panel datasets, such as the Penn World Table loaded
+via [`load_example`](@ref)`(:pwt)` or the Nile river flow series loaded via
+[`load_example`](@ref)`(:nile)`.
+"""
+Yearly
+
+"""
+    Mixed
+
+Mixed observation frequency instance of [`Frequency`](@ref).
+
+Used for datasets combining series observed at different sampling rates (e.g., monthly
+indicators paired with quarterly aggregates in mixed-frequency VARs or MIDAS regressions).
+"""
+Mixed
+
+"""
+    Other
+
+Unspecified, irregular, or custom observation frequency instance of [`Frequency`](@ref).
+
+Default frequency in [`TimeSeriesData`](@ref) and [`PanelData`](@ref) constructors when
+no explicit frequency is specified.
+"""
+Other
+
 
 # =============================================================================
 # TimeSeriesData

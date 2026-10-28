@@ -226,7 +226,13 @@ Both higher orders reduce to the same **generalized Sylvester equation** for the
 f_c \, X + f_f \, X \, \underbrace{(M \otimes M \otimes \cdots \otimes M)}_{d \text{ factors}} = -\text{RHS}
 ```
 
-where ``d`` is the perturbation order, ``M`` is the ``n_v \times n_v`` transition of the augmented innovation vector, and ``X`` is ``n \times n_v^d``.
+where:
+- ``X`` is the ``n \times n_v^d`` tensor of unknown perturbation coefficients (``f_{vv}`` at order 2, ``f_{vvv}`` at order 3)
+- ``d \in \{2, 3\}`` is the perturbation order
+- ``f_c, f_f`` are the Jacobian matrices with respect to current and forward-looking variables
+- ``M`` is the ``n_v \times n_v`` transition matrix of the augmented state-innovation vector
+- ``\otimes`` denotes the Kronecker product
+- ``\text{RHS}`` is the tensor of evaluated lower-order derivative contractions
 
 Vectorizing this gives an ``(n \cdot n_v^d)``-dimensional linear system. That is the direct reading of the equation, and it is unusable at scale: for a 35-variable model at order 3 the operator alone is 68 GB. The default solver instead uses the **generalized-Schur** method (Kamenik 2005), which decomposes once and back-substitutes through the resulting triangular structure:
 
@@ -383,7 +389,10 @@ The standard `fevd(psol, H)` uses the first-order decomposition from the underly
 \text{FEVD}_{i,j}^{\infty} = \frac{\text{Var}_j(y_i)}{\sum_{k=1}^{n_\varepsilon} \text{Var}_k(y_i)}
 ```
 
-where ``\text{Var}_j(y_i)`` is the unconditional variance of variable ``i`` attributable to shock ``j`` alone, computed from the restricted augmented system.
+where:
+- ``\text{FEVD}_{i,j}^{\infty}`` is the unconditional forecast error variance share of variable ``i`` attributable to shock ``j``
+- ``\text{Var}_j(y_i)`` is the unconditional variance of variable ``i`` driven by shock ``j`` alone, computed via the restricted augmented Lyapunov equation
+- ``n_\varepsilon`` is the total number of structural shocks
 
 ```@example dsge_nonlinear
 # Standard FEVD (first-order IRFs)
@@ -465,8 +474,15 @@ report(proj)
 For models with ``n_x > 4`` states, tensor grids become computationally infeasible. A tensor grid with degree 5 and 5 states requires ``6^5 = 7{,}776`` nodes; with 8 states, ``6^8 \approx 1.7 \times 10^6``. **Smolyak sparse grids** (Smolyak 1963; Judd, Maliar, Maliar & Valero 2014) select a subset of grid points that preserve polynomial exactness at a fraction of the cost. The `grid=:smolyak` option uses nested Clenshaw-Curtis points, where a level-``\ell`` dimension contributes ``2^\ell + 1`` points and polynomial degrees ``0, \dots, 2^\ell``. The isotropic selection rule admits the level multi-indices
 
 ```math
-\mathcal{A}_\mu = \{ \ell \in \mathbb{N}_0^{n_x} : |\ell|_1 \leq \mu \},
+\mathcal{A}_\mu = \bigl\{ \ell \in \mathbb{N}_0^{n_x} : |\ell|_1 \leq \mu \bigr\}
 ```
+
+where:
+- ``\mathcal{A}_\mu`` is the set of admissible multi-indices at Smolyak approximation level ``\mu``
+- ``\ell = (\ell_1, \dots, \ell_{n_x}) \in \mathbb{N}_0^{n_x}`` is the multi-index of 1D discretization levels
+- ``n_x`` is the number of continuous state variables
+- ``|\ell|_1 = \sum_{k=1}^{n_x} \ell_k`` is the ``\ell_1``-norm of the multi-index
+- ``\mu \in \mathbb{N}_0`` is the isotropic Smolyak grid level parameter (`smolyak_mu`)
 
 equivalently ``|\alpha|_1 \leq \mu + n_x`` for ``\alpha = \ell + 1``. The nodes and the polynomial basis come out of this one rule, so the collocation matrix is square and unisolvent by construction.
 
@@ -860,8 +876,15 @@ Consumption at the deterministic steady state is 2.754 from both PFI and colloca
 **Anderson acceleration** (Walker & Ni 2011) speeds convergence of fixed-point iterations by mixing the last ``m`` iterates. Given iterates ``x_k`` and residuals ``r_k = g(x_k) - x_k``, the method solves:
 
 ```math
-\min_{\alpha} \left\| \sum_{i=1}^{m} \alpha_i \, r_i \right\|^2 \quad \text{s.t.} \quad \sum_{i=1}^{m} \alpha_i = 1
+\min_{\alpha} \; \left\| \sum_{i=1}^{m} \alpha_i \, r_i \right\|^2 \quad \text{s.t.} \quad \sum_{i=1}^{m} \alpha_i = 1
 ```
+
+where:
+- ``\alpha = (\alpha_1, \dots, \alpha_m)'`` is the vector of mixing weights
+- ``r_i = g(x_i) - x_i`` is the fixed-point residual vector from the ``i``-th stored iterate
+- ``x_i`` is the ``i``-th iterate vector of vectorized Chebyshev policy coefficients
+- ``m`` is the Anderson acceleration memory depth (`anderson_m`)
+- ``\|\cdot\|`` denotes the standard Euclidean vector norm
 
 and returns the mixed iterate ``x_{\text{new}} = \sum_{i} \alpha_i (x_i + r_i)``. The depth parameter ``m`` controls how many previous iterates are used. Larger ``m`` captures more history but increases the linear algebra cost. In practice, ``m = 3``--``5`` works well.
 
@@ -943,6 +966,14 @@ At order ≥ 2, the unconditional distribution is no longer Gaussian and certain
 z_t = \begin{bmatrix} x^f_t \\ x^s_t \\ \text{vec}(x^f_t \otimes x^f_t) \end{bmatrix} \in \mathbb{R}^{2n_x + n_x^2}
 ```
 
+where:
+- ``z_t`` is the ``(2n_x + n_x^2) \times 1`` augmented state vector
+- ``x^f_t`` is the ``n_x \times 1`` first-order pruned state component
+- ``x^s_t`` is the ``n_x \times 1`` second-order pruned state correction
+- ``\text{vec}(\cdot)`` is the matrix vectorization operator
+- ``\otimes`` denotes the Kronecker product
+- ``n_x`` is the number of continuous state variables
+
 The augmented system is linear: ``z_{t+1} = A \, z_t + c + u_t``, where ``A`` contains the pruned dynamics and ``c`` captures the stochastic steady-state correction ``\frac{1}{2} h_{\sigma\sigma}``. Unconditional moments follow from the augmented Lyapunov equation ``\text{Var}(z) = A \, \text{Var}(z) \, A' + \text{Var}(u)``, solved via iterative doubling.
 
 The `:gmm` format returns mean shifts and product moments suitable for higher-order GMM estimation:
@@ -973,13 +1004,25 @@ This package takes a shorter route to the same quantities. Expanding each block 
 \xi_t = \Xi(\varepsilon_t) \, \tilde{z}_{t-1}
 ```
 
+where:
+- ``\xi_t`` is the innovation vector to the order-3 augmented state transition
+- ``\Xi(\varepsilon_t)`` is the matrix-valued polynomial in structural shocks ``\varepsilon_t``
+- ``\tilde{z}_{t-1} = [1; \, z_{t-1}]`` is the affine-extended lagged augmented state vector
+
 and because ``\varepsilon \perp z``,
 
 ```math
-\text{Var}(\xi) = E_\varepsilon\!\left[\Xi(\varepsilon) \, E[\tilde{z}\tilde{z}'] \, \Xi(\varepsilon)'\right],
+\text{Var}(\xi) = \mathbb{E}_\varepsilon\!\left[\Xi(\varepsilon) \, \mathbb{E}[\tilde{z}\tilde{z}'] \, \Xi(\varepsilon)'\right],
 \qquad
-\text{Cov}(\xi_t, z_{t-1}) = E_\varepsilon[\Xi(\varepsilon)] \, \text{Cov}(\tilde{z}, z)
+\text{Cov}(\xi_t, z_{t-1}) = \mathbb{E}_\varepsilon[\Xi(\varepsilon)] \, \text{Cov}(\tilde{z}, z)
 ```
+
+where:
+- ``\text{Var}(\xi)`` is the covariance matrix of the augmented order-3 innovation vector
+- ``\text{Cov}(\xi_t, z_{t-1})`` is the cross-covariance between current innovation and lagged state
+- ``\mathbb{E}_\varepsilon[\cdot]`` denotes expectation over Gaussian shocks evaluated via 4-node Gauss-Hermite tensor quadrature
+- ``\Xi(\varepsilon)`` is the shock-dependent polynomial coefficient matrix
+- ``\tilde{z}`` is the affine-extended state vector ``[1; \, z]``
 
 Both expectations integrate a polynomial of degree ``\le 6`` in ``\varepsilon``, which a **4-node Gauss-Hermite tensor rule evaluates exactly** (an ``m``-node rule is exact through degree ``2m-1 = 7``). Since ``\text{Var}(\xi)`` depends on ``\text{Var}(z)``, the two are solved as a fixed point alongside the Lyapunov equation.
 

@@ -208,6 +208,12 @@ The Phillips-Perron (PP) test (Phillips & Perron 1988) is the non-parametric cou
 y_t = \alpha + \rho y_{t-1} + u_t
 ```
 
+where:
+- ``y_t`` is the observed time series at period ``t``
+- ``\alpha`` is a deterministic constant
+- ``\rho`` is the first-order autoregressive persistence coefficient
+- ``u_t`` is the disturbance term
+
 and corrects the resulting ``t``-ratio for serial correlation and heteroskedasticity after the fact. The corrected statistic is
 
 ```math
@@ -265,12 +271,16 @@ Three specifications control which deterministic terms may break. All three carr
 \Delta y_t = \alpha + \beta t + \theta DU_t + \gamma y_{t-1} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
 ```
 
-**Break in trend** (`:trend`): replace ``\theta DU_t`` with ``\phi DT_t``. **Break in both** (`:both`): include both dummies. In each case:
+where:
+- ``\Delta y_t = y_t - y_{t-1}`` is the first difference of the observed series
+- ``\alpha`` is an intercept and ``\beta t`` is a deterministic linear time trend
+- ``\theta DU_t`` is the intercept break term with ``DU_t = \mathbf{1}(t \geq T_B)``
+- ``\gamma`` is the autoregressive persistence parameter tested under ``H_0: \gamma = 0``
+- ``\delta_j`` are augmentation coefficients eliminating serial correlation over lag order ``p``
+- ``T_B`` is the candidate break date chosen to minimize the ``t``-statistic on ``\gamma``
+- ``\varepsilon_t`` is the white-noise disturbance term
 
-- ``DU_t = \mathbf{1}(t \geq T_B)`` is the level shift dummy
-- ``DT_t = (t - T_B + 1) \cdot \mathbf{1}(t \geq T_B)`` is the trend shift dummy
-- ``T_B`` is the break date, chosen to minimize the ``t``-statistic on ``\gamma``
-- the trimming parameter excludes the first and last `trim` fraction of the sample from the search
+**Break in trend** (`:trend`): replace ``\theta DU_t`` with ``\phi DT_t``, where ``DT_t = (t - T_B + 1) \cdot \mathbf{1}(t \geq T_B)``. **Break in both** (`:both`): include both dummies. In each case the trimming parameter excludes the first and last `trim` fraction of the sample from the search.
 
 !!! note "Innovational and additive outliers"
     `outlier=:io` (the default) puts the break dummies directly in the ADF regression, so the level shift propagates through the dynamics. `outlier=:ao` instead detrends ``y`` on the deterministics and break dummies first, then runs an ADF regression on the residuals with a pulse dummy at ``T_B`` and its lags. Use `:io` when the shift is transmitted gradually and `:ao` when it is a one-off jump in the level.
@@ -441,11 +451,22 @@ The procedure tests the rank of ``\Pi`` with two likelihood ratio statistics bui
 \lambda_{\text{trace}}(r) = -T \sum_{i=r+1}^{n} \ln(1 - \hat{\lambda}_i)
 ```
 
+where:
+- ``T`` is the effective sample size
+- ``\hat{\lambda}_i`` are the ordered squared canonical correlations (eigenvalues)
+- ``n`` is the number of endogenous variables in the system
+- ``r`` is the cointegrating rank under the null hypothesis
+
 **Maximum eigenvalue test** — ``H_0: \text{rank}(\Pi) = r`` against ``H_1: \text{rank}(\Pi) = r + 1``:
 
 ```math
 \lambda_{\max}(r) = -T \ln(1 - \hat{\lambda}_{r+1})
 ```
+
+where:
+- ``T`` is the effective sample size
+- ``\hat{\lambda}_{r+1}`` is the ``(r+1)``-th ordered eigenvalue
+- ``r`` is the cointegrating rank under the null hypothesis
 
 !!! note "Deterministic cases and p-values"
     The `deterministic` keyword selects among Johansen's (1995) cases. `:constant` is Case 2: the intercept is restricted to the cointegrating space, so it enters ``\Pi y_{t-1}`` but not the short-run dynamics, ruling out linear trends in levels. `:trend` is Case 4: a linear trend is restricted to the cointegrating space and the constant is unrestricted, allowing linear trends in levels. Critical values are the Osterwald-Lenum (1992) tables for the matching case; p-values are the Doornik (1998) gamma approximation to the MacKinnon-Haug-Michelis (1999) asymptotic distributions. The two sources can disagree marginally near a critical value, and the reported `rank` follows the tabulated critical values.

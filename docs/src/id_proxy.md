@@ -76,15 +76,22 @@ The reduced-form residual satisfies ``u_t = B_0 \varepsilon_t``. An instrument `
 ```
 
 where:
-- ``\varepsilon_{1t}`` is the ``k \times 1`` vector of instrumented shocks
-- ``\Phi`` is a ``k \times k`` invertible relevance matrix
-- ``\varepsilon_{2t}`` holds the remaining ``n-k`` shocks
+- ``z_t`` is the ``k \times 1`` vector of external instruments (proxies) at time ``t``
+- ``\varepsilon_{1t}`` is the ``k \times 1`` vector of instrumented structural shocks
+- ``\Phi`` is a ``k \times k`` invertible instrument relevance matrix
+- ``\varepsilon_{2t}`` is the ``(n-k) \times 1`` vector of non-instrumented structural shocks
+- ``\mathbb{E}[\cdot]`` denotes the mathematical expectation operator
 
 Then ``\Sigma_{uz} = \mathbb{E}[u_t z_t'] = B_{01} \Phi'``, so the column space of ``B_{01}`` is identified. For ``k = 1`` the impact column is unique up to scale:
 
 ```math
 b_1 \propto \Sigma_{uz}
 ```
+
+where:
+- ``b_1`` is the ``n \times 1`` contemporaneous impact column vector of the instrumented shock (first column of ``B_0``)
+- ``\Sigma_{uz} = \mathbb{E}[u_t z_t']`` is the ``n \times 1`` covariance vector between reduced-form VAR residuals ``u_t`` and the external instrument ``z_t``
+- ``\propto`` denotes proportionality up to a scalar normalization factor (e.g. unit effect or unit variance)
 
 Stock & Watson (2018) **unit-variance** normalisation takes the QR of ``L^{-1} \Sigma_{uz}`` with ``L = \mathrm{chol}(\Sigma)``, yielding an orthogonal ``Q`` and ``B_0 = L Q``. **Unit-effect** normalisation rescales the identified column so a chosen variable (the federal funds rate in Recipe 1) moves by one unit on impact.
 
@@ -128,9 +135,12 @@ Mertens–Ravn **reliability** is the share of instrumented-shock variance captu
 ```
 
 where:
-- ``\Sigma_{uz} = \mathrm{Cov}(\hat u_t, z_t)`` is the ``n \times k`` residual–instrument covariance
-- ``\Sigma_z`` is the instrument covariance
-- ``k = 1`` reduces to ``\phi^2 / \mathrm{Var}(z_t)`` under unit-variance shocks
+- ``\mathcal{R}`` is the Mertens–Ravn reliability metric taking values in ``[0, 1]``
+- ``k`` is the number of external instruments / instrumented shocks
+- ``\Sigma_{uz} = \mathrm{Cov}(\hat u_t, z_t)`` is the ``n \times k`` sample residual–instrument covariance matrix
+- ``\Sigma = \mathrm{Cov}(\hat u_t)`` is the ``n \times n`` reduced-form residual covariance matrix
+- ``\Sigma_z = \mathrm{Cov}(z_t)`` is the ``k \times k`` instrument covariance matrix
+- ``\mathrm{tr}(\cdot)`` denotes the matrix trace operator (for ``k = 1``, this reduces to ``\phi^2 / \mathrm{Var}(z_t)`` under unit-variance shocks)
 
 ```@example proxy
 (F = round(proxy.first_stage_F, digits=1),

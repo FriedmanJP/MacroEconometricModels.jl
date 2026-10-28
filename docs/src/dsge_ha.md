@@ -90,21 +90,22 @@ The full model is assembled into a [`ModelSpec`](@ref) whose `agents` NamedTuple
 Households solve a consumption-savings problem with idiosyncratic income risk and a borrowing constraint:
 
 ```math
-V(a, e) = \max_{c, a'} \; u(c) + \beta \, \mathbb{E}\bigl[V(a', e') \mid e\bigr]
-```
-
-subject to:
-
-```math
-c + a' = (1 + r) \, a + w \, e, \qquad a' \geq \underline{a}
+\begin{aligned}
+V(a, e) &= \max_{c, a'} \; u(c) + \beta \, \mathbb{E}\bigl[V(a', e') \mid e\bigr] \\[6pt]
+\text{s.t.} &\quad c + a' = (1 + r) \, a + w \, e, \qquad a' \geq \underline{a}
+\end{aligned}
 ```
 
 where:
-- ``a`` is individual asset holdings
-- ``e`` is idiosyncratic productivity (Markov chain)
-- ``r, w`` are aggregate prices (interest rate, wage)
-- ``\underline{a}`` is the borrowing constraint
-- ``\beta`` is the discount factor
+- ``V(a, e)`` is the household value function
+- ``c`` is individual consumption
+- ``a, a'`` are current and next-period asset holdings
+- ``\underline{a}`` is the borrowing constraint (`borrowing=...`)
+- ``e, e'`` are current and next-period idiosyncratic labor productivity states
+- ``r`` is the net real interest rate
+- ``w`` is the real wage rate
+- ``\beta`` is the subjective discount factor
+- ``u(\cdot)`` is the flow utility function (`CRRAUtility`)
 
 ### Endogenous Grid Method
 
@@ -251,6 +252,12 @@ Greenwood, Hercowitz & Huffman (1988) preferences put the disutility inside the 
 \psi n^{1/\varphi} = w e \qquad \Longrightarrow \qquad n(e) = \left(\frac{w e}{\psi}\right)^{\varphi}
 ```
 
+where:
+- ``n(e)`` is optimal labor hours as a function of idiosyncratic productivity ``e``
+- ``w`` is the real wage rate
+- ``\psi`` is the labor disutility scaling parameter
+- ``\varphi`` is the Frisch elasticity of labor supply
+
 Hours depend on the effective wage alone — not on consumption, not on assets. That makes GHH the tractable default: substituting hours out leaves an ordinary one-dimensional consumption-savings problem in the composite good ``x = c - v(n)``, with net labor income ``\tilde{y}(e) = w e n(e) - v(n(e))``. The EGM solves that problem unchanged and recovers ``c = x + v(n)`` at the end.
 
 ### Separable: with a wealth effect
@@ -260,6 +267,14 @@ Additively separable preferences ``u(c) - v(n)`` give
 ```math
 \psi n^{1/\varphi} = w e \, u'(c)
 ```
+
+where:
+- ``n`` is optimal labor hours
+- ``c`` is individual consumption
+- ``u'(c)`` is the marginal utility of consumption
+- ``w e`` is the effective idiosyncratic wage
+- ``\psi`` is the labor disutility parameter
+- ``\varphi`` is the Frisch elasticity of labor supply
 
 which couples hours to consumption: a richer household consumes more, values a marginal dollar less, and works less. On the unconstrained EGM branch this costs nothing — the Euler inversion delivers ``c`` first, so hours follow in closed form. At the borrowing constraint the two conditions must hold jointly, and `_egm_solve` runs a bracketed scalar root-find (``g(c) = c + \underline{a} - Ra - w e n(c)`` is strictly increasing, so the root is unique).
 
@@ -392,8 +407,14 @@ K^d(r) = \left(\frac{\alpha Z}{r+\delta}\right)^{1/(1-\alpha)} L
 ```
 
 where:
-- ``Z``, ``\alpha``, ``\delta`` are TFP, the capital share, and depreciation
-- ``L`` is an exogenous firm input (Aiyagari inelastic labor), or measured work-option efficiency when `labor=:measured`
+- ``Y`` is aggregate output
+- ``K, K^d`` are aggregate capital supply and capital demand
+- ``L`` is aggregate effective labor input (or measured work-option efficiency when `labor=:measured`)
+- ``Z`` is total factor productivity
+- ``\alpha`` is the capital share of production
+- ``\delta`` is the capital depreciation rate
+- ``r`` is the net real interest rate
+- ``w`` is the real wage rate
 - Excess supply ``A - K^d`` is increasing in ``r``, so the root is unique on a sign-changing bracket
 
 [`DCEGMFirm`](@ref) stores the technology. [`dcegm_capital_demand`](@ref) and [`dcegm_firm_wage`](@ref) invert the rental FOC:
@@ -526,11 +547,21 @@ The cross-sectional wealth distribution ``\Gamma(a, e)`` evolves according to th
 D_{t+1} = \Lambda \, D_t
 ```
 
-where ``\Lambda`` uses **lottery weights** to map off-grid savings back to grid points. If ``g(a_i, e_j)`` falls between ``a_k`` and ``a_{k+1}``, mass is split proportionally:
+where:
+- ``D_t`` is the vectorized joint wealth-productivity distribution at time ``t`` (size ``N_a N_e \times 1``)
+- ``\Lambda`` is the ``N_a N_e \times N_a N_e`` Markov transition matrix induced by household savings policies and productivity Markov transitions
+
+The matrix ``\Lambda`` uses **lottery weights** to map off-grid savings back to grid points. If ``g(a_i, e_j)`` falls between ``a_k`` and ``a_{k+1}``, mass is split proportionally:
 
 ```math
 \omega = \frac{a_{k+1} - g(a_i, e_j)}{a_{k+1} - a_k}
 ```
+
+where:
+- ``\omega \in [0, 1]`` is the lottery probability weight assigned to asset grid point ``a_k``
+- ``1 - \omega`` is the probability weight assigned to adjacent node ``a_{k+1}``
+- ``g(a_i, e_j)`` is the continuous optimal asset policy choice for state ``(a_i, e_j)``
+- ``a_k, a_{k+1}`` are adjacent asset grid points bracketing ``g(a_i, e_j)``
 
 The transition matrix is sparse --- each column has at most ``2 N_e`` nonzero entries. The **stationary distribution** ``D^*`` satisfies ``D^* = \Lambda D^*`` and is found via power iteration. The `compute_steady_state` function handles distribution tracking internally. The resulting `HASteadyState` stores the distribution:
 
@@ -676,6 +707,13 @@ The **Krusell-Smith (1998)** method approximates agents' forecasting rule with a
 \log K_{t+1} = b_0 + b_1 \log K_t + b_2 z_t
 ```
 
+where:
+- ``K_{t+1}, K_t`` are next-period and current aggregate capital stocks
+- ``b_0`` is the intercept of the perceived law of motion (PLM)
+- ``b_1`` is the persistence coefficient on log capital
+- ``b_2`` is the response coefficient to the aggregate technology shock
+- ``z_t`` is the aggregate technology shock at date ``t``
+
 The fitted PLM coefficients and simulated paths are returned in a [`KrusellSmithSolution`](@ref).
 
 The algorithm iterates between simulation (using the PLM to forecast prices) and regression (updating PLM coefficients via OLS). Convergence requires ``R^2 > 0.9999``, reflecting the near-sufficiency of the first moment plus the aggregate shock for forecasting. Including ``z`` is essential for the Den Haan (2010) accuracy test below: a ``z``-free PLM produces a degenerate, fluctuation-free simulated path.
@@ -721,11 +759,12 @@ Den Haan (2010) shows that the regression ``R^2`` and standard error are **inade
 \varepsilon_t = 100 \cdot \left| \log K_t^{\text{ref}} - \log K_t^{\text{PLM}} \right|
 ```
 
-Call [`den_haan_test`](@ref) on a [`KrusellSmithSolution`](@ref) to obtain the maximum and mean errors packaged in a [`DenHaanAccuracy`](@ref) result.
-
 where:
-- ``K_t^{\text{ref}}`` is the reference aggregate capital from the explicit distribution simulation
-- ``K_t^{\text{PLM}}`` is the PLM-only path, ``\log K_{t+1}^{\text{PLM}} = b_0 + b_1 \log K_t^{\text{PLM}} + b_2 z_t``
+- ``\varepsilon_t`` is the percentage tracking error at period ``t``
+- ``K_t^{\text{ref}}`` is reference aggregate capital from the full cross-sectional simulation
+- ``K_t^{\text{PLM}}`` is aggregate capital generated by the PLM-only simulation path, ``\log K_{t+1}^{\text{PLM}} = b_0 + b_1 \log K_t^{\text{PLM}} + b_2 z_t``
+
+Call [`den_haan_test`](@ref) on a [`KrusellSmithSolution`](@ref) to obtain the maximum and mean errors packaged in a [`DenHaanAccuracy`](@ref) result.
 
 The maximum and mean of ``\varepsilon_t`` (post burn-in) are the headline statistics; `den_haan_test` also reports the standard-deviation comparison.
 
@@ -774,22 +813,24 @@ One subtlety is load-bearing. The Krusell-Smith machinery prices the aggregate s
 The **two-asset HANK** model (Kaplan, Moll & Violante 2018) features households holding both liquid bonds ``b`` and illiquid equity ``a``, with a portfolio **adjustment cost** ``\chi(d, a)`` for accessing the illiquid asset:
 
 ```math
-V(b, a, e) = \max_{c, b', d} \; u(c) + \beta \, \mathbb{E}\bigl[V(b', a', e') \mid e\bigr]
-```
-
-subject to:
-```math
-c + b' + d + \chi(d, a) = (1 + r_b) \, b + w \, e + T
-```
-```math
-a' = (1 + r_a) \, a + d, \qquad b' \geq \underline{b}
+\begin{aligned}
+V(b, a, e) &= \max_{c, b', d} \; u(c) + \beta \, \mathbb{E}\bigl[V(b', a', e') \mid e\bigr] \\[6pt]
+\text{s.t.} &\quad c + b' + d + \chi(d, a) = (1 + r_b) \, b + w \, e + T \\
+&\quad a' = (1 + r_a) \, a + d, \qquad b' \geq \underline{b}
+\end{aligned}
 ```
 
 where:
-- ``b`` is liquid bonds, ``a`` is illiquid equity
-- ``d`` is the deposit/withdrawal from the illiquid account
-- ``\chi(d, a) = \tfrac{1}{2}\,(d/\bar a)^2\,\bar a`` is the convex adjustment cost the shipped example uses, with ``\bar a = \max(a, 0.01)`` flooring the deposit *rate* so it stays finite at ``a = 0``
-- ``r_b, r_a`` are liquid and illiquid returns
+- ``V(b, a, e)`` is the two-asset household value function
+- ``b, b'`` are current and next-period liquid bond balances (subject to borrowing floor ``\underline{b}``)
+- ``a, a'`` are current and next-period illiquid capital/equity holdings
+- ``c`` is consumption
+- ``d`` is the net deposit (or withdrawal) into the illiquid account
+- ``\chi(d, a) = \tfrac{1}{2}\,(d/\bar a)^2\,\bar a`` is the convex portfolio adjustment cost, with ``\bar a = \max(a, 0.01)``
+- ``r_b, r_a`` are liquid and illiquid real interest rates
+- ``w e`` is labor earnings (real wage ``w`` times idiosyncratic labor state ``e``)
+- ``T`` is net lump-sum government transfers
+- ``\beta`` is the subjective discount factor
 
 The cost is quadratic in the deposit rate and therefore smooth at ``d = 0``. The continuous-time module carries the Kaplan-Moll-Violante linear-plus-convex alternative, whose kink at zero generates a genuine inaction region — see [Continuous Time](@ref dsge_continuous).
 
@@ -928,7 +969,11 @@ Expanding ``H(U, Z) = 0`` to second order in the shock size gives the first-orde
 H_U \, dU^{(2)} + \tfrac{1}{2} D^2 H[v, v] = 0, \qquad v = (dU^{(1)}, dZ)
 ```
 
-where ``D^2 H[v, v]`` is the second-order sequence-space Jacobian tensor **contracted with the first-order solution path**. `ssj_irf(...; order=2)` evaluates that contraction from a central difference of two nonlinear DAG passes, so the ``T^3`` tensors --- ``2.7 \times 10^7`` entries per input pair at ``T = 300`` --- are never materialized. Because ``dU^{(2)}`` scales with the square of the shock size, the second-order solution collapses onto the first-order one as the shock shrinks.
+where:
+- ``H_U`` is the ``T \times T`` sequence-space Jacobian of market-clearing conditions with respect to endogenous inputs
+- ``dU^{(2)}`` is the second-order endogenous path correction vector
+- ``D^2 H[v, v]`` is the second-order directional derivative tensor contracted along direction ``v`` (evaluated via central differencing)
+- ``v = (dU^{(1)}, dZ)`` is the stacked direction vector of first-order endogenous responses and exogenous shock inputs
 
 ```@example dsge_ha
 dw = Dict(:w => [0.02 * 0.9^(t - 1) for t in 1:40])   # 2% AR(1) endowment shock
@@ -1247,6 +1292,12 @@ The reloaded steady state keeps the market-clearing residual and the aggregate c
     ```math
     \int a' d\mu - \int a \, d\mu = \int \max(a' - a_{\max}, 0) \, d\mu - \int \max(a_{\min} - a', 0) \, d\mu
     ```
+
+    where:
+    - ``\int a' d\mu`` is aggregate asset policy demand before grid clamping (`aggregates[:A_policy]`)
+    - ``\int a \, d\mu`` is aggregate asset holdings integrated under the stationary distribution (`aggregates[:K]`)
+    - ``a_{\min}, a_{\max}`` are the lower and upper bounds of the asset grid
+    - ``\mu`` is the stationary cross-sectional wealth distribution measure
 
     so a non-zero residual *is* truncation. Read `ha_grid_diagnostics(ss)` (or the **Grid Adequacy** panel that `report(ss)` prints) after every solve, and compare `aggregates[:K]` = ``\int a \, d\mu`` against `aggregates[:A_policy]` = ``\int a' d\mu``, which is what the sequence-space household block integrates. `compute_steady_state` warns by default; use `grid_check=:error` to make it fatal or `:none` to silence it.
 

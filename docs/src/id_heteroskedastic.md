@@ -201,7 +201,16 @@ The structural impact matrix is estimated by maximizing:
 \ell(B_0) = -\frac{1}{2} \sum_{t=1}^{T} \left[ n \ln(2\pi) + \sum_{j=1}^{n} \ln h_{j,t} + \sum_{j=1}^{n} \frac{\varepsilon_{j,t}^2}{h_{j,t}} \right] + T \ln|\det(B_0^{-1})|
 ```
 
-where ``\varepsilon_t = B_0^{-1} u_t`` and each ``h_{j,t}`` follows the GARCH recursion. The estimator alternates between two blocks: with ``B_0`` fixed it fits a GARCH(1,1) to each structural shock; with the conditional variances fixed it re-optimizes the ``n(n-1)/2`` Givens angles that generate ``B_0``. Since ``|\det Q| = 1``, only the weighted residual sum ``\sum_t \sum_j \varepsilon_{j,t}^2 / h_{j,t}`` varies in that second block.
+where:
+- ``\ell(B_0)`` is the concentrated Gaussian log-likelihood under GARCH heteroskedasticity
+- ``T`` is the sample size (number of observations)
+- ``n`` is the number of endogenous variables and structural shocks
+- ``B_0`` is the ``n \times n`` structural impact matrix
+- ``\varepsilon_{j,t}`` is structural shock ``j`` at time ``t``, satisfying ``\varepsilon_t = B_0^{-1} u_t``
+- ``u_t`` is the ``n \times 1`` vector of reduced-form VAR residuals
+- ``h_{j,t}`` is the conditional variance of shock ``j`` at time ``t`` following the GARCH(1,1) recursion
+
+The estimator alternates between two blocks: with ``B_0`` fixed it fits a GARCH(1,1) to each structural shock; with the conditional variances fixed it re-optimizes the ``n(n-1)/2`` Givens angles that generate ``B_0``. Since ``|\det Q| = 1``, only the weighted residual sum ``\sum_t \sum_j \varepsilon_{j,t}^2 / h_{j,t}`` varies in that second block.
 
 ```@example id_het
 garch = identify_garch(model)

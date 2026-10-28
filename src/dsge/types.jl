@@ -621,7 +621,8 @@ function Base.show(io::IO, sol::OccBinSolution{T}) where {T}
     _ss_table(io, sol.varnames, sol.steady_state)
 end
 
-report(sol::OccBinSolution) = show(stdout, sol)
+report(io::IO, sol::OccBinSolution) = show(io, sol)
+report(sol::OccBinSolution) = report(stdout, sol)
 
 """
     OccBinIRF{T}
@@ -660,7 +661,8 @@ function Base.show(io::IO, oirf::OccBinIRF{T}) where {T}
     )
 end
 
-report(oirf::OccBinIRF) = show(stdout, oirf)
+report(io::IO, oirf::OccBinIRF) = show(io, oirf)
+report(oirf::OccBinIRF) = report(stdout, oirf)
 
 # =============================================================================
 # Exception taxonomy for Bayesian DSGE solve/likelihood failures

@@ -114,14 +114,14 @@ report(m_smm)
 Given ``q`` moment conditions and ``k`` parameters (``q \geq k``), GMM chooses ``\theta`` to minimize the quadratic form
 
 ```math
-Q(\theta) = g(\theta)' \, W \, g(\theta),
-\qquad
-g(\theta) = \frac{1}{n} \sum_{i=1}^{n} g_i(\theta),
+Q(\theta) = g(\theta)' \, W \, g(\theta), \qquad g(\theta) = \frac{1}{n} \sum_{i=1}^{n} g_i(\theta),
 ```
 
 where:
+- ``Q(\theta)`` is the scalar GMM quadratic criterion function
+- ``\theta`` is the ``k \times 1`` vector of structural parameters
 - ``g(\theta)`` is the ``q \times 1`` vector of sample moment conditions
-- ``g_i(\theta)`` is the moment contribution of observation ``i``
+- ``g_i(\theta)`` is the ``q \times 1`` moment condition contribution of observation ``i``
 - ``W`` is a ``q \times q`` positive-definite weighting matrix
 - ``n`` is the number of observations
 
@@ -211,6 +211,16 @@ For an overidentified system (``q > k``) the J-statistic
 J = n \, g(\hat\theta)' \, \hat\Omega^{-1} \, g(\hat\theta) \; \xrightarrow{d} \; \chi^2(q - k)
 ```
 
+where:
+- ``J`` is Hansen's (1982) overidentification test statistic
+- ``n`` is the number of observations
+- ``\hat\theta`` is the ``k \times 1`` GMM parameter estimate
+- ``g(\hat\theta)`` is the ``q \times 1`` vector of sample moments evaluated at ``\hat\theta``
+- ``\hat\Omega`` is a consistent estimator of the ``q \times q`` asymptotic covariance matrix of the sample moments
+- ``q`` is the number of moment conditions
+- ``k`` is the number of estimated parameters (with ``q - k`` degrees of freedom)
+- ``\chi^2(q - k)`` is the chi-squared distribution with ``q - k`` degrees of freedom
+
 tests the joint validity of the moment conditions. A large p-value indicates the overidentifying restrictions are not rejected. `gmm_summary` collects the coefficient statistics and the J-test into a single NamedTuple:
 
 ```@example gmm
@@ -233,6 +243,16 @@ To compare non-nested moment specifications, `andrews_lu_mmsc` computes the Andr
 \text{MMSC}_{\text{HQIC}} = J - Q\,(q - k)\log\log n.
 ```
 
+where:
+- ``\text{MMSC}_{\text{BIC}}`` is the Andrews–Lu (2001) Bayesian model and moment selection criterion
+- ``\text{MMSC}_{\text{AIC}}`` is the Andrews–Lu Akaike model and moment selection criterion
+- ``\text{MMSC}_{\text{HQIC}}`` is the Andrews–Lu Hannan–Quinn model and moment selection criterion
+- ``J`` is the Hansen J-statistic of the estimated moment specification
+- ``q`` is the number of moment conditions
+- ``k`` is the number of estimated parameters
+- ``n`` is the number of observations
+- ``Q`` is the tuning constant for the HQIC penalty (set by `hq_criterion`, default `2.1`)
+
 ```@example gmm
 andrews_lu_mmsc(m_iv.J_stat, m_iv.n_moments, m_iv.n_params, m_iv.n_obs)
 ```
@@ -250,6 +270,12 @@ For linear IV models — including those inside [Panel VAR](@ref pvar_page) — 
 ```math
 \hat\beta = (S_{ZX}' \, W \, S_{ZX})^{-1} \, S_{ZX}' \, W \, S_{Zy}.
 ```
+
+where:
+- ``\hat\beta`` is the ``k \times 1`` closed-form linear GMM coefficient estimator
+- ``S_{ZX} = \sum_{i=1}^n Z_i' X_i`` is the ``q \times k`` instrument–regressor cross-product matrix
+- ``S_{Zy} = \sum_{i=1}^n Z_i' y_i`` is the ``q \times 1`` instrument–outcome cross-product vector
+- ``W`` is the ``q \times q`` positive-definite weighting matrix
 
 `linear_gmm_solve` implements this directly, and `gmm_sandwich_vcov` returns the robust one-step covariance ``V = (S_{ZX}'WS_{ZX})^{-1} S_{ZX}'W D_e W S_{ZX} (S_{ZX}'WS_{ZX})^{-1}``, where ``D_e = \sum_i (Z_i e_i)(Z_i e_i)'``:
 
@@ -278,6 +304,13 @@ When model moments have no closed form but the model can be simulated, SMM repla
 ```math
 Q(\theta) = \big(m_{\text{data}} - m_{\text{sim}}(\theta)\big)' \, W \, \big(m_{\text{data}} - m_{\text{sim}}(\theta)\big).
 ```
+
+where:
+- ``Q(\theta)`` is the scalar SMM quadratic criterion function
+- ``\theta`` is the ``k \times 1`` structural parameter vector
+- ``m_{\text{data}}`` is the ``q \times 1`` vector of empirical moments computed from observed data
+- ``m_{\text{sim}}(\theta)`` is the ``q \times 1`` vector of simulated moments evaluated at parameter ``\theta``
+- ``W`` is the ``q \times q`` positive-definite weighting matrix
 
 `estimate_smm` takes a `simulator_fn(theta, T_periods, burn; rng)` and a `moments_fn(data)`:
 

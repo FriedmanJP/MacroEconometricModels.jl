@@ -355,24 +355,6 @@ The pipeline separates three concerns that are easy to conflate. Fetching produc
 
 ---
 
-## API Reference
-
-```@docs
-list_io_sources
-download_io
-download_oecd
-download_wiod
-download_exiobase3
-download_eora26
-download_gloria
-io_file_digest
-parse_io
-parse_icio
-parse_wiod
-IOMetaData
-```
-
----
 
 ## References
 

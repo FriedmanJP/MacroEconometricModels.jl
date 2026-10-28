@@ -62,9 +62,13 @@ b = \sum_i A_x[i]\,x^{base}_i + \sum_k A_z[k]\,z^{base}_k - \text{wedge}
 ```
 
 where:
-- ``\Theta_x[i]`` is the ``H \times n_s`` causal-effect matrix of outcome ``i`` to the identified policy shocks
-- ``x^{base}_i`` is the baseline path of outcome ``i`` (the response to the non-policy shock being offset)
-- ``\nu^*`` is applied **once**, at date 0 — re-shocking period by period is the Sims–Zha exercise, which is *not* Lucas-robust; the oracle suite (`test_oracles.jl`, oracle 6) demonstrates the difference
+- ``\nu^*`` is the date-0 policy-shock vector enforcing the alternative rule (applied once, at date 0)
+- ``M`` is the stacked causal-effect mapping from policy shocks to rule implementation gaps
+- ``b`` is the baseline implementation discrepancy vector
+- ``\Theta_x[i], \Theta_z[k]`` are the ``H \times n_s`` causal-effect matrices of outcome ``i`` and instrument ``k`` to identified policy shocks
+- ``x^{base}_i, z^{base}_k`` are the baseline paths of outcome ``i`` and instrument ``k`` under the prevailing rule
+- ``A_x[i], A_z[k]`` are the alternative policy rule coefficient matrices on outcome ``i`` and instrument ``k``
+- ``\text{wedge}`` is the target wedge or autonomous intercept vector of the alternative rule
 
 With a **square** container (a model news menu, one column per announcement horizon) the solve is exact and the rule holds path-by-path (McKay–Wolf Proposition 1). With a **thin** empirical container it is a least-squares projection, and the implementation-error path ``M\nu^* + b`` is the honesty signal: `report(pc)` prints the enforceability verdict, and the plot appends an error panel whenever `rel_residual` exceeds the threshold.
 
@@ -140,25 +144,20 @@ plot_result(cm)
 
 A rule counterfactual on US data: identify a monetary shock in a small VAR on `load_example(:mp_shocks)`, extract the causal effects with uncertainty, and ask how the demand-driven component of the early 1980s would have evolved under NGDP targeting.
 
-```@setup cfmw2
-using MacroEconometricModels, Random
+```@example cfmw
 Random.seed!(7)
-```
-
-```@example cfmw2
 td = load_example(:mp_shocks)
-names = td.varnames
 rows = findall(t -> all(isfinite, td.data[t, 1:3]), 1:size(td.data, 1))
 Y = td.data[rows, 1:3]                       # ygap, infl, ffr (1969Q1–2007Q4)
 m = estimate_var(Y, 4)
 ir = irf(m, 24; ci_type=:bootstrap, reps=50, rng=MersenneTwister(2))
 Hc = 20
-ce = policy_causal_effects(ir, [3], [:ygap => 1, :infl => 2], [:ffr => 3]; H=Hc)
-base = baseline_path(ir, 1, [:ygap => 1, :infl => 2], [:ffr => 3]; H=Hc)
-pc = policy_counterfactual(base, ce, ngdp_rule(Hc; pi_var=:infl, y_var=:ygap,
-                                               outcomes=[:ygap, :infl],
-                                               instruments=[:ffr]))
-report(pc)
+ce_emp = policy_causal_effects(ir, [3], [:ygap => 1, :infl => 2], [:ffr => 3]; H=Hc)
+base_emp = baseline_path(ir, 1, [:ygap => 1, :infl => 2], [:ffr => 3]; H=Hc)
+pc_emp = policy_counterfactual(base_emp, ce_emp, ngdp_rule(Hc; pi_var=:infl, y_var=:ygap,
+                                                           outcomes=[:ygap, :infl],
+                                                           instruments=[:ffr]))
+report(pc_emp)
 ```
 
 A single identified shock cannot enforce an ``H``-period rule exactly — the report's relative residual quantifies how far the projection falls short, which is exactly the McKay–Wolf spanning discussion: transitory rule changes are nearly enforceable, persistent ones are not. The [`spanning_diagnostic`](@ref) on the [Model Bank & Diagnostics](@ref counterfactual_bank_page) page turns this observation into a formal comparison against a model-extrapolated menu.

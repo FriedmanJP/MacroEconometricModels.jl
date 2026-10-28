@@ -34,6 +34,7 @@ OccBinSolution
 OccBinIRF
 DeterminacyMap
 PrunedStateSpace
+KalmanSmootherResult
 report(::IO, ::DeterminacyMap{T}) where {T}
 report(::IO, ::PrunedStateSpace{T}) where {T}
 ```
@@ -97,6 +98,14 @@ irf(::OccBinSolution{T}, ::Int) where {T<:AbstractFloat}
 irf(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
 irf(::ModelSpec, ::Int)
 fevd(::BayesianDSGE{T}, ::Int) where {T<:AbstractFloat}
+```
+
+### DSGE Smoothers and Historical Decomposition
+
+```@docs
+historical_decomposition
+dsge_smoother
+dsge_particle_smoother
 ```
 
 ### State-Space Moments
@@ -208,7 +217,6 @@ to_spec
 has_kind
 agents_of
 HAGrid
-HAGrid()
 IncomeProcess
 IndividualProblem
 CRRAUtility
@@ -220,7 +228,6 @@ KrusellSmithSolution
 DenHaanAccuracy
 HAGridDiagnostics
 LaborSupply
-LaborSupply()
 ```
 
 ### Heterogeneous-Agent Solvers and Analysis

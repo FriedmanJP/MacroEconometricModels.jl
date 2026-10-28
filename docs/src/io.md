@@ -68,24 +68,23 @@ Classical analysis and environmental extensions share the Leontief inverse and a
 
 Every function on the child pages takes an `IOData`. The container holds four numeric blocks — the intermediate-flow matrix ``Z``, the final-demand matrix ``Y``, the value-added matrix ``V``, and gross output ``x`` — together with the labels that make them interpretable and any satellite accounts attached to them.
 
-The **row balance** states that each sector's gross output is fully absorbed, either as an intermediate input elsewhere or as final demand:
+The accounting structure rests on two fundamental balance conditions: the **row balance** (gross output equals intermediate absorption plus final demand) and the **column balance** (gross output equals intermediate outlays plus value added):
 
 ```math
-x_i = \sum_{j=1}^{n} Z_{ij} + \sum_{k=1}^{n_{fd}} Y_{ik}
-```
-
-The **column balance** states that each sector's gross output is fully paid out, either to its suppliers or to primary factors:
-
-```math
-x_j = \sum_{i=1}^{n} Z_{ij} + \sum_{v=1}^{n_{va}} V_{vj}
+\begin{aligned}
+x_i &= \sum_{j=1}^{n} Z_{ij} + \sum_{k=1}^{n_{fd}} Y_{ik} \quad \text{(row balance)} \\[6pt]
+x_j &= \sum_{i=1}^{n} Z_{ij} + \sum_{v=1}^{n_{va}} V_{vj} \quad \text{(column balance)}
+\end{aligned}
 ```
 
 where:
+- ``x_i`` (or ``x_j``) is the gross output of sector ``i`` (or ``j``)
 - ``Z_{ij}`` is the flow of sector ``i``'s output used as an intermediate input by sector ``j``
-- ``Y_{ik}`` is sector ``i``'s output delivered to final-demand category ``k``
-- ``V_{vj}`` is value-added category ``v`` paid by sector ``j``
-- ``x_i`` is gross output of sector ``i``
-- ``n`` is the number of sectors, ``n_{fd}`` the number of final-demand categories, ``n_{va}`` the number of value-added categories
+- ``Y_{ik}`` is the delivery of sector ``i``'s output to final-demand category ``k``
+- ``V_{vj}`` is the payment to primary value-added category ``v`` by sector ``j``
+- ``n`` is the number of producing sectors
+- ``n_{fd}`` is the number of final-demand categories
+- ``n_{va}`` is the number of primary value-added categories
 
 Summing either identity over all sectors gives the national accounting identity: total final demand equals total value added, and both equal GDP.
 
@@ -166,13 +165,6 @@ Agriculture buys 0.15 units of agricultural output and 0.20 units of manufacturi
 
 ---
 
-## API Reference
-
-```@docs
-IOData
-```
-
----
 
 ## References
 

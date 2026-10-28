@@ -92,8 +92,10 @@ Factors and loadings minimize the sum of squared idiosyncratic errors:
 ```
 
 where:
-- ``\lambda_i`` is the ``r \times 1`` loading vector for variable ``i``
-- ``F_t`` is the ``r \times 1`` factor vector at time ``t``
+- ``x_{it}`` is the observed value of variable ``i`` at time ``t``
+- ``\lambda_i`` is the ``r \times 1`` factor loading vector for variable ``i``
+- ``F_t`` is the ``r \times 1`` latent factor vector at time ``t``
+- ``N`` is the total number of series and ``T`` is the number of time periods
 
 subject to the normalization ``F'F/T = I_r``. The solution is the eigendecomposition of the sample covariance matrix: the first ``r`` eigenvectors scaled by ``\sqrt{\lambda}`` form the loadings, and the factors are the corresponding scores rescaled to unit variance.
 
@@ -143,11 +145,12 @@ IC_k(r) = \log \hat{\sigma}^2(r) + r \cdot g_k(N, T)
 ```
 
 where:
-- ``\hat{\sigma}^2(r) = \frac{1}{NT} \sum_{i,t} \hat{e}_{it}^2`` is the average squared residual with ``r`` factors
+- ``IC_k(r)`` is the Bai & Ng (2002) information criterion ``k \in \{1, 2, 3\}`` for ``r`` factors
+- ``\hat{\sigma}^2(r) = \frac{1}{NT} \sum_{i,t} \hat{e}_{it}^2`` is the average squared idiosyncratic residual
 - ``g_1(N, T) = \frac{N + T}{NT} \log\left(\frac{NT}{N+T}\right)`` is the IC1 penalty
 - ``g_2(N, T) = \frac{N + T}{NT} \log(C_{NT}^2)`` is the IC2 penalty
 - ``g_3(N, T) = \frac{\log(C_{NT}^2)}{C_{NT}^2}`` is the IC3 penalty
-- ``C_{NT}^2 = \min(N, T)``
+- ``C_{NT}^2 = \min(N, T)`` is the dimensional convergence rate
 
 The selected ``\hat{r}`` minimizes ``IC_k(r)`` over ``r \in \{1, \ldots, r_{\max}\}``. All three criteria are consistent as ``N, T \to \infty``; IC2 performs best in the Bai & Ng Monte Carlo designs.
 
@@ -182,7 +185,9 @@ R^2_i = 1 - \frac{\sum_t \hat{e}_{it}^2}{\sum_t (x_{it} - \bar{x}_i)^2}
 ```
 
 where:
-- ``\hat{e}_{it} = x_{it} - \hat{\lambda}_i' \hat{F}_t`` is the idiosyncratic residual for variable ``i``
+- ``R^2_i`` is the fraction of variance in series ``i`` explained by the common factors
+- ``x_{it}`` is the observed series value at time ``t``
+- ``\hat{e}_{it} = x_{it} - \hat{\lambda}_i' \hat{F}_t`` is the idiosyncratic residual
 - ``\bar{x}_i`` is the sample mean of variable ``i``
 
 Series with high ``R^2`` are driven by aggregate forces and carry information about the factors; series with low ``R^2`` are dominated by idiosyncratic shocks and contribute little to factor extraction.
@@ -231,6 +236,12 @@ The dynamic factor model (DFM) adds explicit VAR dynamics for the latent factors
 X_t = \Lambda F_t + e_t
 ```
 
+where:
+- ``X_t`` is the ``N \times 1`` vector of panel observables at time ``t``
+- ``F_t`` is the ``r \times 1`` vector of latent common factors
+- ``\Lambda`` is the ``N \times r`` factor loading matrix
+- ``e_t \sim N(0, \Sigma_e)`` is the ``N \times 1`` idiosyncratic error vector with diagonal covariance
+
 **State equation**:
 
 ```math
@@ -238,12 +249,10 @@ F_t = A_1 F_{t-1} + A_2 F_{t-2} + \cdots + A_p F_{t-p} + \eta_t
 ```
 
 where:
-- ``X_t`` is the ``N \times 1`` vector of observables at time ``t``
-- ``F_t`` is the ``r \times 1`` vector of latent factors
-- ``\Lambda`` is the ``N \times r`` loading matrix
-- ``A_1, \ldots, A_p`` are ``r \times r`` autoregressive coefficient matrices
-- ``\eta_t \sim N(0, \Sigma_\eta)`` are factor innovations
-- ``e_t \sim N(0, \Sigma_e)`` are idiosyncratic errors, diagonal by default
+- ``F_t`` is the ``r \times 1`` vector of latent factors at time ``t``
+- ``A_1, \ldots, A_p`` are the ``r \times r`` autoregressive transition matrices
+- ``\eta_t \sim N(0, \Sigma_\eta)`` is the ``r \times 1`` factor innovation vector
+- ``p`` is the autoregressive lag order of the factor dynamics
 
 **Two-step estimation** extracts the factors by PCA and fits a VAR on them (Stock & Watson 2002a). **EM estimation** iterates a Kalman smoother (E-step) against closed-form parameter updates (M-step), starting from the two-step estimate, and delivers the quasi-maximum-likelihood estimator of Doz, Giannone & Reichlin (2012).
 
@@ -334,8 +343,9 @@ Factor forecasts extrapolate the factor VAR forward and project the result onto 
 ```
 
 where:
-- ``\hat{F}_{T+h|T}`` is the ``h``-step-ahead factor forecast given information at ``T``
+- ``\hat{F}_{T+h|T}`` is the ``h``-step-ahead factor forecast given information at time ``T``
 - ``\hat{A}_1, \ldots, \hat{A}_p`` are the estimated factor VAR coefficient matrices
+- ``p`` is the factor VAR lag order
 
 Observable forecasts follow from the loadings:
 
@@ -344,8 +354,9 @@ Observable forecasts follow from the loadings:
 ```
 
 where:
-- ``\hat{X}_{T+h|T}`` is the ``N \times 1`` vector of observable forecasts
-- ``\hat{\Lambda}`` is the ``N \times r`` estimated loading matrix
+- ``\hat{X}_{T+h|T}`` is the ``N \times 1`` vector of observable forecasts at horizon ``h``
+- ``\hat{\Lambda}`` is the estimated ``N \times r`` loading matrix
+- ``\hat{F}_{T+h|T}`` is the ``h``-step-ahead factor forecast vector
 
 Theoretical intervals compute the ``h``-step forecast error covariance analytically from the VMA(``\infty``) representation:
 
@@ -354,10 +365,11 @@ Theoretical intervals compute the ``h``-step forecast error covariance analytica
 ```
 
 where:
+- ``\text{MSE}_h`` is the ``h``-step forecast error covariance matrix
 - ``\Psi_j = J C^j`` are the VMA coefficient matrices from the companion form
 - ``C`` is the companion matrix of the factor VAR
-- ``J`` selects the first ``r`` rows
-- ``\Sigma_\eta`` is the factor innovation covariance
+- ``J`` is the selection matrix picking the first ``r`` rows
+- ``\Sigma_\eta`` is the factor innovation covariance matrix
 
 | `ci_method` | Description | Available for | Best for |
 |-------------|-------------|---------------|----------|
@@ -419,8 +431,9 @@ x_{it} = \chi_{it} + \xi_{it}
 ```
 
 where:
-- ``\chi_{it}`` is the **common component**, driven by ``q`` common shocks
-- ``\xi_{it}`` is the **idiosyncratic component**
+- ``x_{it}`` is the observed variable ``i`` at time ``t``
+- ``\chi_{it}`` is the common component driven by ``q`` dynamic factors
+- ``\xi_{it}`` is the idiosyncratic component
 
 The common component has the dynamic representation:
 
@@ -429,9 +442,11 @@ The common component has the dynamic representation:
 ```
 
 where:
-- ``b_{ij}(L)`` are square-summable lag polynomial filters
-- ``u_{jt}`` are orthonormal white-noise common shocks
+- ``\chi_{it}`` is the common component of variable ``i`` at time ``t``
+- ``b_{ij}(L) = \sum_{k=0}^{\infty} b_{ij,k} L^k`` are square-summable lag polynomial filters
+- ``u_{jt}`` are orthonormal white-noise common shocks satisfying ``E[u_{jt} u_{ls}] = \delta_{jl}\delta_{ts}``
 - ``q`` is the number of dynamic factors
+- ``L`` is the lag operator
 
 In the frequency domain the spectral density splits as ``\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)``. Common factors produce eigenvalues that **diverge** with ``N`` while idiosyncratic components produce **bounded** ones, and that separation identifies the factor space without any finite-order restriction on factor dynamics.
 
@@ -541,6 +556,13 @@ The two-sided projector cannot be used for forecasting: it looks into the future
 \hat\chi_{T+h|T} = \hat\Gamma_\chi(h)\, Z\, (Z'\hat\Gamma_X(0) Z)^{-1} Z' X_T.
 ```
 
+where:
+- ``\hat\chi_{T+h|T}`` is the ``h``-step-ahead forecast of the common component vector
+- ``\hat\Gamma_\chi(h)`` is the lag-``h`` autocovariance matrix of the common components
+- ``Z`` is the projection matrix spanning the leading generalized principal components
+- ``\hat\Gamma_X(0)`` is the contemporaneous covariance matrix of the panel observables
+- ``X_T`` is the observed panel data vector at forecast origin ``T``
+
 `forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path. `method=:ar` is the older AR(1) recursion on the two-sided factors. `:spectral` is no longer a silent alias for `:ar`.
 
 ```@example factor
@@ -574,8 +596,12 @@ x_{it} = \lambda_i' F_t + e_{it}, \quad \lambda_{ij} = 0 \text{ if variable } i 
 ```
 
 where:
+- ``x_{it}`` is the observed series ``i`` at time ``t``
+- ``F_t`` is the ``r \times 1`` vector of block factors
+- ``\lambda_i`` is the ``r \times 1`` factor loading vector for variable ``i``
 - ``\lambda_{ij}`` is the loading of variable ``i`` on factor ``j``
-- the zero restriction applies whenever variable ``i`` is outside block ``j``
+- ``e_{it}`` is the idiosyncratic error term
+- the zero restriction ``\lambda_{ij} = 0`` applies whenever variable ``i`` is outside block ``j``
 
 !!! note "Technical Note"
     Each block factor is initialized by the leading eigenvector of its own block covariance. EM then alternates ``F = X \Lambda (\Lambda'\Lambda)^{-1}`` (E-step) with ``\Lambda = \left[(F'F)^{-1} F'X\right]' \odot R`` (M-step), where ``R`` is the ``N \times r`` 0/1 mask. Iteration stops when the largest absolute change in ``\Lambda`` falls below ``10^{-6}``, or after 500 sweeps. Validation requires exactly ``r`` blocks, no shared indices, and at least 2 variables per block.
@@ -612,11 +638,15 @@ X_t = \Lambda F_t + \xi_t, \qquad A(L) F_t = K \varepsilon_t, \qquad C(L) = \Lam
 ```
 
 where:
+- ``X_t`` is the ``N \times 1`` observable panel vector at time ``t``
 - ``F_t`` is the ``r \times 1`` vector of static factors (``r \ge q``)
-- ``\Lambda`` is the ``N \times r`` loading matrix
-- ``K`` is ``r \times q``, from the leading ``q`` eigenvectors of the factor-VAR residual covariance
-- ``H`` is the ``q \times q`` identification rotation (Cholesky on `order`, or sign restrictions)
-- ``\varepsilon_t`` are the ``q`` orthonormal common shocks
+- ``\Lambda`` is the ``N \times r`` static loading matrix
+- ``\xi_t`` is the idiosyncratic error vector
+- ``A(L) = I - A_1 L - \cdots - A_p L^p`` is the factor VAR lag polynomial
+- ``K`` is the ``r \times q`` matrix from the leading ``q`` eigenvectors of the factor-VAR residual covariance
+- ``\varepsilon_t`` is the ``q \times 1`` vector of orthonormal common shocks
+- ``H`` is the ``q \times q`` orthogonal structural identification matrix
+- ``C(L)`` is the structural impulse-response lag polynomial mapping structural shocks to observables
 
 Panel IRFs are ``\Lambda \Psi_h K H``, with ``\Psi_h`` the reduced-form MA of the factor VAR. `r` vs `q`: ``q`` is the number of primitive shocks; ``r`` stacks those shocks and their lags so variables that load on ``F_{t-1}`` are not misspecified. The two-sided `method=:gdfm_var` path uses the ``q`` GDFM factors directly and is kept for reproducibility.
 
@@ -852,8 +882,11 @@ Under the assumptions of Bai & Ng (2002) and Bai (2003), principal components co
 
 where:
 - ``\hat{F}_t`` is the estimated factor vector at time ``t``
-- ``F_t`` is the true factor vector
+- ``F_t`` is the true latent factor vector
 - ``H`` is the ``r \times r`` rotation matrix that the estimator cannot pin down
+- ``T`` is the time-series sample size
+- ``N`` is the cross-sectional panel dimension
+- ``O_p`` denotes asymptotic stochastic boundedness
 
 For large ``N`` and ``T`` the factor estimates are asymptotically normal:
 
@@ -862,7 +895,11 @@ For large ``N`` and ``T`` the factor estimates are asymptotically normal:
 ```
 
 where:
-- ``V`` depends on the cross-sectional and temporal dependence of the idiosyncratic errors
+- ``\hat{F}_t`` is the estimated factor vector at time ``t``
+- ``F_t`` is the true latent factor vector
+- ``H`` is the asymptotic ``r \times r`` rotation matrix
+- ``T`` is the sample size
+- ``V`` is the asymptotic covariance matrix determined by the cross-sectional and temporal dependence of the idiosyncratic errors
 
 Consistency survives weak cross-sectional and temporal dependence in ``e_{it}``, which is what makes PCA usable on real macro panels where idiosyncratic errors are plainly correlated within sectors. The ``\min(N, T)`` rate carries a practical warning: a panel with long ``T`` but small ``N`` gains nothing from factor extraction, because the factors stay imprecisely estimated no matter how many periods are added. When ``\sqrt{T}/N \to 0`` fails, Bai & Ng (2006) show that factor-augmented regressions need a correction for the generated-regressor problem.
 
@@ -879,10 +916,12 @@ y_{t+h} = \alpha + \beta' \hat{F}_t + \gamma' y_{t:t-p} + \varepsilon_{t+h}
 ```
 
 where:
-- ``\alpha`` is the intercept
-- ``\beta`` is the ``r \times 1`` vector of factor coefficients
+- ``y_{t+h}`` is the scalar target variable at forecast horizon ``h``
+- ``\alpha`` is the regression intercept
+- ``\beta`` is the ``r \times 1`` vector of factor regression coefficients
 - ``\hat{F}_t`` is the ``r \times 1`` vector of estimated factors at time ``t``
-- ``\gamma`` collects the autoregressive coefficients on own lags of ``y``
+- ``\gamma`` is the vector of autoregressive coefficients on own lags of ``y``
+- ``y_{t:t-p} = (y_t, y_{t-1}, \ldots, y_{t-p})'`` is the vector of lagged target observations
 - ``\varepsilon_{t+h}`` is the forecast error
 
 Compressing a large panel into a few predictors is what makes this regression estimable at all, and Stock & Watson (2002b) document the resulting forecast gains over pure autoregressions.

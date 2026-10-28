@@ -123,9 +123,10 @@ F = \begin{bmatrix}
 
 where:
 - ``F`` is the ``p \times p`` companion matrix
-- ``\phi_i`` are the AR coefficients placed in the first row
+- ``\phi_1, \ldots, \phi_p`` are the autoregressive coefficients placed in the first row
+- ``p`` is the autoregressive order
 
-satisfy ``|\lambda_i(F)| < 1`` for all ``i``. The estimator checks this condition and truncates coefficients toward stationarity when initializing optimization.
+Stationarity requires that all eigenvalues ``\lambda_i(F)`` satisfy ``|\lambda_i(F)| < 1`` for all ``i = 1, \ldots, p``. The estimator checks this condition and truncates coefficients toward stationarity when initializing optimization.
 
 ### Estimation
 
@@ -241,10 +242,12 @@ The **ARMA(p,q) model** combines autoregressive and moving average components, p
 ```
 
 where:
-- ``\phi(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the autoregressive lag polynomial
-- ``\theta(L) = 1 + \theta_1 L + \cdots + \theta_q L^q`` is the moving average lag polynomial
+- ``y_t`` is the observed series at time ``t``
+- ``\phi(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the autoregressive lag polynomial of order ``p``
+- ``\theta(L) = 1 + \theta_1 L + \cdots + \theta_q L^q`` is the moving average lag polynomial of order ``q``
+- ``L`` is the lag operator defined by ``L^k y_t = y_{t-k}``
 - ``c`` is the intercept
-- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is white noise
+- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is a white noise innovation with variance ``\sigma^2``
 
 The process is stationary when all roots of ``\phi(z) = 0`` lie outside the unit circle, and invertible when all roots of ``\theta(z) = 0`` lie outside the unit circle.
 
@@ -295,9 +298,14 @@ The **ARIMA(p,d,q) model** extends ARMA to non-stationary series by applying ``d
 ```
 
 where:
+- ``y_t`` is the observed series at time ``t``
 - ``(1-L)^d y_t`` is the ``d``-th difference of ``y_t``
-- ``\phi(L)`` and ``\theta(L)`` are the AR and MA lag polynomials applied to the differenced series
-- ``d`` is the integration order
+- ``d`` is the integer integration order
+- ``\phi(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the autoregressive lag polynomial of order ``p``
+- ``\theta(L) = 1 + \theta_1 L + \cdots + \theta_q L^q`` is the moving average lag polynomial of order ``q``
+- ``L`` is the lag operator
+- ``c`` is the intercept
+- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is a white noise innovation with variance ``\sigma^2``
 
 Common cases:
 - ``d = 1``: ``\Delta y_t = y_t - y_{t-1}`` (first difference, for I(1) series)
@@ -351,11 +359,16 @@ Monthly and quarterly macro series carry seasonal dependence that a non-seasonal
 ```
 
 where:
-- ``\phi_p(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the non-seasonal AR polynomial
-- ``\Phi_P(L^s) = 1 - \Phi_1 L^s - \cdots - \Phi_P L^{Ps}`` is the seasonal AR polynomial
-- ``\theta_q(L)``, ``\Theta_Q(L^s)`` are the corresponding MA polynomials
-- ``s`` is the seasonal period (12 monthly, 4 quarterly)
-- ``d``, ``D`` are the regular and seasonal differencing orders
+- ``y_t`` is the observed series at time ``t``
+- ``\phi_p(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the non-seasonal autoregressive lag polynomial of order ``p``
+- ``\Phi_P(L^s) = 1 - \Phi_1 L^s - \cdots - \Phi_P L^{Ps}`` is the seasonal autoregressive lag polynomial of order ``P``
+- ``\theta_q(L) = 1 + \theta_1 L + \cdots + \theta_q L^q`` is the non-seasonal moving average lag polynomial of order ``q``
+- ``\Theta_Q(L^s) = 1 + \Theta_1 L^s + \cdots + \Theta_Q L^{Qs}`` is the seasonal moving average lag polynomial of order ``Q``
+- ``L`` is the lag operator
+- ``s`` is the seasonal period (e.g. 12 for monthly, 4 for quarterly)
+- ``d`` is the regular differencing order
+- ``D`` is the seasonal differencing order
+- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is a white noise innovation with variance ``\sigma^2``
 
 !!! note "Technical Note"
     The multiplicative structure is handled by **expanding** the two polynomial pairs into a single long ARMA — ``\phi_p(L)\Phi_P(L^s)`` has degree ``p + Ps`` — which the existing Kalman likelihood then evaluates unchanged. The expansion is what makes the model parsimonious: SARIMA(0,1,1)(0,1,1)₁₂ has two parameters but an MA of degree 13, with the lag-13 coefficient pinned to the product ``\theta_1\Theta_1`` rather than estimated freely.
@@ -451,19 +464,21 @@ For exact maximum likelihood estimation, the ARMA(p,q) model is cast into the st
 ### State-Space Representation
 
 ```math
-y_t = c + Z \, \alpha_t
-```
-
-```math
-\alpha_{t+1} = T \, \alpha_t + R \, \eta_t, \quad \eta_t \sim N(0, Q)
+\begin{aligned}
+y_t &= c + Z \, \alpha_t \\
+\alpha_{t+1} &= T \, \alpha_t + R \, \eta_t, \quad \eta_t \sim N(0, Q)
+\end{aligned}
 ```
 
 where:
-- ``\alpha_t = [a_t, a_{t-1}, \ldots, a_{t-r+1}]'`` is the ``r \times 1`` state vector with ``r = \max(p, q+1)``
+- ``y_t`` is the observed scalar series at time ``t``
+- ``c`` is the intercept
+- ``\alpha_t = [a_t, a_{t-1}, \ldots, a_{t-r+1}]'`` is the ``r \times 1`` latent state vector with state dimension ``r = \max(p, q+1)``
 - ``Z = [1, \theta_1, \ldots, \theta_{r-1}]`` is the ``1 \times r`` observation vector
-- ``T`` is the ``r \times r`` companion matrix with AR coefficients in the first row
-- ``R = [1, 0, \ldots, 0]'`` is the ``r \times 1`` selection vector
-- ``Q = [\sigma^2]`` is the scalar innovation variance
+- ``T`` is the ``r \times r`` companion transition matrix with AR coefficients in the first row
+- ``R = [1, 0, \ldots, 0]'`` is the ``r \times 1`` innovation selection vector
+- ``\eta_t`` is the scalar state innovation
+- ``Q = [\sigma^2]`` is the ``1 \times 1`` innovation covariance matrix with innovation variance ``\sigma^2``
 
 ### Prediction Error Decomposition
 
@@ -474,10 +489,15 @@ The Kalman filter computes the exact log-likelihood via the prediction error dec
 ```
 
 where:
-- ``v_t = y_t - \hat{y}_{t|t-1}`` is the one-step prediction error
-- ``f_t = Z P_{t|t-1} Z' + H`` is the prediction error variance
-- ``n`` is the number of observations
+- ``\ell(\Theta)`` is the Gaussian log-likelihood evaluated via the prediction error decomposition
 - ``\Theta = (\phi_1, \ldots, \phi_p, \theta_1, \ldots, \theta_q, \sigma^2)`` is the full parameter vector
+- ``n`` is the number of observations
+- ``v_t = y_t - \hat{y}_{t|t-1}`` is the one-step-ahead prediction error (innovation)
+- ``\hat{y}_{t|t-1} = c + Z \hat{\alpha}_{t|t-1}`` is the conditional forecast of ``y_t`` given information up to ``t-1``
+- ``f_t = Z P_{t|t-1} Z' + H`` is the conditional variance of the prediction error
+- ``P_{t|t-1}`` is the conditional covariance matrix of the state vector
+- ``Z`` is the observation matrix
+- ``H`` is the observation noise variance (zero for exact ARMA state space representations)
 
 !!! note "Technical Note"
     Initialization uses the unconditional (stationary) distribution ``P_0 = \text{dlyap}(T, RQR')`` when the system is stable. For non-stationary parameters the filter falls back to diffuse initialization (``P_0 = 10^6 I``). The variance parameter ``\sigma^2`` is optimized on the log scale for unconstrained optimization via L-BFGS.
@@ -497,9 +517,14 @@ The optimal ``h``-step ahead forecast minimizes mean squared error. For an ARMA(
 ```
 
 where:
-- ``\hat{y}_{T+k|T} = y_{T+k}`` for ``k \leq 0`` (known past values)
-- ``\hat{\varepsilon}_{T+k} = 0`` for ``k \geq 1`` (future residuals set to their expectation)
-- ``\hat{\varepsilon}_{T+k} = \varepsilon_{T+k}`` for ``k \leq 0`` (estimated past residuals)
+- ``\hat{y}_{T+h|T}`` is the ``h``-step-ahead point forecast formed at forecast origin ``T``
+- ``c`` is the intercept
+- ``\phi_i`` are the autoregressive coefficients of order ``p``
+- ``\theta_j`` are the moving average coefficients of order ``q``
+- ``h`` is the forecast horizon (``h \geq 1``)
+- ``\hat{y}_{T+k|T} = y_{T+k}`` for ``k \leq 0`` denotes known historical observations
+- ``\hat{\varepsilon}_{T+k} = 0`` for ``k \geq 1`` denotes future innovations set to their conditional expectation
+- ``\hat{\varepsilon}_{T+k} = \varepsilon_{T+k}`` for ``k \leq 0`` denotes estimated historical residuals
 
 ### Forecast Uncertainty
 
@@ -521,8 +546,11 @@ The ``h``-step ahead forecast variance is:
 ```
 
 where:
-- ``e_{T+h|T} = y_{T+h} - \hat{y}_{T+h|T}`` is the forecast error
+- ``\text{Var}(e_{T+h|T})`` is the conditional variance of the ``h``-step forecast error
+- ``e_{T+h|T} = y_{T+h} - \hat{y}_{T+h|T}`` is the ``h``-step forecast error
 - ``\sigma^2`` is the innovation variance
+- ``\psi_j`` are the MA(``\infty``) impulse-response weights
+- ``h`` is the forecast horizon
 
 Confidence intervals are symmetric Gaussian: ``\hat{y}_{T+h|T} \pm z_{\alpha/2} \cdot \text{se}_h``.
 
@@ -713,15 +741,30 @@ The ADF statistic of ``-5.48`` clears the 1% critical value of ``-3.49``, so CPI
 Standard ARIMA differencing is restricted to integer orders: a series is either I(0) or I(1). Many economic series --- inflation, realized volatility, interest-rate spreads --- exhibit *long memory*: an autocorrelation function that decays hyperbolically (``\rho(k) \sim k^{2d-1}``) rather than geometrically, too slowly for a stationary ARMA yet without a unit root. The **ARFIMA(p, d, q)** model of Granger, Joyeux, and Hosking captures this with a *fractional* integration order ``d \in (-0.5, 0.5)``:
 
 ```math
-\phi(L)\,(1-L)^d\,(y_t - \mu) = \theta(L)\,\varepsilon_t,
+\phi(L)\,(1-L)^d\,(y_t - \mu) = \theta(L)\,\varepsilon_t
 ```
 
-where the fractional-difference operator is defined by the binomial expansion
+where:
+- ``y_t`` is the observed time series at time ``t``
+- ``\mu`` is the unconditional mean of the process
+- ``d \in (-0.5, 0.5)`` is the fractional integration parameter
+- ``\phi(L) = 1 - \phi_1 L - \cdots - \phi_p L^p`` is the autoregressive lag polynomial of order ``p``
+- ``\theta(L) = 1 + \theta_1 L + \cdots + \theta_q L^q`` is the moving average lag polynomial of order ``q``
+- ``L`` is the lag operator
+- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is a white noise innovation with variance ``\sigma^2``
+
+The fractional-difference operator ``(1-L)^d`` is defined by the binomial expansion:
 
 ```math
 (1-L)^d = \sum_{k=0}^{\infty} \pi_k L^k, \qquad
-\pi_0 = 1,\quad \pi_k = \pi_{k-1}\,\frac{k-1-d}{k}.
+\pi_0 = 1,\quad \pi_k = \pi_{k-1}\,\frac{k-1-d}{k}
 ```
+
+where:
+- ``L`` is the lag operator (``L^k y_t = y_{t-k}``)
+- ``\pi_k`` is the filter weight at lag ``k``
+- ``d`` is the fractional differencing parameter
+- ``k`` is the non-negative integer lag index (``k = 0, 1, 2, \ldots``)
 
 For ``0 < d < 0.5`` the process is stationary but long-range dependent; for ``-0.5 < d < 0`` it is *anti-persistent* (intermediate memory). The weights ``\pi_k`` decay only as ``k^{-1-d}``, so the filter has effectively infinite memory.
 

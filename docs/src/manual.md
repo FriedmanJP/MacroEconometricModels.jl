@@ -141,8 +141,12 @@ X = \begin{bmatrix} 1 & y_p' & y_{p-1}' & \cdots & y_1' \\
 ```
 
 where:
-- ``Y`` is the ``T_{\text{eff}} \times n`` matrix of dependent variables
+- ``Y`` is the ``T_{\text{eff}} \times n`` matrix of stacked dependent variables
 - ``X`` is the ``T_{\text{eff}} \times k`` matrix of regressors with ``k = 1 + np``
+- ``T_{\text{eff}} = T - p`` is the effective sample size after lag conditioning
+- ``p`` is the autoregressive lag order
+- ``n`` is the number of endogenous variables
+- ``y_t'`` is the transposed ``1 \times n`` vector of observations at time ``t``
 
 The compact form ``Y = XB + U`` yields the OLS estimator:
 
@@ -151,7 +155,9 @@ The compact form ``Y = XB + U`` yields the OLS estimator:
 ```
 
 where:
-- ``\hat{B}`` is the ``k \times n`` coefficient matrix ``[c, A_1, \ldots, A_p]'``
+- ``\hat{B}`` is the ``k \times n`` estimated coefficient matrix ``[c, A_1, \ldots, A_p]'``
+- ``X`` is the ``T_{\text{eff}} \times k`` regressor matrix
+- ``Y`` is the ``T_{\text{eff}} \times n`` dependent variable matrix
 
 The `Sigma` field holds the maximum-likelihood residual covariance:
 
@@ -160,7 +166,9 @@ The `Sigma` field holds the maximum-likelihood residual covariance:
 ```
 
 where:
-- ``\hat{U} = Y - X\hat{B}`` is the ``T_{\text{eff}} \times n`` residual matrix
+- ``\hat{\Sigma}`` is the ``n \times n`` maximum-likelihood residual covariance matrix
+- ``\hat{U} = Y - X\hat{B}`` is the ``T_{\text{eff}} \times n`` matrix of OLS residuals
+- ``T_{\text{eff}} = T - p`` is the effective sample size
 
 !!! note "Two residual covariances"
     `model.Sigma` is the ML estimator with denominator ``T_{\text{eff}}``, which is what the
@@ -216,9 +224,10 @@ I_n & 0 & \cdots & 0 & 0 \\
 ```
 
 where:
-- ``A_i`` is the ``n \times n`` VAR coefficient matrix for lag ``i``
+- ``F`` is the ``np \times np`` companion matrix of the VAR(p) system
+- ``A_i`` is the ``n \times n`` VAR coefficient matrix for lag ``i = 1, \ldots, p``
 - ``I_n`` is the ``n \times n`` identity matrix
-- ``F`` is the ``np \times np`` companion matrix
+- ``n`` is the number of variables and ``p`` is the lag order
 
 The stability condition requires ``|\lambda_i| < 1`` for all eigenvalues ``\lambda_i`` of ``F``. The function `is_stationary` checks this condition and returns the companion matrix eigenvalues:
 
@@ -241,9 +250,10 @@ The lag length minimizes an information criterion that balances fit against mode
 ```
 
 where:
-- ``\hat{\Sigma}_p`` is the ML residual covariance at lag order ``p``
+- ``\text{AIC}(p)``, ``\text{BIC}(p)``, and ``\text{HQ}(p)`` are the Akaike, Bayesian, and Hannan-Quinn information criteria
+- ``\hat{\Sigma}_p`` is the ML residual covariance matrix at lag order ``p``
 - ``T_{\text{eff}} = T - p`` is the effective sample size
-- ``k = n(1 + np)`` is the **system** parameter count: ``n`` equations of ``1 + np`` regressors each
+- ``k = n(1 + np)`` is the total system parameter count across all ``n`` equations
 - ``n`` is the number of endogenous variables
 
 AIC tends to overfit in finite samples; BIC penalizes complexity more heavily as ``T`` grows; HQIC sits between them. All three are stored on the fitted model as `aic`, `bic`, and `hqic`.
@@ -284,8 +294,9 @@ u_t = B_0 \varepsilon_t
 ```
 
 where:
-- ``B_0`` is the ``n \times n`` contemporaneous impact matrix
-- ``\varepsilon_t`` are structural shocks with ``E[\varepsilon_t \varepsilon_t'] = I_n``
+- ``u_t`` is the ``n \times 1`` reduced-form innovation vector at time ``t`` with covariance ``\Sigma``
+- ``B_0`` is the ``n \times n`` contemporaneous structural impact matrix
+- ``\varepsilon_t`` is the ``n \times 1`` vector of orthonormal structural shocks satisfying ``E[\varepsilon_t \varepsilon_t'] = I_n``
 
 The identifying restriction ``\Sigma = B_0 B_0'`` provides ``n(n+1)/2`` equations for ``n^2`` unknowns, leaving ``n(n-1)/2`` free parameters. Additional restrictions are required to achieve **exact identification**. The package provides six identification strategies.
 
@@ -298,7 +309,9 @@ B_0 = \text{chol}(\Sigma)
 ```
 
 where:
-- ``B_0`` is lower triangular, implying variable ``i`` responds contemporaneously only to shocks ``1, \ldots, i``
+- ``B_0`` is the lower-triangular Cholesky factor satisfying ``\Sigma = B_0 B_0'``
+- ``\Sigma`` is the ``n \times n`` reduced-form innovation covariance matrix
+- ``\text{chol}`` denotes the lower-triangular Cholesky decomposition operator
 
 The ordering reflects economic assumptions about the speed of adjustment. Variables ordered first respond only to their own shocks on impact. In the standard monetary VAR ordering [INDPRO, CPI, FFR], the federal funds rate shock (shock 3) has no contemporaneous effect on output or prices, consistent with the information and implementation lags in monetary policy transmission (Christiano, Eichenbaum & Evans 1999).
 
@@ -456,8 +469,10 @@ C(1) = (I_n - A_1 - A_2 - \cdots - A_p)^{-1} B_0
 ```
 
 where:
-- ``C(1)`` is the ``n \times n`` long-run cumulative response matrix
-- ``A(1) = A_1 + A_2 + \cdots + A_p`` is the sum of VAR coefficient matrices
+- ``C(1)`` is the ``n \times n`` long-run cumulative impulse response matrix
+- ``I_n`` is the ``n \times n`` identity matrix
+- ``A_i`` is the ``n \times n`` VAR coefficient matrix at lag ``i = 1, \ldots, p``
+- ``B_0`` is the contemporaneous structural impact matrix
 
 Blanchard & Quah (1989) impose that ``C(1)`` is lower triangular, so that shocks ordered later have zero long-run effect on variables ordered earlier. The typical application restricts demand shocks to have no long-run effect on output, identifying supply-driven long-run fluctuations.
 
@@ -550,10 +565,12 @@ f(x) = \begin{cases} x & x \le 0 \\ 100\, x & x > 0 \end{cases}, \qquad
 ```
 
 where:
-- ``x_s > 0`` if and only if the restriction is violated (weight 1 if satisfied, 100 if violated)
-- ``\mathrm{sign}_s \in \{+1, -1\}`` is the required sign direction
+- ``x_s`` is the standardized constraint violation metric for sign restriction ``s``
+- ``\mathrm{sign}_s \in \{+1, -1\}`` is the required sign direction of the response
 - ``\mathrm{IRF}_s`` is the impulse response value at the restricted horizon
-- ``\sigma_s`` is the standard deviation of the response variable (normalization)
+- ``\sigma_s`` is the standard deviation of variable ``s`` (scaling factor)
+- ``f(x)`` is the asymmetric penalty function penalizing violated restrictions with weight 100
+- ``\mathrm{penalty}`` is the objective function minimized over candidate rotations
 
 !!! note "When to use Uhlig vs Arias"
     Use `identify_uhlig` when a single point-identified rotation is needed --- for example, as a starting point for policy analysis. Use `identify_arias` when the full identified set is required for inference with credible intervals.
@@ -604,8 +621,9 @@ For robust inference in the presence of heteroscedasticity and autocorrelation, 
 ```
 
 where:
-- ``\hat{V}_{\text{NW}}`` is the HAC covariance matrix of the coefficient estimator
-- ``\hat{S}`` is the long-run covariance estimator
+- ``\hat{V}_{\text{NW}}`` is the Newey-West HAC covariance matrix of the coefficient estimator
+- ``\hat{S}`` is the estimated long-run covariance matrix of the moment conditions
+- ``X`` is the ``T_{\text{eff}} \times k`` design matrix of regressors
 
 The long-run covariance ``\hat{S}`` is:
 
@@ -614,8 +632,10 @@ The long-run covariance ``\hat{S}`` is:
 ```
 
 where:
-- ``\hat{\Gamma}_j = \sum_{t=j+1}^{T} \hat{u}_t \hat{u}_{t-j}' x_t x_{t-j}'`` is the ``j``-th order autocovariance
-- ``w_j`` is the kernel weight at lag ``j``
+- ``\hat{S}`` is the estimated long-run covariance matrix
+- ``\hat{\Gamma}_0 = \frac{1}{T}\sum_{t=1}^{T} \hat{u}_t \hat{u}_t' x_t x_t'`` is the contemporaneous moment covariance
+- ``\hat{\Gamma}_j = \frac{1}{T}\sum_{t=j+1}^{T} \hat{u}_t \hat{u}_{t-j}' x_t x_{t-j}'`` is the sample autocovariance of moment conditions at lag ``j``
+- ``w_j`` is the kernel weight assigned to lag ``j``
 - ``m`` is the bandwidth (truncation parameter)
 
 ### Kernel Functions
@@ -628,6 +648,11 @@ The weight function ``w_j`` depends on the kernel choice:
 w_j = 1 - \frac{j}{m+1}
 ```
 
+where:
+- ``w_j`` is the Bartlett kernel weight assigned to lag ``j``
+- ``j \in \{1, \ldots, m\}`` is the lag index
+- ``m`` is the truncation lag (bandwidth parameter)
+
 **Parzen**:
 
 ```math
@@ -638,7 +663,9 @@ w_j = \begin{cases}
 ```
 
 where:
-- ``x = j/(m+1)``
+- ``w_j`` is the Parzen kernel weight assigned to lag ``j``
+- ``x = j/(m+1)`` is the normalized lag index
+- ``m`` is the truncation bandwidth
 
 **Quadratic spectral** (Andrews 1991):
 
@@ -647,7 +674,9 @@ w_j = \frac{25}{12\pi^2 x^2} \left( \frac{\sin(6\pi x/5)}{6\pi x/5} - \cos(6\pi 
 ```
 
 where:
-- ``x = j/(m+1)``
+- ``w_j`` is the Quadratic Spectral kernel weight assigned to lag ``j``
+- ``x = j/(m+1)`` is the normalized lag index
+- ``m`` is the bandwidth parameter
 
 ### Automatic Bandwidth Selection
 
@@ -658,7 +687,9 @@ m^* = 1.1447 \left( \hat{\alpha} \cdot T \right)^{1/3}
 ```
 
 where:
-- ``\hat{\alpha} = 4\hat{\rho}^2 / (1-\hat{\rho})^4`` is estimated from AR(1) fits to the residuals
+- ``m^*`` is the data-driven optimal bandwidth
+- ``\hat{\alpha} = 4\hat{\rho}^2 / (1-\hat{\rho})^4`` is the smoothness parameter estimated from univariate AR(1) fits
+- ``\hat{\rho}`` is the estimated AR(1) residual autocorrelation coefficient
 - ``T`` is the sample size
 
 ### White Heteroscedasticity-Robust Estimator
@@ -670,8 +701,11 @@ When errors are heteroscedastic but serially uncorrelated, the White (1980) HC0 
 ```
 
 where:
+- ``\hat{V}_{W}`` is the White (1980) heteroscedasticity-robust HC0 covariance matrix
 - ``\hat{u}_t`` is the OLS residual at time ``t``
 - ``x_t`` is the ``k \times 1`` regressor vector at time ``t``
+- ``X`` is the ``T \times k`` design matrix
+- ``T`` is the sample size
 
 ### Driscoll-Kraay Panel-Robust Estimator
 
@@ -710,8 +744,10 @@ The VAR generates multi-step ahead forecasts by iterating the estimated recursio
 ```
 
 where:
-- ``\hat{y}_{T+h}`` is the ``h``-step ahead point forecast
-- ``\hat{y}_{T+j}`` for ``j \leq 0`` uses the observed data
+- ``\hat{y}_{T+h}`` is the ``h``-step-ahead point forecast in levels
+- ``\hat{c}`` is the estimated ``n \times 1`` intercept vector
+- ``\hat{A}_i`` is the estimated ``n \times n`` VAR coefficient matrix for lag ``i = 1, \ldots, p``
+- ``\hat{y}_{T+j}`` denotes the forecast at horizon ``j``, evaluated at observed historical data for ``j \leq 0``
 
 The default `:bootstrap` bands implement Kilian's (1998) bootstrap-B. Each replication builds a pseudo-sample by resampling the residuals, **re-estimates** the VAR on it, and then simulates forward from the true last ``p`` observations using those re-estimated coefficients and fresh resampled shocks. The bands therefore carry both future-innovation and coefficient-estimation uncertainty, at a cost of `reps` VAR re-estimations. The `:analytic` alternative uses the Lütkepohl (2005, §3.5) known-coefficient forecast MSE ``\Sigma_y(h) = \sum_{i=0}^{h-1} \Phi_i \Sigma_u \Phi_i'`` with symmetric Gaussian bands, which is cheaper but ignores parameter uncertainty.
 
@@ -760,15 +796,24 @@ y_{T+s} = \hat{y}_{T+s} + \sum_{j=1}^{s} \Psi_{s-j} \, \varepsilon_{T+j},
 ```
 
 where:
-- ``\hat{y}_{T+s}`` is the unconditional forecast
-- ``\Phi_s`` is the reduced-form moving-average coefficient at lag ``s`` (``\Phi_0 = I``)
-- ``P`` is the structural impact matrix and ``\varepsilon_{T+j} \sim N(0, I)`` the future shocks
+- ``y_{T+s}`` is the conditional forecast realization at horizon ``s``
+- ``\hat{y}_{T+s}`` is the unconditional forecast vector
+- ``\Psi_s = \Phi_s P`` is the structural impulse response matrix at horizon ``s``
+- ``\Phi_s`` is the reduced-form moving-average coefficient matrix at lag ``s`` (with ``\Phi_0 = I``)
+- ``P`` is the structural impact matrix
+- ``\varepsilon_{T+j} \sim N(0, I)`` is the future structural shock vector at period ``T+j``
 
 Each restriction is linear in ``\varepsilon``, so stacking them over the conditioning window gives ``R\varepsilon = r``, where ``r`` is the gap between the desired path and the unconditional forecast. The shocks are then drawn from the implied conditional distribution
 
 ```math
 \varepsilon \sim N\big(R'(RR')^{-1}r, \; I - R'(RR')^{-1}R\big)
 ```
+
+where:
+- ``\varepsilon`` is the stacked vector of structural shocks over the conditional forecasting horizon
+- ``R`` is the restriction matrix mapping future shocks to constrained variable paths
+- ``r`` is the vector of desired scenario targets minus unconditional forecasts
+- ``I`` is the identity matrix conformal with ``\varepsilon``
 
 — the minimum-norm mean plus randomness in the null space of the restrictions. The point forecast uses the conditional mean; the bands come from `reps` draws, so unconstrained variables and horizons keep genuine uncertainty while constrained cells collapse onto their targets.
 

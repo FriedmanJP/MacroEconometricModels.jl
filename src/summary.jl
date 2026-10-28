@@ -571,19 +571,27 @@ function report(io::IO, s::SignIdentifiedSet{T}) where {T}
 end
 
 # DSGE
-report(x::DSGESolution) = show(stdout, x)
-report(x::PerturbationSolution) = show(stdout, x)
-report(x::ProjectionSolution) = show(stdout, x)
-report(x::PerfectForesightPath) = show(stdout, x)
-report(x::ModelSpec) = show(stdout, x)
+report(io::IO, x::DSGESolution) = show(io, x)
+report(x::DSGESolution) = report(stdout, x)
+report(io::IO, x::PerturbationSolution) = show(io, x)
+report(x::PerturbationSolution) = report(stdout, x)
+report(io::IO, x::ProjectionSolution) = show(io, x)
+report(x::ProjectionSolution) = report(stdout, x)
+report(io::IO, x::PerfectForesightPath) = show(io, x)
+report(x::PerfectForesightPath) = report(stdout, x)
+report(io::IO, x::ModelSpec) = show(io, x)
+report(x::ModelSpec) = report(stdout, x)
 report(x::DSGEEstimation) = report(stdout, x)
 function report(io::IO, x::DSGEEstimation)
     show(io, x)
     println(io)
     show(io, x.solution)
+    return nothing
 end
-report(x::BayesianDSGE) = show(stdout, x)
-report(x::BayesianDSGESimulation) = show(stdout, x)
+report(io::IO, x::BayesianDSGE) = show(io, x)
+report(x::BayesianDSGE) = report(stdout, x)
+report(io::IO, x::BayesianDSGESimulation) = show(io, x)
+report(x::BayesianDSGESimulation) = report(stdout, x)
 
 # Cross-sectional models
 report(m::RegModel) = show(stdout, m)

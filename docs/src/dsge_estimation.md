@@ -39,13 +39,13 @@ fit_smc = estimate_dsge_bayes(spec, y_obs, [0.9];
 report(fit_smc)
 ```
 
-**Recipe 3: SMC``^2`` with projection solver**
+**Recipe 3: SMC``^2`` with particle filter**
 
-```julia
+```@example dsge_estimation
 fit_smc2 = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
-    method=:smc2, observables=[:y], n_smc=200, n_particles=100,
-    solver=:projection, solver_kwargs=(degree=5,))
+    method=:smc2, observables=[:y], n_smc=15, n_particles=15,
+    solver=:gensys)
 report(fit_smc2)
 ```
 
@@ -371,17 +371,24 @@ The likelihood is evaluated via the Kalman filter, which is exact for linear sta
 The particle filter estimates the likelihood as:
 
 ```math
-\hat{\mathcal{L}}(Y|\theta) = \prod_{t=1}^{T} \frac{1}{M} \sum_{j=1}^{M} w_t^{(j)}
+\hat{\mathcal{L}}(Y \mid \theta) = \prod_{t=1}^{T} \left( \frac{1}{M} \sum_{j=1}^{M} w_t^{(j)} \right)
 ```
 
-where ``M`` is the number of inner particles (set via `n_particles`) and ``w_t^{(j)}`` are the importance weights at time ``t``.
+where:
+- ``\hat{\mathcal{L}}(Y \mid \theta)`` is the particle filter estimate of the likelihood function
+- ``Y`` is the ``T \times n_{\text{obs}}`` matrix of observable time series
+- ``\theta`` is the vector of deep structural parameters
+- ``T`` is the sample size (number of observed periods)
+- ``M`` is the number of inner filter particles (`n_particles`)
+- ``w_t^{(j)}`` is the unnormalized importance weight of particle ``j`` at time ``t``
 
-```julia
+```@example dsge_estimation
+# SMC² nests an inner particle filter (15 particles, 15 SMC draws for documentation build)
 fit_smc2 = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
     method=:smc2, observables=[:y],
-    n_smc=200, n_particles=100,
-    solver=:projection, solver_kwargs=(degree=5,))
+    n_smc=15, n_particles=15,
+    solver=:gensys)
 report(fit_smc2)
 ```
 
@@ -399,6 +406,14 @@ The mutation step uses Conditional SMC (CSMC) to update both the parameter ``\th
 ```math
 \alpha_1 = \min\!\Big(1, \; \exp\big[\phi \cdot \hat{\ell}_{\text{screen}}(\theta^*) + \log\pi(\theta^*) - \phi \cdot \hat{\ell}_{\text{screen}}(\theta) - \log\pi(\theta)\big]\Big)
 ```
+
+where:
+- ``\alpha_1`` is the Stage 1 screening acceptance probability
+- ``\theta^*`` is the proposed parameter vector from the proposal kernel
+- ``\theta`` is the current parameter vector in the Markov chain
+- ``\hat{\ell}_{\text{screen}}`` is the approximate log-likelihood from the screening particle filter (`n_screen` particles)
+- ``\pi(\theta)`` is the prior probability density function
+- ``\phi \in [0, 1]`` is the current tempering exponent
 
 **Stage 2** (correction, only if Stage 1 accepts): Accept with probability
 
@@ -458,8 +473,14 @@ The posterior mode is the standard first step of a Dynare-style workflow and the
 `posterior_mode` implements the standard Dynare-style first step of Bayesian estimation: numerically maximize the log posterior, report the mode together with a Laplace approximation of the marginal likelihood, and expose the inverse Hessian at the mode as an RWMH proposal covariance.
 
 ```math
-\theta^* = \arg\max_\theta \; \big[\log \mathcal{L}(Y|\theta) + \log \pi(\theta)\big]
+\theta^* = \arg\max_\theta \; \big[\log \mathcal{L}(Y \mid \theta) + \log \pi(\theta)\big]
 ```
+
+where:
+- ``\theta^*`` is the posterior mode parameter vector
+- ``\mathcal{L}(Y \mid \theta)`` is the likelihood of observed data ``Y`` given structural parameters ``\theta``
+- ``\pi(\theta)`` is the joint prior probability density
+- ``\theta`` is the structural parameter vector
 
 The optimizer works in a **prior-transformed unconstrained space** (log for positive supports, logit for bounded intervals, via `ParameterTransform`), so bounded parameters never collide with their boundaries; the reported mode is mapped back to the natural parameter space. The Laplace approximation of the log marginal likelihood is
 
@@ -467,7 +488,12 @@ The optimizer works in a **prior-transformed unconstrained space** (log for posi
 \log \hat{p}(Y) = \log \mathcal{L}(\theta^*) + \log \pi(\theta^*) + \frac{d}{2}\log(2\pi) - \frac{1}{2}\log\det H
 ```
 
-where ``H`` is the Hessian of the negative log posterior at the mode and ``d`` the number of estimated parameters (Tierney & Kadane 1986). If ``H`` is not positive definite, `laplace_log_ml` is `NaN` (with a warning) and the inverse Hessian falls back to a diagonal matrix, so downstream proposal seeding never receives a garbage covariance.
+where:
+- ``\log \hat{p}(Y)`` is the Laplace approximation of the log marginal data density
+- ``\log \mathcal{L}(\theta^*)`` is the log-likelihood evaluated at the posterior mode
+- ``\log \pi(\theta^*)`` is the log prior density evaluated at the mode
+- ``d`` is the number of estimated structural parameters
+- ``H = -\nabla_\theta^2 \big[\log \mathcal{L}(Y \mid \theta^*) + \log \pi(\theta^*)\big]`` is the negative Hessian matrix of the log posterior at the mode (Tierney & Kadane 1986)
 
 ```@example dsge_estimation
 pm = posterior_mode(spec, y_obs, [0.9];

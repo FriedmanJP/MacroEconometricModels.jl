@@ -114,7 +114,14 @@ The **autocorrelation function** (ACF) measures the linear dependence between ``
 \hat{\rho}_k = \frac{\sum_{t=k+1}^{n} (y_t - \bar{y})(y_{t-k} - \bar{y})}{\sum_{t=1}^{n} (y_t - \bar{y})^2}
 ```
 
-where ``\bar{y}`` is the sample mean. The biased estimator (dividing by ``n``, not ``n-k``) guarantees a positive semi-definite autocovariance matrix.
+where:
+- ``\hat{\rho}_k`` is the sample autocorrelation at lag ``k``
+- ``y_t`` is the observed series at time ``t``
+- ``\bar{y} = \frac{1}{n} \sum_{t=1}^{n} y_t`` is the sample mean
+- ``n`` is the sample size
+- ``k`` is the lag index (``k = 0, 1, \ldots, K``)
+
+The biased estimator (dividing by ``n``, not ``n-k``) guarantees a positive semi-definite autocovariance matrix.
 
 The **partial autocorrelation function** (PACF) measures the correlation between ``y_t`` and ``y_{t-k}`` after removing the linear effects of ``y_{t-1}, \ldots, y_{t-k+1}``. Two estimation methods are available:
 
@@ -126,6 +133,13 @@ The **cross-correlation function** (CCF) measures the correlation between ``x_{t
 ```math
 \hat{\rho}_{xy}(k) = \frac{\sum_{t=1}^{n-|k|} (x_{t+k} - \bar{x})(y_t - \bar{y})}{\sqrt{\sum (x_t - \bar{x})^2 \sum (y_t - \bar{y})^2}}
 ```
+
+where:
+- ``\hat{\rho}_{xy}(k)`` is the sample cross-correlation between series ``x`` and ``y`` at lead/lag ``k``
+- ``x_t`` and ``y_t`` are the observed time series at time ``t``
+- ``\bar{x}`` and ``\bar{y}`` are their respective sample means
+- ``k`` is the lead/lag displacement (positive ``k`` indicates ``x`` leads ``y``; negative ``k`` indicates ``y`` leads ``x``)
+- ``n`` is the sample size
 
 Positive lags indicate ``x`` leads ``y``; negative lags indicate ``y`` leads ``x``. `ccf` returns lags from ``-k`` to ``+k``, so its `lags` field has ``2k+1`` entries where the others have ``k``.
 
@@ -183,7 +197,14 @@ The **spectral density** ``S(\omega)`` decomposes a stationary process into cont
 S(\omega) = \frac{1}{2\pi} \sum_{k=-\infty}^{\infty} \gamma_k e^{-i\omega k}
 ```
 
-where ``\gamma_k = \text{Cov}(y_t, y_{t-k})`` is the autocovariance at lag ``k``. The integral of ``S(\omega)`` over ``[-\pi, \pi]`` equals the variance of the process.
+where:
+- ``S(\omega)`` is the spectral density function at angular frequency ``\omega \in [-\pi, \pi]``
+- ``\gamma_k = \text{Cov}(y_t, y_{t-k})`` is the autocovariance of the process at lag ``k``
+- ``\omega`` is the angular frequency in radians per time unit
+- ``i = \sqrt{-1}`` is the imaginary unit
+- ``e^{-i\omega k}`` is the complex exponential Fourier kernel
+
+The integral of ``S(\omega)`` over ``[-\pi, \pi]`` equals the variance of the process.
 
 Four estimators are available. The raw periodogram has its own entry point, `periodogram`; the three consistent estimators are reached through `spectral_density`.
 
@@ -195,7 +216,15 @@ The **raw periodogram** is the sample analog of the spectral density:
 I(\omega_j) = \frac{1}{2\pi n U} \left| \sum_{t=1}^{n} w_t y_t e^{-i\omega_j t} \right|^2
 ```
 
-where ``w_t`` is a data window and ``U = n^{-1}\sum w_t^2`` is the window energy normalization. The periodogram is computed via the FFT in ``O(n \log n)`` time.
+where:
+- ``I(\omega_j)`` is the raw sample periodogram evaluated at Fourier frequency ``\omega_j = 2\pi j / n``
+- ``y_t`` is the time series observation at time ``t``
+- ``w_t`` is the data taper or window weight applied at time ``t`` (with ``w_t = 1`` for the unwindowed rectangular case)
+- ``U = \frac{1}{n} \sum_{t=1}^{n} w_t^2`` is the window energy normalization factor
+- ``n`` is the sample size
+- ``i = \sqrt{-1}`` is the imaginary unit
+
+The periodogram is computed via the FFT in ``O(n \log n)`` time.
 
 ```@example spectral
 I = periodogram(y; window=:hann)
@@ -235,7 +264,13 @@ The **smoothed periodogram** applies a Daniell kernel to the raw periodogram:
 \hat{S}(\omega_k) = \frac{1}{2m+1} \sum_{j=-m}^{m} I(\omega_{k+j})
 ```
 
-where ``m`` is the kernel half-width (bandwidth). Larger bandwidth reduces variance but increases bias. The equivalent degrees of freedom are ``2(2m+1)``.
+where:
+- ``\hat{S}(\omega_k)`` is the smoothed Daniell spectral density estimate at frequency ``\omega_k``
+- ``I(\omega)`` is the raw sample periodogram
+- ``m`` is the kernel smoothing half-width parameter (bandwidth)
+- ``2m + 1`` is the total number of periodogram ordinates averaged in each frequency window
+
+Larger bandwidth reduces variance but increases bias. The equivalent degrees of freedom are ``2(2m+1)``.
 
 ```@example spectral
 sd_smooth = spectral_density(y; method=:smoothed, bandwidth=7)
@@ -251,6 +286,14 @@ The **AR parametric spectrum** (Burg 1968) fits an autoregressive model and eval
 ```math
 S(\omega) = \frac{\hat{\sigma}^2}{2\pi \left| 1 + \sum_{j=1}^{p} \hat{a}_j e^{-i\omega j} \right|^2}
 ```
+
+where:
+- ``S(\omega)`` is the parametric autoregressive spectral density estimate at frequency ``\omega``
+- ``\hat{\sigma}^2`` is the estimated innovation variance of the fitted AR(``p``) model
+- ``\hat{a}_j`` are the estimated autoregressive coefficients
+- ``p`` is the autoregressive model order selected by AIC or specified by user
+- ``\omega`` is the frequency in radians
+- ``i = \sqrt{-1}`` is the imaginary unit
 
 The AR order ``p`` is selected by AIC over ``1 \le p \le \min(\text{round}(10\log_{10} n),\, n/3)`` unless `order` is given. Burg's algorithm produces stable AR coefficient estimates.
 
@@ -318,9 +361,11 @@ S_{xy}(\omega) = C_{xy}(\omega) - i Q_{xy}(\omega)
 ```
 
 where:
-
+- ``S_{xy}(\omega)`` is the cross-spectral density at angular frequency ``\omega``
 - ``C_{xy}(\omega)`` is the **co-spectrum** (real part) --- the in-phase association at frequency ``\omega``
 - ``Q_{xy}(\omega)`` is the **quadrature spectrum** (negative imaginary part) --- the out-of-phase association
+- ``i = \sqrt{-1}`` is the imaginary unit
+- ``\omega \in [0, \pi]`` is the angular frequency
 
 Three derived quantities summarize the relationship:
 
@@ -394,7 +439,13 @@ Fisher's exact test (Fisher 1929) detects a single dominant periodic component i
 g = \frac{\max_j I(\omega_j)}{\sum_j I(\omega_j)}
 ```
 
-where ``I(\omega_j)`` is the periodogram at Fourier frequency ``\omega_j``. Under ``H_0`` (white noise), ``g`` has an exact distribution. A large ``g`` indicates a hidden periodicity at the peak frequency.
+where:
+- ``g`` is Fisher's exact test statistic for hidden periodicity
+- ``I(\omega_j)`` is the sample periodogram evaluated at the ``j``-th Fourier frequency ``\omega_j = 2\pi j / n``
+- ``\max_j I(\omega_j)`` is the maximum periodogram peak over all fundamental frequencies
+- ``\sum_j I(\omega_j)`` is the sum of periodogram ordinates across all ``j = 1, \ldots, \lfloor (n-1)/2 \rfloor``
+
+Under ``H_0`` (white noise), ``g`` has an exact distribution. A large ``g`` indicates a hidden periodicity at the peak frequency.
 
 ```@example spectral
 result = fisher_test(y)
@@ -410,6 +461,13 @@ Bartlett's test (Bartlett 1955) checks whether the cumulative normalized periodo
 ```math
 D = \max_j \left| \frac{\sum_{k=1}^{j} I(\omega_k)}{\sum_{k=1}^{m} I(\omega_k)} - \frac{j}{m} \right|
 ```
+
+where:
+- ``D`` is Bartlett's cumulative periodogram Kolmogorov-Smirnov test statistic
+- ``I(\omega_k)`` is the periodogram ordinate at the ``k``-th Fourier frequency
+- ``m = \lfloor (n-1)/2 \rfloor`` is the total number of Fourier frequencies
+- ``j/m`` is the cumulative uniform distribution benchmark under the white-noise null hypothesis
+- ``j`` is the frequency index running from 1 to ``m``
 
 The Kolmogorov-Smirnov statistic ``D`` measures the maximum departure from uniformity. Rejection indicates the series is not white noise.
 
@@ -451,7 +509,13 @@ The Ljung-Box test (Ljung & Box 1978) checks for autocorrelation up to lag ``h``
 Q = n(n+2) \sum_{k=1}^{h} \frac{\hat{\rho}_k^2}{n-k} \sim \chi^2(h - p)
 ```
 
-where ``p`` is the number of fitted AR/MA parameters (set via `fitdf`).
+where:
+- ``Q`` is the Ljung-Box portmanteau test statistic
+- ``n`` is the sample size
+- ``h`` is the maximum lag tested
+- ``\hat{\rho}_k`` is the sample autocorrelation at lag ``k``
+- ``p`` is the degrees-of-freedom adjustment for fitted parameters (`fitdf`)
+- ``\chi^2(h - p)`` is the asymptotic chi-squared null distribution with ``h - p`` degrees of freedom
 
 ```@example spectral
 result = ljung_box_test(y; lags=20, fitdf=0)
@@ -476,6 +540,13 @@ The Durbin-Watson test (Durbin & Watson 1950) detects first-order autocorrelatio
 ```math
 DW = \frac{\sum_{t=2}^{n}(e_t - e_{t-1})^2}{\sum_{t=1}^{n} e_t^2} \approx 2(1 - \hat{\rho}_1)
 ```
+
+where:
+- ``DW`` is the Durbin-Watson test statistic for first-order residual autocorrelation
+- ``e_t`` is the regression residual at time ``t``
+- ``e_{t-1}`` is the lagged residual
+- ``\hat{\rho}_1`` is the sample first-order autocorrelation of residuals
+- ``n`` is the number of residual observations
 
 Values near 2 indicate no autocorrelation; values near 0 indicate positive autocorrelation; values near 4 indicate negative autocorrelation.
 
@@ -537,6 +608,11 @@ The HP penalty falls on the **second** difference of the trend, whose squared tr
 G(\omega) = \frac{16\lambda \sin^4(\omega/2)}{1 + 16\lambda \sin^4(\omega/2)}
          = \frac{4\lambda (1 - \cos\omega)^2}{1 + 4\lambda (1 - \cos\omega)^2}
 ```
+
+where:
+- ``G(\omega)`` is the frequency response (power gain) transfer function of the Hodrick-Prescott cycle filter
+- ``\omega \in [0, \pi]`` is the angular frequency in radians per period
+- ``\lambda`` is the Hodrick-Prescott smoothing parameter (e.g. 1600 for quarterly data, 129600 for monthly data)
 
 At ``\lambda = 1600`` the half-power point (``G = 0.5``) occurs at ``\omega^* = 2\arcsin\big((16\lambda)^{-1/4}\big)``, a period of ``\approx 39.7`` quarters (``\approx 9.8`` quarters at ``\lambda = 6.25``).
 

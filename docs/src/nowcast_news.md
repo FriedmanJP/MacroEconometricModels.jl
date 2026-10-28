@@ -2,7 +2,7 @@
 
 Every data release moves the nowcast, and the question a forecaster is actually asked is not *what is the number* but *why did it change*. The news decomposition (Bańbura & Modugno 2014) answers it by splitting the revision between two data vintages into a contribution from each newly published observation, weighted by how surprising that observation was relative to what the model already expected. Releases that merely confirm the model's forecast contribute nothing, however large the number itself.
 
-The decomposition is a property of the state-space representation, so it requires an estimated [DFM](@ref nowcast_dfm_page). For the shared data layout and the `nowcast()` interface, see [Nowcasting](@ref nowcast_page).
+The decomposition is a property of the state-space representation, so it requires an estimated [DFM](@ref nowcast_dfm_page) or [BVAR](@ref nowcast_bvar_page). For the shared data layout and the `nowcast()` interface, see [Nowcasting](@ref nowcast_page).
 
 ```@setup nc_news
 using MacroEconometricModels, Random
@@ -106,7 +106,7 @@ Solving jointly is what makes the attribution well posed: the weights split shar
 
 ## Usage
 
-`nowcast_news` takes the new vintage, the old vintage, an estimated `NowcastDFM`, and the period whose nowcast is being decomposed. The two vintages must have identical dimensions; the old one is the more incomplete of the pair.
+`nowcast_news` takes the new vintage, the old vintage, an estimated `NowcastDFM` or `NowcastBVAR`, and the period whose nowcast is being decomposed. The two vintages must have identical dimensions; the old one is the more incomplete of the pair. The BVAR method runs the same Bańbura–Modugno system on the companion state-space form (centred by the steady-state mean, like the ragged-edge fill), so every recipe below works unchanged with a `nowcast_bvar` fit in place of `dfm`.
 
 ```@example nc_news
 X_old = copy(Y)
@@ -125,6 +125,14 @@ The **total revision** splits three ways in principle:
   + \underbrace{\Delta_{\text{revision}}}_{\texttt{impact\_revision}}
   + \underbrace{\Delta_{\text{re-estimation}}}_{\texttt{impact\_reestimation}}
 ```
+
+where:
+- ``\hat{y}^{\text{new}}`` is the nowcast of the target variable computed from the updated data vintage
+- ``\hat{y}^{\text{old}}`` is the nowcast computed from the previous data vintage
+- ``\text{impact}_k`` is the news impact of newly released data point ``k``, summing to ``\texttt{impact\_news}``
+- ``\Delta_{\text{revision}}`` (``\texttt{impact\_revision}``) is the impact of historical revisions to previously observed data points
+- ``\Delta_{\text{re-estimation}}`` (``\texttt{impact\_reestimation}``) is the revision component arising from re-estimating state-space parameters on the new vintage
+
 
 !!! note "Revisions are not news"
     The Bańbura-Modugno weights are derived for cells that were *missing* in the old vintage, so they cannot price a cell that was already published and merely changed value. Such a cell is a **revision**, and `impact_revision` is the difference between the nowcast under the old vintage and the nowcast under the old vintage with the revised values patched in, with the DFM parameters held fixed. The news step then runs from that patched baseline, so the news weights only ever see genuinely new cells. A cell counts as revised when it moves by more than ``10^{-9}`` relative to its own magnitude, which keeps standardization round-trip noise from turning every observed cell into a revision.

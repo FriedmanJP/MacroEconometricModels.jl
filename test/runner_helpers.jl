@@ -43,6 +43,7 @@ _runner_max_conc(cpu_threads::Integer; cap::Integer=4) = min(Int(cpu_threads), c
 # signature MethodError'd every group.)
 function _with_group_blas(f, group_name::AbstractString)
     n = _blas_threads_for_group(group_name)
+    n == 1 && return f()
     old = BLAS.get_num_threads()
     try
         n != old && BLAS.set_num_threads(n)

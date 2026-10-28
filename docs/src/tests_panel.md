@@ -122,6 +122,12 @@ The IPS ``W_{\bar t}`` test of Im, Pesaran & Shin (2003) allows a **heterogeneou
 W_{\bar t} = \frac{\sqrt{N}\left(\bar t - N^{-1}\sum_i \mathrm{E}[t_{iT}]\right)}{\sqrt{N^{-1}\sum_i \mathrm{Var}[t_{iT}]}} \sim N(0,1)
 ```
 
+where:
+- ``N`` is the number of cross-sectional units in the panel
+- ``\bar t = N^{-1}\sum_{i=1}^N t_{iT}`` is the mean of individual ADF ``t``-statistics
+- ``\mathrm{E}[t_{iT}]`` and ``\mathrm{Var}[t_{iT}]`` are the tabulated finite-sample moments from Im, Pesaran & Shin (2003, Table 3)
+- ``W_{\bar t}`` is the standardized test statistic distributed asymptotically as standard normal
+
 The moments are interpolated linearly in ``T`` for each unit's own ``(\text{deterministic}, \text{lag})`` pair, so the lag column matters: `:auto` selects each unit's lag by information criterion and caps it at 8, the last tabulated value.
 
 ```@example test_panel
@@ -148,6 +154,13 @@ The Fisher-type test of Maddala & Wu (1999) and Choi (2001) combines the per-uni
 P = -2\sum_{i=1}^{N}\ln p_i \sim \chi^2(2N), \qquad Z = \frac{1}{\sqrt{N}}\sum_{i=1}^{N}\Phi^{-1}(p_i) \sim N(0,1)
 ```
 
+where:
+- ``p_i`` is the asymptotic p-value from the unit-specific ADF or Phillips-Perron test on unit ``i``
+- ``N`` is the number of cross-sectional units
+- ``P`` is the Maddala-Wu Fisher statistic with asymptotic ``\chi^2(2N)`` null distribution
+- ``Z`` is Choi's inverse-normal statistic with asymptotic standard normal null distribution
+- ``\Phi^{-1}(\cdot)`` is the standard normal quantile function
+
 All four combinations --- Maddala-Wu ``P`` (upper-tailed), Choi inverse-normal ``Z`` (lower-tailed), Choi logit ``L^*`` (lower-tailed), and Choi modified ``P_m`` (upper-tailed) --- are always computed; `combine` selects which one becomes the primary `statistic` and `pvalue`. With ``N = 1`` the test reduces exactly to the single-series `adf_test` p-value.
 
 ```@example test_panel
@@ -163,6 +176,12 @@ The Hadri (2000) LM test is the panel analogue of KPSS, with a **stationarity nu
 ```math
 Z = \frac{\sqrt{N}\,(\overline{LM} - \xi)}{\zeta} \sim N(0,1), \qquad (\xi, \zeta^2) = \begin{cases}(1/6,\ 1/45) & \text{constant}\\(1/15,\ 11/6300) & \text{trend}\end{cases}
 ```
+
+where:
+- ``\overline{LM} = N^{-1}\sum_{i=1}^N LM_i`` is the cross-sectional average of individual Hadri LM statistics
+- ``N`` is the number of cross-sectional units
+- ``\xi`` and ``\zeta^2`` are the asymptotic mean and variance parameters tabulated by Hadri (2000)
+- ``Z`` is the standardized test statistic distributed as ``N(0,1)`` under the stationarity null
 
 Because the null is stationarity, the test is **right-tailed**: very positive ``Z`` rejects. `hetero=true` (the default) gives each unit its own ``\hat\sigma_i^2``.
 
@@ -276,6 +295,12 @@ The CIPS statistic averages the individual CADF t-statistics after truncation:
 ```math
 \text{CIPS} = N^{-1} \sum_{i=1}^{N} \tilde{t}_i, \qquad \tilde{t}_i = \max(-6.19, \min(6.19, t_i))
 ```
+
+where:
+- ``N`` is the number of cross-sectional units
+- ``t_i`` is the OLS ``t``-ratio on ``y_{i,t-1}`` in the cross-sectionally augmented Dickey-Fuller regression for unit ``i``
+- ``\tilde{t}_i`` is the truncated individual ``t``-statistic bounded within ``[-6.19, 6.19]`` (Pesaran 2007)
+- ``\text{CIPS}`` is the cross-sectionally augmented Im-Pesaran-Shin panel unit root statistic
 
 The truncation at ``\pm 6.19`` (Pesaran 2007) keeps the average's moments finite when an individual regression produces an extreme t-value. The test is left-tailed.
 
@@ -445,8 +470,12 @@ where ``\bar{Z}`` is the asymptotic statistic and ``\tilde{Z}`` uses the exact f
 \operatorname{Var}[W_i] = \frac{2p\,(T - 2p - 1)^2\,(T - p - 3)}{(T - 2p - 3)^2\,(T - 2p - 5)}.
 ```
 
-- ``H_0``: ``x`` does not Granger-cause ``y`` for **any** unit (homogeneous non-causality)
-- ``H_1``: ``x`` Granger-causes ``y`` for **some** units
+where:
+- ``T`` is the number of time periods per cross-sectional unit
+- ``p`` is the lag order of the bivariate autoregression
+- ``\mathbb{E}[W_i]`` and ``\operatorname{Var}[W_i]`` are the exact finite-sample moments from Dumitrescu-Hurlin (2012)
+- ``H_0`` tests that ``x`` does not Granger-cause ``y`` for any unit (homogeneous non-causality)
+- ``H_1`` allows ``x`` to Granger-cause ``y`` for at least one cross-sectional unit
 
 Both statistics are **right-tailed**: a large ``\bar{W}`` rejects non-causality. `dh_causality_test` reports the ``\chi^2(p)`` Wald form ``W_i = p\,F_i``, whereas R's `plm::pgrangertest` reports the F-based ``F_i = W_i/p``; divide by ``p`` to compare.
 

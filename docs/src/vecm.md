@@ -93,9 +93,9 @@ y_t = c + A_1 y_{t-1} + A_2 y_{t-2} + \cdots + A_p y_{t-p} + u_t
 
 where:
 - ``y_t`` is the ``n \times 1`` vector of endogenous variables at time ``t``
-- ``A_i`` are ``n \times n`` coefficient matrices for lag ``i = 1, \ldots, p``
 - ``c`` is the ``n \times 1`` intercept vector
-- ``u_t \sim N(0, \Sigma)`` are i.i.d. innovations
+- ``A_i`` is the ``n \times n`` VAR coefficient matrix for lag ``i = 1, \ldots, p``
+- ``u_t`` is the ``n \times 1`` innovation vector with covariance ``\Sigma``
 
 When the variables are cointegrated, the Granger representation theorem (Engle & Granger 1987) implies the system admits a **Vector Error Correction** representation:
 
@@ -104,12 +104,13 @@ When the variables are cointegrated, the Granger representation theorem (Engle &
 ```
 
 where:
-- ``\Pi = \alpha \beta'`` is the ``n \times n`` **long-run matrix** with rank ``r``
-- ``\alpha`` is the ``n \times r`` matrix of **adjustment coefficients** (loading matrix)
-- ``\beta`` is the ``n \times r`` matrix of **cointegrating vectors**
-- ``\Gamma_i = -(A_{i+1} + \cdots + A_p)`` are the ``n \times n`` **short-run dynamics** matrices
-- ``\mu`` is the ``n \times 1`` intercept vector
-- ``u_t \sim N(0, \Sigma)`` are i.i.d. innovations
+- ``\Delta y_t = y_t - y_{t-1}`` is the first difference of the endogenous vector
+- ``\Pi = \alpha \beta'`` is the ``n \times n`` long-run matrix with reduced rank ``r``
+- ``\alpha`` is the ``n \times r`` adjustment matrix (loading matrix)
+- ``\beta`` is the ``n \times r`` matrix of cointegrating vectors
+- ``\Gamma_i = -(A_{i+1} + \cdots + A_p)`` are the ``n \times n`` short-run dynamic coefficient matrices
+- ``\mu`` is the ``n \times 1`` deterministic drift vector
+- ``u_t \sim N(0, \Sigma)`` is the innovation vector
 
 ### The Cointegrating Relationship
 
@@ -120,8 +121,10 @@ z_{j,t} = \beta_j' y_t \sim I(0), \quad j = 1, \ldots, r
 ```
 
 where:
-- ``z_{j,t}`` is the ``j``-th **error correction term** (deviation from long-run equilibrium)
-- ``\beta_j`` is the ``j``-th cointegrating vector
+- ``z_{j,t}`` is the ``j``-th error correction term (stationary deviation from long-run equilibrium)
+- ``\beta_j`` is the ``j``-th column of ``\beta`` (the ``j``-th cointegrating vector)
+- ``y_t`` is the ``n \times 1`` vector of non-stationary endogenous variables
+- ``r`` is the cointegrating rank (``0 < r < n``)
 
 The corresponding column ``\alpha_j`` of ``\alpha`` governs the **speed of adjustment**: ``\alpha_{ij}`` measures how quickly variable ``i`` responds to deviations from the ``j``-th equilibrium. The **cointegrating rank** ``r`` determines the number of independent long-run equilibrium relationships. When ``r = 0``, there is no cointegration and the system reduces to a VAR in first differences. When ``r = n``, all variables are stationary in levels.
 
@@ -148,9 +151,11 @@ The eigenvalues ``\lambda_1 \geq \lambda_2 \geq \cdots \geq \lambda_n`` correspo
 ```
 
 where:
+- ``\text{LR}_{\text{trace}}(r_0)`` is the Johansen trace test statistic testing ``H_0: \text{rank}(\Pi) \leq r_0`` against ``H_1: \text{rank}(\Pi) > r_0``
 - ``T`` is the effective sample size
-- ``\hat{\lambda}_i`` is the ``i``-th largest eigenvalue
-- ``r_0`` is the null hypothesis rank
+- ``n`` is the total number of endogenous variables
+- ``\hat{\lambda}_i`` is the ``i``-th largest squared canonical correlation (eigenvalue)
+- ``r_0`` is the cointegrating rank specified under the null hypothesis
 
 ```@example vecm
 # Automatic rank selection via Johansen trace test
@@ -253,8 +258,9 @@ A_1 = \Pi + I_n + \Gamma_1, \quad A_i = \Gamma_i - \Gamma_{i-1} \text{ for } i =
 where:
 - ``A_i`` is the ``i``-th VAR coefficient matrix in levels
 - ``\Pi = \alpha\beta'`` is the long-run matrix
+- ``\Gamma_i`` are the VECM short-run coefficient matrices
 - ``I_n`` is the ``n \times n`` identity matrix
-- ``\Gamma_i`` are the short-run dynamics matrices
+- ``p`` is the lag order in levels
 
 ```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
@@ -329,8 +335,12 @@ VECM forecasting iterates the VECM equations directly in levels, preserving the 
 
 where:
 - ``\hat{y}_{T+h}`` is the ``h``-step-ahead forecast in levels
-- ``\hat{y}_{T+h-1}`` is the previous forecast (or last observed value for ``h = 1``)
+- ``\hat{y}_{T+h-1}`` is the levels forecast at horizon ``h-1`` (or last observed data point for ``h=1``)
+- ``\alpha`` is the ``n \times r`` error-correction adjustment matrix
+- ``\beta`` is the ``n \times r`` cointegrating matrix
+- ``\Gamma_i`` are the ``n \times n`` short-run difference coefficient matrices for ``i = 1, \ldots, p-1``
 - ``\Delta\hat{y}_{T+h-i}`` are lagged forecast differences
+- ``\mu`` is the deterministic intercept vector
 
 ```@example vecm
 vecm = estimate_vecm(Y, 2; rank=1)
@@ -441,7 +451,15 @@ The central empirical use of a VECM is testing economic hypotheses on the long-r
 \mathrm{LR} = T \sum_{i=1}^{r} \ln\!\frac{1-\lambda^{*}_i}{1-\lambda_i} \;\sim\; \chi^2(\mathrm{df}),
 ```
 
-where ``\lambda_i`` are the unrestricted eigenvalues and ``\lambda^{*}_i`` the restricted ones. The classic testbed is the [`load_example(:denmark)`](@ref) Danish money-demand data (Johansen & Juselius 1990) --- real money `LRM`, real income `LRY`, the bond rate `IBO` and the deposit rate `IDE` --- estimated as a rank-1 VECM on 53 effective quarterly observations. Throughout this section ``n`` is the number of variables (4 here) and ``r`` the cointegrating rank.
+where:
+- ``\mathrm{LR}`` is the Johansen likelihood-ratio test statistic
+- ``T`` is the effective sample size
+- ``r`` is the cointegrating rank
+- ``\lambda_i`` are the unrestricted eigenvalues from the reduced-rank regression
+- ``\lambda^{*}_i`` are the restricted eigenvalues under the linear hypothesis
+- ``\mathrm{df}`` is the degrees of freedom of the asymptotic ``\chi^2`` distribution
+
+The classic testbed is the [`load_example(:denmark)`](@ref) Danish money-demand data (Johansen & Juselius 1990) --- real money `LRM`, real income `LRY`, the bond rate `IBO` and the deposit rate `IDE` --- estimated as a rank-1 VECM on 53 effective quarterly observations. Throughout this section ``n`` is the number of variables (4 here) and ``r`` the cointegrating rank.
 
 ```@example vecm
 dk = load_example(:denmark)
@@ -517,10 +535,13 @@ y_t = Ξ \sum_{s=1}^{t} u_s + Ξ^{*}(L) u_t + y_0^{*},
 ```
 
 where:
-- ``Ξ = β_⊥ (α_⊥' Ψ β_⊥)^{-1} α_⊥'`` is the ``n \times n`` long-run impact of reduced-form shocks, of rank ``n-r``
-- ``Ψ = I - \sum_{i=1}^{p-1} Γ_i`` is the VECM lag polynomial at frequency zero
-- ``β_⊥`` and ``α_⊥`` are orthogonal complements of the cointegrating vectors and adjustment coefficients
-- ``u_t = B_0 \varepsilon_t`` maps orthogonal structural shocks into the reduced form
+- ``y_t`` is the ``n \times 1`` vector of endogenous variables at time ``t``
+- ``Ξ = β_⊥ (α_⊥' Ψ β_⊥)^{-1} α_⊥'`` is the ``n \times n`` long-run impact matrix of reduced-form shocks (rank ``n-r``)
+- ``Ψ = I - \sum_{i=1}^{p-1} Γ_i`` is the VECM lag polynomial evaluated at frequency zero
+- ``β_⊥`` and ``α_⊥`` are the ``n \times (n-r)`` orthogonal complements of ``\beta`` and ``\alpha``
+- ``u_s`` is the reduced-form innovation vector at time ``s``
+- ``Ξ^{*}(L) = \sum_{j=0}^{\infty} Ξ^{*}_j L^j`` is the stationary lag polynomial capturing transitory dynamics
+- ``y_0^{*}`` represents the initial values of the stationary component
 
 With rank ``r``, ``Ξ B_0`` has ``r`` zero columns (the transitory shocks) by construction. The just-identified **KPSW** default adds a lower-triangular structure on the permanent block of ``Ξ B_0`` and a Cholesky factorisation of the transitory block — ``(n-r)(n-r-1)/2`` extra long-run zeros plus ``r(r-1)/2`` contemporaneous zeros (Lütkepohl 2005, eq. 9.2.10). Custom zeros are passed as `long_run_zeros` / `short_run_zeros` (`NaN` free, a finite number fixed) or as a full [`SVARPattern`](@ref), and are merged with those transitory-zero columns of ``Ξ B_0`` rather than replacing them. A complete `pattern` that already encodes the transitory columns is left unchanged.
 

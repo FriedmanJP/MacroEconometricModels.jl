@@ -51,7 +51,8 @@ const LANDING = Set(["index.md"])
 # Section overviews fronting a family of child pages. Hubs are NOT required to have
 # a Complete Example (worked examples live on the children).
 const HUB = Set(["dsge.md", "tests.md", "innovation_accounting.md",
-                 "nongaussian.md", "io.md", "nowcast.md"])
+                 "nongaussian.md", "io.md", "nowcast.md",
+                 "counterfactual.md", "dsge_heterogeneity.md"])
 
 # Auto-generated API/reference pages + the plotting reference: minimal prose, no
 # method skeleton. All api/*.md are added dynamically below.
@@ -75,6 +76,16 @@ const SAVEPLOT_ALLOW = Set([
     ("plotting.md", "path.html"),
     ("filters.md", "hp_filter.html"),
     ("getting_started.md", "irf.html"),
+])
+
+# Keyword defaults that legitimately vary across unrelated estimators/containers:
+# - `forecast_evaluation.md`: `diebold_mariano` uses `loss=:se` (or `:ad`), whereas
+#   `joint_band` in set SVAR uses `loss::Symbol=:absolute`.
+# - `io.md`: `IOData` container uses `unit=""`, whereas `parse_icio` and `parse_wiod`
+#   use `unit::AbstractString="Million USD"`.
+const KWDEFAULT_ALLOW = Set([
+    ("forecast_evaluation.md", "loss"),
+    ("io.md", "unit"),
 ])
 
 function page_type(rel::String)
@@ -285,6 +296,7 @@ function check_kwdefaults!(V, rel, lines, srcdefaults)
         m = match(ROW_RE, l)
         m === nothing && continue
         kw = m.captures[1]
+        (rel, kw) in KWDEFAULT_ALLOW && continue
         # only compare when the doc cell is itself a simple literal (rejects math /
         # power-of-ten, tuples, ranges, and descriptive words like "Other")
         is_simple_literal(m.captures[2]) || continue
