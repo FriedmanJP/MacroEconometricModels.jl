@@ -155,7 +155,12 @@ Then form the KPSS statistic from the partial sums ``S_t = \sum_{s \le t} \hat e
 \text{KPSS}_F = \frac{\sum_{t=1}^{T} S_t^2}{T^2 \hat{\sigma}^2_{LR}}
 ```
 
-with ``\hat{\sigma}^2_{LR}`` the Bartlett long-run variance. The hypotheses are ``H_0: \sigma_u^2 = 0`` (stationary around a smooth deterministic function) against ``H_1: \sigma_u^2 > 0`` (unit root), and the test is right-tailed like standard KPSS.
+where:
+- ``S_t = \sum_{s=1}^t \hat{e}_s`` is the partial sum process of the Fourier detrended residuals
+- ``T`` is the sample size
+- ``\hat{\sigma}^2_{LR}`` is the Bartlett kernel long-run variance estimate of ``\hat{e}_t``
+
+with the hypotheses ``H_0: \sigma_u^2 = 0`` (stationary around a smooth deterministic function) against ``H_1: \sigma_u^2 > 0`` (unit root), right-tailed like standard KPSS.
 
 ```@example test_ur_adv
 result = fourier_kpss_test(cpi; regression=:constant, fmax=3)
@@ -228,6 +233,13 @@ The deterministic regressors ``Z`` are quasi-differenced the same way, ``\hat{\d
 ```math
 \Delta y_t^d = \gamma \, y_{t-1}^d + \sum_{j=1}^{p} \delta_j \, \Delta y_{t-j}^d + \varepsilon_t
 ```
+
+where:
+- ``y_t^d = y_t - Z_t \hat{\delta}`` is the GLS-detrended series
+- ``\Delta y_t^d = y_t^d - y_{t-1}^d`` is its first difference
+- ``\gamma`` is the autoregressive persistence coefficient tested under ``H_0: \gamma = 0``
+- ``\delta_j`` are augmentation coefficients eliminating serial correlation across lag order ``p``
+- ``\varepsilon_t`` is the white-noise disturbance term
 
 which carries no intercept or trend, since GLS already removed them.
 
@@ -493,12 +505,16 @@ The two-break ADF test (Narayan & Popp 2010) extends the ADF framework to two en
 \Delta y_t = \alpha + \beta t + \gamma y_{t-1} + \theta_1 DU_{1t} + \theta_2 DU_{2t} + \sum_{j=1}^{p} \delta_j \Delta y_{t-j} + \varepsilon_t
 ```
 
-**Level and trend shifts** (`model=:both`) adds ``\phi_1 DT_{1t} + \phi_2 DT_{2t}``. In both cases:
+where:
+- ``\Delta y_t = y_t - y_{t-1}`` is the first difference of the observed series
+- ``\alpha`` is an intercept and ``\beta t`` is a linear deterministic trend
+- ``\gamma`` is the persistence coefficient tested under ``H_0: \gamma = 0`` (unit root with two breaks) against ``H_1: \gamma < 0``
+- ``DU_{it} = \mathbf{1}(t \geq T_{Bi})`` is the level shift indicator at break date ``T_{Bi}`` (with coefficient ``\theta_i``)
+- ``\delta_j`` are augmentation coefficients eliminating serial correlation across lag order ``p``
+- ``T_{B1} < T_{B2}`` are endogenous break dates chosen to minimize the ``t``-ratio on ``\gamma``
+- ``\varepsilon_t`` is the disturbance term
 
-- ``DU_{it} = \mathbf{1}(t \geq T_{Bi})`` is the level shift dummy for break ``i``
-- ``DT_{it} = (t - T_{Bi} + 1) \cdot \mathbf{1}(t \geq T_{Bi})`` is the trend shift dummy
-- ``T_{B1} < T_{B2}`` are the break dates, chosen to minimize the ``t``-ratio on ``\gamma``
-- ``H_0: \gamma = 0`` (unit root with two breaks) against ``H_1: \gamma < 0`` (stationary with two breaks)
+**Level and trend shifts** (`model=:both`) adds ``\phi_1 DT_{1t} + \phi_2 DT_{2t}``, where ``DT_{it} = (t - T_{Bi} + 1) \cdot \mathbf{1}(t \geq T_{Bi})`` is the trend shift regressor.
 
 !!! note "Technical Note"
     The grid search is quadratic in the sample: with trimming ``\tau`` the number of candidate pairs is ``O\big((T(1-2\tau))^2\big)``, and each pair re-runs the lag selection. The default ``\tau = 0.10`` excludes the first and last 10% of the sample. The minimum gap between dates is 2 observations for `:level` and 3 for `:both`, enough to identify the break parameters separately.

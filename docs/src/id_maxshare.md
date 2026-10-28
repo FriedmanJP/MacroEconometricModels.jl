@@ -83,9 +83,11 @@ S = \sum_{h\in\mathcal{H}} (e_i'\Phi_h L)'(e_i'\Phi_h L)
 ```
 
 where:
-- ``e_i`` is the selection vector for the target variable
-- ``\Phi_h`` is the reduced-form MA coefficient at lag ``h`` (``\Phi_0 = I``)
-- ``L = \mathrm{chol}(\hat\Sigma)`` so ``B_0 = L Q``
+- ``S`` is the ``n \times n`` symmetric positive semi-definite forecast-error variance criterion matrix
+- ``\mathcal{H}`` is the set of evaluation horizons (e.g., ``0:H``)
+- ``e_i`` is the ``n \times 1`` standard basis selection vector for target variable ``i``
+- ``\Phi_h`` is the reduced-form MA coefficient matrix at horizon ``h`` (with ``\Phi_0 = I_n``)
+- ``L = \mathrm{chol}(\hat\Sigma)`` is the lower-triangular Cholesky factor of the residual covariance matrix ``\hat\Sigma``
 
 The max-share shock is the leading eigenvector of ``S``. Because the denominator of the FEV share (total MSE of variable ``i`` over ``\mathcal{H}``) does not depend on ``q``, maximising the contribution is equivalent to maximising the share. That share equals ``\lambda_{\max}(S)/\mathrm{tr}(S)`` and is stored as `share`. With `cumulative=true` the same construction uses the partial sums ``\Psi_h = \sum_{k=0}^{h}\Phi_k`` in place of ``\Phi_h``.
 
@@ -131,8 +133,13 @@ S = \int_{\omega_1}^{\omega_2} \mathrm{Re}\bigl[(e_i' C(e^{-i\omega}) L)^{*} (e_
 ```
 
 where:
-- ``C(z) = (I - A_1 z - \cdots - A_p z^p)^{-1}`` is the VAR transfer function
-- the integral is Gauss–Legendre quadrature (`n_quad=32` nodes by default)
+- ``S`` is the ``n \times n`` spectral variance criterion matrix
+- ``[\omega_1, \omega_2]`` is the target frequency band in radians (e.g., business-cycle frequencies ``[2\pi/32, 2\pi/6]``)
+- ``C(z) = (I_n - A_1 z - \cdots - A_p z^p)^{-1}`` is the VAR transfer function evaluated at ``z = e^{-i\omega}``
+- ``e_i`` is the ``n \times 1`` standard basis selection vector for target variable ``i``
+- ``L = \mathrm{chol}(\hat\Sigma)`` is the lower Cholesky factor of the residual covariance matrix
+- ``*`` denotes the conjugate transpose, and ``\mathrm{Re}[\cdot]`` extracts the real part
+- the integral is computed via Gauss–Legendre quadrature (`n_quad=32` nodes by default)
 
 A business-cycle band of 6–32 quarters is ``(2\pi/32,\, 2\pi/6)``. Passing both `horizons` and `band` throws `ArgumentError`.
 
@@ -153,6 +160,13 @@ Barsky and Sims (2011) identify a **surprise** productivity shock as the disturb
 ```math
 q_{\mathrm{news}} = \arg\max_{q'q=1,\; q\perp q_{\mathrm{surprise}}} q'S_{\mathcal{H}} q
 ```
+
+where:
+- ``q_{\mathrm{news}}`` is the identified ``n \times 1`` rotation column vector for the news shock
+- ``q`` is a candidate unit-length rotation vector (satisfying ``q'q = 1``)
+- ``q_{\mathrm{surprise}}`` is the rotation vector of the surprise shock identified on impact
+- ``q \perp q_{\mathrm{surprise}}`` enforces the orthogonality condition ``q' q_{\mathrm{surprise}} = 0``
+- ``S_{\mathcal{H}}`` is the ``n \times n`` forecast-error variance criterion matrix summed over window ``\mathcal{H}``
 
 `previous` accepts a vector or an ``n\times k`` matrix of earlier columns; they are orthonormalised by QR before the projection ``S \leftarrow P S P`` with ``P = I - Q_{\mathrm{prev}}Q_{\mathrm{prev}}'``.
 

@@ -34,6 +34,13 @@ one display fix removes column-type rows from `report()` tables fed by
 - `identify_uhlig(...; scale)`: penalty normalization `:diff` (default,
   Uhlig 2005 first-difference std), `:residual` (legacy), `:none`, or a
   custom vector.
+- Full documentation overhaul: restructured sidebar hierarchy (``\le 6`` child
+  pages per group), dedicated API reference catalogs for Input-Output and
+  Forecast Evaluation (`docs/src/api/io.md`, `docs/src/api/forecast_evaluation.md`),
+  100% exported-symbol docstring coverage (including `Frequency` enums),
+  complete `where:` symbol definitions across all display math blocks, unified
+  per-page `@example` sandboxes, and a 4-tier automated documentation test suite
+  (`docs/test/test_docrule_suite.jl`).
 
 **Fixes**
 

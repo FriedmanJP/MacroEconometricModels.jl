@@ -101,21 +101,22 @@ plot_result(fc)
 The **Autoregressive Conditional Heteroskedasticity** (ARCH) model of Engle (1982) captures time-varying conditional variance by making the variance a function of past squared innovations. The ARCH(``q``) model is the foundation of the entire GARCH family.
 
 ```math
-y_t = \mu + \varepsilon_t, \qquad \varepsilon_t = \sigma_t z_t, \qquad z_t \sim \mathcal{N}(0, 1)
-```
-
-```math
-\sigma^2_t = \omega + \sum_{i=1}^{q} \alpha_i \varepsilon^2_{t-i}
+\begin{aligned}
+y_t &= \mu + \varepsilon_t, \qquad \varepsilon_t = \sigma_t z_t, \qquad z_t \sim \mathcal{N}(0, 1) \\
+\sigma^2_t &= \omega + \sum_{i=1}^{q} \alpha_i \varepsilon^2_{t-i}
+\end{aligned}
 ```
 
 where:
-- ``y_t`` is the observed time series
-- ``\mu`` is the conditional mean (intercept)
-- ``\varepsilon_t`` is the mean-corrected innovation
+- ``y_t`` is the observed time series return at time ``t``
+- ``\mu`` is the conditional mean (constant intercept)
+- ``\varepsilon_t`` is the mean-corrected innovation at time ``t``
+- ``\sigma_t`` is the conditional standard deviation
 - ``\sigma^2_t`` is the conditional variance at time ``t``
+- ``z_t \sim \mathcal{N}(0, 1)`` is an independent standard normal innovation
 - ``\omega > 0`` is the variance intercept
-- ``\alpha_i \geq 0`` are the ARCH coefficients
-- ``z_t`` is a standardized innovation
+- ``\alpha_i \geq 0`` are the ARCH coefficients capturing past shock impacts
+- ``q`` is the ARCH lag order
 
 The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i < 1``, with unconditional variance ``\text{Var}(\varepsilon_t) = \omega / (1 - \sum_{i=1}^{q} \alpha_i)``.
 
@@ -165,9 +166,12 @@ The GARCH(``p``,``q``) specification adds ``p`` lagged variance terms to the ARC
 ```
 
 where:
+- ``\sigma^2_t`` is the conditional variance at time ``t``
 - ``\omega > 0`` is the variance intercept
 - ``\alpha_i \geq 0`` are the ARCH coefficients (impact of past shocks)
+- ``\varepsilon^2_{t-i}`` are lagged squared innovations
 - ``\beta_j \geq 0`` are the GARCH coefficients (variance persistence)
+- ``\sigma^2_{t-j}`` are lagged conditional variances
 - ``p`` is the GARCH order (lagged variances) and ``q`` is the ARCH order (lagged squared residuals)
 
 The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i + \sum_{j=1}^{p} \beta_j < 1``. The unconditional variance is ``\sigma^2 = \omega / (1 - \sum \alpha_i - \sum \beta_j)``. The GARCH(1,1) captures the key empirical regularity of volatility clustering with just three variance parameters.
@@ -205,11 +209,14 @@ The **Exponential GARCH** (Nelson 1991) models the log of conditional variance, 
 ```
 
 where:
+- ``\sigma^2_t`` is the conditional variance at time ``t``
+- ``\omega`` is the constant term
 - ``z_t = \varepsilon_t / \sigma_t`` are standardized residuals
 - ``\alpha_i`` captures the magnitude (symmetric) effect of shocks
 - ``\gamma_i`` captures the sign (asymmetric/leverage) effect --- typically ``\gamma_i < 0`` means negative shocks increase volatility more than positive shocks of equal magnitude
 - ``\beta_j`` governs persistence of log-variance
 - ``\mathbb{E}|z| = \sqrt{2/\pi}`` for standard normal innovations
+- ``p`` and ``q`` are the GARCH and ARCH lag orders
 
 The stationarity condition is ``\sum_{j=1}^{p} \beta_j < 1`` (in log-variance), and the unconditional variance is ``\sigma^2 = \exp(\omega / (1 - \sum \beta_j))``.
 
@@ -229,8 +236,15 @@ The **GJR-GARCH** (Glosten, Jagannathan & Runkle 1993), also called Threshold GA
 ```
 
 where:
-- ``\gamma_i \geq 0`` are leverage parameters
-- ``\mathbb{1}(\varepsilon_{t-i} < 0) = 1`` when past shocks are negative
+- ``\sigma^2_t`` is the conditional variance at time ``t``
+- ``\omega > 0`` is the variance intercept
+- ``\alpha_i \ge 0`` are the standard ARCH coefficients
+- ``\gamma_i \ge 0`` are the asymmetry (leverage) parameters
+- ``\mathbb{1}(\varepsilon_{t-i} < 0)`` is an indicator function taking value 1 if the lagged innovation ``\varepsilon_{t-i} < 0`` and 0 otherwise
+- ``\varepsilon_{t-i}`` are lagged innovations
+- ``\beta_j \ge 0`` are the GARCH persistence coefficients
+- ``\sigma^2_{t-j}`` are lagged conditional variances
+- ``p`` and ``q`` are the GARCH and ARCH lag orders
 
 When ``\gamma_i > 0``, negative shocks have a larger impact on future variance than positive shocks of equal magnitude. This captures the **leverage effect** first documented by Black (1976): stock price declines increase financial leverage, which in turn increases equity volatility. The stationarity condition is ``\sum \alpha_i + \sum \gamma_i / 2 + \sum \beta_j < 1``, and the unconditional variance is ``\sigma^2 = \omega / (1 - \sum \alpha_i - \sum \gamma_i / 2 - \sum \beta_j)``.
 
@@ -381,6 +395,12 @@ Both are **standardized to unit variance**, which is what keeps the model identi
 - \tfrac{1}{2}\log\!\left(\pi(\nu-2)\right) - \tfrac{\nu+1}{2}\log\!\left(1 + \tfrac{z^2}{\nu-2}\right)
 ```
 
+where:
+- ``\log f_t(z)`` is the log-density of the standardized Student-t innovation at time ``t``
+- ``z = \varepsilon_t / \sigma_t`` is the standardized residual
+- ``\nu > 2`` is the degrees of freedom (shape) parameter
+- ``\Gamma(\cdot)`` is the Euler gamma function
+
 Note ``\pi(\nu-2)`` rather than ``\pi\nu`` — the Jacobian of the standardization is already folded in.
 
 ```@example volatility
@@ -414,28 +434,25 @@ On the S&P 500 returns the estimated shape is ``\hat\nu = 4.77`` — fourth mome
 The **GARCH-MIDAS** model of Engle, Ghysels & Sohn (2013) links high-frequency financial volatility to slowly moving macroeconomic fundamentals by factoring the conditional variance into two multiplicative components:
 
 ```math
-\sigma^2_{i,t} = \tau_t \cdot g_{i,t}
+\begin{aligned}
+\sigma^2_{i,t} &= \tau_t \cdot g_{i,t} \\
+g_{i,t} &= (1 - \alpha - \beta) + \alpha \frac{(r_{i-1,t} - \mu)^2}{\tau_{i-1}} + \beta \, g_{i-1,t} \\
+\tau_t &= \exp\!\left( m + \theta \sum_{k=1}^{K} \varphi_k(w) \, X_{t-k} \right)
+\end{aligned}
 ```
 
-where ``i`` indexes the high-frequency return within low-frequency block ``t``. The **short-run** component ``g`` is a unit-mean GARCH(1,1) on the ``\tau``-standardized return,
-
-```math
-g_{i,t} = (1 - \alpha - \beta) + \alpha \frac{(r_{i-1,t} - \mu)^2}{\tau_{i-1}} + \beta \, g_{i-1,t},
-```
-
-and the **long-run** component is a MIDAS filter of a low-frequency driver ``X`` (a macro series or realized variance):
-
-```math
-\tau_t = \exp\!\left( m + \theta \sum_{k=1}^{K} \varphi_k(w) \, X_{t-k} \right),
-```
-
-with Beta weights ``\varphi_k(w)`` (monotone decaying, summing to one). The ``\sqrt{\tau}`` scaling of the short-run innovation keeps ``g`` at unit unconditional mean --- ``\tau`` carries the variance level.
-
-- ``\mu`` --- conditional mean
-- ``\alpha, \beta`` --- short-run ARCH/GARCH coefficients (``\alpha + \beta < 1``)
-- ``m`` --- long-run intercept
-- ``\theta`` --- MIDAS slope on the aggregated low-frequency driver
-- ``w`` --- Beta weight shape (``w > 1`` gives decaying weights)
+where:
+- ``\sigma^2_{i,t}`` is the total conditional variance on high-frequency day ``i`` of low-frequency period ``t``
+- ``\tau_t`` is the secular long-run component of volatility
+- ``g_{i,t}`` is the mean-reverting short-run daily GARCH component with unit unconditional mean
+- ``r_{i,t}`` is the high-frequency return
+- ``\mu`` is the conditional mean return
+- ``\alpha \ge 0, \beta \ge 0`` are short-run ARCH and GARCH parameters satisfying ``\alpha + \beta < 1``
+- ``m`` is the long-run baseline log-volatility intercept
+- ``\theta`` is the MIDAS slope parameter measuring sensitivity to the low-frequency driver
+- ``X_{t-k}`` is the low-frequency driver (macroeconomic series or realized variance) at lag ``k``
+- ``K`` is the MIDAS lag length
+- ``\varphi_k(w)`` is the normalized Beta lag weighting polynomial evaluated at shape parameter ``w`` (where ``w > 1`` yields decaying weights summing to unity)
 
 Estimation is by Gaussian QMLE over ``(\mu, \alpha, \beta, m, \theta, w)`` with ``\alpha, \beta`` log-transformed under the stationarity constraint and ``w = 1 + e^{\tilde w}``. The `variance_ratio` field reports ``\mathrm{Var}(\log \tau_t) / \mathrm{Var}(\log \sigma^2_{i,t})``, the share of total variance variation attributable to the long-run macro component (Engle, Ghysels & Sohn 2013).
 
@@ -517,8 +534,18 @@ Standard GARCH persistence decays *geometrically*: a shock to volatility dies ou
 
 ```math
 \sigma^2_t = \frac{\omega}{1-\beta(1)} + \Big[1 - \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^d\Big]\varepsilon^2_t
-           = \omega^* + \sum_{i=1}^{K} \lambda_i \, \varepsilon^2_{t-i}.
+           = \omega^* + \sum_{i=1}^{K} \lambda_i \, \varepsilon^2_{t-i}
 ```
+
+where:
+- ``\sigma^2_t`` is the conditional variance at time ``t``
+- ``\omega`` is the variance intercept, and ``\omega^* = \omega / (1 - \beta(1))`` is the effective constant
+- ``\beta(L) = \sum_{j=1}^p \beta_j L^j`` is the GARCH lag polynomial of order ``p``
+- ``\phi(L) = 1 - \sum_{i=1}^q \phi_i L^i`` is the ARCH lag polynomial of order ``q``
+- ``(1-L)^d`` is the fractional differencing operator with memory parameter ``d \in (0, 1)``
+- ``\varepsilon^2_t`` is the squared innovation
+- ``\lambda_i`` are the truncated ARCH(``\infty``) convolution weights
+- ``K`` is the truncation lag order (`truncation`)
 
 The ``\lambda``-weights are obtained by convolving the ``(1-L)^d`` fractional-difference weights with ``\phi(L)`` and the inverse of ``1-\beta(L)``, then **truncating at ``K`` lags** (`truncation`, default 1000, capped internally at ``T-1``). Because the weights decay only ``\propto i^{-1-d}``, small ``d`` needs the full truncation — the example below uses 250 because the simulated process is itself built from a truncated weight sequence, and cost is ``O(TK)`` per likelihood evaluation. As ``d \to 0`` the model collapses to GARCH(1,1) with ``\alpha = \phi - \beta``; as ``d \to 1`` it approaches IGARCH.
 
@@ -564,8 +591,16 @@ The fitted ``\hat d = 0.163`` carries a standard error of 0.051, so long memory 
 **FIEGARCH** (Bollerslev & Mikkelsen 1996) is the log-variance analogue: long memory enters the *log* conditional variance through ``(1-L)^{-d}`` (note the negative exponent), and the EGARCH news function ``g(z) = \theta z + \gamma(|z| - E|z|)`` captures asymmetry (leverage). Because the log variance is unconstrained there is no positivity restriction:
 
 ```math
-\ln \sigma^2_t = \omega + \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^{-d}\, g(z_{t-1}).
+\ln \sigma^2_t = \omega + \big(1-\beta(L)\big)^{-1}\phi(L)(1-L)^{-d}\, g(z_{t-1})
 ```
+
+where:
+- ``\ln \sigma^2_t`` is the log conditional variance at time ``t``
+- ``\omega`` is the constant term
+- ``\beta(L)`` is the autoregressive lag polynomial in log-variance
+- ``\phi(L)`` is the moving-average lag polynomial
+- ``(1-L)^{-d}`` is the fractional integration operator with long-memory parameter ``d``
+- ``g(z_{t-1}) = \theta z_{t-1} + \gamma (|z_{t-1}| - \mathbb{E}|z|)`` is the asymmetric news impact function of standardized innovations ``z_{t-1}``
 
 ```@example volatility
 fim = estimate_fiegarch(rets; truncation=250)
@@ -615,8 +650,15 @@ Three further members of the GARCH family target distinct empirical regularities
 The **Integrated GARCH** of Engle & Bollerslev (1986) imposes the persistence constraint ``\sum_i \alpha_i + \sum_j \beta_j = 1`` exactly, so a variance shock never dies out:
 
 ```math
-\sigma^2_t = \omega + \sum_{i=1}^q \alpha_i \varepsilon^2_{t-i} + \sum_{j=1}^p \beta_j \sigma^2_{t-j}, \qquad \sum_i \alpha_i + \sum_j \beta_j = 1
+\sigma^2_t = \omega + \sum_{i=1}^q \alpha_i \varepsilon^2_{t-i} + \sum_{j=1}^p \beta_j \sigma^2_{t-j}, \qquad \sum_{i=1}^q \alpha_i + \sum_{j=1}^p \beta_j = 1
 ```
+
+where:
+- ``\sigma^2_t`` is the conditional variance at time ``t``
+- ``\omega \ge 0`` is the variance drift intercept
+- ``\alpha_i \ge 0`` are the ARCH coefficients on lagged squared innovations ``\varepsilon^2_{t-i}``
+- ``\beta_j \ge 0`` are the GARCH persistence coefficients on lagged variances ``\sigma^2_{t-j}``
+- ``p`` and ``q`` are the GARCH and ARCH lag orders, subject to the unit-root persistence constraint ``\sum_{i=1}^q \alpha_i + \sum_{j=1}^p \beta_j = 1``
 
 Persistence is unity by construction, the unconditional variance diverges, and multi-step variance forecasts grow linearly. The RiskMetrics EWMA is the special case ``\omega = 0``.
 
@@ -638,16 +680,22 @@ The constraint binds: ``\hat\alpha_1 = 0.225`` and ``\hat\beta_1 = 0.775`` sum t
 The **Component GARCH** of Engle & Lee (1999) splits the conditional variance into a slowly mean-reverting **permanent** trend ``q_t`` and a fast **transitory** cycle:
 
 ```math
-\sigma^2_t = q_t + \alpha(\varepsilon^2_{t-1} - q_{t-1}) + \beta(\sigma^2_{t-1} - q_{t-1})
-```
-
-```math
-q_t = \omega + \rho(q_{t-1} - \omega) + \varphi(\varepsilon^2_{t-1} - \sigma^2_{t-1})
+\begin{aligned}
+\sigma^2_t &= q_t + \alpha(\varepsilon^2_{t-1} - q_{t-1}) + \beta(\sigma^2_{t-1} - q_{t-1}) \\
+q_t &= \omega + \rho(q_{t-1} - \omega) + \varphi(\varepsilon^2_{t-1} - \sigma^2_{t-1})
+\end{aligned}
 ```
 
 where:
-- ``q_t`` is the permanent component, reverting to the long-run variance ``\omega`` with persistence ``\rho``
-- ``\alpha + \beta`` is the transitory persistence; identification requires ``\rho > \alpha + \beta``
+- ``\sigma^2_t`` is the total conditional variance at time ``t``
+- ``q_t`` is the permanent (trend) component of volatility
+- ``\sigma^2_t - q_t`` is the transitory (cyclical) component of volatility
+- ``\omega`` is the unconditional long-run variance level
+- ``\rho`` is the persistence of the permanent component (with ``0 < \rho < 1``)
+- ``\alpha`` and ``\beta`` are the transitory ARCH and GARCH parameters
+- ``\alpha + \beta`` is the transitory persistence (identification requires ``\rho > \alpha + \beta``)
+- ``\varphi`` captures the impact of volatility surprise ``\varepsilon^2_{t-1} - \sigma^2_{t-1}`` on the trend
+- ``\varepsilon_{t-1}`` is the innovation at time ``t-1``
 
 That identification condition is not a formality. On the full 803-month sample the MLE drives ``\varphi`` to zero and ``\rho`` onto ``\alpha + \beta``, the two components become indistinguishable, and the fit collapses onto the GARCH(1,1) solution with `converged` reported as `false` and unusable standard errors. Separating a slow trend from a fast cycle needs a window in which the two actually move at different speeds, so fit the last 500 months:
 
@@ -671,6 +719,16 @@ The **Asymmetric Power ARCH** of Ding, Granger & Engle (1993) estimates a free p
 ```math
 \sigma^\delta_t = \omega + \sum_{i=1}^q \alpha_i(|\varepsilon_{t-i}| - \gamma_i \varepsilon_{t-i})^\delta + \sum_{j=1}^p \beta_j \sigma^\delta_{t-j}
 ```
+
+where:
+- ``\sigma^\delta_t`` is the power-transformed conditional scale at time ``t``
+- ``\delta > 0`` is the Box-Cox power parameter (``\delta = 2`` for variance, ``\delta = 1`` for standard deviation)
+- ``\omega > 0`` is the scale intercept
+- ``\alpha_i \ge 0`` are the ARCH coefficients
+- ``\gamma_i \in (-1, 1)`` are leverage parameters (with ``\gamma_i > 0`` weighting negative shocks more heavily)
+- ``\varepsilon_{t-i}`` are lagged innovations
+- ``\beta_j \ge 0`` are persistence parameters on lagged power scale ``\sigma^\delta_{t-j}``
+- ``p`` and ``q`` are the GARCH and ARCH lag orders
 
 APARCH nests the standard family exactly: ``(\delta=2, \gamma=0)`` is GARCH, ``(\delta=2, \gamma \ne 0)`` is GJR-GARCH, and ``(\delta=1, \gamma \ne 0)`` is Zakoïan's TARCH. Pin parameters with the `fix_delta` / `fix_gamma` keywords.
 
@@ -771,8 +829,15 @@ end
 CCC decouples the problem: fit a univariate GARCH to each column, then hold the standardized-residual correlation fixed.
 
 ```math
-H_t = D_t \, R \, D_t, \qquad R = \operatorname{corr}(z), \qquad z_t = D_t^{-1}\varepsilon_t.
+H_t = D_t \, R \, D_t, \qquad R = \operatorname{corr}(z), \qquad z_t = D_t^{-1}\varepsilon_t
 ```
+
+where:
+- ``H_t`` is the ``k \times k`` conditional covariance matrix at time ``t``
+- ``D_t = \operatorname{diag}(\sigma_{1,t}, \ldots, \sigma_{k,t})`` is the diagonal matrix of univariate conditional standard deviations
+- ``R`` is the time-invariant ``k \times k`` unconditional correlation matrix
+- ``z_t = D_t^{-1}\varepsilon_t`` is the vector of standardized residuals
+- ``\varepsilon_t`` is the ``k \times 1`` innovation vector
 
 ```@example volatility
 ccc = estimate_ccc(Yret)      # Yret is a 400×2 return matrix
@@ -787,8 +852,15 @@ DCC lets the correlation evolve while keeping the two-step tractability. Step 1 
 
 ```math
 Q_t = (1-a-b)\bar{Q} + a\, z_{t-1}z_{t-1}' + b\, Q_{t-1}, \qquad
-R_t = \operatorname{diag}(Q_t)^{-1/2} Q_t \operatorname{diag}(Q_t)^{-1/2}.
+R_t = \operatorname{diag}(Q_t)^{-1/2} Q_t \operatorname{diag}(Q_t)^{-1/2}
 ```
+
+where:
+- ``Q_t`` is the ``k \times k`` pseudo-correlation matrix driving correlation dynamics
+- ``\bar{Q}`` is the unconditional covariance matrix of standardized residuals ``z_t``
+- ``a \ge 0`` and ``b \ge 0`` are scalar parameters satisfying ``a + b < 1``
+- ``z_{t-1}`` is the lagged standardized innovation vector
+- ``R_t`` is the standardized time-varying correlation matrix at time ``t`` with unit diagonal elements
 
 The parameters satisfy ``a, b \ge 0`` and ``a + b < 1`` (enforced by a logit-simplex reparametrization). Setting ``a = b = 0`` reduces DCC exactly to CCC.
 
@@ -813,8 +885,15 @@ Pass `correction=:aielli` for the **cDCC** variant (Aielli 2013), which removes 
 BEKK models the covariance directly (no separate margins). With **covariance targeting** the intercept is fixed so the unconditional covariance equals the sample covariance ``\bar\Sigma``; only the news/persistence parameters are estimated, which keeps the recursion positive semidefinite and stable.
 
 ```math
-\text{scalar:}\quad H_t = (1-a-b)\bar\Sigma + a\,\varepsilon_{t-1}\varepsilon_{t-1}' + b\,H_{t-1}.
+\text{scalar:}\quad H_t = (1-a-b)\bar\Sigma + a\,\varepsilon_{t-1}\varepsilon_{t-1}' + b\,H_{t-1}
 ```
+
+where:
+- ``H_t`` is the ``k \times k`` conditional covariance matrix at time ``t``
+- ``\bar\Sigma`` is the sample unconditional covariance matrix of innovations under covariance targeting
+- ``a \ge 0`` and ``b \ge 0`` are scalar parameters satisfying ``a + b < 1``
+- ``\varepsilon_{t-1}`` is the ``k \times 1`` vector of lagged innovations
+- ``H_{t-1}`` is the lagged conditional covariance matrix
 
 ```@example volatility
 bekk = estimate_bekk(Yret)               # scalar (default)
@@ -865,18 +944,18 @@ plot_result(dcc; view=:covariance_heatmap, at=400)    # heatmap of Hₜ at a cho
 The **stochastic volatility** (SV) model of Taylor (1986) treats the log-variance as a latent autoregressive process with its own source of randomness, making it fundamentally different from the observation-driven GARCH family. The SV model is a state-space model with a non-Gaussian observation equation, providing greater flexibility in capturing empirical volatility dynamics at the cost of requiring simulation-based estimation.
 
 ```math
-y_t = \exp(h_t / 2) \, \varepsilon_t, \qquad \varepsilon_t \sim \mathcal{N}(0, 1)
-```
-
-```math
-h_t = \mu + \varphi (h_{t-1} - \mu) + \sigma_\eta \eta_t, \qquad \eta_t \sim \mathcal{N}(0, 1)
+\begin{aligned}
+y_t &= \exp(h_t / 2) \, \varepsilon_t, \qquad \varepsilon_t \sim \mathcal{N}(0, 1) \\
+h_t &= \mu + \varphi (h_{t-1} - \mu) + \sigma_\eta \eta_t, \qquad \eta_t \sim \mathcal{N}(0, 1)
+\end{aligned}
 ```
 
 where:
-- ``h_t`` is the log-variance at time ``t``
+- ``y_t`` is the observed return at time ``t``
+- ``h_t`` is the latent log-variance at time ``t``
 - ``\mu`` is the log-variance level (unconditional mean of ``h_t``)
-- ``\varphi \in (-1, 1)`` is the persistence parameter
-- ``\sigma_\eta > 0`` is the volatility of volatility
+- ``\varphi \in (-1, 1)`` is the AR(1) persistence parameter
+- ``\sigma_\eta > 0`` is the volatility of log-variance (volatility of volatility)
 - ``\varepsilon_t`` and ``\eta_t`` are independent standard normal innovations
 
 ### SV Variants
@@ -892,7 +971,9 @@ Three variants are available, selected via keyword arguments:
 ```
 
 where:
-- ``\rho`` is the correlation between return and volatility shocks
+- ``\varepsilon_t`` and ``\eta_t`` are the standardized return and log-variance innovations at time ``t``
+- ``\rho`` is the leverage correlation parameter between return and volatility shocks
+- ``\mathbf{0}`` is the bivariate zero mean vector
 
 When ``\rho < 0`` (the typical case for equities), negative returns are associated with increases in volatility, analogous to the leverage effect in EGARCH and GJR-GARCH models.
 
@@ -903,6 +984,9 @@ y_t = \exp(h_t / 2) \, \varepsilon_t, \qquad \varepsilon_t \sim t_\nu
 ```
 
 where:
+- ``y_t`` is the observed return at time ``t``
+- ``h_t`` is the latent log-variance at time ``t``
+- ``\varepsilon_t \sim t_\nu`` is the standardized Student-t innovation
 - ``\nu > 2`` is the degrees of freedom parameter (ensuring finite variance)
 
 ### Priors and Estimation
@@ -1046,6 +1130,7 @@ For stationary GARCH processes, multi-step forecasts converge geometrically to t
 ```
 
 where:
+- ``\text{halflife}`` is the number of periods for a volatility shock to decay by half
 - ``\text{persistence} = \sum \alpha_i + \sum \beta_j`` for GARCH (adjusted for EGARCH and GJR-GARCH)
 
 Confidence intervals are constructed by simulating ``n`` paths forward from the last observed state, generating the empirical distribution of future conditional variances.

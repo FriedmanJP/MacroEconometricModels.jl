@@ -207,10 +207,13 @@ The Beveridge-Nelson (1981) decomposition separates an I(1) process into a perma
 ```
 
 where:
-- ``\Delta y_t = y_t - y_{t-1}`` is the first difference
+- ``\Delta y_t = y_t - y_{t-1}`` is the first difference of the observed series
+- ``y_t`` is the observed series at time ``t``
 - ``\mu`` is the drift (mean growth rate)
 - ``\psi(L) = \sum_{j=0}^{\infty} \psi_j L^j`` is the lag polynomial with ``\psi_0 = 1``
-- ``\varepsilon_t`` is a white noise innovation
+- ``L`` is the lag operator
+- ``\psi_j`` are the moving-average impulse-response weights
+- ``\varepsilon_t \sim \text{WN}(0, \sigma^2)`` is a white noise innovation with variance ``\sigma^2``
 
 The long-run multiplier ``\psi(1) = 1 + \sum_{j=1}^{\infty} \psi_j`` determines the permanent impact of shocks. The decomposition is:
 
@@ -219,8 +222,9 @@ y_t = \tau_t + c_t
 ```
 
 where:
-- ``\tau_t`` is the permanent component (random walk with drift ``\mu \cdot \psi(1)``)
-- ``c_t`` is the transitory component (mean-zero stationary process)
+- ``y_t`` is the observed series level at time ``t``
+- ``\tau_t`` is the Beveridge-Nelson permanent component (a pure random walk with drift ``\mu \cdot \psi(1)``)
+- ``c_t`` is the transitory (cyclical) component, representing a mean-zero covariance-stationary process
 
 !!! note "Technical Note"
     The classic `:arima` method fits an ARMA model to ``\Delta y_t`` (order chosen by `auto_arima` over ``p, q \le 6`` when either is `:auto`), computes the ``\psi``-weights from the MA(``\infty``) representation, and constructs the transitory component. When the selected order is ARMA(0,0) the series is a random walk with drift, the transitory component is identically zero, and `report()` says so.
@@ -295,9 +299,13 @@ B_0 = \frac{\omega_H - \omega_L}{\pi}, \quad B_j = \frac{\sin(\omega_H j) - \sin
 ```
 
 where:
-- ``\omega_H = 2\pi / p_l`` is the high-frequency cutoff (short-period boundary)
-- ``\omega_L = 2\pi / p_u`` is the low-frequency cutoff (long-period boundary)
-- ``p_l`` and ``p_u`` are the minimum and maximum periods of oscillation to pass
+- ``B_0`` is the ideal band-pass filter weight at lag 0
+- ``B_j`` is the ideal band-pass filter weight at lag ``j \ge 1``
+- ``\omega_H = 2\pi / p_l`` is the upper (high-frequency) cutoff in radians
+- ``\omega_L = 2\pi / p_u`` is the lower (low-frequency) cutoff in radians
+- ``p_l`` is the minimum periodicity of the business cycle band (e.g. 18 months or 6 quarters)
+- ``p_u`` is the maximum periodicity of the business cycle band (e.g. 96 months or 32 quarters)
+- ``j`` is the lag index
 
 The ideal filter is truncated at lag ``K`` and adjusted to ensure the weights sum to zero, eliminating stochastic trends:
 
@@ -306,9 +314,11 @@ a_j = B_j + \theta, \quad \theta = -\frac{B_0 + 2\sum_{j=1}^K B_j}{2K + 1}
 ```
 
 where:
-- ``a_j`` is the adjusted filter weight at lag ``j``
-- ``\theta`` is the correction ensuring ``a_0 + 2\sum_{j=1}^K a_j = 0``
-- ``K`` is the truncation length
+- ``a_j`` is the Baxter-King modified filter weight at lag ``j``
+- ``B_j`` is the unadjusted ideal bandpass weight at lag ``j``
+- ``B_0`` is the unadjusted ideal bandpass weight at lag 0
+- ``\theta`` is the constant adjustment added to each weight ensuring zero frequency gain (``a_0 + 2\sum_{j=1}^K a_j = 0``)
+- ``K`` is the symmetric truncation lag cutoff (`truncation`)
 
 The filtered series is:
 
@@ -317,8 +327,12 @@ c_t = a_0 y_t + \sum_{j=1}^K a_j (y_{t-j} + y_{t+j})
 ```
 
 where:
-- ``c_t`` is the band-pass filtered (cyclical) component
-- ``y_t`` is the observed time series
+- ``c_t`` is the estimated cyclical component at time ``t``
+- ``y_t`` is the observed time series at time ``t``
+- ``y_{t-j}`` and ``y_{t+j}`` are symmetric lag and lead observations
+- ``a_0`` is the central filter weight
+- ``a_j`` (for ``j = 1, \ldots, K``) are the symmetric adjusted filter weights
+- ``K`` is the truncation horizon (resulting in ``2K`` lost observations at endpoints)
 
 !!! warning "Endpoint truncation"
     The BK filter loses ``K`` observations at each end (``2K`` total). With ``K = 36`` and monthly data, this is 6 years of data at the boundaries.
@@ -378,10 +392,14 @@ Phillips and Shi (2021) propose iterating the HP filter on the cyclical componen
 ```
 
 where:
-- ``S = (I + \lambda D'D)^{-1}`` is the HP smoother matrix
-- ``\hat{c}^{(m)}`` is the cyclical component at iteration ``m``
-- ``\hat{\tau}^{(m^*)}`` is the final trend estimate at stopping iteration ``m^*``
-- ``I - S`` is the HP cycle extraction operator
+- ``\hat{c}^{(m)}`` is the ``T \times 1`` estimated cyclical vector after ``m`` iterations (with ``\hat{c}^{(0)} = y``)
+- ``\hat{\tau}^{(m^*)}`` is the final estimated trend vector at the selected stopping iteration ``m^*``
+- ``y`` is the ``T \times 1`` vector of observed series values
+- ``S = (I + \lambda D'D)^{-1}`` is the standard ``T \times T`` Hodrick-Prescott trend projection matrix
+- ``I`` is the ``T \times T`` identity matrix
+- ``I - S`` is the single-iteration cyclical projection matrix
+- ``\lambda`` is the HP penalization parameter
+- ``D`` is the ``(T-2) \times T`` second-difference matrix
 
 ### Stopping Criteria
 

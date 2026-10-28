@@ -599,6 +599,13 @@ When treatment is assigned by whether a **running variable** crosses a cutoff, u
 \tau = \lim_{x \downarrow c}\mathbb{E}[y \mid x] - \lim_{x \uparrow c}\mathbb{E}[y \mid x]
 ```
 
+where:
+- ``\tau`` is the local average treatment effect at the cutoff
+- ``y`` is the outcome variable
+- ``x`` is the running (forcing) variable
+- ``c`` is the treatment assignment threshold
+- ``\lim_{x \downarrow c}`` and ``\lim_{x \uparrow c}`` denote limits approaching the cutoff from the right (treated) and left (control)
+
 Each limit is a weighted polynomial fit on its own side of the cutoff, using observations within a bandwidth `h` and a kernel (triangular by default) that down-weights points further away. The estimate is the difference of the two fitted intercepts.
 
 ```@example reg
@@ -740,6 +747,14 @@ VARHAC (Den Haan & Levin 1997) is a **parametric** alternative to kernel HAC: it
 ```math
 \Omega = \hat{B}(1)^{-1}\, \hat{\Sigma}\, \hat{B}(1)^{-\top}, \qquad \hat{B}(1) = I - \sum_{l=1}^p \hat{A}_l
 ```
+
+where:
+- ``\Omega`` is the parametric long-run covariance matrix
+- ``\hat{B}(1)`` is the estimated VAR lag polynomial evaluated at frequency zero (unit root)
+- ``\hat{\Sigma}`` is the estimated innovation covariance matrix
+- ``\hat{A}_l`` is the estimated VAR coefficient matrix at lag ``l``
+- ``p`` is the optimal lag order selected by information criterion
+- ``I`` is the identity matrix
 
 with no bandwidth or kernel to choose.
 
@@ -1110,11 +1125,14 @@ The Brown–Durbin–Evans (1975) recursive least-squares residuals fit the mode
 w_t = \frac{y_t - x_t' \hat{\beta}_{t-1}}{\sqrt{1 + x_t' (X_{t-1}'X_{t-1})^{-1} x_t}}, \qquad t = k+1, \dots, n
 ```
 
-where
-
-- ``\hat{\beta}_{t-1}`` is the OLS estimate on the first ``t-1`` observations,
-- ``X_{t-1}`` is the ``(t-1) \times k`` design of those observations,
-- ``k`` is the number of regressors.
+where:
+- ``w_t`` is the standardized recursive residual for observation ``t``
+- ``y_t`` is the observed dependent variable at time ``t``
+- ``x_t`` is the ``k \times 1`` vector of regressors at time ``t``
+- ``\hat{\beta}_{t-1}`` is the OLS coefficient vector estimated on the first ``t-1`` observations
+- ``X_{t-1}`` is the ``(t-1) \times k`` design matrix of observations up to ``t-1``
+- ``k`` is the number of estimated parameters (including intercept)
+- ``n`` is the total sample size
 
 Under a stable model the ``w_t`` are i.i.d. ``N(0, \sigma^2)``, and their sum of squares equals the full-sample OLS SSR. [`recursive_residuals`](@ref) returns the length-``(n-k)`` vector, updating ``(X'X)^{-1}`` by rank-one Sherman–Morrison formulae rather than re-inverting each step.
 
@@ -1128,8 +1146,15 @@ length(w), round(sum(abs2, w) - m.ssr; digits=10)   # Σ wₜ² == SSR
 The **CUSUM** test cumulates the standardized recursive residuals,
 
 ```math
-W_t = \frac{1}{\hat{\sigma}_w} \sum_{j=k+1}^{t} w_j,
+W_t = \frac{1}{\hat{\sigma}_w} \sum_{j=k+1}^{t} w_j, \qquad t = k+1, \dots, n
 ```
+
+where:
+- ``W_t`` is the cumulative sum of standardized recursive residuals at observation ``t``
+- ``w_j`` is the standardized recursive residual for observation ``j``
+- ``\hat{\sigma}_w = \sqrt{\sum_{j=k+1}^n (w_j - \bar{w})^2 / (n - k - 1)}`` is the sample standard deviation of recursive residuals
+- ``k`` is the number of regressors
+- ``n`` is the total number of observations
 
 and rejects stability when ``W_t`` crosses the pair of straight significance lines ``\pm a\sqrt{n-k}\,(1 + 2(t-k)/(n-k))``, with ``a = 0.948`` at the 5% level (Brown, Durbin & Evans 1975). CUSUM is sensitive to a gradual drift in the coefficients. The **CUSUM of squares** test uses the normalized cumulative sum of squared recursive residuals ``S_t = \sum_{j=k+1}^{t} w_j^2 / \sum_{j=k+1}^{n} w_j^2`` against the band ``(t-k)/(n-k) \pm c_0``, where ``c_0`` follows the Edgerton–Wells (1994) approximation; it targets a one-off shift in the error variance.
 
@@ -1152,8 +1177,15 @@ plot_result(cusum_test(m))
 When the break date is known, [`chow_test`](@ref) tests coefficient equality across sub-samples. The **breakpoint** test splits the sample at the break and compares the pooled fit against segment-wise fits:
 
 ```math
-F = \frac{(\text{SSR}_r - \text{SSR}_u)/k}{\text{SSR}_u/(n - 2k)} \sim F(k,\, n - 2k),
+F = \frac{(\text{SSR}_r - \text{SSR}_u)/k}{\text{SSR}_u/(n - 2k)} \sim F(k,\, n - 2k)
 ```
+
+where:
+- ``F`` is the Chow breakpoint test statistic
+- ``\text{SSR}_r`` is the restricted sum of squared residuals from the pooled regression
+- ``\text{SSR}_u = \text{SSR}_1 + \text{SSR}_2`` is the unrestricted sum of squared residuals summing across the two sub-samples
+- ``k`` is the number of estimated coefficients per equation
+- ``n`` is the total sample size
 
 with ``\text{SSR}_u = \text{SSR}_1 + \text{SSR}_2`` the sum of the two sub-sample SSRs. Multiple break indices partition the sample into more segments (and scale the degrees of freedom). The **forecast** test handles a short second sample by treating it as an out-of-sample forecast period.
 
@@ -1294,14 +1326,17 @@ save_plot(p, "reg_iv.html")
 Penalized regression shrinks coefficients toward zero to trade a small increase in bias for a large reduction in variance, which is essential when the number of predictors is large relative to the sample --- the routine setting for macro forecasters facing wide predictor sets such as FRED-MD's 126 series. The elastic-net objective on standardized regressors and a centered response is
 
 ```math
-\min_{\beta}\;\frac{1}{2n}\lVert \tilde{y} - \tilde{X}\beta \rVert_2^2 \;+\; \lambda\!\left[\alpha\lVert\beta\rVert_1 + \tfrac{1-\alpha}{2}\lVert\beta\rVert_2^2\right],
+\min_{\beta}\;\frac{1}{2n}\lVert \tilde{y} - \tilde{X}\beta \rVert_2^2 \;+\; \lambda\!\left[\alpha\lVert\beta\rVert_1 + \tfrac{1-\alpha}{2}\lVert\beta\rVert_2^2\right]
 ```
 
-where
-
-- ``\tilde{X}`` are the mean-centered, unit-variance regressors and ``\tilde{y}`` the centered response,
-- ``\lambda \ge 0`` is the penalty strength (larger ``\lambda`` shrinks more),
-- ``\alpha \in [0,1]`` is the mixing parameter: ``\alpha=1`` is LASSO (sparse), ``\alpha=0`` is ridge (dense), intermediate values interpolate.
+where:
+- ``\tilde{y}`` is the mean-centered dependent variable vector
+- ``\tilde{X}`` is the standardized (mean-centered, unit-variance) regressor matrix
+- ``\beta`` is the vector of shrinkage regression coefficients
+- ``n`` is the sample size
+- ``\lambda \ge 0`` is the overall regularization penalty parameter
+- ``\alpha \in [0, 1]`` is the elastic net mixing parameter (``\alpha=1`` is LASSO; ``\alpha=0`` is ridge)
+- ``\lVert\cdot\rVert_1`` and ``\lVert\cdot\rVert_2`` denote the ``L_1`` and ``L_2`` norms
 
 The intercept is never penalized; coefficients are unstandardized before return and the intercept is recovered as ``\beta_0 = \bar{y} - \bar{x}'\beta``. This `glmnet`-convention ``1/2n`` scaling makes ``\lambda`` values comparable to R `glmnet` and Python `sklearn`.
 
@@ -1441,10 +1476,21 @@ Both are estimated by maximum likelihood with ``u_i \sim N(0, \sigma^2)``. The T
 ```math
 \ell(\beta, \sigma) = \sum_{L < y_i < U} \log\!\left[\tfrac{1}{\sigma}\phi\!\left(\tfrac{y_i - x_i'\beta}{\sigma}\right)\right]
 + \sum_{y_i \le L} \log \Phi\!\left(\tfrac{L - x_i'\beta}{\sigma}\right)
-+ \sum_{y_i \ge U} \log\!\left[1 - \Phi\!\left(\tfrac{U - x_i'\beta}{\sigma}\right)\right],
++ \sum_{y_i \ge U} \log\!\left[1 - \Phi\!\left(\tfrac{U - x_i'\beta}{\sigma}\right)\right]
 ```
 
-where ``\phi`` and ``\Phi`` are the standard normal pdf and cdf. For the normal case the fit is carried out in the globally concave Olsen (1978) reparameterization ``\delta = \beta/\sigma``, ``\gamma = 1/\sigma``, then back-transformed to ``(\beta, \sigma)`` with delta-method standard errors — this guarantees a unique maximum regardless of starting values.
+where:
+- ``\ell(\beta, \sigma)`` is the Tobit sample log-likelihood
+- ``y_i`` is the observed dependent variable for observation ``i``
+- ``x_i`` is the ``k \times 1`` vector of covariates for observation ``i``
+- ``\beta`` is the latent-index coefficient vector
+- ``\sigma`` is the standard deviation of the latent disturbance term
+- ``L`` is the lower censoring threshold (`-Inf` for none)
+- ``U`` is the upper censoring threshold (`Inf` for none)
+- ``\phi(\cdot)`` is the standard normal probability density function (PDF)
+- ``\Phi(\cdot)`` is the standard normal cumulative distribution function (CDF)
+
+For the normal case the fit is carried out in the globally concave Olsen (1978) reparameterization ``\delta = \beta/\sigma``, ``\gamma = 1/\sigma``, then back-transformed to ``(\beta, \sigma)`` with delta-method standard errors — this guarantees a unique maximum regardless of starting values.
 
 **Tobit on left-censored data.** The classic case censors at zero (`lower=0.0, upper=Inf`). `report()` shows the estimated ``\sigma``, the censored-observation counts, and the coefficient table:
 
@@ -1505,14 +1551,31 @@ Censoring records a boundary value for every unit; *incidental truncation* is mo
 
 ```math
 d_i^\ast = z_i'\gamma + u_i, \qquad d_i = \mathbf{1}\{d_i^\ast > 0\}, \qquad
-y_i = x_i'\beta + \varepsilon_i \ \text{ observed only when } d_i = 1,
+y_i = x_i'\beta + \varepsilon_i \ \text{ (observed only when } d_i = 1\text{)}
 ```
+
+where:
+- ``d_i^\ast`` is the latent selection index for unit ``i``
+- ``d_i`` is the binary selection indicator (equals 1 if outcome ``y_i`` is observed)
+- ``z_i`` is the vector of selection determinants (including exclusion restrictions)
+- ``\gamma`` is the vector of selection equation coefficients
+- ``y_i`` is the primary outcome of interest
+- ``x_i`` is the vector of outcome regressors
+- ``\beta`` is the vector of outcome equation coefficients
+- ``u_i, \varepsilon_i`` are error disturbances distributed as bivariate normal with ``\mathrm{Var}(u_i)=1``, ``\mathrm{Var}(\varepsilon_i)=\sigma^2``, and ``\mathrm{Corr}(u_i, \varepsilon_i)=\rho``
 
 with ``(u_i, \varepsilon_i)`` bivariate normal, ``\mathrm{Var}(u_i)=1``, ``\mathrm{Var}(\varepsilon_i)=\sigma^2``, and ``\mathrm{Corr}(u_i,\varepsilon_i)=\rho``. The conditional mean over the selected sample carries a selection-bias term proportional to the inverse-Mills ratio ``\lambda(\cdot)=\phi(\cdot)/\Phi(\cdot)``:
 
 ```math
-E[y_i \mid x_i,\, d_i = 1] = x_i'\beta + \rho\sigma \, \lambda(z_i'\gamma).
+\mathbb{E}[y_i \mid x_i,\, d_i = 1] = x_i'\beta + \rho\sigma \, \lambda(z_i'\gamma)
 ```
+
+where:
+- ``\mathbb{E}[y_i \mid x_i,\, d_i = 1]`` is the expected outcome conditional on being selected into the sample
+- ``x_i'\beta`` is the primary structural regression index
+- ``\rho`` is the correlation between selection and outcome disturbance terms
+- ``\sigma`` is the standard deviation of the outcome error ``\varepsilon_i``
+- ``\lambda(z_i'\gamma) = \phi(z_i'\gamma) / \Phi(z_i'\gamma)`` is the inverse Mills ratio evaluated at the selection index
 
 [`estimate_heckman`](@ref) offers two estimators. The **two-step (Heckit)** estimator fits a probit of ``d`` on ``Z``, forms ``\hat\lambda_i`` from the probit index, and runs OLS of ``y`` on ``[X\ \hat\lambda]`` over the selected subsample --- the Mills coefficient is ``\rho\sigma``. Its covariance is the Greene corrected two-step covariance, which accounts for the generated regressor ``\hat\lambda`` and the selection-induced heteroskedasticity. The **full-information ML** estimator (`method=:mle`) maximizes the bivariate-normal likelihood directly, started at the two-step estimates.
 
@@ -1562,15 +1625,15 @@ Event counts — bank failures, patent filings, sovereign-default episodes, cent
 [`estimate_poisson`](@ref) fits
 
 ```math
-E[y_i \mid x_i] = \mu_i = \exp(x_i'\beta + \text{offset}_i),
-\qquad \mathrm{Var}[y_i \mid x_i] = \mu_i,
+\mathbb{E}[y_i \mid x_i] = \mu_i = \exp(x_i'\beta + \text{offset}_i), \qquad \mathrm{Var}[y_i \mid x_i] = \mu_i
 ```
 
-where
-
-- ``y_i`` is a nonnegative integer count,
-- ``\mu_i`` is the conditional mean,
-- ``\text{offset}_i`` enters the index with coefficient fixed at 1 — pass `exposure` to set it to ``\log(\text{exposure}_i)`` and model a *rate* rather than a count.
+where:
+- ``y_i`` is the nonnegative integer count outcome for unit ``i``
+- ``x_i`` is the ``k \times 1`` vector of covariates
+- ``\beta`` is the ``k \times 1`` parameter vector of semi-elasticities
+- ``\mu_i`` is the conditional mean rate parameter
+- ``\text{offset}_i`` is an optional exposure variable entering the index with coefficient constrained to 1
 
 The equality of mean and variance is the Poisson model's strongest and least credible assumption. It matters far less than it appears to: the Poisson quasi-MLE is consistent for ``\beta`` whenever the *mean* is correctly specified, whatever the variance does (Gourieroux, Monfort & Trognon 1984). What breaks under overdispersion is not the point estimate but the standard error.
 
@@ -1621,8 +1684,15 @@ The naive information-matrix errors are 0.052, 0.034, and 0.089; the QMLE sandwi
 **Negative Binomial 2.** When the test fires, [`estimate_nbreg`](@ref) keeps the same mean but lets the variance grow quadratically:
 
 ```math
-E[y_i \mid x_i] = \mu_i, \qquad \mathrm{Var}[y_i \mid x_i] = \mu_i + \alpha\mu_i^2 .
+\mathbb{E}[y_i \mid x_i] = \mu_i = \exp(x_i'\beta), \qquad \mathrm{Var}[y_i \mid x_i] = \mu_i + \alpha\mu_i^2
 ```
+
+where:
+- ``\mathbb{E}[y_i \mid x_i] = \mu_i`` is the exponential conditional mean
+- ``\mathrm{Var}[y_i \mid x_i]`` is the quadratic overdispersion variance function (NB2 specification)
+- ``\alpha > 0`` is the overdispersion parameter (collapsing to the Poisson model as ``\alpha \to 0``)
+- ``x_i`` is the covariate vector for unit ``i``
+- ``\beta`` is the vector of regression coefficients
 
 ``\alpha`` is estimated jointly with ``\beta`` in the ``(\beta, \log\alpha)`` parameterization, so it is positive by construction, and is reported with its own delta-method standard error. ``\alpha \to 0`` is the Poisson limit.
 
@@ -1724,16 +1794,25 @@ The estimators above fit one equation at a time. When several equations are esti
 Stack the ``M`` equations as ``y = X\beta + u`` with block-diagonal ``X = \mathrm{blkdiag}(X_1,\dots,X_M)`` and ``\mathrm{Cov}(u) = \Sigma \otimes I_T``. **SUR** estimates the residual cross-covariance from equation-by-equation OLS residuals, ``\hat\Sigma_{ij} = \hat u_i'\hat u_j / T`` (the classical Zellner divisor ``T``), then applies feasible GLS:
 
 ```math
-\hat\beta = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1} X'(\hat\Sigma^{-1}\otimes I)y,
+\hat\beta = \left(X'(\hat\Sigma^{-1}\otimes I_T)X\right)^{-1} X'(\hat\Sigma^{-1}\otimes I_T)y,
 \qquad
-\widehat{\mathrm{Var}}(\hat\beta) = \left(X'(\hat\Sigma^{-1}\otimes I)X\right)^{-1}.
+\widehat{\mathrm{Var}}(\hat\beta) = \left(X'(\hat\Sigma^{-1}\otimes I_T)X\right)^{-1}
 ```
+
+where:
+- ``\hat\beta`` is the Feasible Generalized Least Squares (FGLS) SUR coefficient vector
+- ``X = \operatorname{blkdiag}(X_1, \ldots, X_M)`` is the block-diagonal regressor matrix across ``M`` equations
+- ``y = [y_1; \ldots; y_M]`` is the stacked vector of dependent variables across equations
+- ``\hat\Sigma`` is the ``M \times M`` residual cross-covariance matrix estimated from equation-by-equation OLS residuals
+- ``I_T`` is the ``T \times T`` identity matrix for ``T`` observations per equation
+- ``\otimes`` denotes the Kronecker product
+- ``\widehat{\mathrm{Var}}(\hat\beta)`` is the estimated asymptotic covariance matrix of ``\hat\beta``
 
 The efficiency gain comes entirely from cross-equation error correlation: when every equation carries identical regressors the two estimators coincide exactly (Kruskal 1968). The Kronecker product is never materialized — the normal equations are assembled block-wise.
 
 Pass equations as a vector of `(y, X)` (or `(y, X, names)`) tuples. The canonical example is the Grunfeld (1958) investment data for General Electric and Westinghouse:
 
-```@example sur
+```@example reg
 using MacroEconometricModels
 pd = load_example(:grunfeld)              # 10-firm investment panel, 1935–1954
 ge = group_data(pd, "General Electric")
@@ -1751,7 +1830,7 @@ The footer reports ``\det\hat\Sigma``, the McElroy (1977) system R², the Gaussi
 
 **Iterated FGLS** (`iterate = true`) alternates between updating ``\hat\Sigma`` from the current residuals and re-estimating ``\hat\beta`` until convergence; it reaches the Gaussian maximum-likelihood estimator (iterated FGLS ≡ SUR/FIML for the linear system):
 
-```@example sur
+```@example reg
 mi = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
                   eqnames = ["GE", "Westinghouse"], iterate = true)
 mi.iterations
@@ -1759,7 +1838,7 @@ mi.iterations
 
 **Linear cross-equation restrictions** ``R\cdot\mathrm{vec}(B) = r`` are imposed via restricted GLS. Here `vec(B)` stacks the equations' coefficients in order (`[const₁, value₁, capital₁, const₂, value₂, capital₂]`); this restriction forces the `value` coefficient to be equal across the two firms:
 
-```@example sur
+```@example reg
 R = reshape([0.0, 1, 0, 0, -1, 0], 1, 6)   # value₁ − value₂ = 0
 mr = estimate_sur([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)];
                   eqnames = ["GE", "Westinghouse"], restrict = (R, [0.0]))
@@ -1768,7 +1847,7 @@ mr.betas[1][2], mr.betas[2][2]              # equal by construction
 
 **3SLS** extends SUR to simultaneous systems by first projecting each equation's regressors onto an instrument space, ``\hat X_i = P_{Z_i} X_i``, forming ``\hat\Sigma`` from equation-by-equation 2SLS residuals, and then applying the SUR GLS step to the projected regressors. Supply instruments as one shared matrix (`instruments = :common`, the default) or a vector of per-equation matrices (`instruments = :perequation`):
 
-```@example sur
+```@example reg
 Z = hcat(ones(20), ge.data[:, 3], wh.data[:, 3])   # common instruments [1, C_ge, C_wh]
 m3 = estimate_3sls([(ge.data[:, 1], Xge, cols), (wh.data[:, 1], Xwh, cols)], Z;
                    eqnames = ["GE", "Westinghouse"])

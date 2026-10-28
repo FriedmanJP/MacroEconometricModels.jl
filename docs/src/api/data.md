@@ -12,6 +12,12 @@ TimeSeriesData
 PanelData
 CrossSectionData
 Frequency
+Daily
+Monthly
+Quarterly
+Yearly
+Mixed
+Other
 DataDiagnostic
 DataSummary
 ```

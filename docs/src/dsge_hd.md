@@ -210,7 +210,7 @@ Y_obs = Y_bayes[:, [1, 4]]  # observe Y and A
 # measurement error scaled to each series' variance
 bayes = estimate_dsge_bayes(_spec_hd, Y_obs, [0.9];
     priors=Dict(:ρ => Beta(5, 2)),
-    method=:mh, n_draws=2000, burnin=1000,
+    method=:mh, n_draws=200, burnin=100,
     observables=[:Y, :A], measurement_error=:auto)
 
 # Fast path: posterior mode only
@@ -223,7 +223,7 @@ report(hd_mode)
 # Full posterior: re-solve at each draw with credible bands
 hd_bayes = historical_decomposition(bayes, Y_bayes, [:Y, :A];
                                      measurement_error=[0.01, 0.01],
-                                     n_draws=50, quantiles=[0.16, 0.5, 0.84])
+                                     n_draws=20, quantiles=[0.16, 0.5, 0.84])
 report(hd_bayes)
 ```
 
@@ -375,16 +375,6 @@ The stacked bar chart shows the technology shock's contribution to each variable
 
 ---
 
-## API Reference
-
-```@docs
-historical_decomposition
-dsge_smoother
-dsge_particle_smoother
-KalmanSmootherResult
-```
-
----
 
 ## References
 

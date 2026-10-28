@@ -1,4 +1,4 @@
-# MacroEconometricModels.jl
+# [MacroEconometricModels.jl](@id index_page)
 
 *A comprehensive Julia package for macroeconometric research and analysis*
 

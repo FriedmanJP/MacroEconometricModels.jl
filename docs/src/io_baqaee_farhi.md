@@ -171,7 +171,13 @@ Baqaee & Farhi write the economy in **standard form**: every node is a single-el
 \end{aligned}
 ```
 
-Node layout (1-based): index 1 is the household (elasticity ``\sigma``); indices ``2,\ldots,M+1`` are producers (real sectors plus fictitious nests); indices ``M+2,\ldots,M+F+1`` are primary factors.
+where:
+- ``p_i`` is the unit cost / price of node ``i``
+- ``A_i`` is the Hicks-neutral productivity shifter of node ``i`` (normalized to ``1`` for factor and consumer nodes)
+- ``\theta_i`` is the elasticity of substitution among inputs into node ``i``
+- ``\tilde\Omega_{ij}`` is the cost share of input ``j`` in node ``i``'s total input expenditures
+- node indices follow the 1-based convention: index 1 is the household (elasticity ``\sigma``), indices ``2, \ldots, M+1`` are producers, and indices ``M+2, \ldots, M+F+1`` are primary factors
+
 
 ### Nesting schemes
 
@@ -284,7 +290,14 @@ H &= \Psi_P' K \Psi_P - X'(d\log w / d\log A)
 \end{aligned}
 ```
 
-where ``\Psi_P`` / ``\Psi_F`` are the producer (outer-node) / factor column blocks of ``\tilde\Psi = (I-\tilde\Omega)^{-1}``, obtained by sparse solves. Single factor implies ``\Psi_f = \mathbf{1}`` and the factor-price correction vanishes. The Hessian is reported at the ``n`` real sectors; for ``n > 500`` the default is `hessian=:none` and [`bf_quadratic`](@ref) evaluates ``v'Hv`` without forming ``H``.
+where:
+- ``K`` is the weighted substitution-covariance matrix across all nodes
+- ``\Psi_P`` and ``\Psi_F`` are the producer (outer-node) and factor column blocks of the generalized inverse ``\tilde\Psi = (I - \tilde\Omega)^{-1}``, obtained by sparse solves
+- ``\tilde\Lambda`` is the vector of factor revenue shares
+- ``w`` is the factor price vector, and ``A`` is the Hicks-neutral productivity vector
+- ``H`` is the general-equilibrium Hessian matrix of log output with respect to log productivities
+
+Single factor implies ``\Psi_f = \mathbf{1}`` and the factor-price correction vanishes. The Hessian is reported at the ``n`` real sectors; for ``n > 500`` the default is `hessian=:none` and [`bf_quadratic`](@ref) evaluates ``v'Hv`` without forming ``H``.
 
 !!! note "Legacy scalar vs standard-form Hessian"
     The legacy `baqaee_farhi(io; theta, sigma)` Hessian uses intermediate-only cost
@@ -400,8 +413,19 @@ Baqaee & Farhi (2020, Theorem 1, eq. 4) decompose the first-order change in aggr
 ```math
 d\log Y = \underbrace{\tilde\lambda'\, d\log A}_{\Delta\text{Technology}}
 \;-\;
-\underbrace{\tilde\lambda'\, d\log\mu \;+\; \tilde\Lambda'\, d\log\Lambda}_{\Delta\text{Allocative efficiency}}.
+\underbrace{\tilde\lambda'\, d\log\mu \;+\; \tilde\Lambda'\, d\log\Lambda}_{\Delta\text{Allocative efficiency}}
 ```
+
+where:
+- ``d\log Y`` is the first-order change in log aggregate real output (GDP)
+- ``\tilde\lambda`` is the vector of cost-based Domar weights across production nodes
+- ``d\log A`` is the vector of Hicks-neutral productivity shocks
+- ``\mu`` is the vector of gross markups (price over marginal cost) across sectors
+- ``\tilde\Lambda`` is the vector of primary factor cost shares
+- ``\Lambda`` is the vector of primary factor revenue shares
+- ``\Delta\text{Technology} = \tilde\lambda'\, d\log A`` is the direct Hulten technology contribution
+- ``\Delta\text{Allocative efficiency} = -(\tilde\lambda'\, d\log\mu + \tilde\Lambda'\, d\log\Lambda)`` is the welfare effect of resource reallocation across distorted sectors
+
 
 - **Technology**: holding the allocation of resources fixed, a productivity shock raises output in proportion to the producer's *cost-based* Domar weight.
 - **Allocative efficiency**: equilibrium reallocation of resources. For pure productivity shocks the sufficient statistic is ``-\tilde\Lambda' d\log\Lambda`` (a weighted change in revenue factor shares). Markup shocks add the direct term ``-\tilde\lambda' d\log\mu``.
@@ -584,32 +608,6 @@ Hulten prices a 20% agricultural loss at about 9.8% of aggregate output. The sec
 
 ---
 
-## API Reference
-
-```@docs
-domar_weights
-baqaee_farhi
-BaqaeeFarhiResult
-production_network
-ProductionNetwork
-bf_equilibrium
-BFEquilibrium
-bf_shock_curve
-BFShockCurve
-bf_elasticities
-BFElasticities
-BFLocal
-bf_quadratic
-bf_wedge_decomp
-BFWedgeDecomp
-bf_misallocation
-BFMisallocation
-bf_wedge_quadratic
-cost_based_domar
-revenue_based_domar
-```
-
----
 
 ## References
 

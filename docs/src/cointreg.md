@@ -80,9 +80,13 @@ y^{+}_t = y_t - \hat\Omega_{u\Delta x}\hat\Omega_{\Delta x\Delta x}^{-1}\Delta x
 ```
 
 where:
+- ``\hat\theta^{+}`` is the Fully Modified OLS (FMOLS) parameter estimator vector
 - ``Z = [D\ X]`` stacks the deterministics ``D`` and the ``I(1)`` regressors ``X``
-- ``y^{+}_t`` is the regressand purged of contemporaneous regressor endogeneity
-- ``\hat\Delta^{+}_{\Delta x u}`` is the one-sided serial-correlation bias term built from ``\hat\Lambda``
+- ``y^{+}_t = y_t - \hat\Omega_{u\Delta x}\hat\Omega_{\Delta x\Delta x}^{-1}\Delta x_t`` is the regressand transformed to eliminate regressor endogeneity
+- ``y_t`` is the observed dependent variable at time ``t``
+- ``\Delta x_t = x_t - x_{t-1}`` is the vector of differenced regressors
+- ``\hat\Omega_{u\Delta x}`` and ``\hat\Omega_{\Delta x\Delta x}`` are partitions of the estimated long-run covariance matrix ``\hat\Omega``
+- ``\hat\Delta^{+}_{\Delta x u}`` is the one-sided serial-correlation bias correction vector
 - ``T`` is the sample size
 
 The coefficient covariance is ``\hat\omega_{u\cdot\Delta x}(Z'Z)^{-1}`` with the conditional long-run variance ``\hat\omega_{u\cdot\Delta x} = \hat\Omega_{uu} - \hat\Omega_{u\Delta x}\hat\Omega_{\Delta x\Delta x}^{-1}\hat\Omega_{\Delta x u}``.
@@ -125,10 +129,15 @@ y_t = D_t'\delta + x_t'\beta + \sum_{j=-\text{leads}}^{\text{lags}} \Delta x_{t-
 ```
 
 where:
-- ``\beta`` is the long-run (cointegrating) coefficient vector on the levels
+- ``y_t`` is the dependent variable at time ``t``
+- ``D_t`` is the vector of deterministic regressors at time ``t``
 - ``\delta`` collects the deterministic coefficients
+- ``x_t`` is the vector of ``I(1)`` integrated regressors at time ``t``
+- ``\beta`` is the long-run cointegrating coefficient vector
+- ``\Delta x_{t-j} = x_{t-j} - x_{t-j-1}`` is the vector of regressor differences at lead/lag ``j``
 - ``\gamma_j`` are nuisance coefficients on the leads and lags of ``\Delta x_t``
-- ``u^{*}_t`` is orthogonal to the full lead–lag span of ``\Delta x``, which is what removes the endogeneity
+- ``\text{leads}`` and ``\text{lags}`` are the lead and lag truncation lengths
+- ``u^{*}_t`` is the stationary regression error orthogonal to all leads and lags of ``\Delta x``
 
 Projecting ``u_t`` onto leads and lags of ``\Delta x_t`` is what makes ``(\delta, \beta)`` efficient. Leads and lags may be fixed, or selected automatically over a ``0..k_{\max}`` grid (``k_{\max} = \lfloor 4(T/100)^{1/4}\rfloor``) by AIC (default) or BIC. Standard errors default to the long-run-variance–corrected OLS covariance (`dols_se=:lrv`), where the HAC long-run variance of the DOLS residual replaces ``\sigma^2``; `dols_se=:robust` uses a Newey–West sandwich instead.
 

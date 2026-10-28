@@ -115,12 +115,14 @@ where:
 Event-time ATTs aggregate across cohorts at each relative time ``e = t - g``:
 
 ```math
-\text{ATT}(e) = \sum_{g} \frac{N_g}{N_{\text{treated}}} \cdot \text{ATT}(g, g + e)
+\text{ATT}(e) = \sum_g \frac{N_g}{N_{\text{treated}}} \cdot \text{ATT}(g, g + e)
 ```
 
 where:
-- ``N_g`` is the size of cohort ``g``
-- ``N_{\text{treated}}`` is the total number of ever-treated units
+- ``\text{ATT}(e)`` is the event-study average treatment effect at relative event time ``e = t - g``
+- ``N_g`` is the sample size of cohort ``g``
+- ``N_{\text{treated}} = \sum_g N_g`` is the total number of ever-treated units
+- ``\text{ATT}(g, g + e)`` is the cohort-specific treatment effect at calendar time ``t = g + e``
 
 The **parallel trends** assumption requires:
 
@@ -470,8 +472,13 @@ The identified set for the period-``e`` effect follows in closed form from the o
 **Second differences** ``\Delta^{SD}(M)`` (`restriction=:sd`) bounds the change in the slope of ``\delta`` by ``M`` (in outcome units per period squared):
 
 ```math
-\left|\delta_{t+1} - 2\delta_t + \delta_{t-1}\right| \leq M
+\left|\delta_{t+1} - 2\delta_t + \delta_{t-1}\right| \leq M, \qquad t \geq 0
 ```
+
+where:
+- ``\delta_t = \mathbb{E}[Y_{it}(0) \mid G_i = g] - \mathbb{E}[Y_{it}(0) \mid G_i = \infty]`` is the differential parallel trend violation at time ``t``
+- ``\delta_{t+1} - 2\delta_t + \delta_{t-1} = (\delta_{t+1} - \delta_t) - (\delta_t - \delta_{t-1})`` is the second difference measuring the change in trend slope across consecutive periods
+- ``M \geq 0`` is the maximum allowable acceleration/deceleration in the differential trend violation (expressed in outcome units per period squared)
 
 Inference uses the Armstrong & Kolesár (2018) **fixed-length confidence interval** (FLCI): an affine estimator ``\hat{\theta} = a'\hat{\beta}_{\text{pre}} + l'\hat{\beta}_{\text{post}}`` whose pre-period weights cancel the unbounded linear-trend direction, with the worst-case bias over ``\Delta^{SD}(M)`` traded off against variance and the half-length ``cv_\alpha(\text{bias}/\text{sd}) \cdot \text{sd}`` minimized over the bias–variance frontier (``cv_\alpha(b)`` is the ``1-\alpha`` quantile of ``|N(b,1)|``).
 

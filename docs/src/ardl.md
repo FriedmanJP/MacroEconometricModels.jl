@@ -200,9 +200,11 @@ x^{-}_{j,t} = \sum_{s\le t}\min(\Delta x_{j,s},0),
 ```
 
 where:
-- ``x^{+}_{j,t}`` cumulates only the increases in ``x_j`` up to ``t``
-- ``x^{-}_{j,t}`` cumulates only the decreases
-- both start at ``x^{+}_{j,0}=x^{-}_{j,0}=0``, so that ``x_{j,t}=x_{j,1}+x^{+}_{j,t}+x^{-}_{j,t}`` exactly
+- ``x^{+}_{j,t}`` cumulates only the positive changes (increases) in regressor ``x_j`` up to time ``t``
+- ``x^{-}_{j,t}`` cumulates only the negative changes (decreases) in regressor ``x_j`` up to time ``t``
+- ``\Delta x_{j,s} = x_{j,s} - x_{j,s-1}`` is the first difference of regressor ``j`` at time ``s``
+- ``s \le t`` indexes the time periods from the initial observation up to ``t``
+- both partial sums start at ``x^{+}_{j,0}=x^{-}_{j,0}=0``, ensuring the identity ``x_{j,t}=x_{j,1}+x^{+}_{j,t}+x^{-}_{j,t}`` holds exactly
 
 The two partial sums are cumulated **levels** (``I(1)`` like ``x``) and replace ``x_j`` in the ARDL. `estimate_nardl` builds this enlarged design and hands it to the same estimation, `long_run`, and `bounds_test` machinery — so an asymmetric regressor contributes **two** columns to the bounds-table ``k``.
 
@@ -283,10 +285,17 @@ For a **dynamic heterogeneous panel** — many cross-sectional units, each an AR
 ```
 
 where:
-- ``\varphi_i`` is unit ``i``'s speed of adjustment (negative under error correction)
-- ``\theta`` is the long-run vector, common across units under PMG
-- ``\xi_{ij}``, ``\psi_{ij}`` are the unit-specific short-run dynamics
-- ``\mu_i`` is a unit fixed effect and ``\varepsilon_{it}`` the idiosyncratic error
+- ``\Delta y_{it} = y_{it} - y_{i,t-1}`` is the first-differenced dependent variable for unit ``i`` at time ``t``
+- ``y_{i,t-1}`` is the lagged level of the dependent variable for unit ``i``
+- ``x_{i,t-1}`` is the vector of lagged regressor levels for unit ``i``
+- ``\Delta x_{i,t-j} = x_{i,t-j} - x_{i,t-j-1}`` is the vector of differenced regressors at lag ``j``
+- ``\varphi_i`` is unit ``i``'s speed of adjustment (error correction speed, with ``\varphi_i < 0`` under cointegration)
+- ``\theta`` is the long-run cointegrating multiplier vector, common across units under PMG
+- ``\xi_{ij}`` are unit-specific autoregressive coefficients on lagged differences of ``y``
+- ``\psi_{ij}`` are unit-specific short-run dynamic coefficient vectors on differences of ``x``
+- ``\mu_i`` is the cross-sectional unit fixed effect
+- ``\varepsilon_{it}`` is the idiosyncratic disturbance term with mean zero and variance ``\sigma_i^2``
+- ``p`` and ``q`` are the autoregressive and distributed-lag orders
 
 - **`:pmg`** — *Pooled Mean Group* (Pesaran, Shin & Smith 1999): the long-run vector ``\theta`` is **common** across units, while the speed of adjustment ``\varphi_i``, the short-run dynamics, and ``\sigma^2_i`` are heterogeneous. ``\theta`` maximises the concentrated (profile) likelihood.
 - **`:mg`** — *Mean Group* (Pesaran & Smith 1995): an unrestricted ARDL per unit, with ``\bar\theta = N^{-1}\sum_i\theta_i`` and the Swamy between-unit standard error ``\operatorname{std}(\theta_i)/\sqrt N``.
@@ -294,7 +303,7 @@ where:
 
 Pass a [`PanelData`](@ref) from `xtset`, the dependent-variable symbol, and one or more long-run regressor symbols. Units with ``\varphi_i \ge 0`` (non-error-correcting) are flagged.
 
-```@setup ardlpanel
+```@setup ardl
 using MacroEconometricModels, Random, Statistics, DataFrames
 
 # Fixed-seed heterogeneous panel: common long-run θ = 1.5, heterogeneous φ_i and
@@ -305,20 +314,20 @@ rows = NamedTuple[]
 for i in 1:N
     phi = -(0.2 + 0.4 * rand())            # φ_i ∈ (-0.6, -0.2)
     g   = 0.3 * randn()
-    x = zeros(Tt); y = zeros(Tt)
-    x[1] = randn(); y[1] = 1.5 * x[1] + randn()
+    x_sim = zeros(Tt); y_sim = zeros(Tt)
+    x_sim[1] = randn(); y_sim[1] = 1.5 * x_sim[1] + randn()
     for t in 2:Tt
-        x[t] = x[t-1] + randn()
-        y[t] = y[t-1] + phi * (y[t-1] - 1.5 * x[t-1]) + g * (x[t] - x[t-1]) + 0.3 * randn()
+        x_sim[t] = x_sim[t-1] + randn()
+        y_sim[t] = y_sim[t-1] + phi * (y_sim[t-1] - 1.5 * x_sim[t-1]) + g * (x_sim[t] - x_sim[t-1]) + 0.3 * randn()
     end
     for t in 1:Tt
-        push!(rows, (id = i, time = t, y = y[t], x = x[t]))
+        push!(rows, (id = i, time = t, y = y_sim[t], x = x_sim[t]))
     end
 end
 pd = xtset(DataFrame(rows), :id, :time)
 ```
 
-```@example ardlpanel
+```@example ardl
 # Pooled Mean Group: common long-run θ (should be near the true 1.5)
 pmg = estimate_pmg(pd, :y, :x; p=1, q=1, method=:pmg)
 report(pmg)
@@ -326,7 +335,7 @@ report(pmg)
 
 The pooled long-run coefficient is ``\hat\theta = 1.4998`` with a standard error of ``0.0060``, recovering the common ``1.5`` imposed on all 20 units. The mean speed of adjustment ``\hat\varphi = -0.4568`` says a typical unit closes 46% of its long-run gap each period, and no unit is flagged with ``\varphi_i \ge 0``, so every cross-section error-corrects. The short-run coefficient on ``\Delta x`` is insignificant, as it should be: the DGP draws each unit's short-run slope from a mean-zero normal, so the cross-unit average is zero even though individual units respond.
 
-```@example ardlpanel
+```@example ardl
 # Mean Group and Dynamic Fixed Effects on the same panel
 mg  = estimate_pmg(pd, :y, :x; p=1, q=1, method=:mg)
 dfe = estimate_pmg(pd, :y, :x; p=1, q=1, method=:dfe)
@@ -339,7 +348,7 @@ All three estimators land within ``0.002`` of the true 1.5, which is what long-r
 
 The **Hausman test** compares the pooled estimator (efficient under long-run homogeneity) against the always-consistent Mean Group estimator. Failing to reject ``H_0`` supports pooling the long-run relationship:
 
-```@example ardlpanel
+```@example ardl
 h = hausman_test(pmg, mg)   # H0: long-run homogeneity ⇒ PMG efficient
 report(h)
 ```

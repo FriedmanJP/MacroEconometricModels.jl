@@ -106,8 +106,9 @@ Y_t = c + A_1 Y_{t-1} + \cdots + A_p Y_{t-p} + u_t, \quad u_t \sim N(0, \Sigma)
 where:
 - ``Y_t`` is the ``n \times 1`` vector of endogenous variables at time ``t``
 - ``c`` is the ``n \times 1`` intercept vector
-- ``A_l`` is the ``n \times n`` coefficient matrix at lag ``l``
-- ``\Sigma`` is the ``n \times n`` error covariance matrix
+- ``A_l`` is the ``n \times n`` coefficient matrix at lag ``l = 1, \ldots, p``
+- ``u_t`` is the ``n \times 1`` Gaussian innovation vector
+- ``\Sigma`` is the ``n \times n`` innovation covariance matrix
 - ``p`` is the lag order
 
 the posterior distribution over parameters ``(B, \Sigma)`` satisfies:
@@ -117,9 +118,11 @@ p(B, \Sigma \mid Y) \propto p(Y \mid B, \Sigma) \cdot p(B, \Sigma)
 ```
 
 where:
-- ``p(Y \mid B, \Sigma)`` is the Gaussian likelihood
-- ``p(B, \Sigma)`` is the prior distribution
-- ``B`` is the ``k \times n`` coefficient matrix (``k = 1 + np``, stacking the intercept and all lag coefficients)
+- ``p(B, \Sigma \mid Y)`` is the joint posterior distribution of the coefficients and covariance given data ``Y``
+- ``p(Y \mid B, \Sigma)`` is the Gaussian sample likelihood
+- ``p(B, \Sigma)`` is the joint prior distribution
+- ``B`` is the ``k \times n`` coefficient matrix (``k = 1 + np``) stacking the intercept and all lag coefficients
+- ``\Sigma`` is the ``n \times n`` innovation covariance matrix
 
 The package uses the **Normal-Inverse-Wishart** (NIW) conjugate prior:
 
@@ -128,10 +131,12 @@ The package uses the **Normal-Inverse-Wishart** (NIW) conjugate prior:
 ```
 
 where:
+- ``\Sigma`` is the innovation covariance matrix following an Inverse-Wishart distribution ``\text{IW}(\nu_0, S_0)``
 - ``\nu_0`` is the prior degrees of freedom
 - ``S_0`` is the ``n \times n`` prior scale matrix
-- ``B_0`` is the ``k \times n`` prior mean for coefficients
-- ``\Omega_0`` is the ``k \times k`` prior covariance for coefficient rows
+- ``B_0`` is the ``k \times n`` prior mean matrix for coefficients
+- ``\Omega_0`` is the ``k \times k`` prior row-covariance matrix
+- ``\text{vec}`` denotes the vectorization operator and ``\otimes`` the Kronecker product
 
 The conjugate structure yields a closed-form posterior of the same NIW family, enabling exact i.i.d. sampling without MCMC convergence concerns.
 
@@ -145,6 +150,11 @@ The **Minnesota prior** (Litterman 1986; Doan, Litterman & Sims 1984) shrinks VA
 E[A_{1,ii}] = 1, \quad E[A_{1,ij}] = 0 \text{ for } i \neq j, \quad E[A_l] = 0 \text{ for } l > 1
 ```
 
+where:
+- ``A_{l,ij}`` is the coefficient on lag ``l`` of variable ``j`` in equation ``i``
+- ``A_l`` is the ``n \times n`` VAR coefficient matrix at lag ``l``
+- ``E[\cdot]`` denotes prior expectation under the Minnesota random-walk benchmark
+
 The prior is imposed through **dummy observations** in the Bańbura-Giannone-Reichlin stacked form. The autoregressive block contributes one pseudo-observation per (lag, variable) pair, scaled by ``\sigma_i l^{d} / \tau``, which under the conjugate Kronecker structure ``\Sigma \otimes \Omega_0`` implies
 
 ```math
@@ -152,11 +162,13 @@ The prior is imposed through **dummy observations** in the Bańbura-Giannone-Rei
 ```
 
 where:
+- ``\text{Var}(A_{l,ji} \mid \Sigma)`` is the conditional prior variance of coefficient ``A_{l,ji}`` given ``\Sigma``
 - ``A_{l,ji}`` is the coefficient on lag ``l`` of variable ``i`` in the equation for variable ``j``
-- ``\tau`` is the **overall tightness**, entering as an *inverse* tightness --- the dummy observations are divided by ``\tau``, so a **larger** ``\tau`` gives a **looser** prior and a smaller one shrinks harder toward the random walk
-- ``d`` is the **lag decay** exponent; the prior variance falls as ``l^{-2d}``, so distant lags are shrunk more aggressively
-- ``\sigma_i^2`` is the residual variance of a univariate AR(1) fitted to variable ``i``, which puts the regressor side on a common scale
-- ``\Sigma_{jj}`` is the equation-``j`` innovation variance, supplied by the Kronecker structure rather than by a hyperparameter
+- ``\Sigma_{jj}`` is the diagonal element of the innovation covariance matrix for equation ``j``
+- ``\tau`` is the overall tightness hyperparameter (larger ``\tau`` implies looser prior)
+- ``d`` is the lag decay exponent governing shrinkage of distant lags
+- ``l \in \{1, \ldots, p\}`` is the lag index
+- ``\sigma_i^2`` is the residual variance from an initial univariate AR(1) fit to variable ``i``
 
 Own and cross-variable lags carry the same prior variance in this parameterization: the asymmetry that distinguishes them comes from the prior *mean*, which is 1 for a variable's own first lag and 0 everywhere else. Two further dummy blocks impose the **sum-of-coefficients** prior (weight ``\lambda``) and the **dummy initial observation**, or co-persistence, prior (weight ``\mu``). Both divide by their hyperparameter, so as with ``\tau``, larger means looser.
 
@@ -221,8 +233,10 @@ p(Y \mid \tau) = \int p(Y \mid B, \Sigma) \, p(B, \Sigma \mid \tau) \, dB \, d\S
 ```
 
 where:
-- ``p(Y \mid B, \Sigma)`` is the Gaussian likelihood
-- ``p(B, \Sigma \mid \tau)`` is the NIW prior indexed by hyperparameters
+- ``p(Y \mid \tau)`` is the marginal data density (marginal likelihood) conditional on hyperparameter ``\tau``
+- ``p(Y \mid B, \Sigma)`` is the Gaussian likelihood function
+- ``p(B, \Sigma \mid \tau)`` is the Normal-Inverse-Wishart prior density indexed by ``\tau``
+- ``B`` is the coefficient matrix and ``\Sigma`` is the error covariance matrix
 
 For the NIW prior with dummy observations, the log marginal likelihood has an analytical form:
 
@@ -231,11 +245,13 @@ For the NIW prior with dummy observations, the log marginal likelihood has an an
 ```
 
 where:
-- ``c`` is a normalization constant involving multivariate gamma functions
+- ``\log p(Y \mid \tau)`` is the log marginal likelihood
+- ``c`` is an invariant normalization constant involving multivariate gamma functions
+- ``n`` is the number of endogenous variables in the system
 - ``X_d, X_a`` are the dummy-only and augmented (data + dummy) regressor matrices
-- ``\hat{S}_a, \hat{S}_d`` are the residual sum-of-squares matrices from OLS on augmented and dummy-only systems
-- ``\nu_a = T + \nu_d``, ``\nu_d = T_d - k`` are the posterior and prior degrees of freedom
-- ``T_d`` is the number of dummy observations, ``k = 1 + np`` is the number of regressors per equation
+- ``\hat{S}_a, \hat{S}_d`` are the residual sum-of-squares matrices from OLS on the augmented and dummy systems
+- ``\nu_a = T + \nu_d`` and ``\nu_d = T_d - k`` are posterior and prior degrees of freedom
+- ``T_d`` is the number of dummy observations and ``k = 1 + np`` is the regressor count per equation
 
 ### Tau-Only Optimization
 
@@ -267,9 +283,10 @@ Banbura, Giannone & Reichlin (2010) recommend jointly optimizing ``(\tau, \lambd
 ```
 
 where:
-- ``\hat{\tau}`` is the optimal overall tightness
-- ``\hat{\lambda}`` is the optimal sum-of-coefficients scaling
-- ``\hat{\mu}`` is the optimal co-persistence scaling
+- ``\hat{\tau}`` is the optimal overall tightness hyperparameter
+- ``\hat{\lambda}`` is the optimal sum-of-coefficients shrinkage parameter
+- ``\hat{\mu}`` is the optimal co-persistence (dummy initial observation) shrinkage parameter
+- ``\log p(Y \mid \tau, \lambda, \mu)`` is the log marginal likelihood of the data ``Y``
 
 ```@example bvar
 # Three-dimensional grid search
@@ -302,8 +319,10 @@ Giannone, Lenza & Primiceri (2015) treat the hyperparameters as **random**, with
 ```
 
 where:
-- ``p(Y \mid \gamma)`` is the closed-form conjugate marginal likelihood above
-- ``p(\gamma)`` are Gamma hyperpriors in GLP's mode/standard-deviation parameterization: ``\tau`` with mode 0.2 and sd 0.4, ``\lambda`` and ``\mu`` with mode 1 and sd 1
+- ``\hat{\gamma}`` is the posterior mode of the hyperparameter vector
+- ``\gamma = (\tau, \lambda, \mu)`` collects overall tightness, sum-of-coefficients, and co-persistence hyperparameters
+- ``p(Y \mid \gamma)`` is the conjugate marginal likelihood of the BVAR system
+- ``p(\gamma)`` is the joint hyperprior distribution (independent Gamma priors)
 
 This is what `estimate_bvar` uses by default when `prior=:minnesota` and no `hyper` is supplied. It matters because a one-dimensional grid over ``\tau`` cannot trade overall tightness against the sum-of-coefficients and initial-observation priors: holding the latter at their defaults, the grid can be driven to an endpoint of its own range and report that endpoint as though it had been selected.
 
@@ -687,10 +706,14 @@ a_t = a_{t-1} + \zeta_t,\quad
 ```
 
 where:
-- ``X_t' = I_n \otimes [1, y_{t-1}', \ldots, y_{t-p}']``, so ``B_t`` stacks every equation's coefficients
-- ``A_t`` is lower triangular with a unit diagonal; its free elements are the contemporaneous structural coefficients, which impose a recursive identification that itself drifts
-- ``\Sigma_t = \mathrm{diag}(\sigma_{1,t},\ldots,\sigma_{n,t})``
-- ``\nu_t\sim N(0,Q)``, ``\zeta_t\sim N(0,S)`` block diagonal by equation, ``\eta_t\sim N(0,W)`` diagonal
+- ``y_t`` is the ``n \times 1`` vector of endogenous variables at time ``t``
+- ``X_t' = I_n \otimes [1, y_{t-1}', \ldots, y_{t-p}']`` is the Kronecker design matrix
+- ``B_t`` is the ``np+1`` vector of time-varying VAR coefficients drifting as a random walk
+- ``A_t`` is a lower-triangular matrix with unit diagonal capturing contemporaneous structural relationships
+- ``a_t`` is the vector of free off-diagonal elements in ``A_t``
+- ``\Sigma_t = \mathrm{diag}(\sigma_{1,t},\ldots,\sigma_{n,t})`` collects the time-varying stochastic volatilities
+- ``\varepsilon_t \sim N(0, I_n)`` is the vector of standard normal structural shocks
+- ``\nu_t \sim N(0, Q)``, ``\zeta_t \sim N(0, S)``, and ``\eta_t \sim N(0, W)`` are the state innovation vectors
 
 !!! note "Technical Note"
     Each Gibbs sweep draws, in the Del Negro & Primiceri (2015) **corrected** order: ``B_{1:T}`` by Carter-Kohn with per-period observation covariance ``A_t^{-1}\Sigma_t^2A_t^{-1\prime}``; ``a_{1:T}`` equation by equation on the VAR residuals; the Kim-Shephard-Chib mixture indicators ``s_t`` given the **current** volatilities, then ``\log\sigma^2_{1:T}`` given ``s``; and finally ``Q``, ``S``, ``W`` from conjugate inverse-Wishart / inverse-gamma updates. The corrigendum's point is that ``s`` must be drawn *before* the volatility update, and that the coefficient blocks are drawn without conditioning on ``s``.
@@ -790,9 +813,10 @@ y^{lo}_{i,t} = \sum_{j} w_j\, z_{i,t-j+1}
 ```
 
 where:
-- ``z_{i,t}`` is the latent high-frequency value of series ``i``
-- ``w`` is the aggregation filter: ``[1]`` for a `:stock` (end-of-period level), ``\mathbf{1}_m`` for a `:flow` sum, ``\mathbf{1}_m/m`` for an `:average`, and the Mariano-Murasawa triangular filter ``[1,2,\ldots,m,\ldots,2,1]/m`` for a `:growth` rate
-- ``m`` is the frequency ratio (3 for monthly/quarterly)
+- ``y^{lo}_{i,t}`` is the observed low-frequency observation of series ``i`` at time ``t``
+- ``z_{i,t}`` is the latent high-frequency value of series ``i`` at time ``t``
+- ``w`` is the temporal aggregation filter vector with elements ``w_j``
+- ``m`` is the frequency ratio (e.g., 3 for quarterly-to-monthly aggregation)
 
 Input is a high-frequency panel with `NaN` wherever a series is not observed — a quarterly series in a monthly panel carries a value every third row.
 

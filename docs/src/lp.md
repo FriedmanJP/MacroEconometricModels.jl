@@ -115,11 +115,14 @@ y_{i,t+h} = \alpha_{i,h} + \beta_{i,h} \, x_t + \gamma_{i,h}' \, w_t + \varepsil
 ```
 
 where:
-- ``y_{i,t+h}`` is the response variable ``i`` at time ``t+h``
-- ``x_t`` is the shock variable at time ``t``
-- ``w_t = (y_{t-1}', y_{t-2}', \ldots, y_{t-p}')' `` is the vector of lagged controls
-- ``\beta_{i,h}`` is the impulse response of variable ``i`` to shock ``x`` at horizon ``h``
-- ``\varepsilon_{i,t+h}`` is the regression error
+- ``y_{i,t+h}`` is the response variable ``i`` at horizon ``t+h``
+- ``\alpha_{i,h}`` is the horizon-specific constant
+- ``x_t`` is the shock or policy variable at time ``t``
+- ``\beta_{i,h}`` is the impulse response coefficient of variable ``i`` to shock ``x`` at horizon ``h``
+- ``w_t = (y_{t-1}', y_{t-2}', \ldots, y_{t-p}')'`` is the vector of lagged control variables
+- ``\gamma_{i,h}`` is the coefficient vector on lagged controls
+- ``\varepsilon_{i,t+h}`` is the projection error term
+- ``h \in \{0, 1, \ldots, H\}`` is the projection horizon
 
 OLS at each horizon yields:
 
@@ -128,9 +131,11 @@ OLS at each horizon yields:
 ```
 
 where:
+- ``\hat{\beta}_h`` is the OLS coefficient estimator vector at horizon ``h``
 - ``X`` is the ``T_{\text{eff}} \times k`` regressor matrix (intercept, shock, controls)
 - ``Y_h`` is the ``T_{\text{eff}} \times 1`` response vector at horizon ``h``
-- ``k = 2 + np`` (intercept + shock + ``p`` lags of ``n`` variables)
+- ``k = 2 + np`` is the total regressor count (intercept + shock + ``p`` lags of ``n`` variables)
+- ``T_{\text{eff}}`` is the effective sample size
 
 ### HAC Standard Errors
 
@@ -141,9 +146,12 @@ LP residuals ``\varepsilon_{t+h}`` are serially correlated --- at least MA(``h-1
 ```
 
 where:
-- ``\hat{V}_{\text{NW}}`` is the HAC variance-covariance matrix of ``\hat{\beta}_h``
-- ``\hat{S} = \hat{\Gamma}_0 + \sum_{j=1}^{m} w_j (\hat{\Gamma}_j + \hat{\Gamma}_j')`` is the long-run covariance estimator
-- ``w_j`` are Bartlett kernel weights and ``m`` is the bandwidth
+- ``\hat{V}_{\text{NW}}`` is the Newey-West HAC variance-covariance matrix of ``\hat{\beta}_h``
+- ``X`` is the ``T_{\text{eff}} \times k`` design matrix
+- ``\hat{S} = \hat{\Gamma}_0 + \sum_{j=1}^{m} w_j (\hat{\Gamma}_j + \hat{\Gamma}_j')`` is the long-run covariance matrix of the moment conditions
+- ``\hat{\Gamma}_j`` is the sample autocovariance of residuals at lag ``j``
+- ``w_j`` is the Bartlett kernel weight assigned to lag ``j``
+- ``m`` is the truncation bandwidth
 
 !!! note "Automatic Bandwidth Selection"
     When `bandwidth=0` (the default), the effective bandwidth at each horizon ``h`` is `max(m̂_NW, h+1)` where `m̂_NW` is the Newey-West (1994) data-driven selection. This ensures the bandwidth always accounts for the MA(``h-1``) serial correlation structure induced by the overlapping projection.
@@ -252,6 +260,15 @@ When the shock variable ``x_t`` is endogenous or measured with error, external i
 x_t = \pi_0 + \pi_1' z_t + \pi_2' w_t + v_t
 ```
 
+where:
+- ``x_t`` is the endogenous policy or shock variable at time ``t``
+- ``\pi_0`` is the first-stage intercept
+- ``\pi_1`` is the coefficient vector on external instruments ``z_t``
+- ``z_t`` is the ``q \times 1`` vector of external instruments
+- ``\pi_2`` is the coefficient vector on controls ``w_t``
+- ``w_t`` is the vector of lagged controls
+- ``v_t`` is the first-stage error term
+
 **Second stage** --- use fitted values in the LP regression:
 
 ```math
@@ -259,9 +276,13 @@ y_{i,t+h} = \alpha_{i,h} + \beta_{i,h} \, \hat{x}_t + \gamma_{i,h}' \, w_t + \va
 ```
 
 where:
-- ``z_t`` is the vector of external instruments
-- ``\hat{x}_t`` is the first-stage fitted value
+- ``y_{i,t+h}`` is the response variable ``i`` at time ``t+h``
+- ``\alpha_{i,h}`` is the horizon-specific intercept
+- ``\hat{x}_t = \hat{\pi}_0 + \hat{\pi}_1' z_t + \hat{\pi}_2' w_t`` is the first-stage fitted value
 - ``\beta_{i,h}`` is the instrumented impulse response at horizon ``h``
+- ``\gamma_{i,h}`` is the coefficient vector on controls ``w_t``
+- ``w_t`` is the vector of lagged controls
+- ``\varepsilon_{i,t+h}`` is the second-stage regression error
 
 ### Instrument Relevance
 
@@ -272,9 +293,10 @@ F = \frac{\hat{\pi}_1' \, \hat{V}_{\pi}^{-1} \, \hat{\pi}_1}{q}
 ```
 
 where:
-- ``\hat{\pi}_1`` is the vector of first-stage coefficients on the instruments
-- ``\hat{V}_{\pi}`` is the HAC variance-covariance of ``\hat{\pi}_1``
-- ``q`` is the number of instruments
+- ``F`` is the first-stage Wald ``F``-statistic testing instrument relevance
+- ``\hat{\pi}_1`` is the estimated vector of first-stage coefficients on instruments
+- ``\hat{V}_{\pi}`` is the Newey-West HAC covariance matrix of ``\hat{\pi}_1``
+- ``q`` is the number of excluded instruments
 
 A rule of thumb requires ``F > 10`` for strong instruments (Stock & Yogo 2005).
 
@@ -317,9 +339,11 @@ F_{\text{eff}} = \frac{\tilde{x}' P_{\tilde{Z}} \tilde{x}}
 ```
 
 where:
-- ``\tilde{Z} = M_W Z`` and ``\tilde{x} = M_W x`` are the instruments and the shock with the LP controls partialled out
-- ``\hat{V}_{\hat{\pi}}`` is the Newey-West covariance of the first-stage coefficients
-- ``q`` is the number of excluded instruments
+- ``F_{\text{eff}}`` is the Montiel Olea–Pflueger effective ``F``-statistic robust to serial correlation and heteroscedasticity
+- ``\tilde{Z} = M_W Z`` and ``\tilde{x} = M_W x`` are the instruments and shock with controls ``W`` partialled out
+- ``P_{\tilde{Z}} = \tilde{Z}(\tilde{Z}'\tilde{Z})^{-1}\tilde{Z}'`` is the orthogonal projection matrix
+- ``\hat{V}_{\hat{\pi}}`` is the Newey-West HAC covariance matrix of first-stage coefficients
+- ``\operatorname{tr}`` denotes the matrix trace operator
 
 Substituting the homoskedastic covariance ``\hat\sigma_v^2(\tilde{Z}'\tilde{Z})^{-1}`` makes the denominator exactly ``q\hat\sigma_v^2``, so ``F_{\text{eff}}`` collapses to the classical first-stage F — the reduction Montiel Olea and Pflueger establish.
 
@@ -376,10 +400,12 @@ J_h = \frac{\hat{u}_h' \tilde{Z} \, (\tilde{Z}'\tilde{Z})^{-1} \tilde{Z}' \hat{u
 ```
 
 where:
+- ``J_h`` is the Hansen-Sargan overidentification test statistic at horizon ``h``
 - ``\hat{u}_h`` is the horizon-``h`` second-stage residual vector
-- ``\tilde{Z} = M_W Z`` is the instrument matrix with the LP controls ``W`` partialled out
-- ``\hat{\sigma}^2_h = \hat{u}_h'\hat{u}_h / T_h`` is the residual variance at that horizon
-- ``q`` is the number of instruments, so the test has ``q - 1`` degrees of freedom
+- ``\tilde{Z} = M_W Z`` is the instrument matrix with LP controls ``W`` partialled out
+- ``\hat{\sigma}^2_h = \hat{u}_h'\hat{u}_h / T_h`` is the residual variance at horizon ``h``
+- ``q`` is the number of instruments and ``q - 1`` is the degrees of freedom
+- ``\overset{d}{\longrightarrow}`` denotes asymptotic convergence in distribution
 
 Residualizing ``Z`` on the same controls the second stage conditions on matters: the 2SLS residuals are already orthogonal to ``W``, so leaving ``Z`` un-partialled lets the component of ``Z`` spanned by the controls inflate the statistic.
 
@@ -462,9 +488,10 @@ The impulse response is modeled as:
 ```
 
 where:
-- ``\theta_j`` are spline coefficients
+- ``\beta(h)`` is the smooth impulse response function evaluated at horizon ``h``
+- ``\theta_j`` are the B-spline weighting coefficients
 - ``B_j(h)`` are cubic B-spline basis functions evaluated at horizon ``h``
-- ``J`` is the number of basis functions (determined by the knot count and degree)
+- ``J`` is the total number of basis functions
 
 ### Penalized Estimation
 
@@ -475,10 +502,12 @@ Estimation proceeds in two steps — a "smooth-the-point-IRF" approximation to t
 ```
 
 where:
-- ``B`` is the ``(H+1) \times J`` basis matrix
-- ``W = \text{diag}(1/\text{Var}(\hat{\beta}_h))`` is the precision-weight matrix
-- ``R`` is the ``J \times J`` roughness penalty matrix with ``R_{ij} = \int B_i''(x) \, B_j''(x) \, dx``
-- ``\lambda \geq 0`` is the smoothing parameter (``\lambda = 0`` gives unpenalized fit)
+- ``\hat{\theta}`` is the ``J \times 1`` vector of estimated spline coefficients
+- ``B`` is the ``(H+1) \times J`` basis matrix across horizons ``0, \ldots, H``
+- ``W = \text{diag}(1/\text{Var}(\hat{\beta}_h))`` is the weighting matrix
+- ``\hat{\beta}`` is the unconstrained LP response vector
+- ``\lambda \ge 0`` is the smoothing penalty parameter
+- ``R`` is the second-difference roughness penalty matrix
 
 Reported confidence bands propagate the full cross-horizon covariance of ``\hat{\beta}`` through the spline map, ``\text{Var}(\hat{\theta}) = (B'WB+\lambda R)^{-1} B'W\,\text{Cov}(\hat{\beta})\,WB(B'WB+\lambda R)^{-1}``, rather than a per-horizon diagonal — otherwise the strong correlation between overlapping horizons would make the bands systematically too narrow.
 
@@ -559,10 +588,15 @@ y_{t+h} = F(z_t) \left[ \alpha_E + \beta_E \, x_t + \gamma_E' \, w_t \right] + (
 ```
 
 where:
-- ``F(z_t)`` is the logistic smooth transition function
-- ``z_t`` is the state variable (e.g., moving average of GDP growth)
-- ``\beta_E`` is the expansion regime impulse response (``F \to 1``)
-- ``\beta_R`` is the recession regime impulse response (``F \to 0``)
+- ``y_{t+h}`` is the outcome variable at horizon ``h``
+- ``F(z_t) \in [0, 1]`` is the smooth transition function indicating expansion probability
+- ``z_t`` is the economic state variable
+- ``x_t`` is the policy shock variable
+- ``w_t`` is the vector of control variables
+- ``\alpha_E, \alpha_R`` are expansion and recession intercepts
+- ``\beta_E, \beta_R`` are regime-specific impulse response coefficients
+- ``\gamma_E, \gamma_R`` are regime-specific control coefficient vectors
+- ``\varepsilon_{t+h}`` is the projection error
 
 ### Logistic Transition Function
 
@@ -571,8 +605,10 @@ F(z_t) = \frac{1}{1 + \exp(-\gamma(z_t - c))}
 ```
 
 where:
-- ``\gamma > 0`` controls the transition speed (higher = sharper regime switching)
-- ``c`` is the threshold parameter (often 0 for standardized ``z_t``)
+- ``F(z_t)`` is the logistic transition probability function
+- ``z_t`` is the standardized state indicator variable
+- ``\gamma > 0`` is the transition speed parameter
+- ``c`` is the central threshold parameter (typically ``c = 0``)
 
 The function satisfies ``F(z) \to 0`` as ``z \to -\infty`` (deep recession), ``F(z) \to 1`` as ``z \to +\infty`` (strong expansion), and ``F(c) = 0.5`` (neutral state).
 
@@ -585,8 +621,9 @@ t = \frac{\hat{\beta}_E - \hat{\beta}_R}{\sqrt{\text{Var}(\hat{\beta}_E) + \text
 ```
 
 where:
-- ``\hat{\beta}_E, \hat{\beta}_R`` are the regime-specific impulse responses
-- The variance-covariance terms use HAC standard errors
+- ``t`` is the Wald ``t``-test statistic testing regime equality (``H_0: \beta_E = \beta_R``)
+- ``\hat{\beta}_E, \hat{\beta}_R`` are the estimated regime-specific impulse responses
+- ``\text{Var}(\cdot)`` and ``\text{Cov}(\cdot)`` are HAC standard error and covariance terms
 
 !!! note "Optimization of Transition Parameters"
     When `gamma=:estimate` and `threshold=:estimate` (both defaults), the transition parameters ``(\gamma, c)`` are jointly optimized using Nelder-Mead over the nonlinear least squares objective. The threshold ``c`` is box-constrained within the data's interquartile range, and ``\gamma > 0`` is enforced.
@@ -681,9 +718,10 @@ p(X_t) = P(D_t = 1 \mid X_t) = \frac{1}{1 + \exp(-X_t' \beta)}
 ```
 
 where:
-- ``D_t`` is the treatment indicator
-- ``X_t`` is the vector of covariates
-- ``p(X_t)`` is the estimated probability of treatment
+- ``p(X_t)`` is the propensity score (probability of receiving treatment given covariates)
+- ``D_t \in \{0, 1\}`` is the binary treatment indicator
+- ``X_t`` is the vector of pre-treatment covariates
+- ``\beta`` is the vector of logit regression coefficients
 
 The IPW-LP estimator reweights observations via weighted least squares:
 
@@ -692,9 +730,14 @@ y_{t+h} = \alpha_h + \beta_h \, D_t + \gamma_h' \, W_t + \varepsilon_{t+h}
 ```
 
 where:
-- ``W_t`` includes lagged outcomes and covariates
-- Weights are ``w_t = 1/\hat{p}(X_t)`` for treated and ``w_t = 1/(1 - \hat{p}(X_t))`` for control observations
+- ``y_{t+h}`` is the outcome variable at horizon ``h``
+- ``\alpha_h`` is the horizon-specific intercept
 - ``\beta_h`` is the Average Treatment Effect (ATE) at horizon ``h``
+- ``D_t \in \{0, 1\}`` is the binary treatment indicator
+- ``W_t`` is the vector of controls (lagged outcomes and covariates)
+- ``\gamma_h`` is the coefficient vector on controls
+- ``\varepsilon_{t+h}`` is the weighted least squares residual
+- Observations are weighted by ``w_t = 1/\hat{p}(X_t)`` for treated and ``w_t = 1/(1 - \hat{p}(X_t))`` for controls
 
 ### Doubly Robust Estimator
 
@@ -705,8 +748,11 @@ The **doubly robust (DR)** estimator combines IPW with separate outcome regressi
 ```
 
 where:
-- ``\hat{\psi}_t`` is the doubly robust influence function combining IPW and outcome model predictions
-- ``\hat{\mu}_1(X_t) = E[y_{t+h} \mid D_t = 1, X_t]`` and ``\hat{\mu}_0(X_t) = E[y_{t+h} \mid D_t = 0, X_t]`` are outcome regressions
+- ``\hat{\text{ATE}}_h^{\text{DR}}`` is the doubly robust average treatment effect at horizon ``h``
+- ``n`` is the sample size
+- ``\hat{\psi}_t = (\hat{\mu}_1(X_t) - \hat{\mu}_0(X_t)) + \frac{D_t(y_{t+h} - \hat{\mu}_1(X_t))}{\hat{p}(X_t)} - \frac{(1-D_t)(y_{t+h} - \hat{\mu}_0(X_t))}{1-\hat{p}(X_t)}`` is the doubly robust influence function
+- ``\hat{\mu}_1(X_t) = \hat{E}[y_{t+h} \mid D_t = 1, X_t]`` and ``\hat{\mu}_0(X_t) = \hat{E}[y_{t+h} \mid D_t = 0, X_t]`` are outcome model predictions
+- ``D_t`` is the treatment indicator and ``\hat{p}(X_t)`` is the estimated propensity score
 
 The DR estimator is consistent if **either** the propensity score model **or** the outcome regression model is correctly specified, providing insurance against single-model misspecification.
 
@@ -817,9 +863,13 @@ y_{i,t+h} = \alpha_{i,h}^{(j)} + \beta_{i,h}^{(j)} \, \hat{\varepsilon}_{j,t} + 
 ```
 
 where:
-- ``\hat{\varepsilon}_{j,t}`` is the identified structural shock ``j``
+- ``y_{i,t+h}`` is the response variable ``i`` at horizon ``h``
+- ``\alpha_{i,h}^{(j)}`` is the shock-specific intercept
+- ``\hat{\varepsilon}_{j,t}`` is the identified structural shock ``j`` at time ``t``
 - ``\beta_{i,h}^{(j)}`` is the structural impulse response of variable ``i`` to shock ``j`` at horizon ``h``
-- ``w_t`` contains lagged values of ``Y`` as controls
+- ``w_t`` is the vector of lagged controls
+- ``\gamma_{i,h}^{(j)}`` is the coefficient vector on controls
+- ``u_{i,t+h}^{(j)}`` is the structural projection residual
 
 The 3D IRF array stores ``\Theta[h, i, j] = \hat{\beta}_{i,h}^{(j)}`` for ``h = 1, \ldots, H``.
 
@@ -930,10 +980,12 @@ LP-based forecasts use horizon-specific regression coefficients directly --- no 
 ```
 
 where:
-- ``\hat{y}_{T+h}`` is the ``h``-step-ahead point forecast
-- ``s_h`` is the assumed shock path value at horizon ``h``
-- ``\hat{\Gamma}_h`` is the coefficient vector on controls ``w_T`` (last ``p`` observations)
+- ``\hat{y}_{T+h}`` is the direct ``h``-step-ahead point forecast
 - ``\hat{\alpha}_h`` is the horizon-specific intercept
+- ``\hat{\beta}_h`` is the coefficient on assumed future shock value ``s_h``
+- ``s_h`` is the conditioning shock value at horizon ``h``
+- ``\hat{\Gamma}_h`` is the coefficient vector on controls ``w_T``
+- ``w_T`` is the vector of observed variables at forecast origin ``T``
 
 This direct approach avoids compounding misspecification errors across horizons, unlike iterated VAR forecasts.
 
@@ -1013,9 +1065,10 @@ At each horizon ``h``, the share of variable ``i``'s forecast error variance due
 ```
 
 where:
-- ``\hat{f}_{i,t+h|t-1}`` are LP forecast error residuals for variable ``i`` at horizon ``h``
-- ``\hat{\varepsilon}_{j,t+k}`` are leads and current values of structural shock ``j``
-- ``R^2`` measures the fraction of forecast error variance explained by shock ``j``
+- ``\widehat{\text{FEVD}}_{ij}(h)`` is the forecast error variance decomposition share of variable ``i`` explained by shock ``j`` at horizon ``h``
+- ``\hat{f}_{i,t+h|t-1}`` is the LP forecast error residual for variable ``i`` at horizon ``h``
+- ``\hat{\varepsilon}_{j,t+k}`` are future and contemporaneous structural shocks ``j``
+- ``R^2`` denotes the coefficient of determination of the linear projection
 
 ### Alternative Estimators
 
@@ -1026,8 +1079,10 @@ where:
 ```
 
 where:
-- ``\hat{\beta}_{0,ik}^{\text{LP}}`` is the LP coefficient on shock ``j`` at horizon ``k``
-- ``\hat{\sigma}_{\varepsilon_j}^2`` is the variance of structural shock ``j``
+- ``\hat{s}_{ij}^{A}(h)`` is the LP-A forecast error variance share
+- ``\hat{\beta}_{0,ik}^{\text{LP}}`` is the impulse response coefficient on shock ``j`` at horizon ``k``
+- ``\hat{\sigma}_{\varepsilon_j}^2`` is the estimated variance of structural shock ``j``
+- ``\text{Var}(\hat{f}_{i,t+h|t-1})`` is the sample variance of the forecast error residuals
 
 **LP-B estimator** (Gorodnichenko & Lee 2019, Eq. 10):
 
@@ -1036,7 +1091,10 @@ where:
 ```
 
 where:
-- ``\tilde{v}_{t+h}`` are the residuals from the R² regression
+- ``\hat{s}_{ij}^{B}(h)`` is the LP-B forecast error variance share
+- ``\text{numerator}^A = \sum_{k=0}^{h} (\hat{\beta}_{0,ik}^{\text{LP}})^2 \, \hat{\sigma}_{\varepsilon_j}^2`` is the explained variance numerator from estimator A
+- ``\tilde{v}_{t+h}`` is the residual vector from the ``R^2`` regression
+- ``\text{Var}(\tilde{v}_{t+h})`` is the sample variance of the projection residuals
 
 LP-B replaces the total forecast error variance denominator with the sum of explained and unexplained components, improving finite-sample performance.
 
@@ -1115,8 +1173,11 @@ Plagborg-Møller & Wolf (2021) show that under correct specification, LP and VAR
 ```
 
 where:
-- ``V^{\text{LP}} \geq V^{\text{VAR}}`` (VAR is weakly more efficient under correct specification)
-- ``\beta_h = \theta_h`` (both target the same population IRF)
+- ``\hat{\beta}_h^{\text{LP}}`` is the local projection estimator at horizon ``h``
+- ``\hat{\theta}_h^{\text{VAR}}`` is the iterated VAR impulse response estimator at horizon ``h``
+- ``\beta_h = \theta_h`` is the true underlying population impulse response
+- ``T`` is the sample size
+- ``V^{\text{LP}}`` and ``V^{\text{VAR}}`` are asymptotic covariance matrices, satisfying ``V^{\text{LP}} \geq V^{\text{VAR}}`` under correct specification
 
 The key trade-off is bias vs. variance:
 

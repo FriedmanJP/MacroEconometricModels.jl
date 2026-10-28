@@ -140,7 +140,13 @@ JADE (Joint Approximate Diagonalization of Eigenmatrices; Cardoso & Souloumiac 1
 C_{ij}[k,l] = \text{cum}(z_k, z_l, z_i, z_j) = E[z_k z_l z_i z_j] - E[z_k z_l] E[z_i z_j] - E[z_k z_i] E[z_l z_j] - E[z_k z_j] E[z_l z_i]
 ```
 
-where ``z_t`` are the pre-whitened residuals. Joint diagonalization minimizes the sum of squared off-diagonal elements across all ``n(n+1)/2`` cumulant matrices, and the `objective` field reports that sum at the returned rotation.
+where:
+- ``C_{ij}[k,l]`` is entry ``(k,l)`` of the ``n \times n`` fourth-order cumulant matrix associated with pair ``(i,j)``
+- ``\text{cum}(\cdot)`` is the fourth-order joint cumulant function
+- ``z_k, z_l, z_i, z_j`` are elements of the pre-whitened residual vector ``z_t = L^{-1} u_t``
+- ``E[\cdot]`` denotes the mathematical expectation operator
+
+Joint diagonalization minimizes the sum of squared off-diagonal elements across all ``n(n+1)/2`` cumulant matrices, and the `objective` field reports that sum at the returned rotation.
 
 ```@example id_ng
 jade = identify_jade(model; max_iter=100)
@@ -319,7 +325,17 @@ The `:pml` distribution (Herwartz 2018; the symbol is kept for API stability) fi
 f_j(x;\, \nu_j, m_j) = k_j \left[1 + z_j^2\right]^{-m_j} e^{-\nu_j \arctan z_j}, \qquad z_j = \frac{x - \lambda_j}{a_j}
 ```
 
-where ``\nu_j`` controls skewness (``\nu_j = 0`` is symmetric and recovers the unit-variance scaled Student-t with ``2m_j - 1`` degrees of freedom), ``m_j > 2`` controls tail weight, ``a_j`` and ``\lambda_j`` are pinned by the zero-mean/unit-variance constraints, and the normalizing constant ``k_j`` involves ``|\Gamma(m_j + i\nu_j/2)|^2`` (Heinrich 2004). Because the density integrates to one for every parameter value, `loglik`, AIC/BIC, and the likelihood-ratio test against Gaussian shocks are all valid statistics — earlier releases used an unnormalized cubic-tilt approximation whose objective was unbounded in the skewness parameter ([#566](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/566)).
+where:
+- ``f_j(x;\, \nu_j, m_j)`` is the standardized Pearson Type IV probability density function for shock ``j``
+- ``x`` is the standardized structural shock variable
+- ``z_j = (x - \lambda_j)/a_j`` is the shifted and scaled shock coordinate
+- ``\nu_j`` is the parameter controlling skewness (``\nu_j = 0`` corresponds to symmetry)
+- ``m_j > 2`` is the parameter controlling tail thickness
+- ``a_j > 0`` is the scale parameter pinned by the unit-variance restriction
+- ``\lambda_j`` is the location parameter pinned by the zero-mean restriction
+- ``k_j`` is the normalizing constant involving ``|\Gamma(m_j + i\nu_j/2)|^2`` ensuring unit area
+
+Because the density integrates to one for every parameter value, `loglik`, AIC/BIC, and the likelihood-ratio test against Gaussian shocks are all valid statistics — earlier releases used an unnormalized cubic-tilt approximation whose objective was unbounded in the skewness parameter ([#566](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/566)).
 
 ```@example id_ng
 pml = identify_pml(model; max_iter=3000)

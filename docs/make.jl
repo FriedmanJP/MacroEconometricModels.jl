@@ -1,13 +1,18 @@
-using MacroEconometricModels
 using Documenter
+using MacroEconometricModels
 
-DocMeta.setdocmeta!(MacroEconometricModels, :DocTestSetup, :(using MacroEconometricModels); recursive=true)
+DocMeta.setdocmeta!(
+    MacroEconometricModels,
+    :DocTestSetup,
+    :(using MacroEconometricModels);
+    recursive=true,
+)
 
 makedocs(;
     # Draft mode skips execution of every @setup/@example block. It must be opt-in for
     # local iteration only (DOCS_DRAFT=true) — never committed — so CI and any plain
     # make.jl run execute examples and render real output.
-    draft = get(ENV, "DOCS_DRAFT", "false") == "true",
+    draft=get(ENV, "DOCS_DRAFT", "false") == "true",
     modules=[MacroEconometricModels],
     authors="Wookyung Chung <chung@friedman.jp>",
     repo="https://github.com/FriedmanJP/MacroEconometricModels.jl/blob/{commit}{path}#{line}",
@@ -30,44 +35,58 @@ makedocs(;
             "Simulation (DGPs)" => "simulation.md",
         ],
         "Univariate Models" => [
-            "Time Series Filters" => "filters.md",
-            "X-13ARIMA-SEATS" => "x13.md",
-            "Spectral Analysis" => "spectral.md",
-            "ARIMA" => "arima.md",
-            "State-Space Models" => "statespace.md",
-            "Volatility Models" => "volatility.md",
-            "Nonparametric Regression & Density" => "nonparametric.md",
+            "Filters & Decomposition" => [
+                "Time Series Filters" => "filters.md",
+                "X-13ARIMA-SEATS" => "x13.md",
+                "Spectral Analysis" => "spectral.md",
+                "Nonparametric Regression & Density" => "nonparametric.md",
+            ],
+            "Parametric Time Series" => [
+                "ARIMA" => "arima.md",
+                "State-Space Models" => "statespace.md",
+                "Volatility Models" => "volatility.md",
+            ],
         ],
         "Multivariate Models" => [
-            "VAR" => "manual.md",
-            "Bayesian VAR" => "bayesian.md",
-            "VECM" => "vecm.md",
-            "ARDL & Bounds Test" => "ardl.md",
-            "Cointegrating Regression" => "cointreg.md",
-            "Local Projections" => "lp.md",
-            "Factor Models" => "factormodels.md",
-            "FAVAR" => "favar.md",
+            "Vector Autoregressions & Cointegration" => [
+                "VAR" => "manual.md",
+                "Bayesian VAR" => "bayesian.md",
+                "VECM" => "vecm.md",
+                "ARDL & Bounds Test" => "ardl.md",
+                "Cointegrating Regression" => "cointreg.md",
+            ],
+            "Projections & Factor Models" => [
+                "Local Projections" => "lp.md",
+                "Factor Models" => "factormodels.md",
+                "FAVAR" => "favar.md",
+            ],
         ],
         "Nonlinear Time Series" => [
             "Threshold & SETAR" => "nonlinear.md",
         ],
-        "Cross-Section & Panel" => [
-            "Linear Regression" => "regression.md",
+        "Cross-Section Models" => [
+            "Linear & Quantile Regression" => "regression.md",
             "Binary Choice Models" => "binary_choice.md",
-            "Ordered & Multinomial" => "ordered_multinomial.md",
+            "Ordered & Multinomial Choice" => "ordered_multinomial.md",
+        ],
+        "Panel Data Models" => [
             "Panel Regression" => "panel_reg.md",
             "Panel VAR" => "pvar.md",
             "Difference-in-Differences" => "did.md",
-            "Event Study LP" => "event_study.md",
+            "Event Studies" => "event_study.md",
         ],
         "GMM & SMM" => "gmm.md",
         "DSGE Models" => [
             "Overview" => "dsge.md",
-            "Linear Solvers" => "dsge_linear.md",
-            "Nonlinear Methods" => "dsge_nonlinear.md",
-            "Constraints" => "dsge_constraints.md",
-            "Estimation" => "dsge_estimation.md",
-            "Historical Decomposition" => "dsge_hd.md",
+            "Solvers & Constraints" => [
+                "Linear Solvers" => "dsge_linear.md",
+                "Nonlinear Methods" => "dsge_nonlinear.md",
+                "Constraints" => "dsge_constraints.md",
+            ],
+            "Estimation & Tracking" => [
+                "Estimation" => "dsge_estimation.md",
+                "Historical Decomposition" => "dsge_hd.md",
+            ],
             "Heterogeneity & Continuous Time" => [
                 "Overview" => "dsge_heterogeneity.md",
                 "Heterogeneous Agents" => "dsge_ha.md",
@@ -120,12 +139,16 @@ makedocs(;
         "Forecast Evaluation" => "forecast_evaluation.md",
         "Hypothesis Tests" => [
             "Overview" => "tests.md",
-            "Unit Root & Cointegration" => "tests_unitroot.md",
-            "Advanced Unit Root" => "tests_unitroot_advanced.md",
-            "Residual-Based Cointegration" => "tests_cointegration.md",
-            "Structural Breaks" => "tests_breaks.md",
-            "Panel Tests" => "tests_panel.md",
-            "Model Diagnostics" => "tests_diagnostics.md",
+            "Unit Root & Cointegration" => [
+                "Unit Root & Cointegration" => "tests_unitroot.md",
+                "Advanced Unit Root" => "tests_unitroot_advanced.md",
+                "Residual-Based Cointegration" => "tests_cointegration.md",
+            ],
+            "Breaks & Diagnostics" => [
+                "Structural Breaks" => "tests_breaks.md",
+                "Panel Tests" => "tests_panel.md",
+                "Model Diagnostics" => "tests_diagnostics.md",
+            ],
         ],
         "Visualization" => "plotting.md",
         "Project" => [
@@ -136,20 +159,30 @@ makedocs(;
         ],
         "API Reference" => [
             "Overview" => "api.md",
-            "Data Management" => "api/data.md",
-            "Simulation" => "api/simulation.md",
-            "Univariate Models" => "api/univariate.md",
-            "Multivariate Models" => "api/multivariate.md",
-            "Cross-Sectional Models" => "api/cross_section.md",
-            "Panel Models" => "api/panel.md",
-            "DSGE Models" => "api/dsge.md",
-            "Structural & Statistical Identification" => "api/structural.md",
-            "Policy Counterfactuals" => "api/counterfactual.md",
-            "GMM & SMM" => "api/gmm.md",
-            "Hypothesis Tests" => "api/tests.md",
-            "Nowcasting" => "api/nowcasting.md",
-            "Visualization" => "api/visualization.md",
-            "Utilities & Display" => "api/utilities.md",
+            "Data & Simulation" => [
+                "Data Management" => "api/data.md",
+                "Simulation" => "api/simulation.md",
+            ],
+            "Time Series & Regression" => [
+                "Univariate Models" => "api/univariate.md",
+                "Multivariate Models" => "api/multivariate.md",
+                "Cross-Sectional Models" => "api/cross_section.md",
+                "Panel Models" => "api/panel.md",
+            ],
+            "Structural & Macro Models" => [
+                "DSGE Models" => "api/dsge.md",
+                "Input-Output Analysis" => "api/io.md",
+                "Structural & Statistical Identification" => "api/structural.md",
+                "Policy Counterfactuals" => "api/counterfactual.md",
+            ],
+            "Inference & System" => [
+                "GMM & SMM" => "api/gmm.md",
+                "Hypothesis Tests" => "api/tests.md",
+                "Nowcasting" => "api/nowcasting.md",
+                "Forecast Evaluation" => "api/forecast_evaluation.md",
+                "Visualization" => "api/visualization.md",
+                "Utilities & Display" => "api/utilities.md",
+            ],
         ],
     ],
     checkdocs=:exports,

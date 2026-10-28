@@ -294,8 +294,14 @@ report(sol)
 The default route decomposes the `2n × 2n` companion pencil with a complex QZ. For a medium-large model — multi-country, multi-sector, or a reduced HA system — that is the dominant cost, even though each equation touches only a handful of variables. `sparse=` selects an alternative that never forms a QZ: Newton's method on the quadratic `f_{lead} G^2 + f_0 G + f_1 = 0`, whose step
 
 ```math
-(f_{lead} G_k + f_0)\,\Delta G + f_{lead}\,\Delta G\,G_k = -R_k
+(f_{\text{lead}} G_k + f_0)\,\Delta G + f_{\text{lead}}\,\Delta G\,G_k = -R_k
 ```
+
+where:
+- ``G_k`` is the ``n \times n`` state transition matrix iterate at Newton step ``k``
+- ``\Delta G = G_{k+1} - G_k`` is the Newton step direction
+- ``f_{\text{lead}}, f_0, f_1`` are the Jacobian matrices of model equations with respect to leads, current variables, and lags
+- ``R_k = f_{\text{lead}} G_k^2 + f_0 G_k + f_1`` is the quadratic matrix residual at iterate ``k``
 
 is a generalized Sylvester equation solved matrix-free by GMRES. Newton converges quadratically — 7 iterations on the benchmark below, independent of `n`.
 
@@ -406,10 +412,17 @@ For `linear=true` models:
 Stochastic forward simulation generates sample paths from the state-space solution:
 
 ```math
-y_t = G_1 \, y_{t-1} + \text{impact} \cdot \varepsilon_t + C_{\text{sol}}
+y_t = G_1 \, y_{t-1} + C_{\text{sol}} + \text{impact} \cdot \varepsilon_t
 ```
 
-where ``\varepsilon_t \sim N(0, I_{n_\varepsilon})`` are i.i.d. standard normal shocks. The simulation returns **levels** (steady state plus deviations), not deviations alone.
+where:
+- ``y_t`` is the ``n \times 1`` vector of simulated endogenous variables in levels at date ``t``
+- ``G_1`` is the ``n \times n`` state transition matrix
+- ``C_{\text{sol}}`` is the ``n \times 1`` steady-state constant vector
+- ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
+- ``\varepsilon_t \sim N(0, I_{n_\varepsilon})`` is the vector of i.i.d. standard normal structural shocks
+
+The simulation returns **levels** (steady state plus deviations), not deviations alone.
 
 ```@example dsge_linear
 sol = solve(spec)
@@ -516,6 +529,14 @@ The Kronecker reading of this equation,
 ```math
 \text{vec}(\Sigma) = (I_{n^2} - G_1 \otimes G_1)^{-1} \, \text{vec}(\text{impact} \cdot \text{impact}')
 ```
+
+where:
+- ``\Sigma`` is the ``n \times n`` unconditional covariance matrix of endogenous states
+- ``\text{vec}(\cdot)`` is the column-stacking vectorization operator
+- ``G_1`` is the ``n \times n`` state transition matrix (with all eigenvalues strictly inside the unit circle)
+- ``\otimes`` denotes the Kronecker product
+- ``I_{n^2}`` is the ``n^2 \times n^2`` identity matrix
+- ``\text{impact}`` is the ``n \times n_\varepsilon`` shock impact matrix
 
 forms an ``n^2 \times n^2`` operator and costs ``O(n^6)``. `solve_lyapunov` never builds it: it runs the doubling (squaring) iteration, which converges quadratically in ``O(n^3)`` products, and checks its relative residual; if doubling misses tolerance a direct Bartels-Stewart solve takes over.
 

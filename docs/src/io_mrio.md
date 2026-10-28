@@ -61,19 +61,21 @@ footprint(io, "CO2"; by=:region)
 
 ## Block Layout
 
-An MRIO table with ``G`` regions and ``N`` sectors per region stores ``n = G \cdot N`` industries in **region-major** order: region ``r`` occupies rows and columns
+An MRIO table with ``G`` regions and ``N`` sectors per region stores ``n = G \cdot N`` industries in **region-major** order. The index sets partitioning industries and final-demand columns for region ``r`` are:
 
 ```math
-(r-1)N+1,\; \ldots,\; r N.
+\mathcal{I}_r = \bigl\{(r-1)N + 1, \; \ldots, \; r N\bigr\}, \qquad
+\mathcal{J}_r = \bigl\{(r-1)n_{fd/r} + 1, \; \ldots, \; r\, n_{fd/r}\bigr\}
 ```
 
-The intermediate-flow matrix ``Z`` is the full ``n \times n`` block matrix whose off-diagonal blocks ``Z^{rs}`` are intermediate exports from ``r`` to ``s``. Final demand ``Y`` is region-blocked by destination whenever ``n_{fd}`` is divisible by ``G``: the columns for destination region ``r`` are
+where:
+- ``\mathcal{I}_r`` is the index set of producing sectors located in region ``r``
+- ``\mathcal{J}_r`` is the index set of final-demand columns belonging to destination region ``r``
+- ``G`` is the total number of regions
+- ``N`` is the number of sectors per region (so total industries ``n = G \cdot N``)
+- ``n_{fd/r} = n_{fd} / G`` is the number of final-demand categories per destination region
 
-```math
-(r-1)n_{fd/r}+1,\; \ldots,\; r\, n_{fd/r},
-```
-
-with ``n_{fd/r} = n_{fd}/G``. Under that convention bilateral final trade is identified; otherwise all final demand is treated as domestic and final-export terms in the KWW decomposition are zero.
+The intermediate-flow matrix ``Z`` is the full ``n \times n`` block matrix whose off-diagonal blocks ``Z^{rs}`` are intermediate exports from ``r`` to ``s``. Final demand ``Y`` is region-blocked by destination whenever ``n_{fd}`` is divisible by ``G``; under that convention bilateral final trade is identified, whereas otherwise all final demand is treated as domestic and final-export terms in the KWW decomposition are zero.
 
 ```@example io_mrio
 region_block(io, "A", "B")
@@ -173,8 +175,14 @@ where:
 Domestic content is the complement: ``\mathrm{DC}_s = E^{s*} - \mathrm{VS}_s``. The indirect measure VS1 counts home intermediates embodied in foreign exports,
 
 ```math
-\mathrm{VS1}_s = V_s \sum_{r \neq s} B_{sr} E^{r*}.
+\mathrm{VS1}_s = V_s \sum_{r \neq s} B_{sr} E^{r*}
 ```
+
+where:
+- ``\mathrm{VS1}_s`` is the indirect vertical specialization of country ``s`` (domestic intermediates embodied in foreign exports)
+- ``V_s`` is the row vector of direct value-added coefficients of country ``s``
+- ``B_{sr}`` is the multi-regional Leontief inverse submatrix from industries of country ``s`` to industries of country ``r``
+- ``E^{r*}`` is the vector of gross exports of foreign trading partner ``r``
 
 ```@example io_mrio
 vsB = vertical_specialization(io, "B")
@@ -219,6 +227,13 @@ Koopman, Wang & Wei (2014) break a country's gross exports into nine value-added
 ```math
 \mathrm{DVA} + \mathrm{RDV} + \mathrm{FVA} + \mathrm{PDC} = E^{s*}
 ```
+
+where:
+- ``\mathrm{DVA}`` is domestic value-added absorbed abroad (KWW terms 1–3)
+- ``\mathrm{RDV}`` is domestic value-added that returns home via foreign imports (KWW terms 4–5)
+- ``\mathrm{FVA}`` is foreign value-added embodied in gross exports (KWW terms 7–8)
+- ``\mathrm{PDC}`` is pure double counting arising from intermediate inputs crossing international borders multiple times (KWW terms 6 and 9)
+- ``E^{s*}`` is total gross exports of country ``s``
 
 The first three DVA terms further split value-added exports by absorption route: final-goods exports, intermediates absorbed by the direct importer, and intermediates re-exported to third countries. RDV is part of the source country's GDP but is double-counted in gross trade statistics; FVA is foreign GDP in the source's exports; PDC vanishes when at least one country does not export intermediates.
 
@@ -376,21 +391,6 @@ A produces all 80 kt of CO₂ but consumes only the share embodied in its domest
 
 ---
 
-## API Reference
-
-```@docs
-aggregate
-region_block
-region_indices
-bilateral_trade
-gross_exports
-vertical_specialization
-VerticalSpecialization
-export_decomposition
-ExportDecomposition
-```
-
----
 
 ## References
 

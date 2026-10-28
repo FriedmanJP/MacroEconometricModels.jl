@@ -73,13 +73,26 @@ The general two-regime threshold regression splits the sample by a threshold var
 y_t = X_t'\beta_1\,\mathbf{1}\{q_t \le \gamma\} + X_t'\beta_2\,\mathbf{1}\{q_t > \gamma\} + u_t.
 ```
 
+where:
+- ``y_t`` is the scalar dependent variable observed at time ``t``
+- ``X_t`` is the ``k \times 1`` vector of explanatory regressors
+- ``\beta_1, \beta_2`` are the ``k \times 1`` coefficient vectors in Regime 1 and Regime 2
+- ``q_t`` is the scalar threshold variable
+- ``\gamma`` is the threshold parameter defining the sample split
+- ``\mathbf{1}\{\cdot\}`` is the indicator function evaluating to 1 if the condition holds and 0 otherwise
+- ``u_t \sim \text{iid}(0, \sigma^2)`` is the zero-mean idiosyncratic error term
+
 For a fixed ``\gamma`` the model is linear in each regime, so the coefficients are concentrated out by regime OLS and the estimator reduces to a one-dimensional search for ``\gamma``. `estimate_threshold` minimises the concentrated sum of squared residuals
 
 ```math
 S(\gamma) = \mathrm{SSR}_1(\gamma) + \mathrm{SSR}_2(\gamma)
 ```
 
-over a grid of candidate thresholds.
+where:
+- ``S(\gamma)`` is the pooled concentrated sum of squared residuals at candidate threshold ``\gamma``
+- ``\mathrm{SSR}_1(\gamma) = \sum_{t: q_t \le \gamma} (y_t - X_t'\hat\beta_1(\gamma))^2`` is the sum of squared residuals in Regime 1
+- ``\mathrm{SSR}_2(\gamma) = \sum_{t: q_t > \gamma} (y_t - X_t'\hat\beta_2(\gamma))^2`` is the sum of squared residuals in Regime 2
+- ``\hat\beta_1(\gamma), \hat\beta_2(\gamma)`` are the regime OLS estimates given candidate threshold ``\gamma``
 
 !!! note "Grid over order statistics"
     The grid is the set of distinct sample values of ``q`` between the `trim` and ``1 - \text{trim}`` quantiles. Searching the order statistics of ``q`` — rather than an evenly spaced grid — visits every distinct sample split exactly once and never wastes a point on a boundary that reproduces its neighbour.
@@ -126,7 +139,20 @@ The `trim` fraction guards each regime against rank deficiency: it must leave en
 
 ## SETAR
 
-The self-exciting threshold autoregression is the leading special case: the threshold variable is a lag of the series itself, ``q_t = y_{t-d}``, and the regressors are the model's own lags, ``X_t = [1, y_{t-1}, \dots, y_{t-p}]``. `estimate_setar(y, p, d)` builds this design and delegates to the threshold estimator.
+The self-exciting threshold autoregression (SETAR) is the leading special case where the threshold variable is a lag of the series itself, ``q_t = y_{t-d}``, and the regressors are the model's own lags, ``X_t = [1, y_{t-1}, \dots, y_{t-p}]'``:
+
+```math
+y_t = \left(\phi_{1,0} + \sum_{i=1}^p \phi_{1,i} y_{t-i}\right) \mathbf{1}\{y_{t-d} \le \gamma\} + \left(\phi_{2,0} + \sum_{i=1}^p \phi_{2,i} y_{t-i}\right) \mathbf{1}\{y_{t-d} > \gamma\} + u_t.
+```
+
+where:
+- ``y_t`` is the univariate series observed at time ``t``
+- ``p`` is the autoregressive lag order in each regime
+- ``d \in \{1, \dots, p\}`` is the threshold delay parameter
+- ``\gamma`` is the threshold parameter separating the lower and upper regimes
+- ``\phi_{1,0}, \dots, \phi_{1,p}`` are the intercept and autoregressive coefficients for Regime 1 (``y_{t-d} \le \gamma``)
+- ``\phi_{2,0}, \dots, \phi_{2,p}`` are the intercept and autoregressive coefficients for Regime 2 (``y_{t-d} > \gamma``)
+- ``u_t \sim \text{iid}(0, \sigma^2)`` is the error disturbance sequence
 
 ```@example nonlinear
 # SETAR(2; 2, 2) with a fixed delay d = 1
@@ -144,13 +170,19 @@ Passing `d = :auto` (or a range such as `1:p`) selects the delay jointly with th
 
 ## Testing Linearity
 
-Because the threshold ``\gamma`` is unidentified under the null of linearity (``\beta_1 = \beta_2``), the score test statistic has a nonstandard distribution — the Davies (1987) nuisance-parameter problem. `hansen_linearity_test` maximises the heteroskedasticity-robust LM statistic over the threshold grid,
+Because the threshold ``\gamma`` is unidentified under the null of linearity (``\beta_1 = \beta_2``), the score test statistic has a nonstandard distribution — the Davies (1987) nuisance-parameter problem. `hansen_linearity_test` maximises the heteroskedasticity-robust LM statistic over the threshold grid:
 
 ```math
-\sup_\gamma \; LM(\gamma), \qquad LM(\gamma) = S(\gamma)'\,V(\gamma)^{-1}\,S(\gamma),
+\sup_\gamma \; LM(\gamma), \qquad LM(\gamma) = S(\gamma)'\,V(\gamma)^{-1}\,S(\gamma).
 ```
 
-where ``S(\gamma)`` is the score of the regime interaction evaluated at the linear-model residuals and ``V(\gamma)`` is its White heteroskedasticity-robust variance. The p-value comes from the **fixed-regressor bootstrap** of Hansen (1996): draw iid ``N(0,1)`` weights, form the simulated score process, recompute the supremum, and report the exceedance frequency.
+where:
+- ``LM(\gamma)`` is the Lagrange multiplier test statistic evaluated at candidate threshold ``\gamma``
+- ``S(\gamma)`` is the score vector of the regime interaction evaluated at the linear model residuals
+- ``V(\gamma)`` is the White heteroskedasticity-robust covariance matrix of the score vector
+- ``\sup_\gamma LM(\gamma)`` is the supremum of the LM test statistic across candidate threshold values in the trimmed grid
+
+The p-value comes from the **fixed-regressor bootstrap** of Hansen (1996): draw iid ``N(0,1)`` weights, form the simulated score process, recompute the supremum, and report the exceedance frequency.
 
 ```@example nonlinear
 X = hcat(ones(length(y) - 1), y[1:end-1])
@@ -178,6 +210,14 @@ LR(\gamma) = n\,\frac{S(\gamma) - S(\hat\gamma)}{S(\hat\gamma)},
 \qquad
 \text{CI} = \{\gamma : LR(\gamma) \le c(\alpha)\}.
 ```
+
+where:
+- ``LR(\gamma)`` is the likelihood-ratio test statistic comparing candidate threshold ``\gamma`` against minimizer ``\hat\gamma``
+- ``n`` is the effective sample size
+- ``S(\gamma)`` is the concentrated sum of squared residuals at candidate threshold ``\gamma``
+- ``S(\hat\gamma)`` is the minimum sum of squared residuals at estimated threshold ``\hat\gamma``
+- ``\text{CI}`` is the ``100(1-\alpha)\%`` confidence interval for ``\gamma``
+- ``c(\alpha)`` is the non-standard asymptotic critical value corresponding to confidence level ``1-\alpha``
 
 The critical values are non-standard — they are quantiles of the distribution with CDF ``(1 - e^{-x/2})^2`` — and are tabulated exactly as
 
@@ -240,13 +280,31 @@ y_t = \phi_1'z_t\,(1 - G(s_t;\gamma,c)) + \phi_2'z_t\,G(s_t;\gamma,c) + u_t,
 \qquad z_t = [1, y_{t-1}, \dots, y_{t-p}]'.
 ```
 
-This is the standard model for gradual business-cycle asymmetry — expansions and contractions blend into one another rather than snapping at a boundary. The transition ``G`` takes one of three shapes:
+where:
+- ``y_t`` is the scalar time series observed at date ``t``
+- ``z_t = [1, y_{t-1}, \dots, y_{t-p}]'`` is the ``(p+1) \times 1`` vector of autoregressive regressors
+- ``\phi_1, \phi_2`` are the ``(p+1) \times 1`` parameter vectors for the lower and upper regimes
+- ``s_t`` is the transition variable (by default self-exciting lag ``y_{t-d}`` or an external series)
+- ``G(s_t;\gamma,c) \in [0, 1]`` is the continuous transition function
+- ``\gamma > 0`` is the transition slope (speed of transition) parameter
+- ``c`` is the location threshold parameter (or vector of location parameters ``c = [c_1, c_2]'``)
+- ``u_t \sim \text{iid}(0, \sigma^2)`` is the error disturbance
 
-| Type | ``G(s_t;\gamma,c)`` | Shape |
-|:-----|:--------------------|:------|
-| `:lstr1` | ``1/(1 + e^{-(\gamma/\hat\sigma_s)(s_t - c)})`` | Logistic, one location — monotone asymmetry |
-| `:lstr2` | ``1/(1 + e^{-(\gamma/\hat\sigma_s^2)(s_t - c_1)(s_t - c_2)})`` | Logistic, two locations — outer/inner regimes |
-| `:estr`  | ``1 - e^{-(\gamma/\hat\sigma_s^2)(s_t - c)^2}`` | Exponential — symmetric about ``c`` |
+The transition function ``G(s_t;\gamma,c)`` takes one of three functional forms (LSTAR1, LSTAR2, or ESTAR):
+
+```math
+G(s_t; \gamma, c) = \begin{cases}
+\left(1 + \exp\left(-\frac{\gamma}{\hat\sigma_s}(s_t - c)\right)\right)^{-1}, & \text{LSTR1 (logistic, 1 location)} \\[6pt]
+\left(1 + \exp\left(-\frac{\gamma}{\hat\sigma_s^2}(s_t - c_1)(s_t - c_2)\right)\right)^{-1}, & \text{LSTR2 (logistic, 2 locations)} \\[6pt]
+1 - \exp\left(-\frac{\gamma}{\hat\sigma_s^2}(s_t - c)^2\right), & \text{ESTR (exponential, symmetric)}
+\end{cases}
+```
+
+where:
+- ``\hat\sigma_s`` is the sample standard deviation of transition variable ``s`` (normalizing ``\gamma`` to be dimension-free)
+- ``c`` is the central location parameter in LSTR1 and ESTR
+- ``c_1 \le c_2`` are the lower and upper location boundaries in LSTR2
+- ``\gamma > 0`` governs the smoothness of the transition between regimes
 
 !!! note "The ``1/\hat\sigma_s`` slope scaling"
     The slope ``\gamma`` is divided by the sample standard deviation of ``s`` (squared for the quadratic transitions). This makes ``\gamma`` dimension-free and comparable across series — and it is not optional: without it the optimiser stalls on the flat region of ``G`` where the objective is nearly constant in ``\gamma`` (Teräsvirta 1994). The reported ``\hat\gamma`` is the scaled slope.
@@ -338,18 +396,50 @@ At ``\hat\gamma = 203.8`` the curve is a step: ``G`` sits at 0 for every ``s_t``
 
 ## Markov-Switching Regression and MS-AR
 
-Where threshold and STAR models make the regime a deterministic function of an observed transition variable, a **Markov-switching** model treats the regime ``s_t`` as a *latent* ``K``-state Markov chain with transition matrix ``P`` (Hamilton 1989). The likelihood integrates over the unobserved regime path with the scaled Hamilton forward filter; the Kim (1994) backward smoother recovers ``\Pr(s_t=k\mid\mathcal{F}_T)``; and parameters are estimated by EM (Baum–Welch) with an `Optim` maximum-likelihood polish and delta-method standard errors.
+Where threshold and STAR models make the regime a deterministic function of an observed transition variable, a **Markov-switching** model treats the regime ``s_t \in \{1, \dots, K\}`` as a *latent* ``K``-state Markov chain with transition matrix ``P`` (Hamilton 1989):
+
+```math
+P = \begin{bmatrix} p_{11} & p_{12} & \cdots & p_{1K} \\ p_{21} & p_{22} & \cdots & p_{2K} \\ \vdots & \vdots & \ddots & \vdots \\ p_{K1} & p_{K2} & \cdots & p_{KK} \end{bmatrix}, \qquad p_{ij} = \Pr(s_t = j \mid s_{t-1} = i).
+```
+
+where:
+- ``P`` is the ``K \times K`` transition probability matrix with row sums equal to one (``\sum_{j=1}^K p_{ij} = 1``)
+- ``p_{ij}`` is the probability that regime ``j`` occurs at time ``t`` given regime ``i`` occurred at time ``t-1``
+- ``p_{ii}`` is the regime-``i`` persistence (staying probability)
+- ``s_t \in \{1, \dots, K\}`` is the latent discrete regime state at date ``t``
+
+The likelihood integrates over the unobserved regime path with the scaled Hamilton forward filter; the Kim (1994) backward smoother recovers ``\Pr(s_t=k\mid\mathcal{F}_T)``; and parameters are estimated by EM (Baum–Welch) with an `Optim` maximum-likelihood polish and delta-method standard errors.
 
 Two entry points cover the common cases:
 
-- [`estimate_ms`](@ref) — a switching *regression* ``y_t = x_t'\beta_{s_t} + \varepsilon_t``, ``\varepsilon_t\sim N(0,\sigma^2_{s_t})``, where every coefficient (and optionally the variance) switches with the regime.
-- [`estimate_ms_ar`](@ref) — the Hamilton (1989) mean-switching autoregression
+- [`estimate_ms`](@ref) — a general switching regression:
 
 ```math
-(y_t - \mu_{s_t}) = \sum_{j=1}^{p} \phi_j\,(y_{t-j} - \mu_{s_{t-j}}) + \varepsilon_t,
+y_t = x_t'\beta_{s_t} + \varepsilon_t, \qquad \varepsilon_t \mid s_t \sim N(0, \sigma^2_{s_t}).
 ```
 
-where only the level ``\mu`` switches; the AR coefficients ``\phi`` are common across regimes. Because the density depends on the regime *path* ``(s_t,\dots,s_{t-p})``, the filter runs on the ``K^{p+1}`` expanded state space and reports the ``s_t`` marginals.
+where:
+- ``y_t`` is the scalar dependent variable observed at time ``t``
+- ``x_t`` is the ``k_x \times 1`` vector of explanatory regressors
+- ``\beta_{s_t}`` is the ``k_x \times 1`` regime-specific coefficient vector in state ``s_t``
+- ``\sigma^2_{s_t}`` is the state-dependent innovation variance (common ``\sigma^2`` when `switching_variance=false`)
+- ``\varepsilon_t`` is the Gaussian disturbance conditional on regime ``s_t``
+
+- [`estimate_ms_ar`](@ref) — the Hamilton (1989) mean-switching autoregression:
+
+```math
+(y_t - \mu_{s_t}) = \sum_{j=1}^{p} \phi_j\,(y_{t-j} - \mu_{s_{t-j}}) + \varepsilon_t.
+```
+
+where:
+- ``y_t`` is the observed time series at time ``t``
+- ``s_t \in \{1, \dots, K\}`` is the latent discrete regime at date ``t``
+- ``\mu_{s_t} \in \{\mu_1, \dots, \mu_K\}`` is the regime-dependent conditional mean level
+- ``\phi_j`` is the ``j``-th autoregressive coefficient, common across all regimes
+- ``p`` is the autoregressive lag order
+- ``\varepsilon_t \sim N(0, \sigma^2_{s_t})`` is the Gaussian innovation
+
+Because the density depends on the regime *path* ``(s_t,\dots,s_{t-p})``, the filter runs on the ``K^{p+1}`` expanded state space and reports the ``s_t`` marginals.
 
 Regimes are labelled deterministically in order of increasing conditional mean, so regime 1 is always the lowest-mean state — reproducible across runs.
 
@@ -431,16 +521,17 @@ Both entry points return an [`MSRegModel`](@ref):
 
 ### Fitted Values and Forecasts
 
-The fitted value of a Markov-switching model is the regime-probability-weighted conditional mean
+The fitted value of a Markov-switching model is the regime-probability-weighted conditional mean:
 
 ```math
-\hat y_t = \sum_k \Pr(s_t = k \mid \mathcal I)\, E[y_t \mid s_t = k, \mathcal F_{t-1}],
+\hat y_t = \sum_{k=1}^K \Pr(s_t = k \mid \mathcal I)\, E[y_t \mid s_t = k, \mathcal F_{t-1}].
 ```
 
-where
-
-- ``\Pr(s_t = k \mid \mathcal I)`` is the regime probability under information set ``\mathcal I``,
-- ``E[y_t \mid s_t = k, \mathcal F_{t-1}]`` is the regime-``k`` conditional mean.
+where:
+- ``\hat y_t`` is the model-implied fitted value at date ``t``
+- ``K`` is the total number of discrete regimes
+- ``\Pr(s_t = k \mid \mathcal I)`` is the regime probability under information set ``\mathcal I`` (smoothed probabilities ``\mathcal I = \mathcal F_T`` for [`fitted`](@ref), filtered probabilities ``\mathcal I = \mathcal F_t`` for [`predict`](@ref))
+- ``E[y_t \mid s_t = k, \mathcal F_{t-1}]`` is the regime-``k`` conditional expectation given history ``\mathcal F_{t-1}``
 
 [`fitted`](@ref) weights by the **smoothed** probabilities (``\mathcal I = \mathcal F_T``), so `y - fitted(m)` is exactly [`residuals`](@ref). [`predict`](@ref) with `probs=:filtered` weights by ``\mathcal F_t`` instead — the real-time analogue wanted for pseudo-out-of-sample evaluation. Both are computed exactly, over the ``K^{p+1}`` expanded regime state for MS-AR.
 

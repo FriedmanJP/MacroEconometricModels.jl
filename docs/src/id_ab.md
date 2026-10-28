@@ -87,9 +87,10 @@ The reduced-form residual satisfies ``u_t = A^{-1} B \varepsilon_t``. With unit-
 ```
 
 where:
-- ``A`` is the ``n \times n`` contemporaneous left-hand matrix
-- ``B`` is the ``n \times n`` shock-loading matrix
-- ``\Sigma`` is the reduced-form residual covariance
+- ``\Sigma`` is the ``n \times n`` reduced-form residual covariance matrix
+- ``A`` is the ``n \times n`` contemporaneous structural relation matrix
+- ``B`` is the ``n \times n`` structural shock-loading matrix
+- ``A^{-\top} = (A^{-1})'`` denotes the transpose of the inverse matrix
 
 A **pattern** marks each entry as free (`NaN`) or fixed (a number, typically 0 or 1). The concentrated Gaussian log-likelihood is
 
@@ -97,11 +98,27 @@ A **pattern** marks each entry as free (`NaN`) or fixed (a number, typically 0 o
 \ell(A,B) = -\frac{T}{2}\bigl[\log|B|^2 - \log|A|^2 + \mathrm{tr}(B^{-1} A \hat\Sigma A' B^{-\top})\bigr]
 ```
 
+where:
+- ``\ell(A,B)`` is the concentrated Gaussian log-likelihood objective function
+- ``T`` is the effective sample size
+- ``A`` is the ``n \times n`` contemporaneous matrix on reduced-form residuals
+- ``B`` is the ``n \times n`` shock-loading matrix on orthogonal structural shocks
+- ``\hat\Sigma`` is the ``n \times n`` sample covariance matrix of reduced-form VAR residuals
+- ``|A|`` and ``|B|`` are the matrix determinants of ``A`` and ``B``
+- ``\mathrm{tr}(\cdot)`` denotes the matrix trace operator
+
 [`estimate_svar`](@ref) maximises ``\ell`` in the free entries with `Optim.LBFGS` and a `ForwardDiff` gradient, using several random starts. Column signs are normalised so the impact (or long-run impact) diagonal is positive. The rotation used by `irf`/`fevd`/`hd` is
 
 ```math
 Q = L^{-1} A^{-1} B, \qquad L = \mathrm{chol}(\hat\Sigma)
 ```
+
+where:
+- ``Q`` is the ``n \times n`` orthogonal rotation matrix satisfying ``B_0 = L Q``
+- ``L`` is the lower-triangular Cholesky factor of the unrestricted residual covariance ``\hat\Sigma``
+- ``A`` is the estimated contemporaneous left-hand matrix
+- ``B`` is the estimated shock-loading right-hand matrix
+- ``\hat\Sigma`` is the sample covariance matrix of reduced-form residuals
 
 Just-identified recursive and Blanchard–Quah patterns use the Cholesky and long-run closed forms, so they reproduce [`identify_cholesky`](@ref) and [`identify_long_run`](@ref) to machine precision.
 
@@ -152,6 +169,15 @@ Each extra independent zero beyond ``n(n-1)/2`` (plus normalisations) is an over
 ```math
 \mathrm{LR} = T\bigl(\log|\hat\Sigma_r| - \log|\hat\Sigma|\bigr) \;\sim\; \chi^2(n_{\mathrm{over}})
 ```
+
+where:
+- ``\mathrm{LR}`` is the likelihood-ratio test statistic for overidentifying restrictions
+- ``T`` is the effective sample size
+- ``\hat\Sigma_r = A^{-1} B B' A^{-\top}`` is the restricted covariance matrix implied by the estimated AB model
+- ``\hat\Sigma`` is the unrestricted reduced-form residual covariance matrix
+- ``|\cdot|`` denotes the matrix determinant
+- ``n_{\mathrm{over}}`` is the number of overidentifying restrictions (degrees of freedom)
+- ``\chi^2(n_{\mathrm{over}})`` is the chi-squared distribution with ``n_{\mathrm{over}}`` degrees of freedom
 
 Recipe 4 zeros ``A_{31}`` on top of the recursive pattern. That cell is free in the just-identified model; fixing it raises ``n_{\mathrm{over}}`` by one. A small p-value rejects the extra contemporaneous restriction.
 

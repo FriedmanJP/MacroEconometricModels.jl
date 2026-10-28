@@ -85,7 +85,10 @@ The contribution of shock ``j`` to variable ``i`` at time ``t`` is the convoluti
 \text{HD}_{ij}(t) = \sum_{s=0}^{t-1} (\Theta_s)_{ij} \, \varepsilon_j(t-s)
 ```
 
-where ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the structural MA coefficient at lag ``s`` and ``\varepsilon_j(t-s)`` is the realized structural shock ``j`` at time ``t-s``.
+where:
+- ``\text{HD}_{ij}(t)`` is the historical contribution of structural shock ``j`` to variable ``i`` at time ``t``
+- ``(\Theta_s)_{ij}`` is the ``(i,j)`` element of the structural moving-average coefficient matrix at lag ``s``
+- ``\varepsilon_j(t-s)`` is the realized structural shock ``j`` at time ``t-s``
 
 !!! note "How the identity is enforced"
     `initial_conditions` is computed as the residual ``y_{i,t} - \sum_j \text{HD}_{ij}(t)``, so the additive identity ``y_{i,t} = \sum_j \text{HD}_{ij}(t) + \text{initial}_i(t)`` holds by construction. `verify_decomposition()` therefore checks the arithmetic — it catches a numerical failure in the MA recursion, not a misspecified model — and returns `true` whenever the contributions are finite.

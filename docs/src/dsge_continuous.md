@@ -183,7 +183,17 @@ The two-asset model adds a second, **illiquid** asset ``a`` (return ``r_a``) alo
 \rho V(b,a,z) = \max_{c,d}\; u(c) + V_b\,(w z + r_b b - d - \tfrac{\chi}{2}d^2 - c) + V_a\,(r_a a + d) + \sum_{z'}\lambda_{z\to z'}[V(b,a,z')-V(b,a,z)]
 ```
 
-where the first-order conditions are ``c = (V_b)^{-1/\sigma}`` and ``d = (V_a/V_b - 1)/\chi``. The HJB is a two-dimensional PDE solved by upwind finite differences in both ``b`` and ``a``; the stationary joint density of ``(b,a,z)`` solves the Kolmogorov-Forward equation. `ct_two_asset_solve` returns a [`CTTwoAssetSolution`](@ref) with the value function, deposit and consumption policies, joint density, and aggregates.
+where:
+- ``V(b, a, z)`` is the continuous-time household value function
+- ``\rho`` is the subjective discount rate
+- ``b, a`` are liquid bond and illiquid capital asset holdings
+- ``z`` is the idiosyncratic productivity state with Markov switching intensities ``\lambda_{z \to z'}``
+- ``c`` is the consumption rate (with first-order condition ``c = (V_b)^{-1/\sigma}``)
+- ``d`` is the deposit flow into the illiquid account (with FOC ``d = (V_a/V_b - 1)/\chi``)
+- ``V_b = \partial_b V`` and ``V_a = \partial_a V`` are partial derivatives with respect to liquid and illiquid wealth
+- ``r_b, r_a`` are liquid and illiquid real returns
+- ``w`` is the real wage rate
+- ``\chi`` is the portfolio adjustment cost scaling parameter
 
 !!! warning "Check stationarity before reading the aggregates"
     The illiquid ceiling ``a_{\max}`` must sit below ``a^\star = 1/(\chi r_a)`` under the level-quadratic cost, or the reported illiquid stock is where the grid ends rather than where households stop saving. The calibration below puts ``a^\star = 10`` against ``a_{\max} = 8``. See the next section and issue #509.
@@ -253,6 +263,13 @@ d = \begin{cases}
 \end{cases}
 ```
 
+where:
+- ``d`` is the optimal deposit/withdrawal rate
+- ``V_a/V_b`` is the marginal value ratio of illiquid to liquid wealth
+- ``\chi_0`` is the linear adjustment cost determining the inaction band ``|V_a/V_b - 1| \le \chi_0``
+- ``\chi_1, \chi_2`` are the scale and curvature parameters of the convex adjustment cost
+- ``\bar a = \max(a, \chi_3)`` is floored illiquid wealth ensuring finite adjustment rates at ``a = 0``
+
 ```@example ct
 kink = CTTwoAsset(; cost=:kinked, chi0=0.05, chi1=0.5, chi2=2.0, a_kink=1.0, Ib=6, Ia=6)
 smooth = CTTwoAsset(; cost=:quadratic, chi=2.0, Ib=6, Ia=6)
@@ -305,13 +322,22 @@ Integration uses the matching **trapezoidal** weights `bdelta`/`adelta` (half-wi
 r_a = \alpha Z (K/L)^{\alpha-1} - \delta, \qquad w = (1-\alpha) Z (K/L)^{\alpha}
 ```
 
+where:
+- ``r_a`` is the equilibrium real return on illiquid capital
+- ``w`` is the equilibrium real wage rate
+- ``Z`` is aggregate total factor productivity
+- ``K`` is aggregate illiquid capital
+- ``L`` is aggregate effective labor supply
+- ``\alpha`` is capital's share of production
+- ``\delta`` is the depreciation rate of capital
+
 Equilibrium requires household illiquid wealth ``A = K`` and liquid wealth ``B = \bar B``; labor ``L`` is the stationary mean of the income process. The solver iterates both conditions with damped updates, warm-starting the household block from the previous value function.
 
 ```@example ct
-ge = ct_two_asset_ge(CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06,
+ge = ct_two_asset_ge(CTTwoAsset(; Ib=20, Ia=20, a_max=6.0, b_max=5.0, rho=0.06,
                                 z=[0.6, 1.4], lambda=[0.4, 0.4], B_supply=0.69,
                                 chi=2.0, a_power=0.5, b_power=0.5);
-                     max_iter=120, tol=1e-3)
+                     max_iter=25, tol=2e-3, K_init=5.58, rb_init=-0.054)
 report(ge)
 ```
 
@@ -351,7 +377,7 @@ The 18.75% mass on the illiquid ceiling is the number to watch. With ``\chi = 2`
 ```@example ct
 N = 40
 Zpath = [1.0 + 0.02 * 0.6^(n - 1) for n in 1:(N + 1)]; Zpath[1] = 1.0
-tr = ct_two_asset_mit(CTTwoAsset(; Ib=25, Ia=25, a_max=6.0, b_max=5.0, rho=0.06,
+tr = ct_two_asset_mit(CTTwoAsset(; Ib=20, Ia=20, a_max=6.0, b_max=5.0, rho=0.06,
                                  z=[0.6, 1.4], lambda=[0.4, 0.4], B_supply=0.69,
                                  chi=2.0, a_power=0.5, b_power=0.5),
                       ge, Zpath; dt=0.5, max_iter=80, tol=1e-5)

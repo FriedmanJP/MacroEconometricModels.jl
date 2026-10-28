@@ -226,6 +226,11 @@ pf = perfect_foresight(spec; shock_path=shocks,
 l_i \leq y_i \leq u_i, \quad f_i(y) \begin{cases} \geq 0 & \text{if } y_i = l_i \\ = 0 & \text{if } l_i < y_i < u_i \\ \leq 0 & \text{if } y_i = u_i \end{cases}
 ```
 
+where:
+- ``y_i`` is the endogenous model variable along the simulation trajectory
+- ``l_i, u_i`` are lower and upper bounds on variable ``i`` (with ``l_i = -\infty`` or ``u_i = +\infty`` when unconstrained)
+- ``f_i(y)`` is the ``i``-th stacked equilibrium equation evaluated along the path
+
 This complementarity structure is natural for problems where a constraint replaces an equilibrium condition when binding (e.g., the Taylor rule is replaced by ``R_t = 0`` at the ZLB).
 
 ```julia

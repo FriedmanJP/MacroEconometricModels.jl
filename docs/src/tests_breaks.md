@@ -85,6 +85,11 @@ Under the alternative the parameter vector shifts at an unknown break date ``t_b
 \beta = \begin{cases} \beta_1 & t \leq t_b \\ \beta_2 & t > t_b \end{cases}
 ```
 
+where:
+- ``\beta_1`` is the ``k \times 1`` parameter vector before candidate break date ``t_b``
+- ``\beta_2`` is the ``k \times 1`` parameter vector after candidate break date ``t_b``
+- ``t_b`` is the candidate structural break date in the sample
+
 The **Wald statistic** at a candidate break date ``t_b`` compares the two sub-sample estimates:
 
 ```math
@@ -101,13 +106,22 @@ The **LR statistic** compares the full-sample and split-sample residual sums of 
 \text{LR}(t_b) = T \left[ \ln(\text{SSR}_0 / T) - \ln(\text{SSR}_{\text{split}} / T) \right]
 ```
 
+where:
+- ``T`` is the sample size
+- ``\text{SSR}_0`` is the full-sample sum of squared residuals under parameter constancy
+- ``\text{SSR}_{\text{split}}`` is the combined sum of squared residuals from the two sub-samples partitioned at ``t_b``
+
 The **LM statistic** is a score test that needs only the full-sample estimates:
 
 ```math
 \text{LM}(t_b) = \frac{S(t_b)' (X'X)^{-1} S(t_b)}{\hat{\sigma}^2 \cdot \tau (1 - \tau)}
 ```
 
-where ``S(t_b) = \sum_{t=1}^{t_b} X_t \hat{u}_t`` is the partial sum of scores, ``\tau = t_b / T``, and ``\hat{\sigma}^2 = \text{SSR}_0/T``.
+where:
+- ``S(t_b) = \sum_{t=1}^{t_b} X_t \hat{u}_t`` is the partial sum of regression scores up to candidate date ``t_b``
+- ``X`` is the ``T \times k`` regressor matrix
+- ``\hat{\sigma}^2 = \text{SSR}_0 / T`` is the full-sample residual variance estimate
+- ``\tau = t_b / T`` is the candidate break fraction in the sample
 
 Three **functionals** aggregate the base statistic over the trimmed range ``[\pi T, (1 - \pi) T]``:
 
@@ -213,6 +227,12 @@ The optimal break dates minimize the total SSR:
 ```math
 (\hat{T}_1, \ldots, \hat{T}_m) = \arg\min_{T_1, \ldots, T_m} \sum_{j=1}^{m+1} \sum_{t=T_{j-1}+1}^{T_j} (y_t - X_t' \hat{\beta}_j)^2
 ```
+
+where:
+- ``m`` is the number of structural break dates
+- ``\hat{T}_1, \ldots, \hat{T}_m`` are the estimated optimal partition dates
+- ``y_t`` is the dependent variable and ``X_t`` is the regressor vector
+- ``\hat{\beta}_j`` is the OLS parameter estimate for regime ``j``
 
 The **sup-F test** of ``l`` breaks against zero breaks is:
 
@@ -329,6 +349,11 @@ The Han-Inoue test asks whether the panel's loadings break at **one common date*
 W_i(t) = (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})' \left[ \hat{\sigma}_i^2 \left( (F_1'F_1)^{-1} + (F_2'F_2)^{-1} \right) \right]^{-1} (\hat{\lambda}_{1,i} - \hat{\lambda}_{2,i})
 ```
 
+where:
+- ``\hat{\lambda}_{1,i}`` and ``\hat{\lambda}_{2,i}`` are factor loading estimates for series ``i`` on sub-samples ``[1, t]`` and ``[t+1, T]``
+- ``\hat{\sigma}_i^2`` is the full-sample idiosyncratic variance estimate for series ``i``
+- ``F_1`` and ``F_2`` are the factor matrix observations for the two sub-samples
+
 and the panel statistic pools the evidence at each date before maximizing, then standardizes against its simulated null:
 
 ```math
@@ -362,6 +387,13 @@ The Breitung-Eickmeier test runs one loading-break regression per series and poo
 ```math
 x_{it} = \lambda_i' \hat{F}_t + \delta_i' \hat{F}_t \cdot 1(t > \tau) + e_{it}
 ```
+
+where:
+- ``x_{it}`` is the observation for panel unit ``i`` at time ``t``
+- ``\hat{F}_t`` is the ``r \times 1`` vector of estimated static factors
+- ``\lambda_i`` is the baseline factor loading vector
+- ``\delta_i`` is the change in factor loadings after break date ``\tau``, tested under ``H_0: \delta_i = 0``
+- ``e_{it}`` is the idiosyncratic error term
 
 is tested for ``H_0: \delta_i = 0`` by the LM statistic
 
@@ -414,6 +446,13 @@ The Chen-Dolado-Gonzalo test targets a **big break** --- one large enough that t
 ```math
 \hat{F}_{1t} = c + \beta' \hat{F}_{2:r,t} + u_t
 ```
+
+where:
+- ``\hat{F}_{1t}`` is the first estimated static principal component factor at time ``t``
+- ``c`` is an intercept
+- ``\hat{F}_{2:r,t}`` contains the remaining ``r-1`` static factors
+- ``\beta`` is the ``(r-1) \times 1`` regression slope vector, equal to 0 under parameter stability
+- ``u_t`` is the regression disturbance
 
 gives coefficients that are constant under ``H_0`` --- and zero, since principal components are orthogonal over the full sample --- but shift at the break date under ``H_1``. The test is a sup-LM test for instability in that regression:
 
@@ -503,11 +542,23 @@ Three models control the form of the break:
 y_{1t} = \mu_1 + \mu_2 D_t + \alpha' y_{2t} + e_t
 ```
 
+where:
+- ``y_{1t}`` is the dependent variable (the first column of `Y`)
+- ``y_{2t}`` is the ``m \times 1`` vector of cointegrated regressors
+- ``\mu_1`` is the baseline intercept and ``\mu_2`` is the shift in intercept after break date ``T_B``
+- ``D_t = \mathbf{1}(t > T_B)`` is the step dummy variable
+- ``\alpha`` is the cointegrating vector
+- ``e_t`` is the regression disturbance
+
 **Level + trend shift** (`:CT`):
 
 ```math
 y_{1t} = \mu_1 + \mu_2 D_t + \beta t + \alpha' y_{2t} + e_t
 ```
+
+where:
+- ``\beta t`` is a deterministic linear time trend
+- all other symbols are as defined above
 
 **Regime shift** (`:CS`):
 
@@ -520,6 +571,7 @@ where:
 - ``y_{2t}`` is the ``m \times 1`` vector of regressors (the remaining columns)
 - ``D_t = \mathbf{1}(t > T_B)`` is the break dummy
 - ``T_B`` is the break date, searched over the trimmed range
+- ``\alpha_1, \alpha_2`` are the pre- and post-break cointegrating slope vectors
 
 Three statistics are computed from the residuals ``\hat{e}_t`` at each candidate date, and each takes its own minimum:
 

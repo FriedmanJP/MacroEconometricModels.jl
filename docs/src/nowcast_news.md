@@ -126,6 +126,14 @@ The **total revision** splits three ways in principle:
   + \underbrace{\Delta_{\text{re-estimation}}}_{\texttt{impact\_reestimation}}
 ```
 
+where:
+- ``\hat{y}^{\text{new}}`` is the nowcast of the target variable computed from the updated data vintage
+- ``\hat{y}^{\text{old}}`` is the nowcast computed from the previous data vintage
+- ``\text{impact}_k`` is the news impact of newly released data point ``k``, summing to ``\texttt{impact\_news}``
+- ``\Delta_{\text{revision}}`` (``\texttt{impact\_revision}``) is the impact of historical revisions to previously observed data points
+- ``\Delta_{\text{re-estimation}}`` (``\texttt{impact\_reestimation}``) is the revision component arising from re-estimating state-space parameters on the new vintage
+
+
 !!! note "Revisions are not news"
     The Bańbura-Modugno weights are derived for cells that were *missing* in the old vintage, so they cannot price a cell that was already published and merely changed value. Such a cell is a **revision**, and `impact_revision` is the difference between the nowcast under the old vintage and the nowcast under the old vintage with the revised values patched in, with the DFM parameters held fixed. The news step then runs from that patched baseline, so the news weights only ever see genuinely new cells. A cell counts as revised when it moves by more than ``10^{-9}`` relative to its own magnitude, which keeps standardization round-trip noise from turning every observed cell into a revision.
 

@@ -56,17 +56,22 @@ round(cor(tvp.smoothed_state[:, 2], β), digits=3)   # recovered slope path
 Every model in this module is a single-block linear-Gaussian system:
 
 ```math
-y_t = Z \, \alpha_t + d + \varepsilon_t, \qquad \varepsilon_t \sim N(0, H)
-```
-```math
-\alpha_{t+1} = T \, \alpha_t + c + R \, \eta_t, \qquad \eta_t \sim N(0, Q)
+\begin{aligned}
+y_t &= Z \, \alpha_t + d + \varepsilon_t, \qquad \varepsilon_t \sim N(0, H) \\
+\alpha_{t+1} &= T \, \alpha_t + c + R \, \eta_t, \qquad \eta_t \sim N(0, Q)
+\end{aligned}
 ```
 
 where:
-- ``y_t`` is the ``n_\text{obs} \times 1`` observation vector
-- ``\alpha_t`` is the ``n_x \times 1`` latent state
-- ``Z`` (``n_\text{obs} \times n_x``) is the observation matrix, ``d`` the observation intercept, ``H`` the observation-noise covariance
-- ``T`` (``n_x \times n_x``) is the transition matrix, ``c`` the state intercept, ``R`` the state-noise loading, ``Q`` the state-noise covariance
+- ``y_t`` is the ``n_\text{obs} \times 1`` observation vector at time ``t``
+- ``\alpha_t`` is the ``n_x \times 1`` unobserved latent state vector
+- ``Z`` is the ``n_\text{obs} \times n_x`` observation measurement matrix
+- ``d`` is the ``n_\text{obs} \times 1`` observation intercept vector
+- ``\varepsilon_t \sim N(0, H)`` is the observation disturbance vector with ``n_\text{obs} \times n_\text{obs}`` covariance ``H``
+- ``T`` is the ``n_x \times n_x`` state transition matrix
+- ``c`` is the ``n_x \times 1`` state intercept vector
+- ``R`` is the ``n_x \times n_\eta`` state innovation selection matrix
+- ``\eta_t \sim N(0, Q)`` is the ``n_\eta \times 1`` state disturbance vector with ``n_\eta \times n_\eta`` covariance ``Q``
 
 Filtering and smoothing run through the shared kernel `_kalman_filter!` / `_rts_smoother`; the estimator maximizes the prediction-error-decomposition log-likelihood ``\sum_t \log p(y_t \mid y_{1:t-1})``.
 
@@ -104,9 +109,17 @@ The estimator and both wrappers share the initialization keywords:
 The **local-level** (random-walk-plus-noise) model decomposes a series into a stochastic level plus irregular noise:
 
 ```math
-y_t = \mu_t + \varepsilon_t, \quad \varepsilon_t \sim N(0, \sigma^2_\varepsilon); \qquad
-\mu_{t+1} = \mu_t + \eta_t, \quad \eta_t \sim N(0, \sigma^2_\eta)
+\begin{aligned}
+y_t &= \mu_t + \varepsilon_t, \qquad \varepsilon_t \sim N(0, \sigma^2_\varepsilon) \\
+\mu_{t+1} &= \mu_t + \eta_t, \qquad \eta_t \sim N(0, \sigma^2_\eta)
+\end{aligned}
 ```
+
+where:
+- ``y_t`` is the observed series at time ``t``
+- ``\mu_t`` is the unobserved stochastic level state
+- ``\varepsilon_t \sim N(0, \sigma^2_\varepsilon)`` is the Gaussian observation noise with variance ``\sigma^2_\varepsilon``
+- ``\eta_t \sim N(0, \sigma^2_\eta)`` is the Gaussian level innovation with variance ``\sigma^2_\eta``
 
 [`local_level`](@ref) estimates ``(\sigma^2_\varepsilon, \sigma^2_\eta)`` by MLE. The classic test case is the annual Nile river-flow series at Aswan, 1871–1970:
 
@@ -141,12 +154,21 @@ plot_result(m)   # observed vs filtered vs smoothed level with 95% band
 The **local-linear-trend** model adds a stochastic slope ``\beta_t`` to the level, so the trend can drift in both level and growth rate:
 
 ```math
-y_t = \mu_t + \varepsilon_t; \qquad
-\mu_{t+1} = \mu_t + \beta_t + \xi_t; \qquad
-\beta_{t+1} = \beta_t + \zeta_t
+\begin{aligned}
+y_t &= \mu_t + \varepsilon_t \\
+\mu_{t+1} &= \mu_t + \beta_t + \xi_t \\
+\beta_{t+1} &= \beta_t + \zeta_t
+\end{aligned}
 ```
 
-with ``\varepsilon_t \sim N(0,\sigma^2_\varepsilon)``, ``\xi_t \sim N(0,\sigma^2_\xi)``, ``\zeta_t \sim N(0,\sigma^2_\zeta)``. The state is ``[\mu_t, \beta_t]``.
+where:
+- ``y_t`` is the observed time series at time ``t``
+- ``\mu_t`` is the latent stochastic level component
+- ``\beta_t`` is the latent stochastic slope (drift) component
+- ``\varepsilon_t \sim N(0, \sigma^2_\varepsilon)`` is the observation measurement noise with variance ``\sigma^2_\varepsilon``
+- ``\xi_t \sim N(0, \sigma^2_\xi)`` is the level disturbance with variance ``\sigma^2_\xi``
+- ``\zeta_t \sim N(0, \sigma^2_\zeta)`` is the slope disturbance with variance ``\sigma^2_\zeta``
+- ``[\mu_t, \beta_t]'`` is the bivariate latent state vector
 
 ```@example ss
 mt = local_linear_trend(nile)
@@ -162,9 +184,18 @@ On the Nile the MLE drives the slope variance to the boundary, ``\hat\sigma^2_\z
 [`estimate_tvp_reg`](@ref) fits a regression whose coefficients follow a random walk:
 
 ```math
-y_t = X_t \, \beta_t + \varepsilon_t, \quad \varepsilon_t \sim N(0,\sigma^2_\varepsilon); \qquad
-\beta_{t+1} = \beta_t + \eta_t, \quad \eta_t \sim N(0, \operatorname{diag}(\sigma^2_\eta))
+\begin{aligned}
+y_t &= X_t \, \beta_t + \varepsilon_t, \qquad \varepsilon_t \sim N(0,\sigma^2_\varepsilon) \\
+\beta_{t+1} &= \beta_t + \eta_t, \qquad \eta_t \sim N(0, \operatorname{diag}(\sigma^2_\eta))
+\end{aligned}
 ```
+
+where:
+- ``y_t`` is the scalar observed dependent variable at time ``t``
+- ``X_t`` is the ``1 \times k`` vector of regressors (including optional intercept) at time ``t``
+- ``\beta_t`` is the ``k \times 1`` vector of time-varying regression coefficients (latent state)
+- ``\varepsilon_t \sim N(0, \sigma^2_\varepsilon)`` is the observation error with variance ``\sigma^2_\varepsilon``
+- ``\eta_t \sim N(0, \operatorname{diag}(\sigma^2_\eta))`` is the ``k \times 1`` vector of parameter innovations with diagonal covariance ``\operatorname{diag}(\sigma^2_\eta)``
 
 The observation matrix ``Z_t = X_t`` is time-varying, so the coefficient path ``\beta_t`` is recovered as the smoothed state. A leading intercept column is added by default (`intercept=true`), which puts the intercept in column 1 of `smoothed_state` and the first regressor in column 2.
 

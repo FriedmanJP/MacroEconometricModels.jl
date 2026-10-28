@@ -425,7 +425,11 @@ X = \hat{r}\,P\,\hat{s} - \hat{r}^{-1}\,N\,\hat{s}^{-1}
 \quad\text{(GRAS)}
 ```
 
-where ``A_0 = P - N`` splits the prior into positive and absolute-negative parts, and the multipliers ``(r, s)`` are chosen so that ``X`` meets the prescribed margins ``u`` and ``v``.
+where:
+- ``X`` is the balanced intermediate flow matrix
+- ``A_0 = P - N`` is the prior matrix split into positive elements ``P`` and absolute-negative elements ``N``
+- ``\hat{r} = \operatorname{diag}(r)`` and ``\hat{s} = \operatorname{diag}(s)`` are diagonal matrices of row and column scaling multipliers chosen so that ``X`` meets prescribed margins ``u`` and ``v``
+
 
 ```@example io_classical
 A0 = [2.0 1.0; 1.0 2.0]
@@ -611,7 +615,13 @@ plot_result(price_model(io; dva=Dict("Agriculture" => 0.10)))
 \text{impact}_i = h_i\,\Delta x_i
 ```
 
-where ``h = \mathbf{1}`` for `kind=:output`, ``h_j = (\sum_v V_{vj}) / x_j`` for `kind=:va` / `:income`, and the corresponding intensity row for employment or an extension.
+where:
+- ``\Delta x`` is the ``n \times 1`` vector of induced gross output changes
+- ``L = (I - A)^{-1}`` is the Leontief inverse matrix
+- ``\Delta y`` is the specified vector of final-demand shocks
+- ``\text{impact}_i`` is the total impact on sector ``i``
+- ``h_i`` is the sectoral conversion intensity: ``h_i = 1`` for gross output (`kind=:output`), ``h_i = (\sum_v V_{vi})/x_i`` for value added (`kind=:va` / `:income`), or physical intensity for satellite accounts
+
 
 ```@example io_classical
 impact(io, Dict("Agriculture" => 1.0); kind=:output)
@@ -809,38 +819,6 @@ The four diagnostics agree on the economics but rank the sectors differently, wh
 
 ---
 
-## API Reference
-
-```@docs
-technical_coefficients
-leontief_inverse
-allocation_coefficients
-ghosh_inverse
-leontief
-ghosh
-multipliers
-IOMultipliers
-linkages
-LinkageResult
-rasmussen
-key_sectors
-sda
-SDAResult
-ras
-gras
-balance
-RASResult
-hypothetical_extraction
-ExtractionResult
-price_model
-PriceModelResult
-impact
-ImpactResult
-network_stats
-NetworkStatsResult
-```
-
----
 
 ## References
 

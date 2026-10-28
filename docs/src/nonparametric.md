@@ -83,15 +83,24 @@ The kernel density estimator smooths the empirical distribution by placing a sca
 ```
 
 where:
-- ``K(\cdot)`` is a kernel scaled to unit variance (so a common ``h`` smooths comparably across kernels and ``\int \hat f = 1``)
-- ``h`` is the bandwidth controlling the trade-off between bias and variance
+- ``\hat f(x_0)`` is the estimated probability density at evaluation point ``x_0``
+- ``x_0`` is the evaluation point
+- ``y_i`` (for ``i = 1, \ldots, n``) are the observed sample data points
 - ``n`` is the sample size
+- ``h`` is the bandwidth (smoothing parameter) controlling the trade-off between bias and variance
+- ``K(\cdot)`` is a symmetric kernel density function scaled to unit variance (ensuring ``\int \hat f(x) \, dx = 1``)
 
 The bandwidth ``h`` dominates the estimate. Two data-driven rules are available. The **Silverman rule of thumb** — identical to R's `bw.nrd0` — is fast and reliable for roughly unimodal data:
 
 ```math
 h = 0.9 \cdot \min\!\left(\hat\sigma,\; \frac{\text{IQR}}{1.349}\right) \cdot n^{-1/5}
 ```
+
+where:
+- ``h`` is the Silverman rule-of-thumb bandwidth
+- ``\hat\sigma`` is the sample standard deviation
+- ``\text{IQR}`` is the sample interquartile range (with ``\text{IQR} / 1.349`` estimating the Gaussian standard deviation robustly against outliers)
+- ``n`` is the sample size
 
 The **Sheather-Jones plug-in** (`bw=:sj`, matching R's `bw.SJ`) targets the AMISE-optimal bandwidth by solving a fixed-point equation for ``h`` that estimates the integrated squared density derivative from a pilot bandwidth. It is more accurate for multimodal or heavy-tailed samples at higher computational cost: the functionals are evaluated by exact pairwise summation, so cost grows as ``O(n^2)`` per bandwidth trial.
 
@@ -138,8 +147,15 @@ The density is evaluated on an equally-spaced grid of `npoints`, extending `cut�
 Nonparametric regression estimates the conditional mean ``m(x) = E[y \mid x]`` by weighted least squares in a shrinking neighbourhood of each target point. The **Nadaraya-Watson** (local-constant) estimator is a kernel-weighted average:
 
 ```math
-\hat m_{\text{NW}}(x_0) = \frac{\sum_i K\!\left(\frac{x_i - x_0}{h}\right) y_i}{\sum_i K\!\left(\frac{x_i - x_0}{h}\right)}
+\hat m_{\text{NW}}(x_0) = \frac{\sum_{i=1}^n K\!\left(\frac{x_i - x_0}{h}\right) y_i}{\sum_{i=1}^n K\!\left(\frac{x_i - x_0}{h}\right)}
 ```
+
+where:
+- ``\hat m_{\text{NW}}(x_0)`` is the Nadaraya-Watson kernel regression conditional mean estimate at point ``x_0``
+- ``x_0`` is the evaluation point
+- ``x_i`` and ``y_i`` (for ``i = 1, \ldots, n``) are the observed predictor and response pairs
+- ``h`` is the kernel bandwidth
+- ``K(\cdot)`` is the smoothing kernel function
 
 The **local-polynomial** estimator (Fan & Gijbels 1996) fits, at each ``x_0``, a weighted regression of ``y`` on the local design ``[1, (x_i - x_0), \dots, (x_i - x_0)^p]`` with kernel weights, and reports the intercept as the fit:
 
@@ -148,10 +164,13 @@ The **local-polynomial** estimator (Fan & Gijbels 1996) fits, at each ``x_0``, a
 ```
 
 where:
-- ``h`` is the bandwidth
-- ``p`` is the local-polynomial degree (`:nw` ⇒ 0, `:ll` ⇒ 1, `:lp` ⇒ `degree`)
-- ``W_0`` is the diagonal matrix of kernel weights at ``x_0``
-- ``e_1`` selects the intercept of the local fit
+- ``\hat m(x_0)`` is the local-polynomial regression estimate at evaluation point ``x_0``
+- ``e_1 = [1, 0, \ldots, 0]'`` is the first elementary basis vector selecting the local intercept
+- ``X_0`` is the ``n \times (p+1)`` local design matrix with ``i``-th row ``[1, (x_i - x_0), \ldots, (x_i - x_0)^p]``
+- ``p`` is the local-polynomial degree (``p = 0`` for Nadaraya-Watson `:nw`, ``p = 1`` for local linear `:ll`, or user-specified `:lp`)
+- ``W_0 = \operatorname{diag}\big(K((x_1 - x_0)/h), \ldots, K((x_n - x_0)/h)\big)`` is the ``n \times n`` diagonal matrix of kernel weights
+- ``y = [y_1, \ldots, y_n]'`` is the ``n \times 1`` vector of observed response variables
+- ``h`` is the kernel bandwidth
 
 The local-linear case (``p = 1``, `method=:ll`) carries automatic boundary-bias correction that Nadaraya-Watson lacks. When the local design is rank-deficient — too few points carry weight at a given ``x_0`` — the estimator silently falls back to the local-constant weights there.
 
@@ -213,7 +232,12 @@ LOWESS (Cleveland 1979) is a robust scatterplot smoother. At each point it fits 
 w(d) = \left(1 - (d/d_{\max})^3\right)^3, \qquad d \le d_{\max}
 ```
 
-where ``d`` is the distance to the target and ``d_{\max}`` the distance to the farthest neighbour in the window. After the initial fit, `iter` robustifying passes reweight each observation by the bisquare of its scaled residual, so outliers are progressively discounted. The span ``f`` (fraction of points per window) controls smoothness.
+where:
+- ``w(d)`` is the Cleveland (1979) tricube weight for an observation at distance ``d``
+- ``d = |x_i - x_0|`` is the Euclidean distance from predictor ``x_i`` to the evaluation target ``x_0``
+- ``d_{\max}`` is the distance from ``x_0`` to the farthest observation in the nearest-neighbor window determined by span ``f``
+
+After the initial fit, `iter` robustifying passes reweight each observation by the bisquare of its scaled residual, so outliers are progressively discounted. The span ``f`` (fraction of points per window) controls smoothness.
 
 !!! note "Technical Note"
     The implementation is a port of R's `clowess`/`lowest` routines and matches `stats::lowess` to machine precision, including the tricube weights, the local-linear slope correction, the near-boundary tolerances, and the `delta` interpolation skip. `delta` avoids a local fit at abscissae within `delta` of the last computed point and linearly interpolates instead; the default of ``0.01 \cdot \text{range}(x)`` makes long runs of near-duplicate ``x`` cheap.

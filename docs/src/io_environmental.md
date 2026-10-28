@@ -242,19 +242,6 @@ Agriculture uses 0.045 TJ per unit of gross output against manufacturing's 0.060
 
 ---
 
-## API Reference
-
-```@docs
-IOExtension
-add_extension!
-intensities
-emission_multipliers
-footprint
-FootprintResult
-RegionalFootprintResult
-```
-
----
 
 ## References
 

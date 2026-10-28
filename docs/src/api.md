@@ -1,19 +1,23 @@
 # [API Reference](@id api_page)
 
-Complete API documentation for **MacroEconometricModels.jl**. Every export carries its docstring on exactly one of the twelve per-domain reference pages below. The quick-reference tables that follow group the exported functions by task and route each group to the narrative page that explains it.
+Complete API documentation for **MacroEconometricModels.jl**. Every export carries its docstring on exactly one of the sixteen per-domain reference pages below. The quick-reference tables that follow group the exported functions by task and route each group to the narrative page that explains it.
 
 The full API documentation is organized into the following per-domain pages:
 
 - **[Data Management](@ref api_data)** — containers, datasets, cleaning, panel construction
+- **[Simulation](@ref api_simulation)** — public data-generating processes (DGPs) and Monte Carlo simulators
 - **[Univariate Models](@ref api_univariate)** — filters, ARIMA, volatility, spectral analysis
 - **[Multivariate Models](@ref api_multivariate)** — VAR, VECM, BVAR, LP, factor models, FAVAR, innovation accounting
 - **[Cross-Sectional Models](@ref api_cross_section)** — OLS/IV, logit/probit, ordered/multinomial
 - **[Panel Models](@ref api_panel)** — panel VAR, panel regression, DiD, panel unit-root tests
 - **[DSGE Models](@ref api_dsge)** — specification, solvers, estimation, constraints
+- **[Input-Output Analysis](@ref api_io_page)** — input-output tables, multipliers, linkages, trade accounting, Baqaee–Farhi models
 - **[Structural & Statistical Identification](@ref api_structural)** — SVAR schemes, non-Gaussian/heteroskedastic identification
+- **[Policy Counterfactuals](@ref api_counterfactual)** — McKay–Wolf rule counterfactuals, Barnichon–Mesters optimal perturbations, model bank
 - **[GMM & SMM](@ref api_gmm)** — moment-based estimation
 - **[Hypothesis Tests](@ref api_tests)** — unit root, breaks, comparison, portmanteau
 - **[Nowcasting](@ref api_nowcasting)** — DFM/BVAR/bridge nowcasting and news
+- **[Forecast Evaluation](@ref api_fceval_page)** — accuracy metrics, Diebold–Mariano, Clark–West, Mincer–Zarnowitz, forecast combination
 - **[Visualization](@ref api_visualization)** — `plot_result` dispatches
 - **[Utilities & Display](@ref api_utilities)** — covariance estimators, output, references
 
