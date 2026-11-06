@@ -13,21 +13,28 @@ plot_result methods for Historical Decomposition types.
 # =============================================================================
 
 """
-    plot_result(hd::HistoricalDecomposition; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(hd::HistoricalDecomposition; var=nothing,
+                ncols=0, title="", save_path=nothing)
 
 Plot historical decomposition: stacked bar of shock contributions + actual line.
 
 - `var`: Variable index or name. `nothing` = all variables.
 """
 function plot_result(hd::HistoricalDecomposition{T};
-                     var::Union{Int,String,Nothing}=nothing,
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     T_eff = hd.T_eff
     n_vars = length(hd.variables)
     n_shocks = length(hd.shock_names)
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, hd.variables)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, hd.variables) for v in var]
+    else
+        [_resolve_var(var, hd.variables)]
+    end
 
     panels = _PanelSpec[]
     for vi in vars_to_plot
@@ -40,19 +47,21 @@ function plot_result(hd::HistoricalDecomposition{T};
         js_bar = _render_bar_js(id_bar, data_bar, s_bar;
                                 mode="stacked", xlabel="Period",
                                 ylabel="Contribution")
-        push!(panels, _PanelSpec(id_bar, "$(hd.variables[vi]) — Shock Contributions", js_bar))
+        push!(panels, _PanelSpec(id_bar,
+                                 "$(hd.variables[vi]) — Shock Contributions",
+                                 js_bar))
 
         # Panel 2: Actual vs sum of contributions
         id_line = _next_plot_id("hd_line")
         actual = hd.actual[:, vi]
-        total = vec(sum(contributions, dims=2)) .+ hd.initial_conditions[:, vi]
+        total = vec(sum(contributions; dims=2)) .+ hd.initial_conditions[:, vi]
 
         rows = Vector{Pair{String,String}}[]
         for t in 1:T_eff
             push!(rows, [
                 "x" => _json(t),
                 "actual" => _json(actual[t]),
-                "recon" => _json(total[t])
+                "recon" => _json(total[t]),
             ])
         end
         data_line = _json_array_of_objects(rows)
@@ -60,22 +69,25 @@ function plot_result(hd::HistoricalDecomposition{T};
                               [_PLOT_COLORS[1], _PLOT_COLORS[2]];
                               keys=["actual", "recon"],
                               dash=["", "6,3"])
+        ref_json = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
         js_line = _render_line_js(id_line, data_line, s_line;
-                                  ref_lines_json="[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]",
+                                  ref_lines_json=ref_json,
                                   xlabel="Period", ylabel="Value")
-        push!(panels, _PanelSpec(id_line, "$(hd.variables[vi]) — Actual vs Decomposition", js_line))
+        push!(panels, _PanelSpec(id_line,
+                                 "$(hd.variables[vi]) — Actual vs Decomposition",
+                                 js_line))
     end
 
     if isempty(title)
         title = "Historical Decomposition ($(hd.method))"
     end
     if ncols <= 0
-        ncols = 1
+        ncols = 2
     end
 
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 # =============================================================================
@@ -103,9 +115,10 @@ central line:
   so the fan remains the default. Unknown `view` throws `ArgumentError`.
 """
 function plot_result(hd::BayesianHistoricalDecomposition{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
-                     stat::Symbol=:mean, view::Symbol=:fan, ncols::Int=0, title::String="",
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     stat::Symbol=:mean, view::Symbol=:fan, ncols::Int=0,
+                     title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     stat in (:mean, :median) ||
         throw(ArgumentError("stat must be :mean or :median, got :$stat"))
@@ -125,8 +138,20 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
     end
     central_label = stat == :median ? "Median" : "Mean"
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, hd.variables)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, hd.shock_names)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, hd.variables) for v in var]
+    else
+        [_resolve_var(var, hd.variables)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(shk, hd.shock_names) for shk in shock]
+    else
+        [_resolve_var(shock, hd.shock_names)]
+    end
 
     panels = _PanelSpec[]
     if view === :stacked
@@ -149,17 +174,21 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
                 "$(hd.variables[vi]) — Shock Contributions ($(stat_word))", js_bar))
             id_line = _next_plot_id("bhd_line")
             actual = hd.actual[1:T_eff, vi]
-            total = vec(sum(central, dims=2)) .+ hd.initial_point_estimate[1:T_eff, vi]
+            total = vec(sum(central; dims=2)) .+ hd.initial_point_estimate[1:T_eff, vi]
             rows = Vector{Pair{String,String}}[]
             for t in 1:T_eff
-                push!(rows, ["x" => _json(t), "actual" => _json(actual[t]),
-                             "recon" => _json(total[t])])
+                push!(rows, [
+                    "x" => _json(t),
+                    "actual" => _json(actual[t]),
+                    "recon" => _json(total[t]),
+                ])
             end
+            ref_json = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
             js_line = _render_line_js(id_line, _json_array_of_objects(rows),
                 _series_json(["Actual", "Reconstructed"],
                              [_PLOT_COLORS[1], _PLOT_COLORS[2]];
                              keys=["actual", "recon"], dash=["", "6,3"]);
-                ref_lines_json="[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]",
+                ref_lines_json=ref_json,
                 xlabel="Period", ylabel="Value")
             push!(panels, _PanelSpec(id_line,
                 "$(hd.variables[vi]) — Actual vs Decomposition", js_line))
@@ -183,8 +212,13 @@ function plot_result(hd::BayesianHistoricalDecomposition{T};
         stat_word = stat === :median ? "posterior median" : "posterior mean"
         title = "Bayesian Historical Decomposition ($(hd.method), $stat_word)"
     end
+    if ncols <= 0
+        ncols = view === :stacked ? 2 :
+            (length(shocks_to_plot) == 1 ?
+             min(length(vars_to_plot), 3) : length(shocks_to_plot))
+    end
 
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end

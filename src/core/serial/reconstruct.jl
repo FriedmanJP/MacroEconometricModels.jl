@@ -106,7 +106,7 @@ function _from_serializable(::Type{T}, p::AbstractDict, ::Int) where {T}
         # bump; a v1 payload without them also defaults to `nothing`.
         if !haskey(p, key)
             if f === :manifest || f === :boot_irf || f === :boot_lower ||
-               f === :boot_upper || f === :boot_draws
+               f === :boot_upper || f === :boot_draws || f === :model
                 push!(args, nothing)
                 continue
             end

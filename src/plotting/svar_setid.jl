@@ -24,7 +24,7 @@ All rendering reuses the frozen quantile-fan / line renderers (A1).
 # cell non-finite (→ a JSON null / visible gap), rather than being silently dropped.
 function _pw_quantile(v::AbstractVector, q::Float64)
     any(x -> !isfinite(x), v) && return NaN
-    _quantile(sort(Float64[Float64(x) for x in v]), q)
+    return _quantile(sort(Float64[Float64(x) for x in v]), q)
 end
 
 """
@@ -36,7 +36,8 @@ Fan `data_json` for one (response ← shock) slice of a sign-identified draw sta
 `central` line is passed through. Delegates row assembly to `_fan_data_json` so the
 quantile columns are re-keyed to match `_fan_bands_json`.
 """
-function _setid_quantile_json(draws_ij::AbstractMatrix, quantiles::Vector{Float64},
+function _setid_quantile_json(draws_ij::AbstractMatrix,
+                              quantiles::AbstractVector{Float64},
                               central::AbstractVector; xstart::Int=0)
     _, horizon = size(draws_ij)
     Q = Array{Float64}(undef, horizon, length(quantiles))
@@ -46,7 +47,8 @@ function _setid_quantile_json(draws_ij::AbstractMatrix, quantiles::Vector{Float6
             Q[h, qi] = _pw_quantile(col, q)
         end
     end
-    _fan_data_json(Q, quantiles, central; xvals=collect(xstart:(xstart + horizon - 1)))
+    return _fan_data_json(Q, quantiles, central;
+                          xvals=collect(xstart:(xstart + horizon - 1)))
 end
 
 # Synthetic "Var i" / "Shock j" names for result types that carry no names.
@@ -55,13 +57,14 @@ _synth_names(prefix::AbstractString, n::Int) = String["$(prefix) $i" for i in 1:
 # Band percentage from the outer quantile pair, for the C7 draw-count title.
 function _setid_band_pct(quantiles::AbstractVector)
     qs = sort(Float64[Float64(q) for q in quantiles])
-    round(Int, (qs[end] - qs[1]) * 100)
+    return round(Int, (qs[end] - qs[1]) * 100)
 end
 
 # Shared fan panel: zero reference line + nested bands + central line.
 # `band_label` replaces the pointwise percent-pair legend (e.g. "16–84%") when
 # the envelope is not a quantile fan — used by the Inoue–Kilian joint view.
-function _setid_fan_panel(id::String, data_json::String, quantiles::Vector{Float64},
+function _setid_fan_panel(id::String, data_json::String,
+                          quantiles::AbstractVector{Float64},
                           central_label::String, ptitle::String;
                           band_label::Union{Nothing,String}=nothing)
     if band_label === nothing
@@ -69,13 +72,14 @@ function _setid_fan_panel(id::String, data_json::String, quantiles::Vector{Float
     else
         k = length(quantiles)
         fan_json = "[{\"lo_key\":\"q1\",\"hi_key\":\"q$k\"," *
-            "\"label\":$(_json(band_label)),\"alpha\":0.35,\"color\":$(_json(_PLOT_SERIES[1]))}]"
+            "\"label\":$(_json(band_label)),\"alpha\":0.35," *
+            "\"color\":$(_json(_PLOT_SERIES[1]))}]"
     end
     refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
     js = _render_fan_js(id, data_json, fan_json; median_key="med",
                         central_label=central_label, ref_lines_json=refs,
                         xlabel="Horizon", ylabel="Response")
-    _PanelSpec(id, ptitle, js)
+    return _PanelSpec(id, ptitle, js)
 end
 
 # =============================================================================
@@ -96,9 +100,9 @@ legend/title say e.g. "68% joint", not a pointwise 16–84% fan).
 accepted-draw count is in the title (C7).
 """
 function plot_result(s::SignIdentifiedSet{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
-                     quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     quantiles::AbstractVector{Float64}=[0.16, 0.5, 0.84],
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing,
                      view::Symbol=:default,
@@ -112,15 +116,28 @@ function plot_result(s::SignIdentifiedSet{T};
     view === :default || throw(ArgumentError(
         "view must be :default, :joint, or :median_target; got :$view"))
     n_draws, horizon, n_vars, n_shocks = size(s.irf_draws)
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, s.variables) for v in var]
+    else
+        [_resolve_var(var, s.variables)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(shk, s.shocks) for shk in shock]
+    else
+        [_resolve_var(shock, s.shocks)]
+    end
 
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("signset")
             draws_ij = s.irf_draws[:, :, vi, sj]                      # n_draws × horizon
-            central = Float64[_pw_quantile(Base.view(draws_ij, :, h), 0.5) for h in 1:horizon]
+            central = Float64[_pw_quantile(Base.view(draws_ij, :, h), 0.5)
+                              for h in 1:horizon]
             data_json = _setid_quantile_json(draws_ij, quantiles, central; xstart=0)
             ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
             push!(panels, _setid_fan_panel(id, data_json, quantiles, "Median", ptitle))
@@ -128,12 +145,16 @@ function plot_result(s::SignIdentifiedSet{T};
     end
 
     if isempty(title)
-        title = "Sign-Identified IRF set ($(_setid_band_pct(quantiles))% band, $(s.n_accepted) draws)"
+        bpct = _setid_band_pct(quantiles)
+        title = "Sign-Identified IRF set ($(bpct)% band, $(s.n_accepted) draws)"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 function _plot_signset_joint(s::SignIdentifiedSet{T};
@@ -141,8 +162,20 @@ function _plot_signset_joint(s::SignIdentifiedSet{T};
                              title::String="", save_path=nothing,
                              level::Real=0.68) where {T}
     _, horizon, n_vars, n_shocks = size(s.irf_draws)
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, s.variables) for v in var]
+    else
+        [_resolve_var(var, s.variables)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(shk, s.shocks) for shk in shock]
+    else
+        [_resolve_var(shock, s.shocks)]
+    end
     lo, hi = joint_band(s; level=level)
     mt = median_target(s)
     pct = round(Int, level * 100)
@@ -151,37 +184,56 @@ function _plot_signset_joint(s::SignIdentifiedSet{T};
     # a pointwise quantile pair — the legend uses `band_label`.
     col_levels = [0.0, 1.0]
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("signsetj")
             Q = hcat(lo[:, vi, sj], hi[:, vi, sj])
             central = mt.irf[:, vi, sj]
-            data_json = _fan_data_json(Q, col_levels, central; xvals=collect(0:(horizon - 1)))
+            data_json = _fan_data_json(Q, col_levels, central;
+                                       xvals=collect(0:(horizon - 1)))
             ptitle = "$(s.variables[vi]) ← $(s.shocks[sj])"
-            push!(panels, _setid_fan_panel(id, data_json, col_levels, "Median-target", ptitle;
+            push!(panels, _setid_fan_panel(id, data_json, col_levels,
+                                           "Median-target", ptitle;
                                            band_label=band_label))
         end
     end
     if isempty(title)
         title = "Sign-Identified IRF $(pct)% joint band ($(s.n_accepted) draws)"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 function _plot_signset_median_target(s::SignIdentifiedSet{T};
                                      var=nothing, shock=nothing, ncols::Int=0,
                                      title::String="", save_path=nothing) where {T}
-    horizon, n_vars, n_shocks = size(s.irf_draws, 2), size(s.irf_draws, 3), size(s.irf_draws, 4)
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, s.variables)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, s.shocks)]
+    horizon = size(s.irf_draws, 2)
+    n_vars = size(s.irf_draws, 3)
+    n_shocks = size(s.irf_draws, 4)
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, s.variables) for v in var]
+    else
+        [_resolve_var(var, s.variables)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(shk, s.shocks) for shk in shock]
+    else
+        [_resolve_var(shock, s.shocks)]
+    end
     mt = median_target(s)
     refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("signsetmt")
             rows = Vector{Pair{String,String}}[]
             for h in 1:horizon
@@ -198,10 +250,13 @@ function _plot_signset_median_target(s::SignIdentifiedSet{T};
     if isempty(title)
         title = "Median-target IRF (Fry–Pagan, $(s.n_accepted) draws)"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 # =============================================================================
@@ -221,40 +276,53 @@ The result carries no names, so `Var i`/`Shock j` are synthesized from
 response/shock by `Int` or (resolved) name; the draw count is in the title (C7).
 """
 function plot_result(r::BayesianSetIdentifiedSVAR{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
-                     quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     quantiles::AbstractVector{Float64}=[0.16, 0.5, 0.84],
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
-    plot_result(irf(r; quantiles=quantiles); var=var, shock=shock, ncols=ncols,
-                title=isempty(title) ? "Bayesian Set-Identified IRF" : title,
-                save_path=save_path)
+    t = isempty(title) ? "Bayesian Set-Identified IRF" : title
+    return plot_result(irf(r; quantiles=quantiles); var=var, shock=shock,
+                       ncols=ncols, title=t, save_path=save_path)
 end
 
 """
-    plot_result(r::RobustBayesResult; var=nothing, shock=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(r::RobustBayesResult; var=nothing, shock=nothing,
+                ncols=0, title="", save_path=nothing)
 
 Giacomini–Kitagawa robust band versus the Haar single-prior comparison band
 (not necessarily nested inside the robust region), with the midpoint of the
 set of posterior means as the central line.
 """
 function plot_result(r::RobustBayesResult{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
                      variables::Union{Vector{String},Nothing}=nothing,
                      shocks::Union{Vector{String},Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     horizon, n_vars, n_shocks = size(r.lower)
-    varnames = variables === nothing ? _synth_names("Var", n_vars) : variables
-    shocknames = shocks === nothing ? _synth_names("Shock", n_shocks) : shocks
+    varnames = variables === nothing ? r.varnames : variables
+    shocknames = shocks === nothing ? r.shock_names : shocks
     length(varnames) == n_vars || throw(ArgumentError(
         "variables length ($(length(varnames))) must match n_vars ($n_vars)"))
     length(shocknames) == n_shocks || throw(ArgumentError(
         "shocks length ($(length(shocknames))) must match n_shocks ($n_shocks)"))
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, varnames)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, shocknames)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, varnames) for v in var]
+    else
+        [_resolve_var(var, varnames)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(s, shocknames) for s in shock]
+    else
+        [_resolve_var(shock, shocknames)]
+    end
     pct = round(Int, r.level * 100)
     col_levels = [0.0, 0.25, 0.75, 1.0]
     fan_json = "[" *
@@ -265,17 +333,19 @@ function plot_result(r::RobustBayesResult{T};
     refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
 
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("gkbayes")
             Q = hcat(r.robust_lower[:, vi, sj], r.single_prior_lower[:, vi, sj],
                      r.single_prior_upper[:, vi, sj], r.robust_upper[:, vi, sj])
             central = (r.lower[:, vi, sj] .+ r.upper[:, vi, sj]) ./ 2
-            data_json = _fan_data_json(Q, col_levels, central; xvals=collect(0:(horizon - 1)))
+            data_json = _fan_data_json(Q, col_levels, central;
+                                       xvals=collect(0:(horizon - 1)))
             ptitle = "$(varnames[vi]) ← $(shocknames[sj])"
             js = _render_fan_js(id, data_json, fan_json; median_key="med",
                                 central_label="Set of posterior means",
-                                ref_lines_json=refs, xlabel="Horizon", ylabel="Response")
+                                ref_lines_json=refs, xlabel="Horizon",
+                                ylabel="Response")
             push!(panels, _PanelSpec(id, ptitle, js))
         end
     end
@@ -283,53 +353,73 @@ function plot_result(r::RobustBayesResult{T};
     if isempty(title)
         title = "Giacomini–Kitagawa robust Bayes ($(pct)% region)"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 function plot_result(r::AriasSVARResult{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
-                     quantiles::Vector{Float64}=[0.16, 0.5, 0.84],
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     quantiles::AbstractVector{Float64}=[0.16, 0.5, 0.84],
                      variables::Union{Vector{String},Nothing}=nothing,
                      shocks::Union{Vector{String},Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     n_draws, horizon, n_vars, n_shocks = size(r.irf_draws)
-    varnames = variables === nothing ? _synth_names("Var", n_vars) : variables
-    shocknames = shocks === nothing ? _synth_names("Shock", n_shocks) : shocks
+    varnames = variables === nothing ? r.varnames : variables
+    shocknames = shocks === nothing ? r.shock_names : shocks
     length(varnames) == n_vars || throw(ArgumentError(
         "variables length ($(length(varnames))) must match n_vars ($n_vars)"))
     length(shocknames) == n_shocks || throw(ArgumentError(
         "shocks length ($(length(shocknames))) must match n_shocks ($n_shocks)"))
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, varnames)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, shocknames)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, varnames) for v in var]
+    else
+        [_resolve_var(var, varnames)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(s, shocknames) for s in shock]
+    else
+        [_resolve_var(shock, shocknames)]
+    end
 
-    pct = irf_percentiles(r; quantiles=Float64.(quantiles))   # horizon × n × n × nq (weighted)
-    mean_irf = irf_mean(r)                                     # horizon × n × n     (weighted)
+    pct = irf_percentiles(r; quantiles=Float64.(quantiles))
+    mean_irf = irf_mean(r)
 
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("ariasset")
             Q = pct[:, vi, sj, :]                             # horizon × nq
             central = mean_irf[:, vi, sj]
-            data_json = _fan_data_json(Q, quantiles, central; xvals=collect(0:(horizon - 1)))
+            data_json = _fan_data_json(Q, quantiles, central;
+                                       xvals=collect(0:(horizon - 1)))
             ptitle = "$(varnames[vi]) ← $(shocknames[sj])"
             push!(panels, _setid_fan_panel(id, data_json, quantiles, "Mean", ptitle))
         end
     end
 
     if isempty(title)
-        title = "Arias Set-Identified IRF ($(_setid_band_pct(quantiles))% band, $(size(r.irf_draws, 1)) draws)"
+        bpct = _setid_band_pct(quantiles)
+        title = "Arias Set-Identified IRF ($(bpct)% band, $(n_draws) draws)"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 # =============================================================================
@@ -342,32 +432,43 @@ end
 
 Draw the Mountford–Uhlig penalty-optimal identification as a single IRF **line** per
 (response ← shock) — this is one rotation, not a set, so **no band** is drawn (scope
-per the result type). Zero reference line, integer horizon ticks (x from 0). The
-result carries no names, so `Var i`/`Shock j` are synthesized from `r.restrictions`
-(override via `variables=`/`shocks=`); convergence is noted in the figure title.
+per the result type). Zero reference line, integer horizon ticks (x from 0).
+Convergence is noted in the figure title.
 """
 function plot_result(r::UhligSVARResult{T};
-                     var::Union{Int,String,Nothing}=nothing,
-                     shock::Union{Int,String,Nothing}=nothing,
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     shock::Union{Int,String,AbstractVector,Nothing}=nothing,
                      variables::Union{Vector{String},Nothing}=nothing,
                      shocks::Union{Vector{String},Nothing}=nothing,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     horizon, n_vars, n_shocks = size(r.irf)
-    varnames = variables === nothing ? _synth_names("Var", n_vars) : variables
-    shocknames = shocks === nothing ? _synth_names("Shock", n_shocks) : shocks
+    varnames = variables === nothing ? r.varnames : variables
+    shocknames = shocks === nothing ? r.shock_names : shocks
     length(varnames) == n_vars || throw(ArgumentError(
         "variables length ($(length(varnames))) must match n_vars ($n_vars)"))
     length(shocknames) == n_shocks || throw(ArgumentError(
         "shocks length ($(length(shocknames))) must match n_shocks ($n_shocks)"))
 
-    vars_to_plot = var === nothing ? (1:n_vars) : [_resolve_var(var, varnames)]
-    shocks_to_plot = shock === nothing ? (1:n_shocks) : [_resolve_var(shock, shocknames)]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, varnames) for v in var]
+    else
+        [_resolve_var(var, varnames)]
+    end
+    shocks_to_plot = if shock === nothing
+        collect(1:n_shocks)
+    elseif shock isa AbstractVector
+        Int[_resolve_var(s, shocknames) for s in shock]
+    else
+        [_resolve_var(shock, shocknames)]
+    end
 
     refs = "[{\"value\":0,\"axis\":\"y\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\"}]"
     panels = _PanelSpec[]
-    for sj in shocks_to_plot
-        for vi in vars_to_plot
+    for vi in vars_to_plot
+        for sj in shocks_to_plot
             id = _next_plot_id("uhlig")
             rows = Vector{Pair{String,String}}[]
             for h in 1:horizon
@@ -375,8 +476,8 @@ function plot_result(r::UhligSVARResult{T};
             end
             data_json = _json_array_of_objects(rows)
             s_json = _series_json(["IRF"], [_PLOT_SERIES[1]]; keys=["val"])
-            js = _render_line_js(id, data_json, s_json; ref_lines_json=refs, integer_x=true,
-                                 xlabel="Horizon", ylabel="Response")
+            js = _render_line_js(id, data_json, s_json; ref_lines_json=refs,
+                                 integer_x=true, xlabel="Horizon", ylabel="Response")
             ptitle = "$(varnames[vi]) ← $(shocknames[sj])"
             push!(panels, _PanelSpec(id, ptitle, js))
         end
@@ -386,8 +487,11 @@ function plot_result(r::UhligSVARResult{T};
         conv = r.converged ? "converged" : "NOT converged"
         title = "Mountford–Uhlig Penalty-Optimal IRF ($(conv))"
     end
-    ncols <= 0 && (ncols = length(shocks_to_plot))
+    if ncols <= 0
+        ncols = length(shocks_to_plot) == 1 ?
+            min(length(vars_to_plot), 3) : length(shocks_to_plot)
+    end
     p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end

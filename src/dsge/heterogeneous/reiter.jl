@@ -321,9 +321,15 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         impact_vec[n_red + 1, 1] = one(T)
         impact_vec[1:n_red, 1] .= channel_w
 
+        C_agg = zeros(T, 1, n_total)
+        C_agg[1, 1:n_red] .= -sav_load ./ A_r
+        C_agg[1, n_total] = -A_w / A_r
+        D_obs = Matrix{T}(C_agg * impact_vec)
+        C_obs = Matrix{T}(C_agg * G1)
+
         _reiter_warn_unstable(G1, "Huggett")
 
-        return G1, impact_vec, n_red, explained, U_k
+        return G1, impact_vec, n_red, explained, U_k, C_obs, D_obs
     end
 
     # ── Step 6: Aiyagari general-equilibrium block (#230) ─────────────────────
@@ -389,10 +395,15 @@ function _reiter_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     impact_vec[1:n_red, 1] .= Z_column
     impact_vec[n_red + 1, 1] = dot(K_loading, Z_column)
 
+    C_agg = zeros(T, 1, n_total)
+    C_agg[1, n_red + 1] = one(T)
+    D_obs = Matrix{T}(C_agg * impact_vec)
+    C_obs = Matrix{T}(C_agg * G1)
+
     # ── Step 8: Diagnose stability (no silent rescale; #234) ──────────────────
     _reiter_warn_unstable(G1, "Aiyagari")
 
-    return G1, impact_vec, n_red, explained, U_k
+    return G1, impact_vec, n_red, explained, U_k, C_obs, D_obs
 end
 
 """
@@ -507,6 +518,10 @@ function _reiter_linearize_two_asset(ss::HASteadyState{T}, ip::IndividualProblem
     end
     explained = var_full > zero(T) ? one(T) - var_resid / var_full : one(T)
     explained = clamp(explained, zero(T), one(T))
+    C_agg = zeros(T, 1, n_total)
+    C_agg[1, n_red + 1] = one(T)
+    D_obs = Matrix{T}(C_agg * impact_vec)
+    C_obs = Matrix{T}(C_agg * G1)
     _reiter_warn_unstable(G1, "two-asset")
-    return G1, impact_vec, n_red, explained, U_k
+    return G1, impact_vec, n_red, explained, U_k, C_obs, D_obs
 end

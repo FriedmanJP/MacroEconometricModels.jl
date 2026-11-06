@@ -61,6 +61,8 @@ Fields (homoskedastic shocks, where `hetero` is false, carry `NaN` SV entries):
 - `H_smooth::Matrix{T}` — T_eff × n smoothed log-vols (last E-step means)
 - `loglik::Vector{T}` — expected complete-data log-lik path (up to constants)
 - `converged::Bool`, `iters::Int`, `message::String`
+- `varnames::Vector{String}` — variable labels
+- `shock_names::Vector{String}` — structural shock labels
 """
 struct SVSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B::Matrix{T}
@@ -75,6 +77,60 @@ struct SVSVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     converged::Bool
     iters::Int
     message::String
+    varnames::Vector{String}
+    shock_names::Vector{String}
+end
+
+# Backward-compatible 12-arg positional constructor (pre-varnames, pre-shock_names)
+function SVSVARResult{T}(
+    B, A, c, mus, rhos, sigmas, hetero, H_smooth,
+    loglik, converged, iters, message::String,
+) where {T<:AbstractFloat}
+    n = size(B, 1)
+    return SVSVARResult{T}(
+        B, A, c, mus, rhos, sigmas, hetero, H_smooth,
+        loglik, converged, Int(iters), message,
+        ["y$i" for i in 1:n], _default_shock_names(n),
+    )
+end
+
+function SVSVARResult{T}(
+    B, A, c, mus, rhos, sigmas, hetero, H_smooth,
+    loglik, converged, iters, message::String,
+    varnames::Vector{String},
+) where {T<:AbstractFloat}
+    n = size(B, 1)
+    return SVSVARResult{T}(
+        B, A, c, mus, rhos, sigmas, hetero, H_smooth,
+        loglik, converged, Int(iters), message,
+        varnames, _default_shock_names(n),
+    )
+end
+
+function SVSVARResult(
+    B::Matrix{T}, A::Vector{Matrix{T}}, c::Vector{T},
+    mus::Vector{T}, rhos::Vector{T}, sigmas::Vector{T},
+    hetero::BitVector, H_smooth::Matrix{T},
+    loglik::Vector{T}, converged::Bool, iters::Int,
+    message::String,
+) where {T<:AbstractFloat}
+    return SVSVARResult{T}(
+        B, A, c, mus, rhos, sigmas, hetero, H_smooth, loglik,
+        converged, iters, message,
+    )
+end
+
+function SVSVARResult(
+    B::Matrix{T}, A::Vector{Matrix{T}}, c::Vector{T},
+    mus::Vector{T}, rhos::Vector{T}, sigmas::Vector{T},
+    hetero::BitVector, H_smooth::Matrix{T},
+    loglik::Vector{T}, converged::Bool, iters::Int,
+    message::String, varnames::Vector{String},
+) where {T<:AbstractFloat}
+    return SVSVARResult{T}(
+        B, A, c, mus, rhos, sigmas, hetero, H_smooth, loglik,
+        converged, iters, message, varnames,
+    )
 end
 
 function Base.show(io::IO, r::SVSVARResult{T}) where {T}
@@ -275,20 +331,24 @@ res = identify_sv_svar(Y, 1; maxiter=50, rng=Xoshiro(14))
 res.B  # ≈ B0 up to signed permutation; check res.converged
 ```
 """
-function identify_sv_svar(Y::AbstractMatrix, p::Int;
-        hetero::AbstractVector{Bool}=trues(size(Y, 2)),
-        smoother::Symbol=:ksc,
-        maxiter::Int=500,
-        tol::Real=1e-3,
-        b_iter::Int=5,
-        gibbs_burn::Int=5,
-        gibbs_draws::Int=100,
-        init::Symbol=:ols_chol,
-        phi_init::Real=0.9,
-        s_init::Real=0.2,
-        theta_grid::Int=12,
-        c::Real=1e-5,
-        rng::AbstractRNG=Random.default_rng())
+function identify_sv_svar(
+    Y::AbstractMatrix, p::Int;
+    varnames::Union{Nothing,Vector{String}}=nothing,
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+    hetero::AbstractVector{Bool}=trues(size(Y, 2)),
+    smoother::Symbol=:ksc,
+    maxiter::Int=500,
+    tol::Real=1e-3,
+    b_iter::Int=5,
+    gibbs_burn::Int=5,
+    gibbs_draws::Int=100,
+    init::Symbol=:ols_chol,
+    phi_init::Real=0.9,
+    s_init::Real=0.2,
+    theta_grid::Int=12,
+    c::Real=1e-5,
+    rng::AbstractRNG=Random.default_rng(),
+)
     smoother === :ksc || throw(ArgumentError(
         "smoother must be :ksc (KSC-mixture FFBS, BB EM-2); EKF linearization " *
         "rejected: it biases the log-χ² state space where the mixture is exact"))
@@ -297,6 +357,18 @@ function identify_sv_svar(Y::AbstractMatrix, p::Int;
     T0 = size(Y, 1)
     n >= 2 || throw(ArgumentError("SV-SVAR requires n ≥ 2 variables"))
     p >= 1 || throw(ArgumentError("p must be ≥ 1"))
+    vnames = varnames !== nothing ? Vector{String}(varnames) : ["y$i" for i in 1:n]
+    if length(vnames) != n
+        throw(ArgumentError("varnames length ($(length(vnames))) must match n ($n)"))
+    end
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
     Te = T0 - p
     Te >= 100 || throw(ArgumentError("need ≥ 100 usable observations (got T=$T0, p=$p)"))
     length(hetero) == n || throw(ArgumentError("hetero must have length n=$n"))
@@ -450,7 +522,10 @@ function identify_sv_svar(Y::AbstractMatrix, p::Int;
     sigs = [het[i] ? sdv[i] : T(NaN) for i in 1:n]
     message = converged ? "converged in $iters iterations" :
         "reached maxiter=$maxiter (last ΔQ rel. " *
-        string(round(abs(loglik[end] - loglik[end - 1]) / max(one(T), abs(loglik[end - 1])); sigdigits=3)) * ")"
-    SVSVARResult{T}(B, A, cvec, mus, rhos, sigs, het, Hout, loglik,
-        converged, iters, message)
+        string(round(abs(loglik[end] - loglik[end - 1]) /
+                     max(one(T), abs(loglik[end - 1])); sigdigits=3)) * ")"
+    return SVSVARResult{T}(
+        B, A, cvec, mus, rhos, sigs, het, Hout, loglik,
+        converged, iters, message, vnames, snames,
+    )
 end

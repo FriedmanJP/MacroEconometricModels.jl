@@ -557,20 +557,90 @@ end
 
 # =============================================================================
 # OccBinIRF
-# =============================================================================
+# Convenience constructors for OccBinIRF and OccBinSolution (mock & testing ergonomics)
+function OccBinIRF{T}(linear::AbstractMatrix, piecewise::AbstractMatrix,
+                      regime_history::AbstractVector, varnames::Vector{String},
+                      shock_name::String) where {T<:AbstractFloat}
+    rh = reshape(Int.(regime_history), :, 1)
+    return OccBinIRF{T}(Matrix{T}(linear), Matrix{T}(piecewise), rh,
+                        varnames, shock_name)
+end
+
+function OccBinIRF{T}(linear::AbstractMatrix, piecewise::AbstractMatrix,
+                      regime_history::AbstractVecOrMat,
+                      varnames::Vector{String}) where {T<:AbstractFloat}
+    rh = regime_history isa AbstractVector ?
+        reshape(Int.(regime_history), :, 1) : Matrix{Int}(regime_history)
+    return OccBinIRF{T}(Matrix{T}(linear), Matrix{T}(piecewise), rh,
+                        varnames, "shock")
+end
+
+function OccBinIRF(linear::AbstractMatrix{T}, piecewise::AbstractMatrix{T},
+                   regime_history::AbstractVecOrMat,
+                   varnames::Vector{String}) where {T<:AbstractFloat}
+    return OccBinIRF{T}(linear, piecewise, regime_history, varnames)
+end
+
+function OccBinIRF(linear::AbstractMatrix{T}, piecewise::AbstractMatrix{T},
+                   regime_history::AbstractVector, varnames::Vector{String},
+                   shock_name::String) where {T<:AbstractFloat}
+    return OccBinIRF{T}(linear, piecewise, regime_history, varnames, shock_name)
+end
+
+function OccBinSolution{T}(linear_path::AbstractMatrix, piecewise_path::AbstractMatrix,
+                           regime_history::AbstractVecOrMat,
+                           varnames::Vector{String}) where {T<:AbstractFloat}
+    rh = regime_history isa AbstractVector ?
+        reshape(Int.(regime_history), :, 1) : Matrix{Int}(regime_history)
+    n_vars = length(varnames)
+    syms = Symbol[Symbol(v) for v in varnames]
+    spec = ModelSpec{T,NoAgents}(
+        syms, Symbol[], Symbol[], Dict{Symbol,T}(),
+        n_vars, 0, 0,
+        NamedEquation[], Function[],
+        0, Int[],
+        syms, NamedEquation[],
+        n_vars, 0,
+        false, 0, 0, false,
+        nothing, zeros(T, n_vars), varnames,
+        nothing, nothing, nothing, Symbol[],
+        NamedTuple(),
+        ModelIR(),
+    )
+    return OccBinSolution{T}(
+        Matrix{T}(linear_path), Matrix{T}(piecewise_path), zeros(T, n_vars),
+        rh, true, 1, spec, varnames,
+        OccBinConstraint{T}[],
+    )
+end
+
+function OccBinSolution(linear_path::AbstractMatrix{T}, piecewise_path::AbstractMatrix{T},
+                        regime_history::AbstractVecOrMat,
+                        varnames::Vector{String}) where {T<:AbstractFloat}
+    return OccBinSolution{T}(linear_path, piecewise_path, regime_history, varnames)
+end
 
 """
-    plot_result(oirf::OccBinIRF; title="", save_path=nothing)
+    plot_result(oirf::OccBinIRF; var=nothing, ncols=0, title="", save_path=nothing)
 
 Plot OccBin IRF comparison: linear (dashed) vs piecewise-linear (solid) with
 shaded binding-period rectangles for each variable.
 """
 function plot_result(oirf::OccBinIRF{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
     H, n_vars = size(oirf.piecewise)
-    panels = _PanelSpec[]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, oirf.varnames) for v in var]
+    else
+        [_resolve_var(var, oirf.varnames)]
+    end
 
-    for j in 1:n_vars
+    panels = _PanelSpec[]
+    for j in vars_to_plot
         id = _next_plot_id("oirf")
         ptitle = oirf.varnames[j]
 
@@ -582,22 +652,26 @@ function plot_result(oirf::OccBinIRF{T};
                 "h" => _json(h),
                 "lin" => _json(oirf.linear[h, j]),
                 "pw" => _json(oirf.piecewise[h, j]),
-                "bind" => _json(binding[h] ? 1 : 0)
+                "bind" => _json(binding[h] ? 1 : 0),
             ])
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json; xlabel="Horizon", ylabel=oirf.varnames[j])
+        js = _render_occbin_panel_js(id, data_json;
+                                     xlabel="Horizon", ylabel=oirf.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
     if isempty(title)
         title = "OccBin IRF — Shock: $(oirf.shock_name)"
     end
+    if ncols <= 0
+        ncols = length(vars_to_plot) == 2 ? 2 : min(length(vars_to_plot), 3)
+    end
 
-    p = _make_plot(panels; title=title, ncols=min(n_vars, 3))
+    p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 # =============================================================================
@@ -605,17 +679,26 @@ end
 # =============================================================================
 
 """
-    plot_result(sol::OccBinSolution; title="", save_path=nothing)
+    plot_result(sol::OccBinSolution; var=nothing, ncols=0, title="", save_path=nothing)
 
 Plot OccBin solution comparison: linear (dashed) vs piecewise-linear (solid) with
 shaded binding-period rectangles for each variable.
 """
 function plot_result(sol::OccBinSolution{T};
-                     title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+                     var::Union{Int,String,AbstractVector,Nothing}=nothing,
+                     ncols::Int=0, title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
     nperiods, n_vars = size(sol.piecewise_path)
-    panels = _PanelSpec[]
+    vars_to_plot = if var === nothing
+        collect(1:n_vars)
+    elseif var isa AbstractVector
+        Int[_resolve_var(v, sol.varnames) for v in var]
+    else
+        [_resolve_var(var, sol.varnames)]
+    end
 
-    for j in 1:n_vars
+    panels = _PanelSpec[]
+    for j in vars_to_plot
         id = _next_plot_id("osol")
         ptitle = sol.varnames[j]
 
@@ -627,22 +710,26 @@ function plot_result(sol::OccBinSolution{T};
                 "h" => _json(h),
                 "lin" => _json(sol.linear_path[h, j]),
                 "pw" => _json(sol.piecewise_path[h, j]),
-                "bind" => _json(binding[h] ? 1 : 0)
+                "bind" => _json(binding[h] ? 1 : 0),
             ])
         end
         data_json = _json_array_of_objects(rows)
 
-        js = _render_occbin_panel_js(id, data_json; xlabel="Period", ylabel=sol.varnames[j])
+        js = _render_occbin_panel_js(id, data_json;
+                                     xlabel="Period", ylabel=sol.varnames[j])
         push!(panels, _PanelSpec(id, ptitle, js))
     end
 
     if isempty(title)
         title = "OccBin Piecewise-Linear Solution"
     end
+    if ncols <= 0
+        ncols = length(vars_to_plot) == 2 ? 2 : min(length(vars_to_plot), 3)
+    end
 
-    p = _make_plot(panels; title=title, ncols=min(n_vars, 3))
+    p = _make_plot(panels; title=title, ncols=ncols)
     save_path !== nothing && save_plot(p, save_path)
-    p
+    return p
 end
 
 # NOTE: plot_result(::BayesianDSGE) relocated to plotting/mcmc.jl (PLT plotting

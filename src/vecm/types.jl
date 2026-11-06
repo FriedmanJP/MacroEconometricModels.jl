@@ -61,6 +61,21 @@ struct VECMModel{T<:AbstractFloat} <: AbstractVARModel
     varnames::Vector{String}
 end
 
+function Base.getproperty(m::VECMModel, s::Symbol)
+    if s === :eigenvalues
+        joh = getfield(m, :johansen_result)
+        joh === nothing && throw(ArgumentError(
+            "VECMModel estimated without Johansen MLE has no eigenvalues"
+        ))
+        return joh.eigenvalues
+    end
+    return getfield(m, s)
+end
+
+function Base.propertynames(m::VECMModel, private::Bool=false)
+    return (fieldnames(typeof(m))..., :eigenvalues)
+end
+
 # =============================================================================
 # Accessors
 # =============================================================================

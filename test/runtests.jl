@@ -58,6 +58,7 @@ const TEST_GROUPS = [
         "var/test_arias2018.jl",
         "var/test_robust_bayes.jl",   # SID-18 (#747): Giacomini–Kitagawa robust Bayes
         "var/test_uhlig.jl",
+        "var/test_svar_api.jl",           # v1.0.3 (#878, #879): SVAR API & shock names
         "var/test_ab.jl",                 # SID-13 (#742): AB-model ML
         "var/test_conditional_forecast.jl",   # T241 (#340): Waggoner-Zha conditional forecasts
         "preg/test_panel_nonlinear.jl",   # moved from the ceiling ARIMA group to rebalance (#127)
@@ -189,6 +190,7 @@ const TEST_GROUPS = [
         "plotting/test_plot_wave2_laneD.jl",
         "plotting/test_plot_wave2_laneE.jl",
         "plotting/test_plot_wave2_laneF.jl",
+        "plotting/test_plotting_grid.jl",   # v1.0.3 (#880, #881): grid layout & CSS scoping
         "dsge/test_dcegm_plot.jl",
     ]),
     # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
@@ -203,6 +205,7 @@ const TEST_GROUPS = [
     # the heavy test_ha_dsge.jl (~65% of the old group) runs alone.
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
+        "dsge/test_dsge_gmm.jl",          # v1.0.3 (#874, #876): GMM & Reiter IRF
         "dsge/test_perfect_foresight_sparse.jl",
         "dsge/test_dcegm_spec.jl",
         "dsge/test_modelspec_kinds.jl",

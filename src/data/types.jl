@@ -467,54 +467,280 @@ end
 # Indexing
 # =============================================================================
 
-function Base.getindex(d::TimeSeriesData{T}, ::Colon, col::String) where {T}
+# Array interface methods
+Base.axes(d::TimeSeriesData) = (Base.OneTo(d.T_obs), Base.OneTo(d.n_vars))
+
+function Base.axes(d::TimeSeriesData, dim::Integer)
+    dim >= 1 || throw(BoundsError((Base.OneTo(d.T_obs), Base.OneTo(d.n_vars)), dim))
+    if dim == 1
+        return Base.OneTo(d.T_obs)
+    elseif dim == 2
+        return Base.OneTo(d.n_vars)
+    else
+        return Base.OneTo(1)
+    end
+end
+
+Base.firstindex(d::TimeSeriesData) = 1
+
+function Base.firstindex(d::TimeSeriesData, dim::Integer)
+    dim >= 1 || throw(BoundsError((Base.OneTo(d.T_obs), Base.OneTo(d.n_vars)), dim))
+    return 1
+end
+
+Base.lastindex(d::TimeSeriesData) = d.T_obs * d.n_vars
+
+function Base.lastindex(d::TimeSeriesData, dim::Integer)
+    dim >= 1 || throw(BoundsError((Base.OneTo(d.T_obs), Base.OneTo(d.n_vars)), dim))
+    if dim == 1
+        return d.T_obs
+    elseif dim == 2
+        return d.n_vars
+    else
+        return 1
+    end
+end
+
+function Base.size(d::TimeSeriesData, dim::Integer)
+    if dim == 1
+        return d.T_obs
+    elseif dim == 2
+        return d.n_vars
+    else
+        return 1
+    end
+end
+
+# Internal index category aliases
+const _TSRowScalar = Union{Integer, AbstractString}
+const _TSColScalar = Union{Integer, Symbol, AbstractString}
+const _TSRowColl = Union{
+    Colon,
+    AbstractVector{<:Integer},
+    AbstractVector{Bool},
+    AbstractVector{<:AbstractString},
+}
+const _TSColColl = Union{
+    Colon,
+    AbstractVector{<:Integer},
+    AbstractVector{Bool},
+    AbstractVector{Symbol},
+    AbstractVector{<:AbstractString},
+}
+
+# --- Column Resolvers ---
+
+function _resolve_ts_col_index(d::TimeSeriesData, col::Bool)
+    throw(ArgumentError("invalid index: $col of type Bool"))
+end
+
+function _resolve_ts_col_index(d::TimeSeriesData, col::Integer)
+    (1 <= col <= d.n_vars) || throw(BoundsError(d, (:, col)))
+    return Int(col)
+end
+
+function _resolve_ts_col_index(d::TimeSeriesData, col::Symbol)
+    col_str = String(col)
+    idx = findfirst(==(col_str), d.varnames)
+    idx === nothing && throw(ArgumentError(
+        "Variable '$col' not found. Available: $(d.varnames)",
+    ))
+    return idx
+end
+
+function _resolve_ts_col_index(d::TimeSeriesData, col::AbstractString)
     idx = findfirst(==(col), d.varnames)
-    idx === nothing && throw(ArgumentError("Variable '$col' not found. Available: $(d.varnames)"))
-    d.data[:, idx]
+    idx === nothing && throw(ArgumentError(
+        "Variable '$col' not found. Available: $(d.varnames)",
+    ))
+    return idx
 end
 
-function Base.getindex(d::TimeSeriesData{T}, ::Colon, cols::Vector{String}) where {T}
-    idxs = Int[]
-    for col in cols
-        idx = findfirst(==(col), d.varnames)
-        idx === nothing && throw(ArgumentError("Variable '$col' not found. Available: $(d.varnames)"))
-        push!(idxs, idx)
+function _resolve_ts_col_index(d::TimeSeriesData, col)
+    throw(ArgumentError("Unsupported column index type: $(typeof(col))"))
+end
+
+_resolve_ts_col_indices(d::TimeSeriesData, ::Colon) = 1:d.n_vars
+
+function _resolve_ts_col_indices(d::TimeSeriesData, cols::AbstractVector{Bool})
+    length(cols) == d.n_vars || throw(ArgumentError(
+        "boolean column mask length ($(length(cols))) must match n_vars ($(d.n_vars))",
+    ))
+    idxs = findall(cols)
+    isempty(idxs) && throw(ArgumentError("No columns selected"))
+    return idxs
+end
+
+function _resolve_ts_col_indices(d::TimeSeriesData, cols::AbstractVector{<:Integer})
+    isempty(cols) && throw(ArgumentError("No columns selected"))
+    idxs = Vector{Int}(undef, length(cols))
+    @inbounds for (i, j) in enumerate(cols)
+        (1 <= j <= d.n_vars) || throw(BoundsError(d, (:, cols)))
+        idxs[i] = Int(j)
     end
-    sub_vd = Dict(k => v for (k, v) in d.vardesc if k in cols)
-    TimeSeriesData{T}(d.data[:, idxs], d.varnames[idxs], d.frequency,
-                      d.tcode[idxs], d.time_index, d.T_obs, length(idxs),
-                      copy(d.desc), sub_vd, copy(d.source_refs), copy(d.dates))
+    return idxs
 end
 
-function Base.getindex(d::TimeSeriesData{T}, ::Colon, col::Int) where {T}
-    1 <= col <= d.n_vars || throw(BoundsError(d, (Colon(), col)))
-    d.data[:, col]
+function _resolve_ts_col_indices(d::TimeSeriesData, cols::AbstractVector{Symbol})
+    isempty(cols) && throw(ArgumentError("No columns selected"))
+    idxs = Vector{Int}(undef, length(cols))
+    @inbounds for (i, s) in enumerate(cols)
+        s_str = String(s)
+        idx = findfirst(==(s_str), d.varnames)
+        idx === nothing && throw(ArgumentError(
+            "Variable '$s' not found. Available: $(d.varnames)",
+        ))
+        idxs[i] = idx
+    end
+    return idxs
 end
 
-"""Row-slice by date string: `d["2020Q1", :]` returns a `Vector{T}` of values across variables."""
-function Base.getindex(d::TimeSeriesData{T}, date::String, ::Colon) where {T}
+function _resolve_ts_col_indices(d::TimeSeriesData, cols::AbstractVector{<:AbstractString})
+    isempty(cols) && throw(ArgumentError("No columns selected"))
+    idxs = Vector{Int}(undef, length(cols))
+    @inbounds for (i, s) in enumerate(cols)
+        idx = findfirst(==(s), d.varnames)
+        idx === nothing && throw(ArgumentError(
+            "Variable '$s' not found. Available: $(d.varnames)",
+        ))
+        idxs[i] = idx
+    end
+    return idxs
+end
+
+function _resolve_ts_col_indices(d::TimeSeriesData, cols)
+    throw(ArgumentError("Unsupported column index type: $(typeof(cols))"))
+end
+
+# --- Row Resolvers ---
+
+function _resolve_ts_row_index(d::TimeSeriesData, row::Bool)
+    throw(ArgumentError("invalid index: $row of type Bool"))
+end
+
+function _resolve_ts_row_index(d::TimeSeriesData, row::Integer)
+    (1 <= row <= d.T_obs) || throw(BoundsError(d, (row, :)))
+    return Int(row)
+end
+
+function _resolve_ts_row_index(d::TimeSeriesData, row::AbstractString)
     isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
-    idx = findfirst(==(date), d.dates)
-    idx === nothing && throw(ArgumentError("Date '$date' not found. Available: $(d.dates[1]):$(d.dates[end])"))
-    d.data[idx, :]
+    idx = findfirst(==(row), d.dates)
+    idx === nothing && throw(ArgumentError(
+        "Date '$row' not found. Available: $(d.dates[1]):$(d.dates[end])",
+    ))
+    return idx
 end
+
+function _resolve_ts_row_index(d::TimeSeriesData, row)
+    throw(ArgumentError("Unsupported row index type: $(typeof(row))"))
+end
+
+_resolve_ts_row_indices(d::TimeSeriesData, ::Colon) = 1:d.T_obs
+
+function _resolve_ts_row_indices(d::TimeSeriesData, rows::AbstractVector{Bool})
+    length(rows) == d.T_obs || throw(ArgumentError(
+        "boolean row mask length ($(length(rows))) must match T_obs ($(d.T_obs))",
+    ))
+    idxs = findall(rows)
+    isempty(idxs) && throw(ArgumentError("No rows selected"))
+    return idxs
+end
+
+function _resolve_ts_row_indices(d::TimeSeriesData, rows::AbstractVector{<:Integer})
+    isempty(rows) && throw(ArgumentError("No rows selected"))
+    idxs = Vector{Int}(undef, length(rows))
+    @inbounds for (i, r) in enumerate(rows)
+        (1 <= r <= d.T_obs) || throw(BoundsError(d, (rows, :)))
+        idxs[i] = Int(r)
+    end
+    return idxs
+end
+
+function _resolve_ts_row_indices(d::TimeSeriesData, rows::AbstractVector{<:AbstractString})
+    isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
+    isempty(rows) && throw(ArgumentError("No rows selected"))
+    idxs = Vector{Int}(undef, length(rows))
+    @inbounds for (i, dt) in enumerate(rows)
+        idx = findfirst(==(dt), d.dates)
+        idx === nothing && throw(ArgumentError("Date '$dt' not found."))
+        idxs[i] = idx
+    end
+    return idxs
+end
+
+function _resolve_ts_row_indices(d::TimeSeriesData, rows)
+    throw(ArgumentError("Unsupported row index type: $(typeof(rows))"))
+end
+
+# --- 2D getindex Methods ---
 
 """
-Row-slice by a vector of date strings: `d[["2020Q1", "2020Q2", "2020Q3", "2020Q4"], :]`
-returns a sub-`TimeSeriesData`. (Julia does not define `(:)(::String, ::String)`, so the
-colon-range syntax `d["2020Q1":"2020Q4", :]` is not supported.)
+    Base.getindex(d::TimeSeriesData, rows, cols)
+
+2D indexing on `TimeSeriesData` supporting 4 combinations of row and column selectors:
+1. `(collection, collection)` -> returns a sub-`TimeSeriesData` preserving metadata
+2. `(collection, single)`     -> returns `Vector{T}` across rows for selected column
+3. `(single, collection)`     -> returns `Vector{T}` across columns for selected row
+4. `(single, single)`         -> returns scalar `T` element
 """
-function Base.getindex(d::TimeSeriesData{T}, dates_range::AbstractVector{String}, ::Colon) where {T}
-    isempty(d.dates) && throw(ArgumentError("No dates set. Use `set_dates!` first."))
-    idxs = Int[]
-    for date in dates_range
-        idx = findfirst(==(date), d.dates)
-        idx === nothing && throw(ArgumentError("Date '$date' not found."))
-        push!(idxs, idx)
-    end
-    TimeSeriesData{T}(d.data[idxs, :], copy(d.varnames), d.frequency,
-                      copy(d.tcode), d.time_index[idxs], length(idxs), d.n_vars,
-                      copy(d.desc), copy(d.vardesc), copy(d.source_refs), d.dates[idxs])
+function Base.getindex(
+    d::TimeSeriesData{T},
+    rows::_TSRowColl,
+    cols::_TSColColl,
+) where {T}
+    row_idxs = _resolve_ts_row_indices(d, rows)
+    col_idxs = _resolve_ts_col_indices(d, cols)
+    isempty(row_idxs) && throw(ArgumentError("No rows selected"))
+    isempty(col_idxs) && throw(ArgumentError("No columns selected"))
+    sub_varnames = d.varnames[col_idxs]
+    sub_vd = Dict{String,String}(
+        k => d.vardesc[k] for k in sub_varnames if haskey(d.vardesc, k)
+    )
+    sub_dates = isempty(d.dates) ? String[] : d.dates[row_idxs]
+    return TimeSeriesData{T}(
+        d.data[row_idxs, col_idxs],
+        sub_varnames,
+        d.frequency,
+        d.tcode[col_idxs],
+        d.time_index[row_idxs],
+        length(row_idxs),
+        length(col_idxs),
+        copy(d.desc),
+        sub_vd,
+        copy(d.source_refs),
+        sub_dates,
+    )
+end
+
+function Base.getindex(
+    d::TimeSeriesData{T},
+    rows::_TSRowColl,
+    col::_TSColScalar,
+) where {T}
+    row_idxs = _resolve_ts_row_indices(d, rows)
+    col_idx = _resolve_ts_col_index(d, col)
+    return d.data[row_idxs, col_idx]
+end
+
+function Base.getindex(
+    d::TimeSeriesData{T},
+    row::_TSRowScalar,
+    cols::_TSColColl,
+) where {T}
+    row_idx = _resolve_ts_row_index(d, row)
+    col_idxs = _resolve_ts_col_indices(d, cols)
+    return d.data[row_idx, col_idxs]
+end
+
+function Base.getindex(
+    d::TimeSeriesData{T},
+    row::_TSRowScalar,
+    col::_TSColScalar,
+) where {T}
+    row_idx = _resolve_ts_row_index(d, row)
+    col_idx = _resolve_ts_col_index(d, col)
+    return d.data[row_idx, col_idx]
 end
 
 function Base.getindex(d::CrossSectionData{T}, ::Colon, col::String) where {T}

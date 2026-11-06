@@ -42,8 +42,15 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
 # ---------------------------------------------------------------------------
 const _DK = load_example(:denmark)
 const _DKY = Matrix(_DK[:, ["LRM", "LRY", "IBO", "IDE"]])
-_dk_vecm() = estimate_vecm(_DKY, 2; rank=1, deterministic=:constant,
-                           varnames=["LRM", "LRY", "IBO", "IDE"])
+function _dk_vecm()
+    return estimate_vecm(
+        _DKY,
+        2;
+        rank=1,
+        deterministic=:unrestricted_constant,
+        varnames=["LRM", "LRY", "IBO", "IDE"],
+    )
+end
 
 @testset "VECM restriction tests (EV-38)" begin
 
@@ -211,5 +218,63 @@ _dk_vecm() = estimate_vecm(_DKY, 2; rank=1, deterministic=:constant,
         @test_throws ArgumentError test_beta_restriction(m, ones(4, 0))   # s < r
         @test_throws DimensionMismatch test_known_beta(m, reshape(Float64[1, 0, 0, 0, 0], 5, 1))
         @test_throws ArgumentError test_weak_exogeneity(m, "NOPE")
+    end
+
+    # ---- Case 2 (:constant) restriction invariants ------------------------
+    @testset "Case 2 (:constant) restriction invariants" begin
+        m_c2 = estimate_vecm(
+            _DKY,
+            2;
+            rank=1,
+            deterministic=:constant,
+            varnames=["LRM", "LRY", "IBO", "IDE"],
+        )
+        @test m_c2.deterministic == :constant
+        @test m_c2.eigenvalues ≈ m_c2.johansen_result.eigenvalues atol = 1e-12
+
+        # Non-binding H = I_4 on Case 2: LR ≈ 0, df = 0, p = 1.0
+        res_nb = test_beta_restriction(m_c2, Matrix{Float64}(I, 4, 4))
+        @test res_nb.df == 0
+        @test res_nb.lr_stat ≈ 0.0 atol = 1e-10
+        @test res_nb.pvalue == 1.0
+
+        # Known beta = m_c2.beta: LR ≈ 0, df = 3
+        res_kb = test_known_beta(m_c2, m_c2.beta)
+        @test res_kb.lr_stat ≈ 0.0 atol = 1e-6
+        @test res_kb.df == 3
+
+        # Non-binding joint restriction H = I_4, A = I_4 on Case 2: LR ≈ 0, df = 0, p = 1.0
+        res_joint_nb = test_joint_restriction(
+            m_c2,
+            Matrix{Float64}(I, 4, 4),
+            Matrix{Float64}(I, 4, 4),
+        )
+        @test res_joint_nb.df == 0
+        @test res_joint_nb.lr_stat ≈ 0.0 atol = 1e-8
+        @test res_joint_nb.pvalue == 1.0
+        @test res_joint_nb.converged
+        @test res_joint_nb.restricted_model.mu ≈ m_c2.mu atol = 1e-10
+
+        # Non-binding alpha restriction A = I_4 on Case 2: LR ≈ 0, df = 0, p = 1.0
+        # (verifying restricted_model.mu ≈ m_c2.mu)
+        res_alpha_nb = test_alpha_restriction(m_c2, Matrix{Float64}(I, 4, 4))
+        @test res_alpha_nb.df == 0
+        @test res_alpha_nb.lr_stat ≈ 0.0 atol = 1e-8
+        @test res_alpha_nb.pvalue == 1.0
+        @test res_alpha_nb.restricted_model.mu ≈ m_c2.mu atol = 1e-10
+
+        # Weak exogeneity on Case 2 preserves mu non-zero
+        res_we_c2 = test_weak_exogeneity(m_c2, "LRY")
+        @test res_we_c2.df == 1
+        @test any(abs.(res_we_c2.restricted_model.mu) .> 1e-4)
+
+        # Binding joint restriction on Case 2
+        H_c2 = Float64[1 0 0; 0 1 0; 0 0 1; 0 0 -1]
+        A_c2 = Float64[1 0 0; 0 1 0; 0 0 1; 0 0 0]
+        res_joint_b = test_joint_restriction(m_c2, H_c2, A_c2)
+        @test res_joint_b.converged
+        @test res_joint_b.df == 2
+        @test res_joint_b.lr_stat > 0
+        @test res_joint_b.restricted_model.mu !== nothing
     end
 end

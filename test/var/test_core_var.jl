@@ -473,7 +473,7 @@ using Random
         # Variable names propagate to IRF
         irf_result = irf(m2, 10)
         @test irf_result.variables == ["GDP", "CPI", "FFR"]
-        @test irf_result.shocks == ["GDP", "CPI", "FFR"]
+        @test irf_result.shocks == ["Shock 1", "Shock 2", "Shock 3"]
 
         # Variable names propagate to FEVD
         fevd_result = fevd(m2, 10)

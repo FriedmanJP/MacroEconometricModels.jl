@@ -47,25 +47,70 @@ struct UhligSVARResult{T<:AbstractFloat}
     restrictions::SVARRestrictions
     converged::Bool
     varnames::Vector{String}
+    shock_names::Vector{String}
     id_status::IdentificationStatus
+
+    function UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        varnames::Vector{String}, shock_names::Vector{String},
+        id_status::IdentificationStatus,
+    ) where {T<:AbstractFloat}
+        return new{T}(
+            Matrix{T}(Q), Array{T,3}(irf), T(penalty), Vector{T}(shock_penalties),
+            restrictions, converged, varnames, shock_names, id_status,
+        )
+    end
 end
 
-# Back-compatible arity without varnames / id_status
+# Back-compatible arities: pre-varnames / pre-shock_names / pre-id_status sites.
 function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
                             converged) where {T<:AbstractFloat}
     nv = restrictions.n_vars
+    ns = restrictions.n_shocks
     return UhligSVARResult{T}(
         Q, irf, penalty, shock_penalties, restrictions, converged,
-        ["var$i" for i in 1:nv],
+        ["var$i" for i in 1:nv], _default_shock_names(ns),
+        check_identification(restrictions, nv),
     )
 end
 
 function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
-                            converged, varnames) where {T<:AbstractFloat}
+                            converged, varnames::Vector{String}) where {T<:AbstractFloat}
+    n = restrictions.n_vars
+    ns = restrictions.n_shocks
+    return UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        varnames, _default_shock_names(ns), check_identification(restrictions, n),
+    )
+end
+
+function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
+                            converged, varnames::Vector{String},
+                            id_status::IdentificationStatus) where {T<:AbstractFloat}
+    ns = restrictions.n_shocks
+    return UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        varnames, _default_shock_names(ns), id_status,
+    )
+end
+
+function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
+                            converged, varnames::Vector{String},
+                            shock_names::Vector{String}) where {T<:AbstractFloat}
     n = restrictions.n_vars
     return UhligSVARResult{T}(
         Q, irf, penalty, shock_penalties, restrictions, converged,
-        varnames, check_identification(restrictions, n),
+        varnames, shock_names, check_identification(restrictions, n),
+    )
+end
+
+function UhligSVARResult{T}(Q, irf, penalty, shock_penalties, restrictions,
+                            converged, varnames::Vector{String},
+                            id_status::IdentificationStatus,
+                            shock_names::Vector{String}) where {T<:AbstractFloat}
+    return UhligSVARResult{T}(
+        Q, irf, penalty, shock_penalties, restrictions, converged,
+        varnames, shock_names, id_status,
     )
 end
 
@@ -468,6 +513,7 @@ result = identify_uhlig(model, restrictions, 20)
 **Reference**: Mountford & Uhlig (2009)
 """
 function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, horizon::Int;
+                        shock_names::Union{Nothing,Vector{String}}=nothing,
                         n_starts::Int=50, n_refine::Int=10,
                         max_iter_coarse::Int=500, max_iter_fine::Int=2000,
                         tol_coarse::T=T(1e-4), tol_fine::T=T(1e-8),
@@ -475,6 +521,14 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         scale::Union{Symbol,AbstractVector{<:Real}}=:diff,
                         seed::Union{Integer,Nothing}=nothing,
                         rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    snames = shock_names !== nothing ? Vector{String}(shock_names) :
+             _default_shock_names(restrictions.n_shocks)
+    if length(snames) != restrictions.n_shocks
+        throw(ArgumentError(
+            "Length of shock_names ($(length(snames))) must match " *
+            "n_shocks ($(restrictions.n_shocks))",
+        ))
+    end
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     @assert restrictions.n_vars == n (
@@ -615,7 +669,7 @@ function identify_uhlig(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     return UhligSVARResult{T}(
         Q, irf, best_val, shock_penalties, restrictions, converged,
-        copy(model.varnames), id_status,
+        copy(model.varnames), snames, id_status,
     )
 end
 

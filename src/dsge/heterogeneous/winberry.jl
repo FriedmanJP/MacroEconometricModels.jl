@@ -1257,8 +1257,14 @@ function _winberry_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
         impact_vec[n_dist + 1, 1] = one(T)
         impact_vec[1:n_dist, 1] .= channel_w
 
+        C_agg = zeros(T, 1, n_total)
+        C_agg[1, 1:n_dist] .= -sav_load ./ A_r
+        C_agg[1, n_total] = -A_w / A_r
+        D_obs = Matrix{T}(C_agg * impact_vec)
+        C_obs = Matrix{T}(C_agg * G1)
+
         _reiter_warn_unstable(G1, "Huggett/Winberry")
-        return G1, impact_vec, n_dist, explained, basis
+        return G1, impact_vec, n_dist, explained, basis, C_obs, D_obs
     end
 
     for k in (:alpha, :delta, :rho_z)
@@ -1293,8 +1299,13 @@ function _winberry_linearize(ss::HASteadyState{T}, ip::IndividualProblem{T},
     impact_vec[1:n_dist, 1] .= Z_column
     impact_vec[n_dist + 1, 1] = dot(K_load, Z_column)
 
+    C_agg = zeros(T, 1, n_total)
+    C_agg[1, n_dist + 1] = one(T)
+    D_obs = Matrix{T}(C_agg * impact_vec)
+    C_obs = Matrix{T}(C_agg * G1)
+
     _reiter_warn_unstable(G1, "Aiyagari/Winberry")
-    return G1, impact_vec, n_dist, explained, basis
+    return G1, impact_vec, n_dist, explained, basis, C_obs, D_obs
 end
 
 """

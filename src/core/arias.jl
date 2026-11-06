@@ -342,49 +342,98 @@ struct AriasSVARResult{T<:AbstractFloat}
     ess::T
     ess_fraction::T
     varnames::Vector{String}
+    shock_names::Vector{String}
     n_degenerate_weights::Int
     n_narrative_sims::Int
     elapsed::T
     weights_elapsed::T
 end
 
-# Back-compatible arities: pre-ESS / pre-varnames / pre-degenerate construction sites.
+# Back-compatible arities: pre-ESS / pre-varnames / pre-shock_names construction sites.
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions) where {T<:AbstractFloat}
     ess = T(_effective_sample_size(weights))
     n = length(weights)
     nv = restrictions.n_vars
-    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, n > 0 ? ess / T(n) : zero(T),
-                       ["var$i" for i in 1:nv], 0)
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, n > 0 ? ess / T(n) : zero(T),
+        ["var$i" for i in 1:nv], _default_shock_names(ns),
+        0, 0, zero(T), zero(T),
+    )
 end
 
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions, ess, ess_fraction) where {T<:AbstractFloat}
     nv = restrictions.n_vars
-    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, ["var$i" for i in 1:nv], 0)
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, ["var$i" for i in 1:nv], _default_shock_names(ns),
+        0, 0, zero(T), zero(T),
+    )
 end
 
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
-                            restrictions, ess, ess_fraction, varnames) where {T<:AbstractFloat}
-    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, varnames, 0, 0)
+                            restrictions, ess, ess_fraction,
+                            varnames::Vector{String}) where {T<:AbstractFloat}
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, varnames, _default_shock_names(ns),
+        0, 0, zero(T), zero(T),
+    )
 end
 
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
-                            restrictions, ess, ess_fraction, varnames,
+                            restrictions, ess, ess_fraction,
+                            varnames::Vector{String},
+                            shock_names::Vector{String}) where {T<:AbstractFloat}
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, varnames, shock_names,
+        0, 0, zero(T), zero(T),
+    )
+end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction,
+                            varnames::Vector{String},
                             n_degenerate_weights::Int) where {T<:AbstractFloat}
-    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, varnames, n_degenerate_weights, 0)
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, varnames, _default_shock_names(ns),
+        n_degenerate_weights, 0, zero(T), zero(T),
+    )
 end
 
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
-                            restrictions, ess, ess_fraction, varnames,
-                            n_degenerate_weights::Int, n_narrative_sims::Int) where {T<:AbstractFloat}
-    AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-                       ess, ess_fraction, varnames, n_degenerate_weights, n_narrative_sims,
-                       zero(T), zero(T))
+                            restrictions, ess, ess_fraction,
+                            varnames::Vector{String},
+                            n_degenerate_weights::Int,
+                            n_narrative_sims::Int) where {T<:AbstractFloat}
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, varnames, _default_shock_names(ns),
+        n_degenerate_weights, n_narrative_sims, zero(T), zero(T),
+    )
+end
+
+function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
+                            restrictions, ess, ess_fraction,
+                            varnames::Vector{String},
+                            n_degenerate_weights::Int,
+                            n_narrative_sims::Int,
+                            elapsed, weights_elapsed) where {T<:AbstractFloat}
+    ns = restrictions.n_shocks
+    return AriasSVARResult{T}(
+        Q_draws, irf_draws, weights, acceptance_rate, restrictions,
+        ess, ess_fraction, varnames, _default_shock_names(ns),
+        n_degenerate_weights, n_narrative_sims, T(elapsed), T(weights_elapsed),
+    )
 end
 
 """
@@ -936,12 +985,29 @@ struct IdentificationStatus
     end
 end
 
+function Base.:(==)(a::IdentificationStatus, b::IdentificationStatus)
+    return a.status == b.status &&
+           a.ranks == b.ranks &&
+           a.orders == b.orders &&
+           a.n_overidentifying == b.n_overidentifying
+end
+
+function Base.hash(s::IdentificationStatus, h::UInt)
+    return hash(s.status, hash(s.ranks, hash(s.orders, hash(s.n_overidentifying, h))))
+end
+
+Base.Bool(st::IdentificationStatus) = st.status !== :under
+
+function Base.convert(::Type{Bool}, st::IdentificationStatus)
+    return st.status !== :under
+end
+
 function _zeros_per_shock(restrictions::SVARRestrictions, n::Int)
     orders = zeros(Int, n)
     for zr in restrictions.zeros
         (1 <= zr.shock <= n) && (orders[zr.shock] += 1)
     end
-    orders
+    return orders
 end
 
 function _matrix_rank(A::AbstractMatrix{T}) where {T<:AbstractFloat}
@@ -949,7 +1015,7 @@ function _matrix_rank(A::AbstractMatrix{T}) where {T<:AbstractFloat}
     svals = svdvals(A)
     isempty(svals) && return 0
     tol = max(size(A)...) * Base.eps(T) * maximum(svals)
-    count(>(tol), svals)
+    return count(>(tol), svals)
 end
 
 function _rwz_phi_length(restrictions::SVARRestrictions)
@@ -957,7 +1023,7 @@ function _rwz_phi_length(restrictions::SVARRestrictions)
     for zr in restrictions.zeros
         h = max(h, _restriction_horizon(zr))
     end
-    h + 1
+    return h + 1
 end
 
 function _rwz_classify(ranks::Vector{Int}, orders::Vector{Int}, n::Int, has_signs::Bool)
@@ -1038,7 +1104,8 @@ has more independent zeros than the null space admits; `identify_arias` and
 """
 function check_identification(restrictions::SVARRestrictions, model::VARModel{T};
                               n_points::Int=10,
-                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                              rng::AbstractRNG=Random.default_rng(),
+                              kwargs...) where {T<:AbstractFloat}
     n = nvars(model)
     n_points >= 1 || throw(ArgumentError("n_points must be ≥ 1, got $n_points"))
     restrictions.n_vars == n || throw(ArgumentError(
@@ -1066,7 +1133,7 @@ function check_identification(restrictions::SVARRestrictions, model::VARModel{T}
         end
     end
     status, n_over = _rwz_classify(ranks, orders, n, !isempty(restrictions.signs))
-    IdentificationStatus(status, ranks, orders, n_over)
+    return IdentificationStatus(status, ranks, orders, n_over)
 end
 
 function check_identification(restrictions::SVARRestrictions, n::Int)
@@ -1076,7 +1143,48 @@ function check_identification(restrictions::SVARRestrictions, n::Int)
     orders = _zeros_per_shock(restrictions, n)
     ranks = copy(orders)
     status, n_over = _rwz_classify(ranks, orders, n, !isempty(restrictions.signs))
-    IdentificationStatus(status, ranks, orders, n_over)
+    return IdentificationStatus(status, ranks, orders, n_over)
+end
+
+"""
+    check_identification(model::VARModel, restrictions::SVARRestrictions; kwargs...)
+        -> IdentificationStatus
+
+Bidirectional dispatch delegating to `check_identification(restrictions, model; kwargs...)`.
+"""
+function check_identification(model::VARModel, restrictions::SVARRestrictions; kwargs...)
+    return check_identification(restrictions, model; kwargs...)
+end
+
+"""
+    check_identification(n::Integer, restrictions::SVARRestrictions) -> IdentificationStatus
+
+Bidirectional dispatch delegating to `check_identification(restrictions, n)`.
+"""
+function check_identification(n::Integer, restrictions::SVARRestrictions)
+    return check_identification(restrictions, Int(n))
+end
+
+"""
+    add_zero!(restr::SVARRestrictions, mat::Symbol, var::Integer, shock::Integer; horizon=0)
+
+Append a zero restriction to `restr.zeros`. `mat` may be `:A` / `:A0` (contemporaneous),
+`:Ap` / `:Aplus` (lagged), or `:B` / `:L` / `:C` (impulse / long-run impact).
+"""
+function add_zero!(restr::SVARRestrictions, mat::Symbol, var::Integer, shock::Integer;
+                   horizon=0)
+    r = if mat in (:A, :A0)
+        A0ZeroRestriction(Int(var), Int(shock))
+    elseif mat in (:Ap, :Aplus)
+        AplusZeroRestriction(Int(var), Int(shock), 1)
+    elseif mat in (:B, :L, :C)
+        zero_restriction(Int(var), Int(shock); horizon=horizon)
+    else
+        throw(ArgumentError("Unknown restriction matrix: :$mat"))
+    end
+    _validate_restriction(r, restr.n_vars)
+    push!(restr.zeros, r)
+    return restr
 end
 
 function _assert_rwz_identified(restrictions::SVARRestrictions, model::VARModel;
@@ -1451,7 +1559,9 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
                         rng::AbstractRNG=Random.default_rng(),
                         seed::Union{Integer,Nothing}=nothing,
                         check_id::Bool=true,
-                        n_narrative_sims::Int=1000) where {T<:AbstractFloat}
+                        n_narrative_sims::Int=1000,
+                        shock_names::Union{Nothing,Vector{String}}=nothing,
+                        ) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
     @assert restrictions.n_vars == n "Restriction dimension must match model"
@@ -1606,9 +1716,19 @@ function identify_arias(model::VARModel{T}, restrictions::SVARRestrictions, hori
 
     w_out = normalize_weights ? weights ./ sum(weights) : weights
     vnames = copy(model.varnames)
-    AriasSVARResult{T}(Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
-                       ess, ess_frac, vnames, n_degenerate, n_nar_sims,
-                       elapsed, weights_elapsed)
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
+    return AriasSVARResult{T}(
+        Q_draws, irf_array, w_out, T(n_acc / n_attempts), restrictions,
+        ess, ess_frac, vnames, snames, n_degenerate, n_nar_sims,
+        elapsed, weights_elapsed,
+    )
 end
 
 # --- Bayesian Integration ---
