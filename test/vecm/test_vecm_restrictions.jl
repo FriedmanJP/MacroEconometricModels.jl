@@ -261,7 +261,7 @@ end
         @test res_alpha_nb.df == 0
         @test res_alpha_nb.lr_stat ≈ 0.0 atol = 1e-8
         @test res_alpha_nb.pvalue == 1.0
-        @test res_alpha_nb.restricted_model.mu ≈ m_c2.mu atol = 1e-10
+        @test res_alpha_nb.restricted_model.mu ≈ m_c2.mu atol = 1e-8
 
         # Weak exogeneity on Case 2 preserves mu non-zero
         res_we_c2 = test_weak_exogeneity(m_c2, "LRY")

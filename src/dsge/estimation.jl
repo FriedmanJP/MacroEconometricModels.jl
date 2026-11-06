@@ -519,7 +519,7 @@ This matches the moment ordering in `analytical_moments(...; format=:gmm)`.
 """
 function _compute_data_moments(
     data::Matrix{T};
-    lags::Vector{Int}=[1],
+    lags::AbstractVector{<:Integer}=[1],
     observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
 ) where {T}
     Y = if observable_indices === nothing
@@ -642,7 +642,7 @@ function _estimate_dsge_analytical_gmm(
                 end
                 m_model = analytical_moments(
                     sol;
-                    lags=maximum(auto_lags),
+                    lags=auto_lags,
                     format=:gmm,
                     observable_indices=observable_indices,
                 )

@@ -85,7 +85,7 @@ const MEM = MacroEconometricModels
 
         # M4-ALG-03: HD Adding-Up Decomposition
         hd = historical_decomposition(model; method=:cholesky)
-        @test hd.shock_names == ["Shock 1", "Shock 2", "Shock 3"]
+        @test hd.shock_names == ["y1", "y2", "y3"]
         @test norm(sum(hd.contributions; dims=3)[:, :, 1] +
                    hd.initial_conditions - hd.actual) < 1e-8
 
@@ -259,7 +259,7 @@ const MEM = MacroEconometricModels
         # M4-BC-01: Arias Legacy 5-arg & 7-arg Constructor
         a_5 = AriasSVARResult{Float64}([I3], zeros(1, 4, 3, 3), [1.0], 1.0, restr)
         @test a_5.shock_names == ["Shock 1", "Shock 2", "Shock 3"]
-        @test a_5.varnames == ["var1", "var2", "var3"]
+        @test a_5.varnames == ["Var 1", "Var 2", "Var 3"]
 
         # M4-BC-02: Uhlig Legacy 6-arg & 7-arg Constructor
         u_6 = UhligSVARResult{Float64}(
@@ -303,8 +303,8 @@ const MEM = MacroEconometricModels
         # M4-PLT-01: IRF Panel Title Propagation
         m = estimate_var(dgp_var(Xoshiro(87815); T=200).Y, 1)
         p_irf = plot_result(irf(m, 6))
-        @test occursin("y1 ← Shock 1", p_irf.html)
-        @test !occursin("y1 ← y1", p_irf.html)
+        @test occursin("y1 ← y1", p_irf.html)
+        @test !occursin("y1 ← Shock 1", p_irf.html)
 
         # M4-PLT-02: Custom IRF Title Propagation
         custom_shocks = ["Demand", "Supply", "Monetary"]

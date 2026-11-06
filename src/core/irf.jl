@@ -310,7 +310,7 @@ function irf(model::VARModel{T}, horizon::Int;
         ))
         Vector{String}(shock_names)
     else
-        _default_shock_names(nvars(model))
+        model.varnames
     end
     cl = ci_type == :none ? zero(T) : T(conf_level)
     # Attach a reproducibility manifest whenever the bands consume randomness.

@@ -54,8 +54,10 @@ function fevd(model::VARModel{T}, horizon::Int;
             "nvars ($(nvars(model)))",
         ))
         Vector{String}(shock_names)
-    else
+    elseif _is_set_identified(method)
         _default_shock_names(nvars(model))
+    else
+        model.varnames
     end
     # SID-05/19: FEVD of each accepted rotation, then pointwise median. The median
     # IRF is not Σ-orthonormal, so this is not FEVD-of-the-median-IRF.
@@ -263,7 +265,7 @@ function fevd(post::BVARPosterior, horizon::Int;
         ))
         Vector{String}(shock_names)
     else
-        _default_shock_names(n)
+        post.varnames
     end
     # MC honesty (#244): process_posterior_samples drops non-stationary /
     # unidentified draws.

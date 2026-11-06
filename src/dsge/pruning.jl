@@ -904,11 +904,17 @@ or standard Lyapunov (order 1).
 """
 function analytical_moments(
     sol::PerturbationSolution{T};
-    lags::Int=1,
+    lags::Union{Integer,AbstractVector{<:Integer}}=1,
     format::Symbol=:covariance,
     observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
 ) where {T<:AbstractFloat}
-    lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+    if lags isa Integer
+        lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+        lag_vec = lags > 0 ? collect(1:lags) : Int[]
+    else
+        all(>=(0), lags) || throw(ArgumentError("all lags must be non-negative"))
+        lag_vec = collect(lags)
+    end
     format in (:covariance, :gmm) ||
         throw(ArgumentError("format must be :covariance or :gmm; got $format"))
 
@@ -920,15 +926,16 @@ function analytical_moments(
         )
     end
 
+    max_lag = isempty(lag_vec) ? 0 : maximum(lag_vec)
     # Default :covariance format — backward compatible. Orders 2 AND 3 use the closed-form
     # augmented-state Lyapunov recursion ([T269]); both are simulation-free and reproduce the
     # analytic moments of an exactly linear model to machine precision.
     if sol.order == 2
-        res = _augmented_moments_2nd(sol; lags=collect(1:max(lags, 1)))
-        return _moment_vector_from_dict(res, lags; observable_indices=observable_indices)
+        res = _augmented_moments_2nd(sol; lags=collect(1:max(max_lag, 1)))
+        return _moment_vector_from_dict(res, lag_vec; observable_indices=observable_indices)
     elseif sol.order >= 3
-        res = _augmented_moments_3rd(sol; lags=collect(1:max(lags, 1)))
-        return _moment_vector_from_dict(res, lags; observable_indices=observable_indices)
+        res = _augmented_moments_3rd(sol; lags=collect(1:max(max_lag, 1)))
+        return _moment_vector_from_dict(res, lag_vec; observable_indices=observable_indices)
     end
 
     # Order 1: closed-form Lyapunov approach
@@ -1015,14 +1022,20 @@ function analytical_moments(
     end
 
     # Autocovariances at each lag: Gamma_h = G1^h * Sigma, extract diagonal
-    if lags > 0
+    if max_lag > 0
         G1_power = copy(G1_equiv)
-        for lag in 1:lags
-            Gamma_h = G1_power * Sigma
-            for i in 1:n_obs
-                push!(moments, Gamma_h[obs[i], obs[i]])
-            end
+        Gammas = Vector{Matrix{T}}(undef, max_lag)
+        for lag in 1:max_lag
+            Gammas[lag] = G1_power * Sigma
             G1_power = G1_power * G1_equiv
+        end
+        for lag in lag_vec
+            if lag > 0
+                Gamma_h = Gammas[lag]
+                for i in 1:n_obs
+                    push!(moments, Gamma_h[obs[i], obs[i]])
+                end
+            end
         end
     end
 
@@ -1041,19 +1054,25 @@ For order 1, uses standard Lyapunov (means are zero).
 """
 function _analytical_moments_gmm(
     sol::PerturbationSolution{T};
-    lags::Int=1,
+    lags::Union{Integer,AbstractVector{<:Integer}}=1,
     observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
 ) where {T}
-    lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
-    lag_vec = collect(1:max(lags, 1))
+    if lags isa Integer
+        lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+        lag_vec = lags > 0 ? collect(1:lags) : Int[]
+    else
+        all(>=(0), lags) || throw(ArgumentError("all lags must be non-negative"))
+        lag_vec = collect(lags)
+    end
+    max_lag = isempty(lag_vec) ? 0 : maximum(lag_vec)
 
     if sol.order >= 3
-        result = _augmented_moments_3rd(sol; lags=lag_vec)
+        result = _augmented_moments_3rd(sol; lags=collect(1:max(max_lag, 1)))
         E_y = result[:E_y]
         Var_y = result[:Var_y]
         Cov_y = result[:Cov_y]
     elseif sol.order >= 2
-        result = _augmented_moments_2nd(sol; lags=lag_vec)
+        result = _augmented_moments_2nd(sol; lags=collect(1:max(max_lag, 1)))
         E_y = result[:E_y]
         Var_y = result[:Var_y]
         Cov_y = result[:Cov_y]
@@ -1096,10 +1115,10 @@ function _analytical_moments_gmm(
             end
         end
 
-        max_lag = max(lags, 1)
-        Cov_y = zeros(T, n, n, max_lag)
+        max_lag_calc = max(max_lag, 1)
+        Cov_y = zeros(T, n, n, max_lag_calc)
         G1_power = copy(G1_equiv)
-        for lag in 1:max_lag
+        for lag in 1:max_lag_calc
             Cov_y[:, :, lag] = G1_power * Var_y
             G1_power = G1_power * G1_equiv
         end
@@ -1142,9 +1161,9 @@ function _analytical_moments_gmm(
         end
     end
 
-    # 3. Diagonal autocovariances at each lag: E[y_i,t * y_i,t-k]
-    if lags > 0
-        for lag in 1:lags
+    # 3. Diagonal autocovariances at each requested lag: E[y_i,t * y_i,t-k]
+    for lag in lag_vec
+        if lag > 0
             for i in 1:n_obs
                 push!(moments, Cov_y[obs[i], obs[i], lag] + E_y[obs[i]]^2)
             end
@@ -1164,7 +1183,7 @@ variance-covariance matrix, then the diagonal autocovariance at each lag.
 """
 function _moment_vector_from_dict(
     res::Dict{Symbol,Any},
-    lags::Int;
+    lags::Union{Integer,AbstractVector{<:Integer}};
     observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
 )
     Var_y = res[:Var_y]
@@ -1188,8 +1207,9 @@ function _moment_vector_from_dict(
     for i in 1:n_obs, j in i:n_obs
         push!(out, Var_y[obs[i], obs[j]])
     end
-    if lags > 0
-        for lag in 1:lags
+    lag_vec = lags isa Integer ? (lags > 0 ? collect(1:lags) : Int[]) : collect(lags)
+    for lag in lag_vec
+        if lag > 0
             for i in 1:n_obs
                 push!(out, Cov_y[obs[i], obs[i], lag])
             end

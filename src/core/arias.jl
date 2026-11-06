@@ -349,6 +349,8 @@ struct AriasSVARResult{T<:AbstractFloat}
     weights_elapsed::T
 end
 
+_synth_names(prefix::AbstractString, n::Integer) = String["$(prefix) $i" for i in 1:n]
+
 # Back-compatible arities: pre-ESS / pre-varnames / pre-shock_names construction sites.
 function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
                             restrictions) where {T<:AbstractFloat}
@@ -359,7 +361,7 @@ function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
     return AriasSVARResult{T}(
         Q_draws, irf_draws, weights, acceptance_rate, restrictions,
         ess, n > 0 ? ess / T(n) : zero(T),
-        ["var$i" for i in 1:nv], _default_shock_names(ns),
+        _synth_names("Var", nv), _default_shock_names(ns),
         0, 0, zero(T), zero(T),
     )
 end
@@ -370,7 +372,7 @@ function AriasSVARResult{T}(Q_draws, irf_draws, weights, acceptance_rate,
     ns = restrictions.n_shocks
     return AriasSVARResult{T}(
         Q_draws, irf_draws, weights, acceptance_rate, restrictions,
-        ess, ess_fraction, ["var$i" for i in 1:nv], _default_shock_names(ns),
+        ess, ess_fraction, _synth_names("Var", nv), _default_shock_names(ns),
         0, 0, zero(T), zero(T),
     )
 end

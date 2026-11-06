@@ -128,10 +128,17 @@ then extracts the same moment format as `autocovariance_moments`:
 """
 function analytical_moments(
     sol::DSGESolution{T};
-    lags::Int=1,
+    lags::Union{Integer,AbstractVector{<:Integer}}=1,
     observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
 ) where {T<:AbstractFloat}
-    lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+    if lags isa Integer
+        lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+        lag_vec = lags > 0 ? collect(1:lags) : Int[]
+    else
+        all(>=(0), lags) || throw(ArgumentError("all lags must be non-negative"))
+        lag_vec = collect(lags)
+    end
+    max_lag = isempty(lag_vec) ? 0 : maximum(lag_vec)
     k = nvars(sol)
 
     if observable_indices !== nothing
@@ -158,14 +165,20 @@ function analytical_moments(
     end
 
     # Autocovariances at each lag: Gamma_h = G1^h * Sigma, extract diagonal
-    if lags > 0
+    if max_lag > 0
         G1_power = copy(sol.G1)
-        for lag in 1:lags
-            Gamma_h = G1_power * Sigma
-            for i in 1:n_obs
-                push!(moments, Gamma_h[obs[i], obs[i]])
-            end
+        Gammas = Vector{Matrix{T}}(undef, max_lag)
+        for lag in 1:max_lag
+            Gammas[lag] = G1_power * Sigma
             G1_power = G1_power * sol.G1
+        end
+        for lag in lag_vec
+            if lag > 0
+                Gamma_h = Gammas[lag]
+                for i in 1:n_obs
+                    push!(moments, Gamma_h[obs[i], obs[i]])
+                end
+            end
         end
     end
 

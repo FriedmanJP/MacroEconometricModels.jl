@@ -278,8 +278,10 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
             "nvars ($n)",
         ))
         Vector{String}(shock_names)
-    else
+    elseif _is_set_identified(method)
         _default_shock_names(n)
+    else
+        model.varnames
     end
     if _is_partial(method)
         @warn "historical_decomposition: method=:$method is partially identified; contributions of unidentified shocks are not identified." maxlog = 1
@@ -570,7 +572,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
         ))
         Vector{String}(shock_names)
     else
-        _default_shock_names(n)
+        post.varnames
     end
     # MC honesty (#244): non-stationary / unidentified posterior draws are
     # skipped (valid_count usable).
