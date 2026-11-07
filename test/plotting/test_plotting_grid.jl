@@ -68,7 +68,7 @@ const MEM = MacroEconometricModels
         rng = Xoshiro(8803)
         sim = dgp_var(rng; T=150)
         m = estimate_var(sim.Y, 1)
-        r = irf(m, 8; ci_type=:none)
+        r = irf(m, 8; ci_type=:none, shock_names=["Shock 1", "Shock 2", "Shock 3"])
 
         p = plot_result(r)
         check_plot(p)
