@@ -98,3 +98,20 @@ to_matrix
 to_vector
 load_example
 ```
+
+---
+
+## Indexing and Array Interface
+
+2D indexing `Base.getindex(::TimeSeriesData, rows, cols)` and array interface methods on `TimeSeriesData`.
+
+```@docs
+Base.getindex
+```
+
+`TimeSeriesData` implements standard Julia array interface methods:
+- `Base.axes(d::TimeSeriesData)`: returns `(Base.OneTo(d.T_obs), Base.OneTo(d.n_vars))`
+- `Base.size(d::TimeSeriesData, dim::Integer)`: returns dimension size (1 for rows, 2 for columns)
+- `Base.firstindex(d::TimeSeriesData)`: returns 1
+- `Base.lastindex(d::TimeSeriesData)`: returns total elements `T_obs * n_vars` (or dimension end)
+

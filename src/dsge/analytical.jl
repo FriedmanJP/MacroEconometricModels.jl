@@ -110,42 +110,77 @@ function _diffuse_initial_covariance(G1::AbstractMatrix{T}, RQR::AbstractMatrix{
 end
 
 """
-    analytical_moments(sol::DSGESolution{T}; lags::Int=1) -> Vector{T}
+    analytical_moments(sol::DSGESolution{T}; lags::Int=1,
+                       observable_indices=nothing) -> Vector{T}
 
 Compute analytical moment vector from a solved DSGE model.
 
 Uses the discrete Lyapunov equation to compute the unconditional covariance,
 then extracts the same moment format as `autocovariance_moments`:
 
-1. Upper-triangle of variance-covariance matrix: k*(k+1)/2 elements
-2. Diagonal autocovariances at each lag: k elements per lag
+1. Upper-triangle of variance-covariance matrix: k_obs*(k_obs+1)/2 elements
+2. Diagonal autocovariances at each lag: k_obs elements per lag
 
 # Arguments
 - `sol` -- solved DSGE model (must be stable/determined)
 - `lags` -- number of autocovariance lags (default: 1)
+- `observable_indices` -- indices of observable variables to subset moments
 """
-function analytical_moments(sol::DSGESolution{T}; lags::Int=1) where {T<:AbstractFloat}
+function analytical_moments(
+    sol::DSGESolution{T};
+    lags::Union{Integer,AbstractVector{<:Integer}}=1,
+    observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+) where {T<:AbstractFloat}
+    if lags isa Integer
+        lags >= 0 || throw(ArgumentError("lags must be non-negative; got $lags"))
+        lag_vec = lags > 0 ? collect(1:lags) : Int[]
+    else
+        all(>=(0), lags) || throw(ArgumentError("all lags must be non-negative"))
+        lag_vec = collect(lags)
+    end
+    max_lag = isempty(lag_vec) ? 0 : maximum(lag_vec)
     k = nvars(sol)
+
+    if observable_indices !== nothing
+        isempty(observable_indices) &&
+            throw(ArgumentError("observable_indices cannot be empty"))
+        for idx in observable_indices
+            (idx < 1 || idx > k) && throw(BoundsError(1:k, idx))
+        end
+        obs = collect(observable_indices)
+    else
+        obs = collect(1:k)
+    end
+    n_obs = length(obs)
+
     Sigma = solve_lyapunov(sol.G1, sol.impact)
 
     moments = T[]
 
     # Upper triangle of variance-covariance matrix (matching autocovariance_moments order)
-    for i in 1:k
-        for j in i:k
-            push!(moments, Sigma[i, j])
+    for i in 1:n_obs
+        for j in i:n_obs
+            push!(moments, Sigma[obs[i], obs[j]])
         end
     end
 
     # Autocovariances at each lag: Gamma_h = G1^h * Sigma, extract diagonal
-    G1_power = copy(sol.G1)
-    for lag in 1:lags
-        Gamma_h = G1_power * Sigma
-        for i in 1:k
-            push!(moments, Gamma_h[i, i])
+    if max_lag > 0
+        G1_power = copy(sol.G1)
+        Gammas = Vector{Matrix{T}}(undef, max_lag)
+        for lag in 1:max_lag
+            Gammas[lag] = G1_power * Sigma
+            G1_power = G1_power * sol.G1
         end
-        G1_power = G1_power * sol.G1
+        for lag in lag_vec
+            if lag > 0
+                Gamma_h = Gammas[lag]
+                for i in 1:n_obs
+                    push!(moments, Gamma_h[obs[i], obs[i]])
+                end
+            end
+        end
     end
 
-    moments
+    return moments
 end

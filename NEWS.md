@@ -1,0 +1,729 @@
+# MacroEconometricModels.jl Release Notes
+
+Release highlights for MacroEconometricModels.jl, newest first. This is a highlights-level summary of
+each release, not a commit-by-commit log. Versions marked with correctness fixes changed numerical
+output, not just documentation.
+
+---
+
+## v1.0.3
+
+Robustness, interface alignment, and numerical precision release: DSGE analytical GMM
+observable subsetting and arbitrary vector lags, cointegration and VECM deterministic
+harmonization (Johansen Cases 1–5) and restriction tests in ``(n+1)``-space, HA-DSGE
+Reiter aggregate observation mapping, full 2D metadata-preserving `TimeSeriesData`
+indexing across four return shapes, SVAR and identification API unification, shock naming
+standardization across all structural models, and plotting grid layout defaults and CSS
+scoping (closes `#874`–`#881`). No breaking changes; struct constructors maintain backward
+compatibility. Numerical output changes for Reiter HA-DSGE impact multipliers (correcting
+initial impact ``h=1`` to non-zero aggregate responses) and VECM Case 2
+restricted-constant critical values and likelihood ratio tests.
+
+**New**
+
+- `analytical_moments` for DSGE models accepts `observable_indices` to subset moments to
+  observed series and arbitrary vector `lags` (e.g. `[1, 3]`), with lazy `sol.Sigma`
+  unconditional covariance property access via discrete Lyapunov recursion (`#874`).
+- Cointegration and VECM deterministic specification harmonized across Johansen Cases 1–5
+  (`:none`, `:constant`, `:unrestricted_constant`, `:trend`, `:unrestricted_trend`) with
+  Osterwald-Lenum (1992) critical values, cointegration restriction tests
+  (`test_beta_restriction`) in ``(n+1)``-space for restricted constants, and lazy
+  `m.eigenvalues` dynamic property exposure on `VECMModel` (`#875`).
+- Reiter HA-DSGE linearization computes aggregate observation maps (`C_obs`, `D_obs`),
+  and `sol.variables` exposes aggregate variable names (`["K"]`, `["r"]`) for automatic
+  downstream IRF and FEVD labeling (`#876`).
+- Full 2D indexing on `TimeSeriesData` (`ts[rows, cols]`) across all 4 return shapes with
+  Symbol, String, Date, range, and boolean selectors, array interfaces (`axes`, `size`,
+  `firstindex`, `lastindex`), and complete metadata preservation with mutation
+  isolation (`#877`).
+- SVAR ergonomics and API consistency: `cholesky_pattern(n)`, `add_zero!`,
+  bidirectional dispatch for `estimate_svar(model, pat)` and `check_identification`,
+  `instruments` keyword alias in `identify_proxy`, and `VARModel.residuals` property
+  accessor delegating to `m.U` (`#878`).
+- Standardized `shock_names` across all SVAR and SVEC result types (`AriasSVARResult`,
+  `UhligSVARResult`, `RobustBayesResult`, `SVARModel`, `SVECResult`, `SVSVARResult`,
+  `ProxySVARResult`, `HistoricalDecomposition`), with direct `irf()`, `fevd()`, and
+  `historical_decomposition()` methods and HTML-escaped plot title propagation (`#879`).
+- Plotting grid layout enhancements: single-shock IRF and OccBin plots default to
+  `ncols = min(n, 3)`, historical decomposition defaults to 2-column side-by-side panels,
+  and matrix IRFs render in strict row-major panel order (`#880`).
+- Plotting scoping and batch persistence: CSS custom property `--mem-panel-width` for
+  fragment isolation, D3 asset deduplication guard, and `save_plot` / `display_plot`
+  vector and tuple overloads for multi-plot standalone HTML persistence (`#881`).
+
+**Fixes**
+
+- `irf(::HADSGESolution)` under `:reiter` evaluates contemporaneous impact through `D_obs`,
+  eliminating the zero-impact anomaly at ``h=1`` and ensuring dynamic continuity with
+  state transitions (`#876`).
+- `test_beta_restriction` on Case 2 (`:constant`) VECMs correctly augments
+  ``n \times s`` design matrices to ``(n+1)``-space, ensuring non-binding identity
+  restrictions yield LR statistic ``\approx 0.0``, degrees of freedom ``0``,
+  and ``p = 1.0`` (`#875`).
+- `ProxySVARResult` property lookup supports both singular `instrument_names` and plural
+  `instruments_names` (`#878`).
+
+## v1.0.2
+
+Machine-readability release: `Tables.jl` / `long_table` coverage for the TIDY
+series (closes `#852`–`#867`), plus BVAR news decomposition, a sysimage-safe
+dataset path, and Uhlig penalty-scale normalization (closes `#868`–`#870`).
+No exported names added or removed; no struct fields changed. Two correctness
+fixes change numerical output: `long_table(::MidasForecast)` horizon labels,
+and the `identify_uhlig` default penalty scale (`:diff`, Uhlig 2005);
+one display fix removes column-type rows from `report()` tables fed by
+`Tables.jl` inputs.
+
+**New**
+
+- Close to 100 newly-tabular result types: count / quantile / RDD /
+  SUR / 3SLS coefficients, DiD event-study results, per-category marginal
+  effects, forecast evaluation and combination, policy-counterfactual
+  paths and moments, input-output sector tables, the 60-type test battery
+  (one row per hypothesis with 5% decisions), and DSGE/HA solutions and
+  simulations.
+- `long_table` for historical decompositions (+Bayesian), `BayesianFEVD`,
+  `LPFEVD` (bias-corrected headline), and the ordered-model
+  `marginal_effects` table.
+- `nowcast_news` for `NowcastBVAR`: the Bańbura–Modugno decomposition on
+  the companion state-space form, with the same revision-vs-news semantics
+  and group aggregation as the DFM method.
+- `identify_uhlig(...; scale)`: penalty normalization `:diff` (default,
+  Uhlig 2005 first-difference std), `:residual` (legacy), `:none`, or a
+  custom vector.
+- Full documentation overhaul: restructured sidebar hierarchy (``\le 6`` child
+  pages per group), dedicated API reference catalogs for Input-Output and
+  Forecast Evaluation (`docs/src/api/io.md`, `docs/src/api/forecast_evaluation.md`),
+  100% exported-symbol docstring coverage (including `Frequency` enums),
+  complete `where:` symbol definitions across all display math blocks, unified
+  per-page `@example` sandboxes, and a 4-tier automated documentation test suite
+  (`docs/test/test_docrule_suite.jl`).
+
+**Fixes**
+
+- `long_table(::MidasForecast)` labels the true direct horizon `h` and
+  carries the prediction standard error; the generic method sized the
+  horizon from the length-1 array and mislabeled every row `horizon=1`.
+- `report()` tables never print column-type names or omit rows/columns:
+  the central table wrapper pins single-row name labels and no-crop
+  output on all three display backends.
+- `load_example` resolves the bundled-data directory at runtime instead of
+  a precompile-baked depot path, so installed sysimages find the TOMLs.
+- `identify_uhlig` normalizes the penalty by first-difference std by
+  default (Uhlig 2005, p. 10) instead of residual std; pass
+  `scale=:residual` for the previous behavior.
+
+## v1.0.1
+
+Plot-option and coverage release (closes `#836`–`#843`, `#845`–`#849`). No
+exported names added or removed; no struct fields changed. One user-visible
+default flip: spectral-density plots now default to a linear scale
+(`plot_result(r; log_scale=true)` restores log10).
+
+**New**
+
+- Seven plot families accept new keywords (all backward-compatible defaults):
+  spectral `log_scale`, density `bw`/`n_grid`, ARIMA `:resid` `lags`,
+  Logit/Probit `:classification` `threshold`, penalized `log_scale`, every
+  dot-and-whisker plot `conf_level`, break-test plots `level`.
+- 52 new `plot_result` dispatches: unit-root, panel unit-root, panel and
+  residual cointegration, portmanteau, causality, specification, count /
+  quantile / robust / panel models, and DiD diagnostics — plus a stacked-bar
+  view for Bayesian historical decompositions.
+- `forecast(::NowcastBridge)`, mirroring the DFM/BVAR forecast interface.
+
+**Fixes**
+
+- `ct_kfe` raises a typed `SingularSystemError` (with a finer-grid hint)
+  instead of leaking a raw `SingularException` on degenerate coarse grids.
+- Built-in dataset count corrected to thirteen (`:mp_shocks`); StatsAPI
+  statistic-field exceptions (`ERSResult.P_T`, Ng-Perron multi-statistics)
+  documented; MRIO download verification documented as opt-in until checksums
+  are registered.
+
+## v1.0.0
+
+First major release. **Breaking**: downstream `[compat]` of `MacroEconometricModels = "0.9"` no longer resolves — move the bound to `MacroEconometricModels = "1"`.
+
+**Breaking (source level)**
+
+- DSGE `forward_indices` / `n_expect` now catalog distinct lead *variables* (indices into `endog`), not lead-containing *equations*; `LinearDSGE.Pi` carries one expectational-error column per lead variable (`#223`). Models whose equations share a lead get a smaller, correct `n_expect` (the NK block: 3 → 2). Code reading `forward_indices` as equation indices or pinning `Pi` width must be updated.
+- Two-asset HA `compute_steady_state` closer rewritten as nested bisection: kwargs `rb_init`, `relax_K`, `relax_rb` removed (unknown kwargs error); new `k_lo`, `k_hi`, `inner_max_iter`, `k_atol`, `stable_iters`; retuned defaults (`tol = 2e-3`, `hh_max_iter = 500`, `howard_steps = 0`) (`#709`). Steady-state values can differ slightly from the damped-updater path.
+
+**New**
+
+- Julia 1.13 support: SVAR internals accept any `LowerTriangular` backing store (`cholesky().L` changed wrapper in 1.13).
+- Test hardening (`#258`): `isfinite`-only assertions guarding statistical quantities tightened to value assertions (bounds, identities, determinism checks) across the suite.
+- No exports added or removed.
+
+---
+
+## v0.9.7
+
+Patch on the `0.9` series: identification and solver follow-ups from the v0.9.5–v0.9.6 backlog (`#814`–`#816`, `#829`, `#830`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output**: `identify_uhlig` sign-normalizes uniquely determined columns, so previously sign-flipped penalty rotations now satisfy the imposed signs.
+
+**Correctness**
+
+- `identify_uhlig` sign-normalizes columns that carry a sign restriction after the search (zeros are preserved under a column sign flip). Uniquely determined rotations (`free_dim = 1`) no longer land on the sign-flipped Cholesky with a dummy penalty of 0.0 from a 0-parameter Nelder–Mead run (`#814`).
+- `compute_steady_state` on an infeasible model throws `DSGESolveError` from the residual gate rather than a LinearSolve world-age `MethodError` on the QR-fallback path (`#816`).
+
+**New**
+
+- IV-GMM first-stage F: pass `X` and `Z` to `estimate_gmm` to store `first_stage_F` (Stock–Yogo partial F) on `GMMModel`; `report` / `gmm_summary` print it and warn when F < 10 (`#815`).
+- `physical_nodes(sol)` rescales `ProjectionSolution.collocation_nodes` from Chebyshev `[-1, 1]` to physical state levels. The field comment documents the convention (`#829`).
+- `estimate_structural_dfm` accepts `:lewis_tvv`, `:sv_em`, and `:gmm_moments` (plus `id_kwargs` forwarded to `compute_Q`) (`#830`).
+
+---
+
+## v0.9.6
+
+Minor release on the `0.9` series: statistical identification from volatility dynamics —
+Lewis (2021) model-free TVV-GMM and Bertsche–Braun (2022) SV-SVAR EM
+(`#823`–`#827`, parent `#739` item 7). Downstream `[compat]` of
+`MacroEconometricModels = "0.9"` still resolves. **Changed numerical output**: none on
+existing paths — the new estimators only take effect when requested.
+
+**New**
+
+- `identify_lewis_tvv`: GMM on lagged cross-moments of squared shocks (Lewis 2021),
+  no variance law assumed; one-step / two-step / CUE weighting, multi-start
+  globalization, portmanteau weak-identification screen (`weak_id`), and J-test.
+  Recovery: `q_distance` below `0.25` (mean over 3 draws) on the SV fixture at
+  `T = 20000` (`#824`).
+- `identify_sv_svar`: EM maximum likelihood under AR(1) log-volatility (Bertsche–Braun
+  2022, EM-2 with mixture Kalman smoother); rotation-only M-step with scales frozen
+  at the OLS Cholesky factor, full/partial identification via `hetero`, smoothed
+  log-volatilities in `H_smooth`. Recovery: Procrustes distance below `0.2` at
+  `T = 2000` (`#825`).
+- `compute_Q` symbols `:lewis_tvv` and `:sv_em` with registry entries (25→27 methods),
+  so `irf`, `fevd`, and `historical_decomposition` accept both estimators through the
+  standard `method=` keyword (`#826`).
+- Recovery table, T×n benchmark timings (lewis <0.1s/0.8s/14s; sv-em 6s/6s/87s
+  on the (n,T) grid), `id_tvv.md` / `id_sv_svar.md` documentation pages,
+  `save_model` / `load_model` round-trips for both result types, and loud negative
+  controls (homoskedastic data trips `weak_id`; proportional variance shifts reject
+  the J-test) (`#827`).
+
+---
+
+## v0.9.5
+
+Minor release on the `0.9` series: Smolyak sparse-grid and multi-control value-function iteration
+(DSGE `#817`–`#821`, parent `#620` §2). Downstream `[compat]` of `MacroEconometricModels = "0.9"`
+still resolves. **Changed numerical output**: none on default paths — the tensor VFI path is
+bit-identical to v0.9.4 and `optimizer=:auto` keeps the legacy 1-D scan for one control. The new
+`grid=:smolyak` / `:fminbox_nm` / `:fminbox_lbfgs` paths only take effect when requested.
+
+**New**
+
+- `grid=:smolyak` for `vfi_solver`: Smolyak sparse-grid Bellman iteration with a
+  Chebyshev-collocation interpolant refit every sweep (reused LU factorization); `grid=:auto`
+  routes `nx ≤ 3` to tensor and `nx ≥ 4` to Smolyak (41 nodes at `nx=4, μ=2` vs 20,736 uniform).
+  Anisotropic `smolyak_mu` vectors spend resolution on slow-moving states (31 nodes beat 41
+  isotropic nodes 15x on Euler error in the 4-state test model). `ProjectionSolution.smolyak_levels`
+  is filled and `evaluate_value` works on Smolyak solutions (`#817`, `#819`, `#821`).
+- Multi-control Bellman maximization: `optimizer=:auto` keeps `:grid1d` for one control and
+  selects derivative-free `Optim.Fminbox(NelderMead())` for control vectors, with
+  `:fminbox_lbfgs` (central finite differences) for smooth problems, `optimizer_opts` forwarded
+  to `Optim.Options`, and deterministic best-of-seeds globalization over warm start, midpoint,
+  and corners (`#818`).
+- Solver docs: Smolyak routing/node-count tables, optimizer routing table, per-dimension-μ
+  tuning guide, VFI-Smolyak vs PFI-Smolyak guidance, and worked 4-state Smolyak plus 2-control
+  labor examples (`#820`). Surplus-driven adaptive refinement stays future work (`#821`).
+
+---
+
+## v0.9.4
+
+Patch on the `0.9` series: public DGP simulation API (`src/dgp/`, 40 exports) and rng-first test seeding across the suite (DGP series, `#790`–`#807`, `#813`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for `compare_var_lp` and SMM `j_test` under identity weighting (both bugfixes, below).
+
+**New**
+
+- Public simulation library: truth-returning `dgp_*` simulators for VAR/SVAR, VECM and panel cointegration, ARIMA, GARCH/SV/MGARCH/MIDAS, dynamic factors, LP-IV/state-dependent/propensity, cross-section/panel/DiD, regime-switching, and GMM, plus analytic helpers (`var_irf`, `var_fevd`, `lyapunov_gamma0`, `arma_spectrum`, `mm_aggregate`; `#790`, `#813`).
+- Simulation guide and DGP API reference (`#813`).
+- Suite-wide explicit `Xoshiro` seeding (no global RNG) with a white-noise lint (`#790`–`#807`).
+
+**Correctness**
+
+- `compare_var_lp` aligns VAR Θ to LP Θ row-wise (off-by-one horizon fix; DGP-05 `#794`).
+- SMM `j_test` reports a `NaN` p-value under identity weighting (the χ² limit needs efficient weighting; M-29 policy; DGP-08 `#797`).
+
+**Also**
+
+- `_smooth_lp_cv_errors` rejects unknown keyword arguments instead of silently ignoring them (`#794`).
+- Johansen display normalizes numerical-noise `-0.0` via `_fmt` (display only; `#790`).
+- Randomized-estimator default RNGs move `MersenneTwister` → `Xoshiro`: same-seed streams differ from `≤ v0.9.3`, but `seed=` / `reproduce` still bit-reproduce from the recorded seed.
+
+---
+
+## v0.9.3
+
+Patch on the `0.9` series: `save_model` / `load_model` for every result type (DSER `#759`--`#773`, RSER `#774`--`#788`). JLD2 is a hard dependency. `SERIALIZATION_FORMAT_VERSION` stays `1`. Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves.
+
+**New**
+
+- `save_model` / `load_model` cover `ModelSpec`, representative-agent solutions, Bayesian DSGE results, HA steady states and SSJ objects, DCEGM / firm / intermediary, OLG, and continuous-time families (`#759`--`#768`).
+- `CRRAUtility` / `CRRAMarginalUtility` / `CRRAInverseMarginalUtility` callable structs replace anonymous household utilities (`#764`).
+- `seed=` / `manifest` / `reproduce` for `BayesianDSGE` and `KrusellSmithSolution` (`#769`).
+- `save_model(...; compress=true)` forwards CodecZlib compression to JLD2 (`#772`).
+- Every non-DSGE fitted model, IRF/FEVD/HD, forecast, nowcast, DiD, test, counterfactual, IO, and companion result round-trips through the registry (`#774`--`#787`).
+- Bundles (`Dict` / `Vector` of objects per file), `note=`, and `model_info(path)` (`#785`).
+- `seed=` / `manifest` / `reproduce` for randomized non-DSGE estimators (`#786`).
+
+**Also**
+
+- `@float_fallback` throws `MethodError` instead of overflowing when no concrete method exists (`#758`).
+- Persistence documentation, the executed-code caveat, the named-function / `CRRAUtility` requirement, and the saveable-type table (`#771`, `#788`).
+- Dynare/HA solve-equality serialization suite and committed v1 fixtures (`#770`).
+- Module-split serialization tests, report/plot equivalence helpers, and the completeness flip (`#787`).
+
+---
+
+## v0.9.2
+
+Patch on the `0.9` series: SVAR identification completion (SID series, `#730`--`#756`). Downstream `[compat]` of `MacroEconometricModels = "0.9"` still resolves. **Changed numerical output** for heteroskedastic ``B_0``, the Uhlig penalty, and `irf(; method=:sign/:narrative)`.
+
+**New**
+
+- Proxy SVAR (`identify_proxy`, `method=:proxy`; `#740`), AB-model ML (`estimate_svar`; `#742`), max-share / news shocks (`identify_max_share`; `#741`), structural VECM (`identify_svec`; `#745`).
+- Moment-based GMM (`identify_gmm_moments`; `#750`); K-regime joint ML for heteroskedastic schemes (`#739`); `label_shocks` (`#749`).
+- Set-identified summaries (`median_target`, `modal_model`, `joint_band`, `sup_t_band`; `#746`) and Giacomini–Kitagawa robust Bayes (`identify_robust_bayes`; `#747`).
+- Principled identifiability tests (`test_lambda_distinct`, `test_gaussian_shock_count`, `test_label_stability`; `#751`).
+- ADRR narrative restrictions (`identify_narrative`; `#744`); keyword `compute_Q` registry (`#748`); RWZ rank/order checker (`#752`).
+
+**Correctness**
+
+- Heteroskedastic kernel is the symmetric generalized eigenproblem ``L_1^{-1}\Sigma_2 L_1^{-\top} = W\Lambda W'``, ``B_0 = L_1 W`` (no polar projection) (`#730`).
+- Smooth-transition identification is joint ML, not a frozen sample split (`#738`).
+- Uhlig penalty weights: 1 if the sign is satisfied, 100 if violated (`#732`).
+- `irf(; method=:sign/:narrative)` returns the identified-set median (`ci_type = :identified_set`); `max_draws` defaults to 1000 (`#734`).
+
+**Also**
+
+- Identification documentation rewrite (`#754`): method-choice table, proxy / AB / max-share pages, structural VECM section.
+- Horizon ranges, long-run zeros, ``A_0`` and bound restrictions (`#743`); Arias/Uhlig evaluated at `max_h` (`#731`); bootstrap column matching (`#733`).
+- Theoretical CIs rejected for residual-based and set-ID methods (`#735`); BVAR posterior skips `IdentificationError` draws (`#736`); non-orthogonal long-run ``Q`` throws (`#737`).
+- Identification result serialization (`#753`); DGP-recovery tests and identification oracle (`#755`); parallel Arias draws and ForwardDiff volume (`#756`).
+
+---
+
+## v0.9.1
+
+Patch release: Structural DFM and GDFM defaults follow FGLR (2009) and FHLR lag-window spectra. `estimate_structural_dfm` and `estimate_gdfm` **change numerical output** under default keywords. Legacy paths stay: `method=:gdfm_var` and `spectral=:smoothed_periodogram`.
+
+This is a patch on the `0.9` series. Downstream `[compat]` of `MacroEconometricModels = "0.9"` resolves here; no bound change is required.
+
+**New**
+
+- **FGLR structural DFM** (`#711`): default `method=:fglr` extracts `r ≥ q` static PCA factors, fits a VAR(`p`), reduces residuals to rank `q` (`K`), and identifies `H` on selected observables. Panel IRFs are ``\Lambda \Psi_h K H``. `r < q` throws.
+- **FHLR lag-window spectrum** (`#720`): GDFM default `spectral=:lag_window` is the full-rank estimator ``(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}`` with ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``.
+- **Selecting ``q``** (`#719`): `hallin_liska`, `bai_ng_q`, and `amengual_watson_q`. `ic_criteria_gdfm` warns when the 90% rule hits `max_q`. `estimate_structural_dfm(X, :auto; q_method=...)` consumes the selectors.
+- **FHLR (2005) one-sided GDFM** (`#721`): `Z`, `factors_onesided`, `common_component_onesided` on every GDFM. `forecast(gdfm, h; method=:one_sided)` is the projection ``\hat\chi_{T+h|T}=\hat\Gamma_\chi(h)Z(Z'\hat\Gamma_X(0)Z)^{-1}Z'X_T``. `method=:spectral` is that path, **not** an AR(1) alias.
+- **SDFM bootstrap IRFs, shocks, forecast, lag selection** (`#714`, `#716`, `#718`): `irf(sdfm, H; ci_type=:bootstrap)` returns panel-space residual-bootstrap bands; `structural_shocks` and `forecast(sdfm, h)` complete FAVAR parity (HD is `#729`); `p=:bic` selects the factor-VAR lag and `show` prints the companion modulus.
+
+**Correctness**
+
+- `fevd(::StructuralDFM)` uses the stored identification (`#710`).
+- `irf(sdfm, h)` computes on demand for any horizon (`#717`).
+
+**Also**
+
+- `TimeSeriesData` dispatch, GDFM `varnames`, `shock_names`, accessors (`#722`).
+- `refs` / `report` for SDFM and GDFM (`#724`); two stale SDFM doc sentences (`#725`).
+- CI: coverage uploads from macOS on every run; the version-bump-only Codecov job is gone.
+- SDFM polish (`#723`, `#726`, `#727`): `plot_result` views for SDFM/GDFM, FGLR recovery tests plus a committed Cholesky fixture, and `identification=:proxy` with first-stage F.
+
+---
+
+## v0.9.0
+
+Breaking feature release: **unified `ModelSpec`** (`#630`, `#631`). One public spec type replaces `DSGESpec` / `HADSGESpec`. Leads are rational expectations (`E[t](...)` is gone). Agent keys are free names; kinds are `AbstractAgentSystem` subtypes. `solve` dispatches on `has_kind`.
+
+This is a **0.x minor bump** and is breaking under Julia SemVer: `[compat] MacroEconometricModels = "0.8"` does **not** resolve to 0.9. Dependents must move the bound to `"0.9"`.
+
+**New**
+
+- **`ModelSpec{T,A}`**, `NamedEquation`, `NoAgents`, `HouseholdSystem`, `to_spec`.
+- **Family kinds**: `DCEGMSystem`, `LifeCycleSystem`, `ContinuousHouseholdSystem`, `FirmSystem` (Khan–Thomas 2008), `IntermediarySystem` (Jamilov–Monacelli Bewley Banks).
+- **HA**: `combine_blocks` / `HetBlock` / `MitBlock`; multi-population `solve`; OccBin errors by name on shipped real-rate HANKs.
+- **OLG**: `to_spec(::BlanchardOLG)` TFP IRF; `blanchard_nk_spec` Phillips–Taylor on the same `NoAgents` residuals; `lifecycle_transition`.
+- **DCEGM**: `dcegm_steady_state`, `dcegm_mit` (`method=:mit`).
+- **Solvers**: sparse colored perfect-foresight Jacobian and block-tridiagonal solve; VFI infers `transition` / `control_bounds`.
+
+**Breaking**
+
+- Delete `DSGESpec` / `HADSGESpec` (no aliases).
+- Drop `E[t](...)`; write `x[t+1]`.
+- `@dsge discrete:` / `clock:` / `horizon:` set `ModelIR` flags; they do not compile family kinds — use `to_spec`.
+
+---
+
+## v0.8.2
+
+Patch release: restore CI on Julia 1.10. `XLSX` 0.12.2 fails to precompile against
+`XML` 0.4.5 on LTS (`XLSXError: No sheetData node found in worksheet` inside the
+XLSX precompile workload). Compat is tightened to `XLSX = "0.10, 0.11"` until an
+XLSX release loads on Julia 1.10 with the current XML 0.4 series. The Excel
+parser extension is unchanged; `using XLSX` should resolve 0.11.x.
+
+This is a patch on the `0.8` series. Downstream `[compat]` of
+`MacroEconometricModels = "0.8"` resolves here; no bound change is required.
+
+---
+
+## v0.8.1
+
+Patch release: the **Input-Output overhaul** (`#611`) — a Baqaee--Farhi production-network
+layer on top of the classical column Leontief toolkit, plus MRIO trade accounting,
+general SDA, RAS/GRAS, and labeled ICIO/WIOD parsers. Legacy `baqaee_farhi(io)` remains
+the frozen intermediate-only Hessian; the new standard-form path is
+`production_network` → `bf_equilibrium` / `baqaee_farhi(net)`.
+
+This is a patch on the `0.8` series. Downstream `[compat]` of
+`MacroEconometricModels = "0.8"` resolves here; no bound change is required.
+
+**New**
+
+- **Baqaee--Farhi network** (`ProductionNetwork`, `production_network`): row-oriented
+  nested CES (single/two-nest, multi-factor) calibrated from column `IOData` once.
+- **Exact nonlinear equilibrium** (`bf_equilibrium` → `BFEquilibrium`): Newton
+  unit-cost fixed point, factor-market clearing, GDP numéraire.
+- **Local second-order** (`baqaee_farhi(net)`, `BFLocal`, `BFElasticities`,
+  `bf_quadratic`, `bf_shock_curve`): 2019 multi-factor ``H_A`` with incidence; shock
+  curve for large-``d\log A``.
+- **Wedges / markups** (`bf_wedge_decomp`, cost- vs revenue-based Domar): B\&F 2020
+  Theorem 1 technology / allocative-efficiency decomposition.
+- **Misallocation** (`bf_misallocation`, `bf_wedge_quadratic` → `BFMisallocation`):
+  Proposition 5 ``H_\mu`` and the Harberger triangle at the efficient point;
+  `:observed` is the Prop 5 Var/Cov object, not the solver Hessian.
+- **Classical IO**: Leontief `price_model`, Dietzenbacher--Lahr extraction variants,
+  `impact` scenario API (Type I/II + mixed), `network_stats`.
+- **MRIO**: `aggregate`, `region_block`, HIY vertical specialization,
+  KWW 2014 `export_decomposition` (DVA/RDV/FVA/PDC), regional footprints.
+- **SDA / balancing**: general n-determinant Dietzenbacher--Los SDA (incl. emission
+  SDA) and `ras` / `gras` / `balance`.
+- **Parsers**: `parse_icio` / `parse_wiod` labeled MRIO recipes.
+
+**Also**
+
+- Windows CI: threaded single-process runner, FAST HA-DSGE/DSGE, HA-DSGE OpenBLAS
+  threads, skip artifact cache upload.
+
+---
+
+## v0.8.0
+
+Feature release: the **policy-counterfactual module** (`src/counterfactual/`, series
+`CF-01`--`CF-24` = `#381`--`#404`) — sufficient-statistics policy analysis after
+McKay & Wolf (2023), Barnichon & Mesters (2023), and Caravello, McKay & Wolf (2025).
+The module is a general implementation of the *methods*, validated by a ten-identity
+theorem-level oracle suite in linear laboratories (Proposition-1 exact recovery on RANK
+and HA menus, rule immateriality, the optimal-policy circle, OPP ``\equiv`` optimal
+projection, the Sims--Zha vs. news-based Lucas contrast, an end-to-end historical
+recursion oracle, Wold-rotation invariance, model-averaging degeneracy, and
+second-moment consistency) — not by replicating published tables.
+
+**New**
+
+- **Containers and templates**: `PolicyCausalEffects` (square news menus / thin
+  empirical subsets, with draws), `PolicyRule`/`PolicyLoss` with
+  peg/target/Taylor/NGDP/AIT/smoothing builders; one shared weighted-projection kernel
+  with exact, least-squares, and min-norm regimes and always-surfaced
+  implementation-error diagnostics.
+- **Inputs from everything the package estimates**: `policy_causal_effects` adapters
+  for VAR/BVAR/sign-set/LP IRFs, `baseline_path`, `wold_representation`,
+  `policy_forecast` gap containers (BVAR `forecast(...; store_draws=true)` retention;
+  SEP-style external route), `stacked_irf_target` + `ctw_covariance`,
+  `policy_news_matrix` DSGE news menus (shared news pipeline, linear state growth),
+  public `sequence_jacobian` + HA `policy_causal_effects`, and
+  `cognitive_discounting`/`sticky_expectations`/`behavioral` operators.
+- **Engines**: `policy_counterfactual` (McKay--Wolf), `optimal_policy`/`optimal_rule`,
+  `counterfactual_moments` (with business-cycle frequency bands), `opp`/`estimate_opp`
+  (reversed 60/75/90% band polarity), `constrained_opp` (ZLB/pledges via SLSQP with
+  KKT diagnostics), `opp_sequence`/`opp_sensitivity`/`robust_weights` (exact three-part
+  time-consistency decomposition), `irf_match`/`posterior_model_probs`/`model_average`
+  (CMW model bank), `counterfactual_forecast`/`counterfactual_history` (forecast-revision
+  recursion), `spanning_diagnostic`/`forecast_sufficiency`.
+- **Data**: `load_example(:mp_shocks)` — quarterly US monetary panel (1960Q1--2019Q4)
+  with the Romer--Romer/Wieland--Yang, Gertler--Karadi, Aruoba--Drechsel, and Ben
+  Zeev--Khan shock series (NaN outside published samples).
+- **UX**: `report()`/`refs()` for all nine result types (honesty verdicts, band-polarity
+  notes, model-probability tables), seven `plot_result` dispatches (path overlays with
+  automatic implementation-error panels, OPP fan charts, moment and spanning views), and
+  a four-page "Policy Counterfactuals" documentation section.
+
+---
+
+## v0.7.3
+
+Patch release resolving the issues filed by the 2026-08 documentation audit (`#516`--`#595`)
+plus its follow-ups (`#598`--`#602`, `#605`--`#607`): a full documentation-site rewrite, two
+new capabilities, and correctness fixes across nearly every module. **Many reported numbers
+change** --- lag selection, Bayesian FAVAR, panel confidence bands, LP-DiD, RE/CRE panel
+logit, the PP/PANIC/Pedroni/break-test battery, and order-1 DSGE analytical moments all
+produce different (now correct) output.
+
+**New**
+
+- **Litterman prior for nowcasting BVARs** (`#602`): `nowcast_bvar(...; prior=:litterman)`
+  fixes ``\Sigma`` diagonal so the equations separate, enabling a genuine cross-lag
+  tightness knob `theta_cross` that the conjugate dummy-observation prior cannot express.
+  Posterior mean verified against direct GLS and the marginal likelihood against the
+  ``T \times T`` Gaussian to machine precision. Log-likelihoods are not comparable across
+  priors --- the conjugate prior integrates ``\Sigma`` out.
+- **Per-series break diagnostics** (`#606`): `FactorBreakResult` stores
+  `series_statistics` and `series_break_dates` for the pooled factor-break tests, and
+  `report` lists the top-5 breaking series. The ranking identifies breakers exactly when a
+  modest subset breaks; a half-panel break rotates the factor space and contaminates
+  stable series' statistics (documented).
+
+**Correctness** (selected highlights of the ~70 behaviour fixes; the issue tracker has the full list)
+
+- **Lag selection** (`#522`): VAR/VECM information criteria use the system parameter count
+  (Lütkepohl 2005) and a common estimation sample --- `select_lag_order` no longer returns
+  `max_p` mechanically on short samples.
+- **Bayesian FAVAR** (`#523`, `#528`): scale-aware priors, and the BBE measurement
+  equation now carries the direct ``\Lambda_y`` loading block, removing the
+  factor/observable collinearity that produced explosive coefficient draws.
+- **Panel bands** (`#524`): FAVAR panel IRF/forecast intervals take quantiles in panel
+  space instead of mapping factor-space endpoints through the loadings.
+- **Kilian bootstrap** (`#564`): `bias_correct=true` corrects the point IRF, not only the
+  bootstrap draws.
+- **LP-DiD** (`#540`): IPW reweighting enters the time-demeaning step, so the reweighted
+  estimand matches the weighted least-squares target.
+- **DiD cohorts** (`#587`, `#598`): `xtset` stores cohort *values* rather than ranks, and
+  non-positive cohorts are treated as adoption periods instead of being silently dropped
+  --- four of five estimators returned ATT ``= 0`` on shifted event-time panels.
+- **RE/CRE panel logit** (`#600`, `#542`): the adaptive Gauss--Hermite likelihood is
+  finite everywhere, the inner mode search converges (safeguarded Newton), and the
+  covariance uses the Louis identity --- standard errors recover their information bound.
+- **Unit-root and panel tests** (`#576`, `#581`, `#582`, `#584`): the Phillips--Perron
+  correction restores a missing factor of ``T``; PANIC pools via the Bai--Ng Fisher
+  combination; Moon--Perron projects the standardized panel; ADF regressions solve via QR
+  and the Pedroni statistics weight by ``1/\widehat{\text{LRV}}``.
+- **Structural break tests** (`#577`, `#583`, `#605`): the LM unit-root, two-break ADF,
+  and factor-break family (Breitung--Eickmeier, Chen--Dolado--Gonzalo, Han--Inoue) are
+  calibrated against simulated conditional null distributions --- measured sizes now fall
+  in ``[0.035, 0.055]`` where several tests previously had size 0.00 or 1.00.
+- **Non-Gaussian identification** (`#565`--`#570`): JADE/SOBI rotation-angle fix, a
+  genuine normalized Pearson Type IV density for `:pml`, corrected GARCH initialization,
+  and a centered bootstrap for restriction tests.
+- **DSGE** (`#556`, `#607`): box-constrained perfect foresight solves as a semismooth
+  complementarity Newton (the NK ZLB model converges in 2--3 iterations), and order-1
+  `analytical_moments` reports contemporaneous control moments --- corr(state, control)
+  was ``\rho`` where it should be 1.
+- **Nowcasting** (`#571`--`#573`, `#575`, `#588`): full-rank dummy-observation prior
+  design, data revisions are no longer mislabeled as news in `nowcast_news`, the MIDAS
+  weight Jacobian is clamped consistently with the weights, and `apply_tcode` no longer
+  crashes on non-positive columns.
+
+**API and behaviour notes**
+
+- `BayesianFEVD` axes are unified to `(variable, shock, horizon)` (`#527`).
+- One-argument `refs(x)` prints to stdout and returns `nothing`; capture text with
+  `sprint(io -> refs(io, x))` (`#530`).
+- Nowcast-BVAR `theta` is re-purposed as the lag-decay exponent (GLP ``\alpha``) ---
+  cross-lag tightness is structurally impossible in the conjugate prior; use
+  `prior=:litterman` for a cross-lag knob (`#571`, `#602`).
+- The EORA26 downloader throws a clear not-implemented error instead of failing obscurely
+  (`#518`).
+
+**Documentation**
+
+- **Full documentation-site rewrite** (PR `#596`): every page rebuilt to a uniform
+  skeleton (Quick Start recipes, verified `@example` blocks, keyword and return-value
+  tables, topic-scoped bibliographies), a restructured API reference covering every
+  export, cross-reference integrity enforced as a hard build error, and all 93 plot
+  assets regenerated.
+- The reproducibility footer on `report()` output is opt-in (`#521`).
+
+---
+
+## v0.7.2
+
+Patch release closing the last open issues in the `#407`--`#512` range: one new
+estimator family, four correctness fixes, and two API gaps. **Two reported accuracy
+numbers change** --- see the correctness notes below.
+
+**New**
+
+- **Count-data regression** (`#427`, EV-19): `estimate_poisson` (IRLS on the log link,
+  Gourieroux--Monfort--Trognon pseudo-ML sandwich standard errors by default) and
+  `estimate_nbreg` (Negative-Binomial-2, fit jointly in ``(\beta, \log\alpha)``), with
+  `dispersion_test` (Cameron--Trivedi 1990), `incidence_rate_ratio`, marginal effects,
+  and `offset`/`exposure` support. Validated against R's `glm(family=poisson)` and
+  `MASS::glm.nb` to 8--10 significant digits. Zero-inflated and hurdle variants are out
+  of scope.
+- **Markov-switching fitted values and forecasts** (`#510`): `fitted`/`predict` expose
+  the regime-probability-weighted conditional mean the estimator already computed
+  (`y - fitted(m) == residuals(m)` exactly), with `probs=:filtered` for the real-time
+  weighting. `forecast(m, h)` for MS-AR and `forecast(m, X_new)` for switching
+  regressions return an exact analytic mean path with simulated mixture bands.
+- **Residuals for ordered and multinomial models** (`#507`): `residuals(m; kind=)`
+  returns the ``n \times K`` response / Pearson / deviance matrix, and
+  `generalized_residuals` the length-``n`` Chesher--Irish score residual for ordered
+  models. Note the shape differs from the binary models, which return a vector.
+
+**Correctness**
+
+- **The HA Euler-error statistic was near-zero by construction where the solution was
+  worst** (`#508`). It evaluated only at grid nodes, where EGM solves the Euler equation
+  exactly, and flat-extrapolated above ``a_{\max}`` so that truncated cells reported
+  machine-precision residuals. It is now measured off-node at cell midpoints, with
+  out-of-grid cells excluded and counted. **Every HA accuracy number moves by 2.5--3.8
+  ``\log_{10}`` units** --- Krusell--Smith from ``-6.04`` to ``-2.25``, one-asset HANK from
+  ``-6.06`` to ``-2.28``, Huggett from ``-4.47`` to ``-1.94``. This is a metric-honesty
+  change, not a solver regression; `compute_steady_state(spec; euler_points=:nodes)`
+  restores the old convention and `ss.euler` carries both.
+- **The continuous-time two-asset stationarity check was inverted for the kinked cost**
+  (`#509`). In the KMV parameterization ``\chi_1`` multiplies the withdrawal, so a
+  *larger* ``\chi_1`` is more stationary; the old test certified divergent calibrations
+  (96% of mass on the ceiling) as sound. `ct_two_asset_solve` now also warns when the
+  calibration cannot bound illiquid wealth instead of returning a grid artifact with
+  `converged = true`.
+- **A lone `a1` or `P1` was silently discarded** by `StateSpaceModel` (`#512`), returning
+  a different model from the one written --- and the quieter one, differing by three
+  orders of magnitude in log-likelihood. It now raises, and the explicit path validates
+  dimensions.
+- **Panel `report()` printed the raw covariance symbol** (`#407`) --- `cluster` rather than
+  `Cluster-robust`. Cosmetic only; the covariance matrix and standard errors were correct.
+
+**Documentation**
+
+- Six state-space entry points documented `init_mode=:diffuse` while defaulting to
+  `:kappa` (`#512`); the docstrings now match the code, with a table of what each mode does.
+- `docs/src/dsge_ha.md` no longer claims "values below ``-3`` are standard in the
+  literature" --- that survived on the node metric and does not survive the corrected one.
+
+---
+
+## v0.7.1
+
+Documentation-only patch. No public API or numerical changes.
+
+- **API reference completed**: added `@docs`/`@autodocs` coverage for the v0.7.0
+  EViews-parity and new-module exports --- extended GARCH (IGARCH/CGARCH/APARCH/FIGARCH/
+  FIEGARCH, GARCH-MIDAS diagnostics), multivariate GARCH, single-equation & panel
+  cointegrating regression, SUR/3SLS, ARDL/NARDL/PMG, penalized/robust/Tobit/Heckman
+  regression, MIDAS, ARFIMA, nonlinear & state-space forecast methods, and the
+  higher-moment/bubble/distribution test battery --- so every export is registered on a
+  reference page (`checkdocs=:exports`).
+- Fixed the v0.7.0 documentation examples that were blocking the docs build.
+
+---
+
+## v0.7.0
+
+Major feature release. Breaking (0.6 to 0.7): a large new exported API surface, and `JuMP` + `Ipopt`
+are now full dependencies.
+
+- **EViews-parity series** (EV-01--EV-40): nine new modules --- MIDAS (`src/midas`), ARDL/NARDL + panel
+  ARDL (`src/ardl`), single-equation & panel cointegrating regression (`src/cointreg`), SUR/3SLS
+  (`src/system`), multivariate GARCH CCC/DCC/BEKK (`src/mgarch`), nonlinear time series
+  (threshold/SETAR, STAR/LSTR, Markov-switching; `src/nonlinear`), nonparametric density/regression
+  (`src/nonparametric`), Kalman-MLE state-space + TVP regression (`src/statespace`), and forecast
+  evaluation & combination (`src/fceval`) --- plus GARCH extensions (IGARCH/CGARCH/APARCH/FIGARCH/
+  FIEGARCH, GARCH-MIDAS), ARFIMA, penalized/robust/Tobit/Heckman regression, IV k-class, panel
+  PCSE/Prais-Winsten, and a large hypothesis-test battery (HEGY, ERS, SADF/GSADF bubbles, BDS,
+  variance-ratio, EDF goodness-of-fit, residual/panel cointegration, first-generation panel unit
+  root, Dumitrescu-Hurlin, long-run variance).
+- **DSGE Bayesian diagnostics**: posterior mode + Laplace/bridge-sampling marginal likelihood, MCMC
+  convergence diagnostics (rank-normalized R-hat, bulk/tail ESS, Geweke), Iskrev identification
+  tests, prior/posterior predictive checks, sampler parameter transforms, and Dynare prior shims.
+- **Reproducibility & serialization**: `ReproManifest`/`reproduce` and versioned
+  `save_model`/`load_model` (JLD2 weak-dependency backend).
+- **Tables.jl integration** for result types and **structured logging** replacing bare `println`.
+- **`JuMP` + `Ipopt` promoted to full dependencies** (GPL-compatible): `solver=:ipopt` works with no
+  manual `]add`; `PATHSolver` remains an optional weak dependency.
+
+---
+
+## v0.6.7
+
+Documentation content and architecture, plus test-suite quality. No public API changes.
+
+- New [Getting Started](@ref getting_started_page) tutorial and [Choosing a Method](@ref
+  method_guide_page) decision-table router.
+- New narrative pages: [GMM & SMM](@ref gmm_page), [Notation](@ref notation),
+  [Bibliography](@ref bibliography),
+  [How to Cite](@ref citation), and this changelog.
+- API reference split into per-domain pages with an auto-generated type hierarchy; every exported
+  symbol is now documented on exactly one reference page (`:missing_docs` is a hard build error).
+- Corrected stale counts, mislabeled example series, and keyword-table defaults across the corpus.
+- Test-suite compute cuts: shared fixtures and shorter simulation/grid/draw settings across the
+  DSGE, heterogeneous-agent, volatility, factor, panel, and nowcast suites (with assertions kept
+  discriminating), and a dedicated Extensions test group for the optional JuMP/Ipopt/PATH solvers.
+
+---
+
+## v0.6.6
+
+Display quality: publication-grade `report()`/`table()` output.
+
+- Golden-file regression harness and display invariants for the bespoke VAR/VECM/DSGE reports.
+- Goldens made robust to cross-version numeric drift.
+
+---
+
+## v0.6.5
+
+Heterogeneous-agent DSGE rebuild plus reliability and QA hardening (issue #380).
+
+---
+
+## v0.6.4
+
+Solver and filter correctness fixes (issue #378). Numerical output changed for affected estimators.
+
+---
+
+## v0.6.3
+
+README and plotting-asset refresh (issue #377).
+
+---
+
+## v0.6.2
+
+Stage-4 Bayesian DSGE estimation validity (issues #128--#150, #376). Correctness fixes to the
+posterior samplers, not documentation only.
+
+---
+
+## v0.6.1
+
+Phase-0 correctness criticals and test-runner restructure (issue #375). Numerical output changed for
+the affected methods.
+
+---
+
+## v0.6.0
+
+[Input-Output Analysis](@ref io_page) module (issue #374): the [`IOData`](@ref) container,
+Leontief/Ghosh models, multipliers/linkages/SDA/extraction, environmental extensions,
+Baqaee-Farhi (2019), and the pymrio-style MRIO downloaders.
+
+---
+
+## v0.5.1
+
+Continuous-time and life-cycle heterogeneous-agent methods: [Continuous Time](@ref dsge_continuous)
+(HJB / Kolmogorov-Forward), [Overlapping Generations](@ref dsge_olg) (Blanchard 1985 perpetual youth),
+and the Huggett (1993) pure-exchange example.
+
+---
+
+## v0.5.0
+
+Heterogeneous-agent DSGE and higher-order analysis.
+
+- [Heterogeneous Agent DSGE](@ref dsge_ha): SSJ (Auclert et al. 2021), Reiter (2009), and
+  Krusell-Smith (1998) solvers; EGM/VFI individual solvers; Young (2010) histogram.
+- Dynare replication suite (22 models); order ``\geq 2`` unconditional FEVD.
+- Pre-linearized models via `model(linear=true)`; [Linear Solution Methods](@ref dsge_linear) rewrite
+  on a companion-QZ core.
+- [X-13ARIMA-SEATS](@ref x13_page) coverage.
+
+---
+
+See [How to Cite](@ref citation) for how to reference a specific version in your work.

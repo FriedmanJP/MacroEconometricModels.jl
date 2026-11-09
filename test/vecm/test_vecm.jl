@@ -145,21 +145,49 @@ _vecm_drift(rng::AbstractRNG, T::Int=400) =
         Y = _vecm_dgp(Xoshiro(42), 200)
 
         for det in (:none, :constant, :trend)
+            joh = johansen_test(Y, 2; deterministic=det)
             m = estimate_vecm(Y, 2; rank=1, deterministic=det)
             @test m.deterministic == det
             @test m isa VECMModel{Float64}
+            @test m.eigenvalues ≈ joh.eigenvalues atol = 1e-12
+            @test length(m.eigenvalues) == nvars(m)
+            @test all(isfinite, m.eigenvalues)
+            @test size(m.beta, 1) == nvars(m)
+            @test length(m.mu) == nvars(m)
+            @test m.rank == m.johansen_result.rank
+        end
+
+        for det in (:unrestricted_constant, :unrestricted_trend)
+            joh = johansen_test(Y, 2; deterministic=det)
+            m = estimate_vecm(Y, 2; rank=1, deterministic=det)
+            @test m.deterministic == det
+            @test m isa VECMModel{Float64}
+            @test m.eigenvalues ≈ joh.eigenvalues atol = 1e-12
+            @test length(m.eigenvalues) == nvars(m)
+            @test all(isfinite, m.eigenvalues)
+            @test size(m.beta, 1) == nvars(m)
+            @test length(m.mu) == nvars(m)
+            @test m.rank == m.johansen_result.rank
+            extra_det = det === :unrestricted_trend ? 2 : 1
+            @test dof(m) == nvars(m) * (m.rank + nvars(m) * (m.p - 1) + extra_det)
+            m0 = estimate_vecm(Y, 2; rank=0, deterministic=det)
+            @test m0.rank == 0
+            @test dof(m0) == nvars(m0) * (nvars(m0) * (m0.p - 1) + extra_det)
+            @test length(m0.mu) == nvars(m0)
         end
 
         # A DGP WITH drift separates the specifications (DGP-04 #793): the old
         # trendless fixture made :none/:constant/:trend all correct at once.
         # m.mu cannot recover the drift point-wise (I(1) contamination through
         # β̂ error), so assert what the constant honestly delivers: nesting and
-        # the exact OLS fitted-mean identity.
+        # the exact OLS fitted-mean identity for unrestricted constant.
         Yd = _vecm_drift(Xoshiro(16), 400)
         mc = estimate_vecm(Yd, 2; rank=1, deterministic=:constant)
         mn = estimate_vecm(Yd, 2; rank=1, deterministic=:none)
         @test mc.loglik >= mn.loglik   # nested models: constant can only fit better
-        @test vec(sum(residuals(mc); dims=1)) ≈ zeros(3) atol = 1e-8
+        mc_unr = estimate_vecm(Yd, 2; rank=1, deterministic=:unrestricted_constant)
+        @test mc_unr.loglik >= mn.loglik
+        @test vec(sum(residuals(mc_unr); dims=1)) ≈ zeros(3) atol = 1e-8
         @test any(abs.(vec(sum(residuals(mn); dims=1))) .> 1e-8)  # no const: drift leaks
     end
 

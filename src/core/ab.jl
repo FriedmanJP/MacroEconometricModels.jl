@@ -79,6 +79,14 @@ function recursive_pattern(n::Integer)
 end
 
 """
+    cholesky_pattern(n::Integer) -> SVARPattern
+
+Alias for [`recursive_pattern`](@ref). Just-identified recursive AB pattern where
+`A` is unit lower-triangular and `B` is diagonal.
+"""
+cholesky_pattern(n::Integer) = recursive_pattern(n)
+
+"""
     a_model_pattern(A) -> SVARPattern
 
 A-model: supplied pattern on `A` with `B = I`.
@@ -148,6 +156,8 @@ Maximum-likelihood AB-model SVAR.
 - `pattern`: the restriction pattern
 - `identification`: [`IdentificationStatus`](@ref)
 - `varnames`: variable labels
+- `shock_names`: structural shock labels
+- `model`: underlying reduced-form [`VARModel`](@ref), or `nothing`
 """
 struct SVARModel{T<:AbstractFloat} <: AbstractAnalysisResult
     A::Matrix{T}
@@ -162,6 +172,42 @@ struct SVARModel{T<:AbstractFloat} <: AbstractAnalysisResult
     pattern::SVARPattern{T}
     identification::IdentificationStatus
     varnames::Vector{String}
+    shock_names::Vector{String}
+    model::Union{Nothing,VARModel{T}}
+end
+
+# Back-compatible 12-arg positional constructor (pre-shock_names, pre-model)
+function SVARModel{T}(A, B, Q, vcov, se, loglik, lr_stat, lr_df, lr_pvalue,
+                      pattern, identification,
+                      varnames::Vector{String}) where {T<:AbstractFloat}
+    n = length(varnames)
+    return SVARModel{T}(
+        A, B, Q, vcov, se, T(loglik), T(lr_stat), Int(lr_df), T(lr_pvalue),
+        pattern, identification, varnames, _default_shock_names(n), nothing,
+    )
+end
+
+function SVARModel{T}(A, B, Q, vcov, se, loglik, lr_stat, lr_df, lr_pvalue,
+                      pattern, identification,
+                      varnames::Vector{String},
+                      shock_names::Vector{String}) where {T<:AbstractFloat}
+    return SVARModel{T}(
+        A, B, Q, vcov, se, T(loglik), T(lr_stat), Int(lr_df), T(lr_pvalue),
+        pattern, identification, varnames, shock_names, nothing,
+    )
+end
+
+function SVARModel(A::AbstractMatrix{T}, B::AbstractMatrix{T}, Q::AbstractMatrix{T},
+                   vcov, se, loglik::Real, lr_stat::Real, lr_df::Integer,
+                   lr_pvalue::Real, pattern::SVARPattern{T},
+                   identification::IdentificationStatus, varnames::Vector{String},
+                   shock_names::Vector{String}=_default_shock_names(length(varnames)),
+                   model::Union{Nothing,VARModel{T}}=nothing) where {T<:AbstractFloat}
+    return SVARModel{T}(
+        Matrix{T}(A), Matrix{T}(B), Matrix{T}(Q), vcov, se, T(loglik), T(lr_stat),
+        Int(lr_df), T(lr_pvalue), pattern, identification, varnames, shock_names,
+        model,
+    )
 end
 
 # =============================================================================
@@ -461,7 +507,8 @@ end
 function check_identification(pattern::SVARPattern, model::VARModel{T};
                               n_points::Int=10,
                               rng::AbstractRNG=Random.default_rng(),
-                              long_run_matrix=nothing) where {T<:AbstractFloat}
+                              long_run_matrix=nothing,
+                              kwargs...) where {T<:AbstractFloat}
     n = nvars(model)
     n_points >= 1 || throw(ArgumentError("n_points must be ≥ 1, got $n_points"))
     pattern = _ab_promote(pattern, T)
@@ -511,7 +558,26 @@ function check_identification(pattern::SVARPattern, model::VARModel{T};
     if n_free == n_cov + n_lr && (_is_recursive_pattern(pattern) || _is_bq_pattern(pattern))
         rank_J = n_free
     end
-    _ab_classify(n_free, n_lr, n_cov, rank_J, orders)
+    return _ab_classify(n_free, n_lr, n_cov, rank_J, orders)
+end
+
+"""
+    check_identification(model::VARModel, pattern::SVARPattern; kwargs...)
+        -> IdentificationStatus
+
+Bidirectional dispatch delegating to `check_identification(pattern, model; kwargs...)`.
+"""
+function check_identification(model::VARModel, pattern::SVARPattern; kwargs...)
+    return check_identification(pattern, model; kwargs...)
+end
+
+"""
+    check_identification(n::Integer, pattern::SVARPattern) -> IdentificationStatus
+
+Bidirectional dispatch delegating to `check_identification(pattern, n)`.
+"""
+function check_identification(n::Integer, pattern::SVARPattern)
+    return check_identification(pattern, Int(n))
 end
 
 # =============================================================================
@@ -610,6 +676,7 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
                        max_iter::Int=400,
                        rng::AbstractRNG=Random.default_rng(),
                        long_run_matrix=nothing,
+                       shock_names::Union{Nothing,Vector{String}}=nothing,
                        kwargs...) where {T<:AbstractFloat}
     n = nvars(model)
     n_starts >= 1 || throw(ArgumentError("n_starts must be ≥ 1, got $n_starts"))
@@ -696,8 +763,28 @@ function estimate_svar(model::VARModel{T}, pattern::SVARPattern;
     θ = n_free > 0 ? _ab_pack(A, B, pattern) : T[]
     vcov, se = _ab_se(θ, pattern, Sigma, Tobs, C1, penalty)
 
-    SVARModel{T}(A, B, Matrix{T}(Q), vcov, se, T(loglik), T(lr_stat), lr_df,
-                 T(lr_pvalue), pattern, st, copy(model.varnames))
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
+
+    return SVARModel{T}(
+        A, B, Matrix{T}(Q), vcov, se, T(loglik), T(lr_stat), lr_df,
+        T(lr_pvalue), pattern, st, copy(model.varnames), snames, model,
+    )
+end
+
+"""
+    estimate_svar(pattern::SVARPattern, model::VARModel; kwargs...) -> SVARModel
+
+Bidirectional dispatch delegating to `estimate_svar(model, pattern; kwargs...)`.
+"""
+function estimate_svar(pattern::SVARPattern, model::VARModel; kwargs...)
+    return estimate_svar(model, pattern; kwargs...)
 end
 
 # =============================================================================
@@ -730,6 +817,48 @@ function Base.show(io::IO, m::SVARModel{T}) where {T}
         _sig_legend(io)
     end
     _matrix_table(io, m.A, "A"; row_labels=m.varnames, col_labels=m.varnames)
-    _matrix_table(io, m.B, "B"; row_labels=m.varnames, col_labels=m.varnames)
+    _matrix_table(io, m.B, "B"; row_labels=m.varnames, col_labels=m.shock_names)
     return nothing
+end
+
+# =============================================================================
+# Impulse Response, FEVD, and Historical Decomposition for SVARModel
+# =============================================================================
+
+function irf(svar::SVARModel{T}, horizon::Int; kwargs...) where {T}
+    svar.model === nothing && throw(ArgumentError(
+        "irf(svar): SVARModel was constructed without an underlying VARModel",
+    ))
+    kw = Dict{Symbol,Any}(pairs(kwargs))
+    if !haskey(kw, :shock_names) || kw[:shock_names] === nothing
+        kw[:shock_names] = svar.shock_names
+    end
+    return irf(svar.model, horizon; method=:svar, _svar_Q=svar.Q, kw...)
+end
+
+function fevd(svar::SVARModel{T}, horizon::Int; kwargs...) where {T}
+    svar.model === nothing && throw(ArgumentError(
+        "fevd(svar): SVARModel was constructed without an underlying VARModel",
+    ))
+    kw = Dict{Symbol,Any}(pairs(kwargs))
+    if !haskey(kw, :shock_names) || kw[:shock_names] === nothing
+        kw[:shock_names] = svar.shock_names
+    end
+    return fevd(svar.model, horizon; method=:svar, _svar_Q=svar.Q, kw...)
+end
+
+function historical_decomposition(svar::SVARModel{T},
+                                  horizon::Int=effective_nobs(svar.model);
+                                  kwargs...) where {T}
+    svar.model === nothing && throw(ArgumentError(
+        "historical_decomposition(svar): SVARModel was constructed without " *
+        "an underlying VARModel",
+    ))
+    kw = Dict{Symbol,Any}(pairs(kwargs))
+    if !haskey(kw, :shock_names) || kw[:shock_names] === nothing
+        kw[:shock_names] = svar.shock_names
+    end
+    return historical_decomposition(
+        svar.model, horizon; method=:svar, _svar_Q=svar.Q, kw...,
+    )
 end

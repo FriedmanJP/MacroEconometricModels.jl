@@ -906,19 +906,18 @@ function den_haan_test(sol::HADSGESolution{T};
     innov = σ .* randn(rng_fit, T, T_fit, 1)
     Y = simulate(sol, T_fit; shock_draws=innov)
 
-    dK = if sol.method === :ssj
-        size(Y, 2) == 1 || error("den_haan_test: expected a single SSJ aggregate output, " *
-                                 "got $(size(Y, 2)); the observation map is not aggregate K.")
+    dK = if size(Y, 2) == 1
         Vector{T}(@view Y[:, 1])
     else
         iK = sol.n_reduced + 1
         size(Y, 2) >= sol.n_reduced + 2 || error(
-            "den_haan_test: Reiter reduced system has $(size(Y, 2)) outputs but capital and " *
-            "TFP are expected at indices $(iK) and $(iK + 1).")
+            "den_haan_test: Reiter reduced system has $(size(Y, 2)) outputs but " *
+            "capital and TFP are expected at indices $(iK) and $(iK + 1).",
+        )
         Vector{T}(@view Y[:, iK])
     end
     # TFP state: read off the Reiter state, else rebuild the AR(1) from its own innovations.
-    z_path = if sol.method === :reiter
+    z_path = if sol.method === :reiter && size(Y, 2) >= sol.n_reduced + 2
         Vector{T}(@view Y[:, sol.n_reduced + 2])
     else
         zp = zeros(T, T_fit)

@@ -110,6 +110,8 @@ dsge_particle_smoother
 
 ### State-Space Moments
 
+`DSGESolution` exposes the dynamic property `.Sigma`, which evaluates the unconditional covariance matrix via `solve_lyapunov(sol.G1, sol.impact)`. `analytical_moments` supports `observable_indices` for moment subsetting, `lags=0` for contemporaneous-only moments, and arbitrary vector lags (`auto_lags`).
+
 ```@docs
 solve_lyapunov
 pruned_state_space
@@ -136,6 +138,8 @@ DETERMINACY_CODES
 ---
 
 ## DSGE GMM Estimation
+
+GMM estimation via empirical IRF matching, Euler equation moments, simulated method of moments (SMM), or closed-form analytical GMM (`method=:analytical_gmm`). For analytical GMM, `bounds` accepts `ParameterTransform` or an `AbstractDict` (e.g. `Dict(:rho => (0.2, 0.95))`), `auto_lags` accepts vector lags, and the data matrix can be supplied either pre-subsetted (``T \times k_{\mathrm{obs}}``) or full (``T \times n_{\mathrm{endog}}``) when `observable_indices` is specified.
 
 ```@docs
 estimate_dsge
@@ -231,6 +235,8 @@ LaborSupply
 ```
 
 ### Heterogeneous-Agent Solvers and Analysis
+
+Reiter and Winberry solutions map to aggregate observables via observation matrices `C_obs` and `D_obs`, expose `sol.variables` (`["K"]` or `["r"]`), and produce aggregate impulse responses with non-zero impact at ``h = 1`` via `D_obs`.
 
 ```@docs
 rouwenhorst

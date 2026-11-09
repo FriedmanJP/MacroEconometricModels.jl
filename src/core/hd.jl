@@ -272,7 +272,17 @@ function historical_decomposition(model::VARModel{T}, horizon::Int=effective_nob
     horizon = min(horizon, T_eff)
 
     actual = model.Y[(model.p + 1):end, :]
-    snames = isnothing(shock_names) ? model.varnames : shock_names
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match " *
+            "nvars ($n)",
+        ))
+        Vector{String}(shock_names)
+    elseif _is_set_identified(method)
+        _default_shock_names(n)
+    else
+        model.varnames
+    end
     if _is_partial(method)
         @warn "historical_decomposition: method=:$method is partially identified; contributions of unidentified shocks are not identified." maxlog = 1
     end
@@ -556,8 +566,16 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
         end
     end
 
-    snames = isnothing(shock_names) ? post.varnames : shock_names
-    # MC honesty (#244): non-stationary / unidentified posterior draws are skipped (valid_count usable).
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        post.varnames
+    end
+    # MC honesty (#244): non-stationary / unidentified posterior draws are
+    # skipped (valid_count usable).
     result = BayesianHistoricalDecomposition{ET}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         post.varnames, snames, q_vec, method,
@@ -671,8 +689,17 @@ function historical_decomposition(model::VARModel{T}, restrictions::SVARRestrict
         end
     end
 
-    snames = isnothing(shock_names) ? model.varnames : shock_names
-    # MC honesty (#244): n_acc rotations survived Arias sign/zero restrictions out of n_draws.
+    snames = if shock_names !== nothing
+        length(shock_names) == nvars(model) || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match " *
+            "nvars ($(nvars(model)))",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(nvars(model))
+    end
+    # MC honesty (#244): n_acc rotations survived Arias sign/zero restrictions
+    # out of n_draws.
     BayesianHistoricalDecomposition{T}(
         contrib_q, contrib_m, initial_q, initial_m, shocks_m, actual, T_eff,
         model.varnames, snames, q_vec, :arias,
@@ -746,27 +773,33 @@ function historical_decomposition(model::VARModel{T}, s::SignIdentifiedSet{T},
                          quantiles=quantiles, uniform_unweighted=true)
 end
 
-function historical_decomposition(model::VARModel{T}, s::AriasSVARResult{T},
-                                  horizon::Int=effective_nobs(model);
-                                  quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+function historical_decomposition(
+    model::VARModel{T}, s::AriasSVARResult{T},
+    horizon::Int=effective_nobs(model);
+    quantiles::AbstractVector{<:Real}=[0.16, 0.5, 0.84],
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+) where {T<:AbstractFloat}
     n_acc = length(s.Q_draws)
-    snames = isnothing(shock_names) ? s.varnames : shock_names
-    _bayesian_hd_from_Qs(model, s.Q_draws, s.weights, horizon, s.varnames, snames, :arias,
-                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+    snames = isnothing(shock_names) ? s.shock_names : Vector{String}(shock_names)
+    return _bayesian_hd_from_Qs(
+        model, s.Q_draws, s.weights, horizon, s.varnames, snames, :arias,
+        n_acc, 0; quantiles=quantiles, uniform_unweighted=false,
+    )
 end
 
-function historical_decomposition(model::VARModel{T}, r::UhligSVARResult{T},
-                                  horizon::Int=effective_nobs(model);
-                                  shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
+function historical_decomposition(
+    model::VARModel{T}, r::UhligSVARResult{T},
+    horizon::Int=effective_nobs(model);
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+) where {T<:AbstractFloat}
     T_eff = effective_nobs(model)
     horizon = min(horizon, T_eff)
     actual = model.Y[(model.p + 1):end, :]
     contributions, initial_conditions, shocks = _hd_from_Q(model, r.Q, horizon, actual)
-    snames = isnothing(shock_names) ? r.varnames : shock_names
-    HistoricalDecomposition{T}(
+    snames = isnothing(shock_names) ? r.shock_names : Vector{String}(shock_names)
+    return HistoricalDecomposition{T}(
         contributions, initial_conditions, actual, shocks, T_eff,
-        r.varnames, snames, :uhlig
+        r.varnames, snames, :uhlig,
     )
 end
 

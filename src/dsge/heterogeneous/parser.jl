@@ -748,7 +748,8 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
         reiter_params = merge(
             Dict{Symbol,T}(k => T(v) for (k, v) in spec.param_values),
             _hh(spec).het_params)
-        G1, impact, n_red, explained, U_k = if _hh(spec).distribution === :winberry
+        (G1, impact, n_red, explained, U_k, C_obs, D_obs) =
+            if _hh(spec).distribution === :winberry
             # Winberry (2018): identical GE closure, but the distribution state is
             # the n_income × n_moments moment vector instead of the SVD-compressed
             # histogram (#356/T257).
@@ -757,12 +758,15 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
                 n_moments=get(kwargs, :n_moments, 3),
                 n_quad=get(kwargs, :n_quad, 4),
                 model=_hh(spec).model, het_params=reiter_params,
-                hh_solver=get(kwargs, :hh_solver, :egm))
+                hh_solver=get(kwargs, :hh_solver, :egm),
+            )
         else
             _reiter_linearize(
-                ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income; n_reduced=n_reduced,
+                ss, _hh(spec).individual, _hh(spec).grid, _hh(spec).income;
+                n_reduced=n_reduced,
                 model=_hh(spec).model, het_params=reiter_params,
-                hh_solver=get(kwargs, :hh_solver, :egm))
+                hh_solver=get(kwargs, :hh_solver, :egm),
+            )
         end
 
         # Build a minimal DSGESolution and HADSGESolution from Reiter output
@@ -795,11 +799,6 @@ function _ha_solve(spec::ModelSpec{T}; method::Symbol=:ssj,
         # n_a·n_e, so the projection guard always failed and distribution IRFs were
         # identically zero.
         reduction_basis = U_k
-        # Reiter reports the reduced system in its own coordinates (K and Z are
-        # explicit states), so the observation map is the identity with no
-        # feed-through — carried explicitly, not silently zeroed (#227).
-        C_obs = Matrix{T}(I, n_sys, n_sys)
-        D_obs = zeros(T, n_sys, size(impact, 2))
         return HADSGESolution{T}(ss, dsge_sol, :reiter, spec, reduction_basis,
                                   _hh(spec).grid.total_individual_states, n_red,
                                   explained, nothing, C_obs, D_obs)

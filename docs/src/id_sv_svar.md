@@ -94,6 +94,8 @@ Convergence is declared on parameter stabilization (max change in ``\phi``, rela
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
+| `varnames` | `Union{Nothing, Vector{String}}` | `nothing` | Variable display names (default: `y1`, `y2`, ...) |
+| `shock_names` | `Union{Nothing, Vector{String}}` | `nothing` | Structural shock labels (default: `Shock 1`, `Shock 2`, ...) |
 | `hetero` | `AbstractVector{Bool}` | All true | Flags shocks with AR(1) log-vol |
 | `smoother` | `Symbol` | `:ksc` | Only supported smoother (anything else throws) |
 | `maxiter` | `Int` | `500` | Maximum EM iterations |
@@ -105,6 +107,7 @@ Convergence is declared on parameter stabilization (max change in ``\phi``, rela
 | `phi_init` | `Real` | `0.9` | Starting persistence |
 | `s_init` | `Real` | `0.2` | Starting volatility-of-volatility |
 | `theta_grid` | `Int` | `12` | Givens-grid density for start globalization (0 disables) |
+| `c` | `Real` | `1e-5` | Offset constant for log-squared innovation transformation |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Haar starts and mixture draws (pass `Xoshiro` for reproducibility) |
 
 | Field | Type | Description |
@@ -120,6 +123,9 @@ Convergence is declared on parameter stabilization (max change in ``\phi``, rela
 | `loglik` | `Vector{T}` | Diagnostic log-likelihood path |
 | `converged` | `Bool` | Parameter stabilization within `maxiter` |
 | `iters` | `Int` | EM iterations run |
+| `message` | `String` | Status message or convergence diagnostic |
+| `varnames` | `Vector{String}` | Endogenous variable display names |
+| `shock_names` | `Vector{String}` | Structural shock labels |
 
 ---
 

@@ -32,7 +32,7 @@ using Random
 # (K and Z are explicit states), so its coordinate names are reported.
 function _ha_obs_names(sol::HADSGESolution)
     n_out = size(sol.C_obs, 1)
-    if sol.method === :ssj
+    if sol.method in (:ssj, :reiter)
         name = _hh(sol.spec).model === :huggett ? "r" : "K"
         return n_out == 1 ? [name] : ["obs_$i" for i in 1:n_out]
     else
@@ -41,6 +41,18 @@ function _ha_obs_names(sol::HADSGESolution)
                ["x_$i" for i in 1:n_out]
     end
 end
+
+function Base.getproperty(sol::HADSGESolution, s::Symbol)
+    if s === :variables
+        return _ha_obs_names(sol)
+    end
+    return getfield(sol, s)
+end
+
+function Base.propertynames(sol::HADSGESolution, private::Bool=false)
+    return (fieldnames(typeof(sol))..., :variables)
+end
+
 
 """
     irf(sol::HADSGESolution{T}, horizon::Int; kwargs...) -> ImpulseResponse{T}
@@ -56,6 +68,7 @@ IRF sequence `h[k]` of the output: the impact (`h=1`) is the direct feed-through
 """
 function irf(sol::HADSGESolution{T}, horizon::Int;
              ci_type::Symbol=:none, kwargs...) where {T<:AbstractFloat}
+    horizon <= 0 && throw(ArgumentError("horizon must be positive; got $horizon"))
     lsol = sol.linear_solution
     G1 = lsol.G1
     B = lsol.impact

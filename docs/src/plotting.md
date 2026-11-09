@@ -90,6 +90,39 @@ The keyword vocabulary is standardized — these names carry these exact meaning
 
 The docstrings for `plot_result`, `PlotOutput`, `save_plot`, and `display_plot` are catalogued on the [Visualization API](@ref api_visualization) page. Rendering is orthogonal to result display: `set_display_backend`, `with_display_backend`, and the `table`/`long_table` tidy exports on the [Utilities & Display API](@ref api_utilities) page govern how `report()` and tabular output appear, and never affect `plot_result`.
 
+### Grid Layout and Scoping
+
+The default grid layout automatically determines the number of columns `ncols`:
+- **Single-shock multi-variable plots**: `ncols = min(n_vars, 3)`. A single variable renders at full width (`100%`), two variables render at half width (`50%`), and three or more variables render at one-third width (`33%`).
+- **All-shocks matrix IRF grids**: `ncols = n_shocks`. Multi-shock grids enforce strict **row-major ordering** (variables along rows, shocks along columns) with panel titles formatted as `"var ← shock"`.
+- **Historical decomposition**: `ncols = 2`. Displays the shock contribution stacked-bar chart side-by-side with the actual/reconstructed series.
+- **OccBin**: `ncols = min(n_vars, 3)`.
+
+Layout width is scoped dynamically per figure container using CSS custom properties:
+
+```css
+.panel-grid {
+    --mem-panel-width: $(col_width);
+}
+.panel {
+    width: calc(var(--mem-panel-width, 100%) - 16px);
+}
+```
+
+This isolates column widths per `.panel-grid` so multiple figures embedded on the same page never collide. Inlined JavaScript includes a single-injection guard (`if (typeof window.d3 === 'undefined')`) to prevent duplicate D3 loading across fragments.
+
+### Multi-Plot Batch Saving and Display
+
+Multiple figures can be bundled and saved into a single self-contained HTML page:
+- `save_plot(plots::AbstractVector{PlotOutput}, path::String; title="...")`
+- `save_plot(plots::Tuple{Vararg{PlotOutput}}, path::String; kwargs...)`
+
+Similarly, `display_plot` accepts vectors and tuples of `PlotOutput` objects:
+- `display_plot(plots::AbstractVector{PlotOutput}; kwargs...)`
+- `display_plot(plots::Tuple{Vararg{PlotOutput}}; kwargs...)`
+
+D3.js, shared tooltips, and styles are injected once in the combined page, eliminating asset bloat while keeping each figure's grid scoping intact.
+
 ---
 
 ## Type-specific views and keywords

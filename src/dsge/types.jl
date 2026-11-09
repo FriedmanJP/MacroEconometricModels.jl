@@ -96,6 +96,17 @@ struct DSGESolution{T<:AbstractFloat}
     linear::LinearDSGE{T}
 end
 
+function Base.getproperty(sol::DSGESolution, s::Symbol)
+    if s === :Sigma
+        return solve_lyapunov(sol.G1, sol.impact)
+    end
+    return getfield(sol, s)
+end
+
+function Base.propertynames(sol::DSGESolution, private::Bool=false)
+    return (fieldnames(typeof(sol))..., :Sigma)
+end
+
 # Accessors
 nvars(sol::DSGESolution) = sol.spec.n_endog
 

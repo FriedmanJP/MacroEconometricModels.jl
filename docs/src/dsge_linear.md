@@ -59,7 +59,7 @@ plot_result(decomp)
 **Recipe 3: Unconditional moments via the Lyapunov equation**
 
 ```@example dsge_linear
-Σ = solve_lyapunov(sol.G1, sol.impact)
+Σ = sol.Sigma                      # dynamic property evaluating solve_lyapunov(sol.G1, sol.impact)
 round.(sqrt.(diag(Σ)); digits=4)   # unconditional std of Y, C, K, A
 ```
 
@@ -362,6 +362,7 @@ All three linear solvers return a `DSGESolution{T}` with the following fields:
 | `eigenvalues` | `Vector{ComplexF64}` | Eigenvalues of ``G_1`` — the *solved* transition matrix, not the model pencil |
 | `spec` | `ModelSpec{T}` | Back-reference to model specification |
 | `linear` | `LinearDSGE{T}` | Linearized system (``\Gamma_0, \Gamma_1, C, \Psi, \Pi``) |
+| `Sigma` | `Matrix{T}` | Unconditional covariance matrix ``\Sigma`` (dynamic property evaluating `solve_lyapunov(sol.G1, sol.impact)`) |
 
 Accessor functions:
 
@@ -550,18 +551,27 @@ Output has an unconditional variance of ``1.15 \times 10^{-2}`` and consumption 
 The `analytical_moments` function extracts a moment vector in a format compatible with `autocovariance_moments(data, lags)`, enabling direct comparison between model-implied and data moments for GMM estimation:
 
 ```@example dsge_linear
+# Full-system moments with 2 lags
 m = analytical_moments(sol; lags=2)
-length(m)
+
+# Contemporaneous-only moments (lags=0) subset to first 2 observables
+m_sub0 = analytical_moments(sol; lags=0, observable_indices=[1, 2])
+(n_full = length(m), n_sub0 = length(m_sub0))
 ```
 
 The moment vector contains:
-1. Upper triangle of the variance-covariance matrix: ``k(k+1)/2`` elements
-2. Diagonal autocovariances ``\text{diag}(G_1^h \, \Sigma)`` at each lag ``h = 1, \ldots, \text{lags}``: ``k`` elements per lag
+1. Upper triangle of the variance-covariance matrix: ``k_{\mathrm{obs}}(k_{\mathrm{obs}}+1)/2`` elements from ``\Sigma`` (`sol.Sigma`)
+2. Diagonal autocovariances ``\text{diag}(G_1^h \, \Sigma)`` at each lag ``h \in \text{lags}``: ``k_{\mathrm{obs}}`` elements per lag
 
-With ``k = 4`` variables and two lags that is ``10 + 4 + 4 = 18`` moments, which is what `length(m)` reports.
+With ``k = 4`` variables and two lags that is ``10 + 4 + 4 = 18`` moments. With ``k_{\mathrm{obs}} = 2`` observables and ``\text{lags} = 0`` (contemporaneous only), it returns ``2(2+1)/2 = 3`` moments.
+
+| Keyword | Type | Default | Description |
+|---------|------|---------|-------------|
+| `lags` | `Union{Integer, AbstractVector{<:Integer}}` | `1` | Number of lags or specific lag vector; `0` computes contemporaneous moments only |
+| `observable_indices` | `Union{Nothing, AbstractVector{<:Integer}}` | `nothing` | Subset of endogenous variable indices to include |
 
 !!! note "Technical Note"
-    `analytical_moments` extracts the upper triangle of ``\Sigma`` (``k(k+1)/2`` elements) followed by diagonal autocovariances at each lag. This format matches `autocovariance_moments(data, lags)`, enabling direct comparison between model-implied and data moments for GMM estimation (see [Estimation](@ref dsge_estimation)).
+    `analytical_moments` extracts the upper triangle of ``\Sigma`` (``k_{\mathrm{obs}}(k_{\mathrm{obs}}+1)/2`` elements) followed by diagonal autocovariances at each lag. This format matches `autocovariance_moments(data, lags)`, enabling direct comparison between model-implied and data moments for GMM estimation (see [Estimation](@ref dsge_estimation)). The unconditional covariance matrix is also directly accessible via `sol.Sigma`.
 
 ---
 

@@ -16,6 +16,10 @@ using LinearAlgebra
 # Result
 # =============================================================================
 
+function _svec_default_shock_names(n_perm::Integer, n_trans::Integer)
+    return vcat(["P$i" for i in 1:n_perm], ["T$i" for i in 1:n_trans])
+end
+
 """
     SVECResult{T} <: AbstractAnalysisResult
 
@@ -30,6 +34,7 @@ impact (`Ξ B₀` has `r` zero columns).
 - `n_permanent`: number of common trends ``n - r``
 - `vecm`: the estimated [`VECMModel`](@ref)
 - `identification`: [`IdentificationStatus`](@ref)
+- `shock_names`: shock labels (default `P1..Pk, T1..Tr`)
 """
 struct SVECResult{T<:AbstractFloat} <: AbstractAnalysisResult
     B0::Matrix{T}
@@ -38,6 +43,26 @@ struct SVECResult{T<:AbstractFloat} <: AbstractAnalysisResult
     n_permanent::Int
     vecm::VECMModel{T}
     identification::IdentificationStatus
+    shock_names::Vector{String}
+end
+
+# Backward-compatible 6-arg constructor
+function SVECResult{T}(
+    B0::Matrix{T}, Q::Matrix{T}, Xi::Matrix{T},
+    n_permanent::Int, vecm::VECMModel{T},
+    identification::IdentificationStatus,
+) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    snames = _svec_default_shock_names(n_permanent, n - n_permanent)
+    return SVECResult{T}(B0, Q, Xi, n_permanent, vecm, identification, snames)
+end
+
+function SVECResult(
+    B0::Matrix{T}, Q::Matrix{T}, Xi::Matrix{T},
+    n_permanent::Int, vecm::VECMModel{T},
+    identification::IdentificationStatus,
+) where {T<:AbstractFloat}
+    return SVECResult{T}(B0, Q, Xi, n_permanent, vecm, identification)
 end
 
 function Base.show(io::IO, r::SVECResult{T}) where {T}
@@ -54,8 +79,7 @@ function Base.show(io::IO, r::SVECResult{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r])
     names = r.vecm.varnames
-    snames = vcat(["P$i" for i in 1:r.n_permanent],
-                  ["T$i" for i in 1:(n - r.n_permanent)])
+    snames = r.shock_names
     _matrix_table(io, r.B0, "Impact B₀"; row_labels=names, col_labels=snames)
     _matrix_table(io, r.Xi * r.B0, "Long-run ΞB₀"; row_labels=names, col_labels=snames)
     return nothing
@@ -272,6 +296,7 @@ with the KPSW transitory-zero columns of ``Ξ B_0``; a complete `pattern` that
 already encodes those columns is left unchanged.
 """
 function identify_svec(vecm::VECMModel{T};
+                       shock_names::Union{Nothing,Vector{String}}=nothing,
                        long_run_zeros=nothing,
                        short_run_zeros=nothing,
                        pattern=nothing,
@@ -281,6 +306,14 @@ function identify_svec(vecm::VECMModel{T};
     n = nvars(vecm)
     r = vecm.rank
     n_perm = n - r
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _svec_default_shock_names(n_perm, n - n_perm)
+    end
     Psi = _svec_psi(vecm)
     Xi = _svec_xi(vecm.alpha, vecm.beta, Psi)
     Sigma = Matrix{T}(vecm.Sigma)
@@ -291,8 +324,10 @@ function identify_svec(vecm::VECMModel{T};
         B0 = _svec_kpsw_B0(vecm.alpha, vecm.beta, Sigma, Xi)
         L = safe_cholesky(Sigma)
         Q = L \ B0
-        return SVECResult{T}(Matrix{T}(B0), Matrix{T}(Q), Matrix{T}(Xi),
-                             n_perm, vecm, _svec_default_status(n, n_perm))
+        return SVECResult{T}(
+            Matrix{T}(B0), Matrix{T}(Q), Matrix{T}(Xi),
+            n_perm, vecm, _svec_default_status(n, n_perm), snames,
+        )
     end
 
     pat = _svec_resolve_pattern(n, n_perm, pattern, long_run_zeros,
@@ -301,8 +336,10 @@ function identify_svec(vecm::VECMModel{T};
     svar = estimate_svar(var, pat; n_starts=n_starts, max_iter=max_iter,
                          rng=rng, long_run_matrix=Xi)
     B0 = svar.A \ svar.B
-    SVECResult{T}(Matrix{T}(B0), Matrix{T}(svar.Q), Matrix{T}(Xi),
-                  n_perm, vecm, svar.identification)
+    return SVECResult{T}(
+        Matrix{T}(B0), Matrix{T}(svar.Q), Matrix{T}(Xi),
+        n_perm, vecm, svar.identification, snames,
+    )
 end
 
 # =============================================================================

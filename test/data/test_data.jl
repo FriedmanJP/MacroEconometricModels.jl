@@ -321,6 +321,289 @@ using Test
             @test_throws BoundsError d[:, 4]
         end
 
+        # ---------------------------------------------------------------------
+        # TimeSeriesData 2D Indexing (#877)
+        # ---------------------------------------------------------------------
+        @testset "TimeSeriesData 2D Indexing (#877)" begin
+            rng2d = Xoshiro(877)
+            raw_mat = randn(rng2d, 10, 3)
+            date_list = [
+                "2020-01", "2020-02", "2020-03", "2020-04", "2020-05",
+                "2020-06", "2020-07", "2020-08", "2020-09", "2020-10",
+            ]
+            d2d = TimeSeriesData(
+                raw_mat;
+                varnames=["GDP", "CPI", "FFR"],
+                frequency=Monthly,
+                tcode=[5, 5, 2],
+                desc="US Macroeconomic Indicators",
+                vardesc=Dict(
+                    "GDP" => "Real Gross Domestic Product",
+                    "CPI" => "Consumer Price Index",
+                ),
+                source_refs=[:FRED, :BEA],
+                dates=date_list,
+            )
+            d_nodates = TimeSeriesData(
+                raw_mat;
+                varnames=["GDP", "CPI", "FFR"],
+                frequency=Monthly,
+            )
+
+            # --- Dimension 1: Exact Algebraic & Metadata Invariants ---
+            @testset "D1: Metadata Invariants & Mutation Isolation" begin
+                # D1.1: All 11 metadata fields preserved in sub-container
+                sub = d2d[2:4, [3, 1]]
+                @test sub isa TimeSeriesData{Float64}
+                @test sub.data == raw_mat[2:4, [3, 1]]
+                @test sub.varnames == ["FFR", "GDP"]
+                @test sub.tcode == [2, 5]
+                @test sub.time_index == [2, 3, 4]
+                @test sub.T_obs == 3
+                @test sub.n_vars == 2
+                @test sub.frequency == Monthly
+                @test sub.desc == ["US Macroeconomic Indicators"]
+                @test sub.vardesc == Dict("GDP" => "Real Gross Domestic Product")
+                @test sub.source_refs == [:FRED, :BEA]
+                @test sub.dates == ["2020-02", "2020-03", "2020-04"]
+
+                # D1.2: Empty dates preservation
+                sub_nd = d_nodates[1:5, 1:2]
+                @test sub_nd.dates == String[]
+                @test isempty(sub_nd.dates)
+
+                # D1.3: Mutation isolation
+                sub.data[1, 1] = 999.0
+                @test d2d.data[2, 3] != 999.0
+                sub.desc[1] = "Mutated description"
+                @test d2d.desc[1] == "US Macroeconomic Indicators"
+
+                # D1.4: Reverse order
+                sub_rev = d2d[5:-1:1, 3:-1:1]
+                @test sub_rev.time_index == d2d.time_index[5:-1:1]
+                @test sub_rev.varnames == ["FFR", "CPI", "GDP"]
+                @test sub_rev.tcode == [2, 5, 5]
+                @test sub_rev.dates == d2d.dates[5:-1:1]
+
+                # D1.5: 1x1 sub-container
+                sub_1x1 = d2d[1:1, 1:1]
+                @test sub_1x1 isa TimeSeriesData
+                @test nobs(sub_1x1) == 1
+                @test nvars(sub_1x1) == 1
+                @test sub_1x1.varnames == ["GDP"]
+                @test sub_1x1.data[1, 1] == raw_mat[1, 1]
+            end
+
+            # --- Dimension 2: Property Round-Trip & Downstream Invariants ---
+            @testset "D2: Property Round-Trip & Downstream Compatibility" begin
+                # D2.1: to_matrix consistency
+                @test to_matrix(d2d[3:7, 1:2]) == to_matrix(d2d)[3:7, 1:2]
+
+                # D2.2: estimate_var compatibility
+                rng_dgp = Xoshiro(999)
+                dgp_res = dgp_var(rng_dgp; T=200)
+                ts_var = TimeSeriesData(
+                    dgp_res.Y;
+                    varnames=["y1", "y2", "y3"],
+                    frequency=Quarterly,
+                )
+                ts_sliced = ts_var[1:150, [:y1, :y2]]
+                m = estimate_var(ts_sliced, 1)
+                @test m.varnames == ["y1", "y2"]
+                @test m.p == 1
+
+                # D2.3: apply_tcode commute on column slice
+                @test apply_tcode(d2d[:, 1:2]).data == apply_tcode(d2d).data[:, 1:2]
+
+                # D2.4: Boolean mask filtering
+                mask = d2d[:, :GDP] .> 0.0
+                sub_mask = d2d[mask, :]
+                @test sub_mask.data == d2d.data[findall(mask), :]
+                @test sub_mask.dates == d2d.dates[findall(mask)]
+            end
+
+            # --- Dimension 3: Type Stability & Return Signatures (@inferred) ---
+            @testset "D3: Type Stability (@inferred)" begin
+                mat32 = randn(rng2d, Float32, 10, 3)
+                d32 = TimeSeriesData(mat32; varnames=["GDP", "CPI", "FFR"])
+
+                # D3.1: Sub-container 2D slice
+                r1 = @inferred d2d[1:5, 1:2]
+                @test r1 isa TimeSeriesData{Float64}
+
+                # D3.2: Float32 container
+                r2 = @inferred d32[1:5, 1:2]
+                @test r2 isa TimeSeriesData{Float32}
+
+                # D3.3: Column slice (Integer)
+                r3 = @inferred d2d[1:5, 1]
+                @test r3 isa Vector{Float64}
+
+                # D3.4: Column slice (String)
+                r4 = @inferred d2d[1:5, "GDP"]
+                @test r4 isa Vector{Float64}
+
+                # D3.5: Column slice (Symbol)
+                r5 = @inferred d2d[1:5, :GDP]
+                @test r5 isa Vector{Float64}
+
+                # D3.6: Row slice (Integer)
+                r6 = @inferred d2d[1, 1:2]
+                @test r6 isa Vector{Float64}
+
+                # D3.7: Row slice (Date)
+                r7 = @inferred d2d["2020-01", 1:2]
+                @test r7 isa Vector{Float64}
+
+                # D3.8: Scalar element
+                r8 = @inferred d2d[1, 1]
+                @test r8 isa Float64
+
+                # D3.9: Array interface axes
+                r9 = @inferred axes(d2d)
+                @test r9 == (Base.OneTo(10), Base.OneTo(3))
+
+                # D3.10: Array interface lastindex
+                r10 = @inferred lastindex(d2d, 1)
+                @test r10 == 10
+            end
+
+            # --- Dimension 4: Concrete @test_throws Error Paths ---
+            @testset "D4: Bounds and Argument Error Paths" begin
+                # D4.1: Row integer lower bound
+                @test_throws BoundsError d2d[0, :]
+                @test_throws BoundsError d2d[-1, 1]
+
+                # D4.2: Row integer upper bound
+                @test_throws BoundsError d2d[d2d.T_obs + 1, :]
+
+                # D4.3: Row range out of bounds
+                @test_throws BoundsError d2d[0:5, :]
+                @test_throws BoundsError d2d[1:(d2d.T_obs + 1), :]
+
+                # D4.4: Col integer lower bound
+                @test_throws BoundsError d2d[:, 0]
+                @test_throws BoundsError d2d[1, 0]
+
+                # D4.5: Col integer upper bound
+                @test_throws BoundsError d2d[:, d2d.n_vars + 1]
+
+                # D4.6: Col range out of bounds
+                @test_throws BoundsError d2d[:, 0:2]
+                @test_throws BoundsError d2d[:, 1:(d2d.n_vars + 1)]
+
+                # D4.7: Unknown var (String)
+                @test_throws ArgumentError d2d[:, "FOO"]
+                @test_throws ArgumentError d2d[1:5, "FOO"]
+
+                # D4.8: Unknown var (Symbol)
+                @test_throws ArgumentError d2d[:, :FOO]
+                @test_throws ArgumentError d2d[1:5, :FOO]
+
+                # D4.9: Unknown var in vector
+                @test_throws ArgumentError d2d[:, ["GDP", "FOO"]]
+                @test_throws ArgumentError d2d[:, [:GDP, :FOO]]
+
+                # D4.10: Unknown date string
+                @test_throws ArgumentError d2d["1900Q1", :]
+                @test_throws ArgumentError d2d["1900Q1", 1]
+                @test_throws ArgumentError d2d[["2020-01", "1900Q1"], :]
+
+                # D4.11: Date indexing without dates
+                @test_throws ArgumentError d_nodates["2020-01", :]
+
+                # D4.12: Row mask length mismatch
+                @test_throws ArgumentError d2d[Bool[true, false], :]
+
+                # D4.13: Col mask length mismatch
+                @test_throws ArgumentError d2d[:, Bool[true]]
+
+                # D4.14: Empty row integer slice
+                @test_throws ArgumentError d2d[Int[], :]
+                @test_throws ArgumentError d2d[1:0, :]
+
+                # D4.15: Empty row boolean slice
+                @test_throws ArgumentError d2d[falses(d2d.T_obs), :]
+
+                # D4.16: Empty row date slice
+                @test_throws ArgumentError d2d[String[], :]
+
+                # D4.17: Empty col integer slice
+                @test_throws ArgumentError d2d[:, Int[]]
+                @test_throws ArgumentError d2d[:, 1:0]
+
+                # D4.18: Empty col string slice
+                @test_throws ArgumentError d2d[:, String[]]
+
+                # D4.19: Empty col symbol slice
+                @test_throws ArgumentError d2d[:, Symbol[]]
+
+                # D4.20: Empty col boolean slice
+                @test_throws ArgumentError d2d[:, falses(d2d.n_vars)]
+
+                # D4.21: Invalid dimension for axes
+                @test_throws BoundsError axes(d2d, 0)
+                @test_throws BoundsError axes(d2d, -1)
+
+                # D4.22: Invalid dimension for lastindex / firstindex
+                @test_throws BoundsError lastindex(d2d, 0)
+                @test_throws BoundsError firstindex(d2d, 0)
+
+                # D4.23: Bool as scalar index
+                @test_throws ArgumentError d2d[true, 1]
+                @test_throws ArgumentError d2d[1, true]
+            end
+
+            # --- Dimension 5: Syntax Lowering & Ergonomics ---
+            @testset "D5: Syntax Lowering & Ergonomics" begin
+                # D5.1: End row range
+                sub_end_r = d2d[end-2:end, :]
+                @test nobs(sub_end_r) == 3
+                @test sub_end_r.dates == ["2020-08", "2020-09", "2020-10"]
+
+                # D5.2: End col range
+                sub_end_c = d2d[:, end-1:end]
+                @test nvars(sub_end_c) == 2
+                @test varnames(sub_end_c) == ["CPI", "FFR"]
+
+                # D5.3: End scalar element
+                @test d2d[end, end] == raw_mat[10, 3]
+
+                # D5.4: Symbol vector column selection
+                sub_sym = d2d[1:4, [:CPI, :FFR]]
+                @test varnames(sub_sym) == ["CPI", "FFR"]
+                @test sub_sym.data == raw_mat[1:4, [2, 3]]
+
+                # D5.5: Boolean row + Symbol col
+                sub_bool_sym = d2d[d2d[:, :GDP] .> 0.0, [:GDP, :CPI]]
+                @test sub_bool_sym isa TimeSeriesData
+                @test varnames(sub_bool_sym) == ["GDP", "CPI"]
+
+                # D5.6: Date row + Symbol col scalar
+                @test d2d["2020-01", :GDP] == raw_mat[1, 1]
+
+                # D5.7: Date row + String col scalar
+                @test d2d["2020-01", "GDP"] == raw_mat[1, 1]
+
+                # D5.8: Array interface methods
+                @test axes(d2d) == (Base.OneTo(10), Base.OneTo(3))
+                @test axes(d2d, 1) == Base.OneTo(10)
+                @test axes(d2d, 2) == Base.OneTo(3)
+                @test axes(d2d, 3) == Base.OneTo(1)
+                @test firstindex(d2d) == 1
+                @test firstindex(d2d, 1) == 1
+                @test firstindex(d2d, 2) == 1
+                @test firstindex(d2d, 3) == 1
+                @test lastindex(d2d) == 30
+                @test lastindex(d2d, 1) == 10
+                @test lastindex(d2d, 2) == 3
+                @test lastindex(d2d, 3) == 1
+                @test size(d2d, 1) == 10
+                @test size(d2d, 2) == 3
+                @test size(d2d, 3) == 1
+            end
+        end
+
         @testset "CrossSectionData indexing" begin
             cs = CrossSectionData(randn(10, 2); varnames=["a", "b"])
             @test length(cs[:, "a"]) == 10

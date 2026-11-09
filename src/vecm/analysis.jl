@@ -19,8 +19,12 @@ function _vecm_svec_ident_kwargs(kwargs)
     Pair{Symbol,Any}[k => kwargs[k] for k in _SVEC_IDENT_KW if haskey(kwargs, k)]
 end
 
+function _filter_shock_names(kwargs)
+    return pairs(NamedTuple(k => v for (k, v) in pairs(kwargs) if k !== :shock_names))
+end
+
 function _vecm_svec_Q(vecm::VECMModel{T}; kwargs...) where {T}
-    identify_svec(vecm; _vecm_svec_ident_kwargs(kwargs)...).Q
+    return identify_svec(vecm; _vecm_svec_ident_kwargs(kwargs)...).Q
 end
 
 function _vecm_reject_svec_ci(kwargs, method::Symbol)
@@ -44,13 +48,23 @@ corresponding column of ``Ξ B_0``. `ci_type=:bootstrap` and
 `ci_type=:theoretical` throw `ArgumentError` on those methods: the levels-VAR
 resampler would inject a frozen SVEC rotation into every draw.
 """
-function irf(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+function irf(
+    vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...,
+) where {T}
     if method === :svec || method === :long_run
         _vecm_reject_svec_ci(kwargs, method)
         Q = _vecm_svec_Q(vecm; kwargs...)
-        return irf(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+        snames = get(
+            kwargs, :shock_names,
+            _svec_default_shock_names(nvars(vecm) - vecm.rank, vecm.rank),
+        )
+        other_kw = _filter_shock_names(kwargs)
+        return irf(
+            to_var(vecm), horizon; method=:svec, _svec_Q=Q,
+            shock_names=snames, other_kw...,
+        )
     end
-    irf(to_var(vecm), horizon; method=method, kwargs...)
+    return irf(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 """
@@ -59,27 +73,93 @@ end
 Compute FEVD for a VECM by converting to VAR representation.
 `method=:svec` and `method=:long_run` use [`identify_svec`](@ref).
 """
-function fevd(vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...) where {T}
+function fevd(
+    vecm::VECMModel{T}, horizon::Int; method::Symbol=:cholesky, kwargs...,
+) where {T}
     if method === :svec || method === :long_run
         Q = _vecm_svec_Q(vecm; kwargs...)
-        return fevd(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+        snames = get(
+            kwargs, :shock_names,
+            _svec_default_shock_names(nvars(vecm) - vecm.rank, vecm.rank),
+        )
+        other_kw = _filter_shock_names(kwargs)
+        return fevd(
+            to_var(vecm), horizon; method=:svec, _svec_Q=Q,
+            shock_names=snames, other_kw...,
+        )
     end
-    fevd(to_var(vecm), horizon; method=method, kwargs...)
+    return fevd(to_var(vecm), horizon; method=method, kwargs...)
 end
 
 """
-    historical_decomposition(vecm::VECMModel, horizon; method=:cholesky, kwargs...) -> HistoricalDecomposition
+    historical_decomposition(vecm::VECMModel, horizon; method=:cholesky, kwargs...) ->
+        HistoricalDecomposition
 
 Compute historical decomposition for a VECM by converting to VAR representation.
 `method=:svec` and `method=:long_run` use [`identify_svec`](@ref).
 """
-function historical_decomposition(vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm);
-                                  method::Symbol=:cholesky, kwargs...) where {T}
+function historical_decomposition(
+    vecm::VECMModel{T}, horizon::Int=effective_nobs(vecm);
+    method::Symbol=:cholesky, kwargs...,
+) where {T}
     if method === :svec || method === :long_run
         Q = _vecm_svec_Q(vecm; kwargs...)
-        return historical_decomposition(to_var(vecm), horizon; method=:svec, _svec_Q=Q, kwargs...)
+        snames = get(
+            kwargs, :shock_names,
+            _svec_default_shock_names(nvars(vecm) - vecm.rank, vecm.rank),
+        )
+        other_kw = _filter_shock_names(kwargs)
+        return historical_decomposition(
+            to_var(vecm), horizon; method=:svec, _svec_Q=Q,
+            shock_names=snames, other_kw...,
+        )
     end
-    historical_decomposition(to_var(vecm), horizon; method=method, kwargs...)
+    return historical_decomposition(to_var(vecm), horizon; method=method, kwargs...)
+end
+
+"""
+    irf(svec::SVECResult, horizon::Int; kwargs...) -> ImpulseResponse
+
+Compute IRFs directly from a [`SVECResult`](@ref).
+"""
+function irf(svec::SVECResult, horizon::Int; kwargs...)
+    snames = get(kwargs, :shock_names, svec.shock_names)
+    other_kw = _filter_shock_names(kwargs)
+    return irf(
+        to_var(svec.vecm), horizon; method=:svec, _svec_Q=svec.Q,
+        shock_names=snames, other_kw...,
+    )
+end
+
+"""
+    fevd(svec::SVECResult, horizon::Int; kwargs...) -> FEVD
+
+Compute FEVD directly from a [`SVECResult`](@ref).
+"""
+function fevd(svec::SVECResult, horizon::Int; kwargs...)
+    snames = get(kwargs, :shock_names, svec.shock_names)
+    other_kw = _filter_shock_names(kwargs)
+    return fevd(
+        to_var(svec.vecm), horizon; method=:svec, _svec_Q=svec.Q,
+        shock_names=snames, other_kw...,
+    )
+end
+
+"""
+    historical_decomposition(svec::SVECResult, horizon; kwargs...) ->
+        HistoricalDecomposition
+
+Compute historical decomposition directly from a [`SVECResult`](@ref).
+"""
+function historical_decomposition(
+    svec::SVECResult, horizon::Int=effective_nobs(svec.vecm); kwargs...,
+)
+    snames = get(kwargs, :shock_names, svec.shock_names)
+    other_kw = _filter_shock_names(kwargs)
+    return historical_decomposition(
+        to_var(svec.vecm), horizon; method=:svec, _svec_Q=svec.Q,
+        shock_names=snames, other_kw...,
+    )
 end
 
 # =============================================================================
@@ -179,55 +259,104 @@ end
 # Rebuild a VECMModel with β fixed to `beta_r`; α, Γ, μ, Σ re-estimated by OLS.
 # If `alpha_basis` A is given, α is restricted to span(A) (projection) and the
 # short-run/deterministic block is refit holding α fixed.
-function _refit_vecm_beta(m::VECMModel{T}, beta_r::AbstractMatrix{T};
-                          alpha_basis::Union{Nothing,AbstractMatrix{T}}=nothing) where {T}
+function _refit_vecm_beta(
+    m::VECMModel{T},
+    beta_r::AbstractMatrix{T};
+    alpha_basis::Union{Nothing,AbstractMatrix{T}}=nothing,
+    rho_r::Union{Nothing,AbstractVector{T}}=nothing,
+) where {T}
     n = nvars(m); r = m.rank; p = m.p
     mom = _johansen_moments(m)
     Y_lag = mom.Y_lag; dY_lags = mom.dY_lags; dY_eff = mom.dY_eff; T_eff = mom.T_eff
     br = Matrix{T}(beta_r)
-    ecm = Y_lag * br                                   # T_eff × r
+    case = mom.case
 
-    has_const = m.deterministic ∈ (:constant, :trend)
-    has_trend = m.deterministic == :trend
+    local alpha::Matrix{T}
+    local Gamma::Vector{Matrix{T}}
+    local mu::Vector{T}
+    local U::Matrix{T}
 
-    # short-run + deterministic design (no ECM)
-    Xsr = dY_lags
-    has_const && (Xsr = size(Xsr, 2) > 0 ? hcat(Xsr, ones(T, T_eff)) : ones(T, T_eff, 1))
-    has_trend && (Xsr = hcat(Xsr, T.(1:T_eff)))
-
-    RHS = size(Xsr, 2) > 0 ? hcat(ecm, Xsr) : ecm
-    B_full = robust_inv(RHS'RHS) * (RHS' * dY_eff)
-    alpha = Matrix{T}(B_full[1:r, :]')                 # n × r
-
-    if alpha_basis !== nothing
-        A = Matrix{T}(alpha_basis)
-        alpha = A * (robust_inv(A'A) * (A' * alpha))   # project α onto span(A)
-        target = dY_eff - ecm * alpha'
-        if size(Xsr, 2) > 0
-            Bsr = robust_inv(Xsr'Xsr) * (Xsr' * target)
-            U = target - Xsr * Bsr
-            Gamma, mu = _split_shortrun(Bsr, n, p, has_const)
+    if case == 2
+        # Case 2: restricted constant
+        rho = if rho_r !== nothing
+            Vector{T}(rho_r)
         else
-            U = target; Gamma = Matrix{T}[]; mu = zeros(T, n)
+            zeros(T, r)
+        end
+        ecm = Y_lag * br + ones(T, T_eff) * rho'
+        beta_aug = [br; rho']
+        b_norm = beta_aug' * mom.S11 * beta_aug
+        alpha_raw = mom.S01 * beta_aug * robust_inv(Matrix{T}(b_norm))
+        if alpha_basis !== nothing
+            A = Matrix{T}(alpha_basis)
+            alpha = A * (robust_inv(A' * A) * (A' * alpha_raw))
+        else
+            alpha = Matrix{T}(alpha_raw)
+        end
+        mu = vec(alpha * rho)
+        target = dY_eff - ecm * alpha'
+        if size(dY_lags, 2) > 0
+            Bsr = robust_inv(dY_lags' * dY_lags) * (dY_lags' * target)
+            U = target - dY_lags * Bsr
+            Gamma = Matrix{T}[]
+            col = 1
+            for _ in 1:(p-1)
+                push!(Gamma, Matrix{T}(Bsr[col:col+n-1, :]'))
+                col += n
+            end
+        else
+            U = target
+            Gamma = Matrix{T}[]
         end
     else
-        U = dY_eff - RHS * B_full
-        Bsr = size(Xsr, 2) > 0 ? B_full[r+1:end, :] : zeros(T, 0, n)
-        Gamma, mu = _split_shortrun(Bsr, n, p, has_const)
+        ecm = Y_lag * br
+        has_const = case ∈ (2, 3, 4, 5)
+        has_trend = case ∈ (4, 5)
+
+        Xsr = dY_lags
+        if has_const
+            Xsr = size(Xsr, 2) > 0 ? hcat(Xsr, ones(T, T_eff)) : ones(T, T_eff, 1)
+        end
+        has_trend && (Xsr = hcat(Xsr, T.(1:T_eff)))
+
+        RHS = size(Xsr, 2) > 0 ? hcat(ecm, Xsr) : ecm
+        B_full = robust_inv(RHS' * RHS) * (RHS' * dY_eff)
+        alpha = Matrix{T}(B_full[1:r, :]')
+
+        if alpha_basis !== nothing
+            A = Matrix{T}(alpha_basis)
+            alpha = A * (robust_inv(A' * A) * (A' * alpha))
+            target = dY_eff - ecm * alpha'
+            if size(Xsr, 2) > 0
+                Bsr = robust_inv(Xsr' * Xsr) * (Xsr' * target)
+                U = target - Xsr * Bsr
+                Gamma, mu = _split_shortrun(Bsr, n, p, has_const)
+            else
+                U = target; Gamma = Matrix{T}[]; mu = zeros(T, n)
+            end
+        else
+            U = dY_eff - RHS * B_full
+            Bsr = size(Xsr, 2) > 0 ? B_full[r+1:end, :] : zeros(T, 0, n)
+            Gamma, mu = _split_shortrun(Bsr, n, p, has_const)
+        end
     end
 
     Pi = alpha * br'
-    Sigma = (U'U) / T_eff
+    Sigma = (U' * U) / T_eff
     log_det = logdet_safe(Sigma)
+    has_const = case ∈ (2, 3, 4, 5)
+    has_trend = case ∈ (4, 5)
     k_total = r * n + n * n * (p - 1) + (has_const ? n : 0) + (has_trend ? n : 0)
     loglik = -T(T_eff * n / 2) * log(T(2π)) - T(T_eff / 2) * log_det - T(T_eff * n / 2)
     aic_val = log_det + 2 * k_total / T_eff
     bic_val = log_det + k_total * log(T_eff) / T_eff
     hqic_val = log_det + 2 * k_total * log(log(T_eff)) / T_eff
 
-    VECMModel{T}(m.Y, p, r, alpha, br, Pi, Gamma, mu, U, Sigma,
-                 aic_val, bic_val, hqic_val, loglik,
-                 m.deterministic, m.method, m.johansen_result, m.varnames)
+    return VECMModel{T}(
+        m.Y, p, r, alpha, br, Pi, Gamma, mu, U, Sigma,
+        aic_val, bic_val, hqic_val, loglik,
+        m.deterministic, m.method, m.johansen_result, m.varnames,
+    )
 end
 
 # Split a short-run+deterministic OLS coefficient block into (Γ list, μ).
@@ -257,23 +386,44 @@ The returned test carries a re-estimated `restricted_model` whose `β` lies in
 `span(H)`, ready for `irf`/`fevd`/`historical_decomposition`.
 """
 function test_beta_restriction(m::VECMModel{T}, H::AbstractMatrix) where {T<:AbstractFloat}
-    n = nvars(m); r = m.rank
-    r >= 1 || throw(ArgumentError("β restriction test requires cointegrating rank ≥ 1 (got r=$r)"))
+    n = nvars(m)
+    r = m.rank
+    r >= 1 || throw(ArgumentError(
+        "β restriction test requires cointegrating rank ≥ 1 (got r=$r)"
+    ))
     Hc = Matrix{T}(H)
-    size(Hc, 1) == n || throw(DimensionMismatch("H must have $n rows (nvars), got $(size(Hc,1))"))
+    size(Hc, 1) == n || throw(DimensionMismatch(
+        "H must have $n rows (nvars), got $(size(Hc, 1))"
+    ))
     s = size(Hc, 2)
     s >= r || throw(ArgumentError("H must have at least r=$r columns, got s=$s"))
     lam, _, mom = _vecm_unrestricted_eigen(m)
     S10 = Matrix{T}(mom.S01')
-    lamstar, phivecs = _grr_eigen(Hc' * mom.S11 * Hc, Hc' * S10, mom.S00)
+
+    is_augmented = size(mom.S11, 1) == n + 1
+    Hstar = if is_augmented
+        H_aug = zeros(T, n + 1, s + 1)
+        H_aug[1:n, 1:s] .= Hc
+        H_aug[n+1, s+1] = one(T)
+        H_aug
+    else
+        Hc
+    end
+
+    lamstar, phivecs = _grr_eigen(Hstar' * mom.S11 * Hstar, Hstar' * S10, mom.S00)
     df = r * (n - s)
     lr = _vecm_lr(lamstar, lam, r, mom.T_eff)
     pval = _chisq_pvalue(lr, df)
-    beta_r = _phillips_normalize(Hc * phivecs[:, 1:r], r)
-    rmodel = _refit_vecm_beta(m, beta_r)
-    VECMRestrictionTest{T}(:beta, lr, df, pval, r,
+    raw_beta = Hstar * phivecs[:, 1:r]
+    norm_beta = raw_beta * robust_inv(Matrix{T}(raw_beta[1:r, :]))
+    beta_r = Matrix{T}(norm_beta[1:n, :])
+    rho_r = is_augmented ? vec(norm_beta[n+1, :]) : nothing
+    rmodel = _refit_vecm_beta(m, beta_r; rho_r=rho_r)
+    return VECMRestrictionTest{T}(
+        :beta, lr, df, pval, r,
         "β = Hφ (restricted to span(H), s=$s)", beta_r, m.beta,
-        lamstar[1:r], lam[1:r], true, rmodel)
+        lamstar[1:r], lam[1:r], true, rmodel,
+    )
 end
 
 """
@@ -288,21 +438,37 @@ The `restricted_model` keeps the (superconsistent) unrestricted `β` and project
 `α` onto `span(A)`.
 """
 function test_alpha_restriction(m::VECMModel{T}, A::AbstractMatrix) where {T<:AbstractFloat}
-    n = nvars(m); r = m.rank
-    r >= 1 || throw(ArgumentError("α restriction test requires cointegrating rank ≥ 1 (got r=$r)"))
+    n = nvars(m)
+    r = m.rank
+    r >= 1 || throw(ArgumentError(
+        "α restriction test requires cointegrating rank ≥ 1 (got r=$r)"
+    ))
     Ac = Matrix{T}(A)
-    size(Ac, 1) == n || throw(DimensionMismatch("A must have $n rows (nvars), got $(size(Ac,1))"))
+    size(Ac, 1) == n || throw(DimensionMismatch(
+        "A must have $n rows (nvars), got $(size(Ac, 1))"
+    ))
     a = size(Ac, 2)
     a >= r || throw(ArgumentError("A must have at least r=$r columns, got a=$a"))
-    lam, _, mom = _vecm_unrestricted_eigen(m)
+    lam, betavecs, mom = _vecm_unrestricted_eigen(m)
     lamstar = _alpha_restricted_eigen(mom, Ac, r)
     df = r * (n - a)
     lr = _vecm_lr(lamstar, lam, r, mom.T_eff)
     pval = _chisq_pvalue(lr, df)
-    rmodel = _refit_vecm_beta(m, m.beta; alpha_basis=Ac)
-    VECMRestrictionTest{T}(:alpha, lr, df, pval, r,
+
+    is_augmented = size(mom.S11, 1) == n + 1
+    rho_r = if is_augmented
+        raw_beta = betavecs[:, 1:r]
+        norm_beta = raw_beta * robust_inv(Matrix{T}(raw_beta[1:r, :]))
+        vec(norm_beta[n+1, :])
+    else
+        nothing
+    end
+    rmodel = _refit_vecm_beta(m, m.beta; alpha_basis=Ac, rho_r=rho_r)
+    return VECMRestrictionTest{T}(
+        :alpha, lr, df, pval, r,
         "α = Aψ (restricted to span(A), a=$a)", m.beta, m.beta,
-        lamstar[1:r], lam[1:r], true, rmodel)
+        lamstar[1:r], lam[1:r], true, rmodel,
+    )
 end
 
 """
@@ -342,22 +508,45 @@ case); **`df = r(p − r)`**. Setting `b = m.beta` (the estimated β) returns
 `LR ≈ 0`.
 """
 function test_known_beta(m::VECMModel{T}, b::AbstractMatrix) where {T<:AbstractFloat}
-    n = nvars(m); r = m.rank
-    r >= 1 || throw(ArgumentError("known-β test requires cointegrating rank ≥ 1 (got r=$r)"))
+    n = nvars(m)
+    r = m.rank
+    r >= 1 || throw(ArgumentError(
+        "known-β test requires cointegrating rank ≥ 1 (got r=$r)"
+    ))
     bc = Matrix{T}(b)
-    size(bc, 1) == n || throw(DimensionMismatch("b must have $n rows (nvars), got $(size(bc,1))"))
-    size(bc, 2) == r || throw(DimensionMismatch("b must have exactly r=$r columns, got $(size(bc,2))"))
+    size(bc, 1) == n || throw(DimensionMismatch(
+        "b must have $n rows (nvars), got $(size(bc, 1))"
+    ))
+    size(bc, 2) == r || throw(DimensionMismatch(
+        "b must have exactly r=$r columns, got $(size(bc, 2))"
+    ))
     lam, _, mom = _vecm_unrestricted_eigen(m)
     S10 = Matrix{T}(mom.S01')
-    lamstar, _ = _grr_eigen(bc' * mom.S11 * bc, bc' * S10, mom.S00)
+
+    is_augmented = size(mom.S11, 1) == n + 1
+    b_star = if is_augmented
+        b_aug = zeros(T, n + 1, r + 1)
+        b_aug[1:n, 1:r] .= bc
+        b_aug[n+1, r+1] = one(T)
+        b_aug
+    else
+        bc
+    end
+
+    lamstar, phivecs = _grr_eigen(b_star' * mom.S11 * b_star, b_star' * S10, mom.S00)
     df = r * (n - r)
     lr = _vecm_lr(lamstar, lam, r, mom.T_eff)
     pval = _chisq_pvalue(lr, df)
     beta_r = _phillips_normalize(bc, r)
-    rmodel = _refit_vecm_beta(m, beta_r)
-    VECMRestrictionTest{T}(:known_beta, lr, df, pval, r,
+    raw_beta = b_star * phivecs[:, 1:r]
+    norm_beta = raw_beta * robust_inv(Matrix{T}(raw_beta[1:r, :]))
+    rho_r = is_augmented ? vec(norm_beta[n+1, :]) : nothing
+    rmodel = _refit_vecm_beta(m, beta_r; rho_r=rho_r)
+    return VECMRestrictionTest{T}(
+        :known_beta, lr, df, pval, r,
         "β = b (fully known cointegrating space)", beta_r, m.beta,
-        lamstar[1:r], lam[1:r], true, rmodel)
+        lamstar[1:r], lam[1:r], true, rmodel,
+    )
 end
 
 """
@@ -370,22 +559,56 @@ unrestricted Gaussian log-likelihoods, `LR = T (ln|Ω̂_r| − ln|Ω̂_u|) ∼ �
 with **`df = r(p − s) + r(p − a)`**. Non-convergence within `maxiter` sets
 `converged = false` and emits a warning.
 """
-function test_joint_restriction(m::VECMModel{T}, H::AbstractMatrix, A::AbstractMatrix;
-                                maxiter::Int=1000, tol::Real=1e-8) where {T<:AbstractFloat}
-    n = nvars(m); r = m.rank
-    r >= 1 || throw(ArgumentError("joint restriction test requires cointegrating rank ≥ 1 (got r=$r)"))
-    Hc = Matrix{T}(H); Ac = Matrix{T}(A)
-    size(Hc, 1) == n || throw(DimensionMismatch("H must have $n rows, got $(size(Hc,1))"))
-    size(Ac, 1) == n || throw(DimensionMismatch("A must have $n rows, got $(size(Ac,1))"))
-    s = size(Hc, 2); a = size(Ac, 2)
-    (s >= r && a >= r) || throw(ArgumentError("need s ≥ r and a ≥ r (got s=$s, a=$a, r=$r)"))
+function test_joint_restriction(
+    m::VECMModel{T},
+    H::AbstractMatrix,
+    A::AbstractMatrix;
+    maxiter::Int=1000,
+    tol::Real=1e-8,
+) where {T<:AbstractFloat}
+    n = nvars(m)
+    r = m.rank
+    r >= 1 || throw(ArgumentError(
+        "joint restriction test requires cointegrating rank ≥ 1 (got r=$r)"
+    ))
+    Hc = Matrix{T}(H)
+    Ac = Matrix{T}(A)
+    size(Hc, 1) == n || throw(DimensionMismatch(
+        "H must have $n rows, got $(size(Hc, 1))"
+    ))
+    size(Ac, 1) == n || throw(DimensionMismatch(
+        "A must have $n rows, got $(size(Ac, 1))"
+    ))
+    s = size(Hc, 2)
+    a = size(Ac, 2)
+    (s >= r && a >= r) || throw(ArgumentError(
+        "need s ≥ r and a ≥ r (got s=$s, a=$a, r=$r)"
+    ))
 
     lam, betavecs, mom = _vecm_unrestricted_eigen(m)
-    S00 = mom.S00; S11 = mom.S11; S01 = mom.S01; S10 = Matrix{T}(S01'); Teff = mom.T_eff
+    S00 = mom.S00
+    S11 = mom.S11
+    S01 = mom.S01
+    S10 = Matrix{T}(S01')
+    Teff = mom.T_eff
     logdet_u = logdet_safe(S00) + sum(log(one(T) - lam[i]) for i in 1:r)
 
-    # initialize β by projecting the unrestricted β onto span(H)
-    beta = _phillips_normalize(Hc * (robust_inv(Hc'Hc) * (Hc' * betavecs[:, 1:r])), r)
+    is_augmented = size(mom.S11, 1) == n + 1
+    Hstar = if is_augmented
+        H_aug = zeros(T, n + 1, s + 1)
+        H_aug[1:n, 1:s] .= Hc
+        H_aug[n+1, s+1] = one(T)
+        H_aug
+    else
+        Hc
+    end
+    s_star = size(Hstar, 2)
+
+    # initialize β by projecting the unrestricted β onto span(Hstar)
+    beta = _phillips_normalize(
+        Hstar * (robust_inv(Hstar' * Hstar) * (Hstar' * betavecs[:, 1:r])),
+        r,
+    )
     Omega = Matrix{T}(S00)
     ll_prev = T(-Inf)
     converged = false
@@ -396,7 +619,11 @@ function test_joint_restriction(m::VECMModel{T}, H::AbstractMatrix, A::AbstractM
         Oi = robust_inv(Omega)
         bSb = beta' * S11 * beta
         rhs_a = Ac' * Oi * (S01 * beta)
-        psi = reshape(robust_inv(kron(bSb, Ac' * Oi * Ac)) * vec(rhs_a), a, r)
+        psi = reshape(
+            robust_inv(kron(bSb, Ac' * Oi * Ac)) * vec(rhs_a),
+            a,
+            r,
+        )
         alpha = Ac * psi
         Omega = S00 - alpha * (beta' * S10) - (S01 * beta) * alpha' + alpha * bSb * alpha'
         Omega = (Omega + Omega') / 2
@@ -404,11 +631,16 @@ function test_joint_restriction(m::VECMModel{T}, H::AbstractMatrix, A::AbstractM
         # β = Hφ given (α, Ω)
         Oi = robust_inv(Omega)
         aOa = alpha' * Oi * alpha
-        rhs_b = Hc' * S10 * Oi * alpha
-        phi = reshape(robust_inv(kron(aOa, Hc' * S11 * Hc)) * vec(rhs_b), s, r)
-        beta = _phillips_normalize(Hc * phi, r)
+        rhs_b = Hstar' * S10 * Oi * alpha
+        phi = reshape(
+            robust_inv(kron(aOa, Hstar' * S11 * Hstar)) * vec(rhs_b),
+            s_star,
+            r,
+        )
+        beta = _phillips_normalize(Hstar * phi, r)
 
-        Omega = S00 - alpha * (beta' * S10) - (S01 * beta) * alpha' + alpha * (beta' * S11 * beta) * alpha'
+        bSb = beta' * S11 * beta
+        Omega = S00 - alpha * (beta' * S10) - (S01 * beta) * alpha' + alpha * bSb * alpha'
         Omega = (Omega + Omega') / 2
         ll = -logdet_safe(Omega)
         if abs(ll - ll_prev) < tol
@@ -417,14 +649,19 @@ function test_joint_restriction(m::VECMModel{T}, H::AbstractMatrix, A::AbstractM
         end
         ll_prev = ll
     end
-    converged || @warn "test_joint_restriction: switching algorithm did not converge in $maxiter iterations"
+    converged || @warn "test_joint_restriction: switching algorithm did not " *
+        "converge in $maxiter iterations"
 
     lr = max(T(Teff) * (logdet_safe(Omega) - logdet_u), zero(T))
     df = r * (n - s) + r * (n - a)
     pval = _chisq_pvalue(lr, df)
-    beta_r = _phillips_normalize(beta, r)
-    rmodel = _refit_vecm_beta(m, beta_r; alpha_basis=Ac)
-    VECMRestrictionTest{T}(:joint, lr, df, pval, r,
+    beta_norm = _phillips_normalize(beta, r)
+    beta_r = Matrix{T}(beta_norm[1:n, :])
+    rho_r = is_augmented ? vec(beta_norm[n+1, :]) : nothing
+    rmodel = _refit_vecm_beta(m, beta_r; alpha_basis=Ac, rho_r=rho_r)
+    return VECMRestrictionTest{T}(
+        :joint, lr, df, pval, r,
         "Joint β=Hφ (s=$s), α=Aψ (a=$a) via switching", beta_r, m.beta,
-        T[], lam[1:r], converged, rmodel)
+        T[], lam[1:r], converged, rmodel,
+    )
 end

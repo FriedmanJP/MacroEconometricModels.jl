@@ -7,3 +7,4 @@ MacroEconometricModels = "14a6ec33-bcac-448e-845f-2fb6769698f1"
 [compat]
 DataFrames = "1"
 Documenter = "1.0"
+MacroEconometricModels = "1.0"

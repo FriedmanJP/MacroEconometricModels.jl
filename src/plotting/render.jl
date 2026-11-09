@@ -46,9 +46,9 @@ const _MEM_LIGHT_VARS = """
         --mem-tooltip-bg: rgba(0,0,0,0.82);
         --mem-tooltip-ink: #fff;"""
 
-function _render_css(ncols::Int)
+function _render_css(ncols::Int=0)
     col_width = ncols <= 1 ? "100%" : "$(round(Int, 100 / ncols))%"
-    """
+    return """
     /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
        light default, a prefers-color-scheme dark override, and an explicit
        data-theme override the docs toggle stamps on the root element. */
@@ -91,9 +91,10 @@ $(_MEM_LIGHT_VARS)
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: $(col_width);
     }
     .panel {
-        width: calc($col_width - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -187,14 +188,17 @@ end
 # D3 is inlined per fragment (the UMD build reassigns window.d3 idempotently); the
 # shared JS core is guarded so re-inclusion on the same page is a runtime no-op.
 function _render_fragment(; css::String, body::String, scripts::String)
-    """<style>$(css)</style>
+    return """<style>$(css)</style>
 $(body)
-<script>$(_d3_source())</script>
+<script>if (typeof window.d3 === 'undefined') { $(_d3_source()) }</script>
 <script>
 $(_render_js_core())
 $(scripts)
 </script>"""
 end
+
+_render_fragment(p::PlotOutput) = p.fragment
+
 
 # =============================================================================
 # Shared D3.js Core
@@ -1900,9 +1904,11 @@ function _render_body_single(panel::_PanelSpec; title::String="",
     if !isempty(title)
         html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
-    html *= """<div class="panel">
+    html *= """<div class="panel-grid" style="--mem-panel-width: 100%;">
+<div class="panel">
 <div class="panel-title">$(_esc_html(panel.title))</div>
 <div id="$(panel.id)"></div>
+</div>
 </div>"""
     # C7: a cap/figure note must stay visible even on a single-panel figure —
     # _render_body_figure already appends it; the single-panel path must too, or
@@ -1913,16 +1919,17 @@ function _render_body_single(panel::_PanelSpec; title::String="",
     if !isempty(note)
         html *= "\n<div class=\"figure-source\">$(_esc_html(note))</div>"
     end
-    html
+    return html
 end
 
 function _render_body_figure(panels::Vector{_PanelSpec}; title::String="",
-                             source::String="", note::String="")
+                             source::String="", note::String="", ncols::Int=0)
+    col_width = ncols <= 1 ? "100%" : "$(round(Int, 100 / ncols))%"
     html = ""
     if !isempty(title)
         html *= "<div class=\"figure-title\">$(_esc_html(title))</div>\n"
     end
-    html *= "<div class=\"panel-grid\">\n"
+    html *= "<div class=\"panel-grid\" style=\"--mem-panel-width: $(col_width);\">\n"
     for p in panels
         html *= """<div class="panel">
 <div class="panel-title">$(_esc_html(p.title))</div>
@@ -1936,7 +1943,7 @@ function _render_body_figure(panels::Vector{_PanelSpec}; title::String="",
     if !isempty(note)
         html *= "<div class=\"figure-source\">$(_esc_html(note))</div>\n"
     end
-    html
+    return html
 end
 
 # =============================================================================
@@ -1957,14 +1964,15 @@ function _make_plot(panels::Vector{_PanelSpec}; title::String="",
     if length(panels) == 1
         body = _render_body_single(panels[1]; title=title, source=source, note=note)
     else
-        body = _render_body_figure(panels; title=title, source=source, note=note)
+        body = _render_body_figure(panels; title=title, source=source,
+                                   note=note, ncols=ncols)
     end
     scripts = join([p.js for p in panels], "\n")
 
     doc_title = isempty(title) ? "MacroEconometricModels Plot" : title
     html = _render_html(; title=doc_title, css=css, body=body, scripts=scripts)
     fragment = _render_fragment(; css=css, body=body, scripts=scripts)
-    PlotOutput(html, fragment)
+    return PlotOutput(html, fragment)
 end
 
 # =============================================================================
@@ -1986,7 +1994,88 @@ function save_plot(p::PlotOutput, path::String)
     open(path, "w") do f
         write(f, p.html)
     end
-    path
+    return path
+end
+
+function _extract_plot_body_and_scripts(p::PlotOutput)
+    src = !isempty(p.html) ? p.html : p.fragment
+    b_idx = findfirst("<body>", src)
+    b_start = b_idx === nothing ? 1 : last(b_idx) + 1
+    s1_idx = findnext("<script", src, b_start)
+    body = s1_idx === nothing ? src[b_start:end] : src[b_start:first(s1_idx) - 1]
+
+    scripts = ""
+    if s1_idx !== nothing
+        s2_start = findnext("<script", src, last(s1_idx) + 1)
+        if s2_start !== nothing
+            s2_close = findnext("</script>", src, last(s2_start) + 1)
+            tag_end = findnext(">", src, first(s2_start))
+            if tag_end !== nothing && s2_close !== nothing
+                scripts = src[last(tag_end) + 1:first(s2_close) - 1]
+            end
+        end
+    end
+    return strip(body), strip(scripts)
+end
+
+function _render_multi_plot_html(plots::AbstractVector{PlotOutput};
+                                 title::String="MacroEconometricModels Plots")
+    isempty(plots) && throw(ArgumentError("plots vector cannot be empty"))
+    doc_title = isempty(title) ? "MacroEconometricModels Plots" : title
+
+    bodies = String[]
+    all_scripts = String[]
+    for p in plots
+        b, s = _extract_plot_body_and_scripts(p)
+        !isempty(b) && push!(bodies, b)
+        !isempty(s) && push!(all_scripts, s)
+    end
+
+    divider = "\n<hr class=\"figure-divider\" style=\"margin: 32px 0; " *
+        "border: none; border-top: 1px solid var(--mem-panel-border, #ddd);\">\n"
+    combined_body = join(bodies, divider)
+    combined_scripts = join(all_scripts, "\n")
+    css = _render_css(0)
+
+    return """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$(_esc_html(doc_title))</title>
+<style>$(css)</style>
+</head>
+<body>
+$(combined_body)
+<script>$(_d3_source())</script>
+<script>
+$(_render_js_core())
+$(combined_scripts)
+</script>
+$(_render_theme_sync_js())
+</body>
+</html>"""
+end
+
+"""
+    save_plot(plots::AbstractVector{PlotOutput}, path::String;
+              title::String="MacroEconometricModels Plots")
+
+Save multiple PlotOutput figures into a single self-contained HTML document.
+D3.js and stylesheet are bundled once, preventing duplication and isolating
+per-figure panel layouts.
+"""
+function save_plot(plots::AbstractVector{PlotOutput}, path::String;
+                   title::String="MacroEconometricModels Plots")
+    doc = _render_multi_plot_html(plots; title=title)
+    open(path, "w") do f
+        write(f, doc)
+    end
+    return path
+end
+
+function save_plot(plots::Tuple{Vararg{PlotOutput}}, path::String; kwargs...)
+    return save_plot(PlotOutput[plots...], path; kwargs...)
 end
 
 """
@@ -2004,7 +2093,29 @@ function display_plot(p::PlotOutput)
     elseif Sys.iswindows()
         run(`cmd /c start $tmpfile`)
     end
-    tmpfile
+    return tmpfile
+end
+
+"""
+    display_plot(plots::AbstractVector{PlotOutput}; kwargs...)
+
+Open multiple PlotOutput figures in a single HTML document in the system default browser.
+"""
+function display_plot(plots::AbstractVector{PlotOutput}; kwargs...)
+    tmpfile = tempname() * ".html"
+    save_plot(plots, tmpfile; kwargs...)
+    if Sys.isapple()
+        run(`open $tmpfile`)
+    elseif Sys.islinux()
+        run(`xdg-open $tmpfile`)
+    elseif Sys.iswindows()
+        run(`cmd /c start $tmpfile`)
+    end
+    return tmpfile
+end
+
+function display_plot(plots::Tuple{Vararg{PlotOutput}}; kwargs...)
+    return display_plot(PlotOutput[plots...]; kwargs...)
 end
 
 # Embeddable fragment for notebook/Documenter pages (A11); full standalone document

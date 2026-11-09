@@ -54,17 +54,41 @@ function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix,
                         # corrects — without discarding scale information. Opt in to
                         # standardize=true only when no scale parameter is being estimated.
                         moments_fn::Function=d -> autocovariance_moments(d; lags=1),
-                        contributions_fn::Function=d -> autocovariance_moment_contributions(d; lags=1),
-                        bounds::Union{Nothing,ParameterTransform}=nothing,
+                        contributions_fn::Function=(
+                            d -> autocovariance_moment_contributions(d; lags=1)
+                        ),
+                        bounds::Union{Nothing,ParameterTransform,AbstractDict}=nothing,
                         lags::Int=1,
                         rng=Random.default_rng(),
                         # Perturbation-order GMM kwargs
                         solve_method::Symbol=:gensys,
                         solve_order::Int=1,
-                        auto_lags::Vector{Int}=[1],
-                        observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
+                        auto_lags::AbstractVector{<:Integer}=[1],
+                        observable_indices::Union{
+                            Nothing,
+                            AbstractVector{<:Integer},
+                        }=nothing,
+) where {T<:AbstractFloat}
     _require_estimable_spec(:estimate_dsge, spec)
     data_T = Matrix{T}(data)
+
+    resolved_bounds = if bounds isa AbstractDict
+        lowers = T[]
+        uppers = T[]
+        for p in param_names
+            if haskey(bounds, p)
+                lb, ub = bounds[p]
+                push!(lowers, T(lb))
+                push!(uppers, T(ub))
+            else
+                push!(lowers, T(-Inf))
+                push!(uppers, T(Inf))
+            end
+        end
+        ParameterTransform(lowers, uppers)
+    else
+        bounds
+    end
 
     # `weighting=nothing` means "method default": :two_step for the sample-moment
     # methods, :identity for :analytical_gmm. The sentinel lets the
@@ -88,7 +112,7 @@ function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix,
                                     sim_ratio=sim_ratio, burn=burn,
                                     weighting=w, moments_fn=moments_fn,
                                     contributions_fn=contributions_fn,
-                                    bounds=bounds, rng=rng)
+                                    bounds=resolved_bounds, rng=rng)
     elseif method == :analytical_gmm
         # Analytical GMM matches deterministic model moments to a single data-moment
         # vector, so HAC / two-step weighting on the 1×q residual is degenerate.
@@ -101,7 +125,7 @@ function estimate_dsge(spec::ModelSpec{T}, data::AbstractMatrix,
         return _estimate_dsge_analytical_gmm(spec, data_T, param_names;
                                               lags=lags,
                                               weighting=:identity,
-                                              bounds=bounds,
+                                              bounds=resolved_bounds,
                                               solve_method=solve_method,
                                               solve_order=solve_order,
                                               auto_lags=auto_lags,
@@ -493,10 +517,22 @@ Compute data moment vector matching the GMM format from model moments:
 
 This matches the moment ordering in `analytical_moments(...; format=:gmm)`.
 """
-function _compute_data_moments(data::Matrix{T};
-                                lags::Vector{Int}=[1],
-                                observable_indices::Union{Nothing,Vector{Int}}=nothing) where {T}
-    Y = observable_indices === nothing ? data : data[:, observable_indices]
+function _compute_data_moments(
+    data::Matrix{T};
+    lags::AbstractVector{<:Integer}=[1],
+    observable_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+) where {T}
+    Y = if observable_indices === nothing
+        data
+    elseif size(data, 2) == length(observable_indices)
+        if collect(observable_indices) == collect(1:size(data, 2))
+            data
+        else
+            data[:, observable_indices]
+        end
+    else
+        data[:, observable_indices]
+    end
     T_obs, ny = size(Y)
 
     moments = T[]
@@ -549,24 +585,44 @@ autocovariances.
 - `auto_lags=[1]` — autocovariance lags for GMM format
 - `observable_indices=nothing` — which data columns to match
 """
-function _estimate_dsge_analytical_gmm(spec::ModelSpec{T}, data::Matrix{T},
-                                         param_names::Vector{Symbol};
-                                         lags=1, weighting=:identity,
-                                         bounds=nothing,
-                                         solve_method=:gensys,
-                                         solve_order=1,
-                                         auto_lags=[1],
-                                         observable_indices=nothing) where {T}
+function _estimate_dsge_analytical_gmm(
+    spec::ModelSpec{T},
+    data::Matrix{T},
+    param_names::Vector{Symbol};
+    lags=1,
+    weighting=:identity,
+    bounds=nothing,
+    solve_method=:gensys,
+    solve_order=1,
+    auto_lags=[1],
+    observable_indices=nothing,
+) where {T}
     theta0 = T[spec.param_values[p] for p in param_names]
 
     use_perturbation = (solve_method == :perturbation && solve_order >= 2)
 
+    data_obs = if observable_indices === nothing
+        data
+    elseif size(data, 2) == spec.n_endog
+        if collect(observable_indices) == collect(1:spec.n_endog)
+            data
+        else
+            data[:, observable_indices]
+        end
+    elseif size(data, 2) == length(observable_indices)
+        data
+    else
+        throw(ArgumentError(
+            "data has $(size(data, 2)) columns; expected $(length(observable_indices)) " *
+            "(matching observable_indices) or $(spec.n_endog) (matching model variables)",
+        ))
+    end
+
     # Data moments
     if use_perturbation
-        m_data = _compute_data_moments(data; lags=auto_lags,
-                                        observable_indices=observable_indices)
+        m_data = _compute_data_moments(data_obs; lags=auto_lags)
     else
-        m_data = autocovariance_moments(data; lags=lags)
+        m_data = autocovariance_moments(data_obs; lags=lags)
     end
     n_moments = length(m_data)
 
@@ -584,23 +640,36 @@ function _estimate_dsge_analytical_gmm(spec::ModelSpec{T}, data::Matrix{T},
                 if !is_determined(sol) || !is_stable(sol)
                     return fill(T(1e6), 1, n_moments)
                 end
-                m_model = analytical_moments(sol; lags=maximum(auto_lags), format=:gmm)
+                m_model = analytical_moments(
+                    sol;
+                    lags=auto_lags,
+                    format=:gmm,
+                    observable_indices=observable_indices,
+                )
             else
                 sol = solve(new_spec; method=solve_method)
                 if !is_determined(sol) || !is_stable(sol)
                     return fill(T(1e6), 1, n_moments)
                 end
-                m_model = analytical_moments(sol; lags=lags)
+                m_model = analytical_moments(
+                    sol;
+                    lags=lags,
+                    observable_indices=observable_indices,
+                )
             end
             g = reshape(m_data .- m_model, 1, n_moments)
             return g
-        catch
+        catch e
+            e isa DimensionMismatch && rethrow(e)
+            e isa BoundsError && rethrow(e)
             return fill(T(1e6), 1, n_moments)
         end
     end
 
-    gmm_result = estimate_gmm(analytical_moment_fn, theta0, data;
-                                weighting=weighting, bounds=bounds)
+    gmm_result = estimate_gmm(
+        analytical_moment_fn, theta0, data_obs;
+        weighting=weighting, bounds=bounds,
+    )
 
     # Classical-minimum-distance variance (#561). The GMM residual here is a
     # single 1×q vector, so gmm_estimate has no valid Ω — and (G'G)⁻¹ alone is
@@ -615,12 +684,14 @@ function _estimate_dsge_analytical_gmm(spec::ModelSpec{T}, data::Matrix{T},
         # format — report NaN rather than a number that is not a variance.
         fill(T(NaN), length(gmm_result.theta), length(gmm_result.theta))
     else
-        contribs = autocovariance_moment_contributions(data; lags=lags)
-        Omega = long_run_covariance(contribs .- mean(contribs, dims=1))
-        Gj = numerical_gradient(t -> vec(analytical_moment_fn(t, data)),
-                                gmm_result.theta)
+        contribs = autocovariance_moment_contributions(data_obs; lags=lags)
+        Omega = long_run_covariance(contribs .- mean(contribs; dims=1))
+        Gj = numerical_gradient(
+            t -> vec(analytical_moment_fn(t, data_obs)),
+            gmm_result.theta,
+        )
         bread = Matrix{T}(robust_inv(Hermitian(Gj' * Gj)))
-        V = bread * (Gj' * Omega * Gj) * bread ./ T(size(data, 1))
+        V = bread * (Gj' * Omega * Gj) * bread ./ T(size(data_obs, 1))
         T(0.5) .* (V .+ V')
     end
 

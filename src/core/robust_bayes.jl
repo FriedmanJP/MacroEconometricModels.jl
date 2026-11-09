@@ -35,6 +35,8 @@ the interval `[ℓ(B,Σ), u(B,Σ)]` over admissible rotations `Q`. Arrays are
 - `empty_set_prob`: posterior probability that the identified set is empty
   (GK's `Π(∅)`)
 - `level`: credibility level of the robust region (default `0.68`)
+- `varnames`: variable labels
+- `shock_names`: structural shock labels
 """
 struct RobustBayesResult{T<:AbstractFloat} <: AbstractAnalysisResult
     lower::Array{T,3}
@@ -46,6 +48,56 @@ struct RobustBayesResult{T<:AbstractFloat} <: AbstractAnalysisResult
     informativeness::T
     empty_set_prob::T
     level::T
+    varnames::Vector{String}
+    shock_names::Vector{String}
+end
+
+# Backward-compatible 9-arg positional constructor
+function RobustBayesResult{T}(
+    lower::Array{T,3}, upper::Array{T,3},
+    robust_lower::Array{T,3}, robust_upper::Array{T,3},
+    single_prior_lower::Array{T,3}, single_prior_upper::Array{T,3},
+    informativeness, empty_set_prob, level,
+) where {T<:AbstractFloat}
+    _, n, n_shocks = size(lower)
+    return RobustBayesResult{T}(
+        lower, upper, robust_lower, robust_upper,
+        single_prior_lower, single_prior_upper,
+        T(informativeness), T(empty_set_prob), T(level),
+        ["var$i" for i in 1:n], _default_shock_names(n_shocks),
+    )
+end
+
+function RobustBayesResult{T}(
+    lower::Array{T,3}, upper::Array{T,3},
+    robust_lower::Array{T,3}, robust_upper::Array{T,3},
+    single_prior_lower::Array{T,3}, single_prior_upper::Array{T,3},
+    informativeness, empty_set_prob, level,
+    varnames::Vector{String},
+) where {T<:AbstractFloat}
+    _, _, n_shocks = size(lower)
+    return RobustBayesResult{T}(
+        lower, upper, robust_lower, robust_upper,
+        single_prior_lower, single_prior_upper,
+        T(informativeness), T(empty_set_prob), T(level),
+        varnames, _default_shock_names(n_shocks),
+    )
+end
+
+function RobustBayesResult(
+    lower::Array{T,3}, upper::Array{T,3},
+    robust_lower::Array{T,3}, robust_upper::Array{T,3},
+    single_prior_lower::Array{T,3}, single_prior_upper::Array{T,3},
+    informativeness::Real, empty_set_prob::Real, level::Real,
+    varnames::Vector{String}=["var$i" for i in 1:size(lower, 2)],
+    shock_names::Vector{String}=_default_shock_names(size(lower, 3)),
+) where {T<:AbstractFloat}
+    return RobustBayesResult{T}(
+        lower, upper, robust_lower, robust_upper,
+        single_prior_lower, single_prior_upper,
+        T(informativeness), T(empty_set_prob), T(level),
+        varnames, shock_names,
+    )
 end
 
 function Base.show(io::IO, r::RobustBayesResult{T}) where {T}
@@ -57,11 +109,12 @@ function Base.show(io::IO, r::RobustBayesResult{T}) where {T}
          "Empty-set prob" => _fmt(r.empty_set_prob; digits=4),
          "Informativeness" => _fmt(r.informativeness; digits=4)])
     if any(isfinite, r.lower)
-        _irf_points_table(io, r.lower[:, :, 1], ["var$i" for i in 1:n],
-                          "Posterior-mean lower bound (shock 1)")
-        _irf_points_table(io, r.upper[:, :, 1], ["var$i" for i in 1:n],
-                          "Posterior-mean upper bound (shock 1)")
+        _irf_points_table(io, r.lower[:, :, 1], r.varnames,
+                          "Posterior-mean lower bound ($(r.shock_names[1]))")
+        _irf_points_table(io, r.upper[:, :, 1], r.varnames,
+                          "Posterior-mean upper bound ($(r.shock_names[1]))")
     end
+    return nothing
 end
 
 # Linear (in a column of Q) restriction types — n=2 closed form applies.
@@ -736,11 +789,14 @@ of the draws' sets), the Haar single-prior interval from
 [`identify_arias_bayesian`](@ref), the prior-informativeness diagnostic, and
 `Π(∅)`.
 """
-function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
-                               level::Real=0.68, solver::Symbol=:optimize,
-                               n_draws::Int=200, n_rotations::Int=100,
-                               rng::AbstractRNG=Random.default_rng(),
-                               data::Union{Nothing,AbstractMatrix}=nothing)
+function identify_robust_bayes(
+    post::BVARPosterior, restrictions::SVARRestrictions, horizon::Int;
+    shock_names::Union{Nothing,Vector{String}}=nothing,
+    level::Real=0.68, solver::Symbol=:optimize,
+    n_draws::Int=200, n_rotations::Int=100,
+    rng::AbstractRNG=Random.default_rng(),
+    data::Union{Nothing,AbstractMatrix}=nothing,
+)
     (0 < level < 1) || throw(ArgumentError("level must lie in (0, 1)"))
     horizon >= 1 || throw(ArgumentError("horizon must be ≥ 1"))
     solver === :draws || solver === :optimize ||
@@ -748,6 +804,14 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
 
     use_data = isnothing(data) ? (isempty(post.data) ? nothing : post.data) : data
     p, n = post.p, post.n
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
     T = eltype(post.Sigma_draws)
     α = T(level)
     b_vecs, sigmas = extract_chain_parameters(post)
@@ -836,5 +900,8 @@ function identify_robust_bayes(post::BVARPosterior, restrictions::SVARRestrictio
     end
 
     κ = _gk_informativeness(sp_lo, sp_hi, rob_lo, rob_hi)
-    RobustBayesResult{T}(lower, upper, rob_lo, rob_hi, sp_lo, sp_hi, κ, empty_prob, α)
+    return RobustBayesResult{T}(
+        lower, upper, rob_lo, rob_hi, sp_lo, sp_hi, κ, empty_prob, α,
+        copy(post.varnames), snames,
+    )
 end

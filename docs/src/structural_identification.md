@@ -106,7 +106,7 @@ The six economic schemes, the instrument / pattern / share schemes, and the fift
 | Structural VECM | `irf(vecm, H; method=:svec)` | `VECMModel`; `method=:long_run` is an alias |
 | Zero + sign | `identify_arias(m, restrictions, H)` or `method=:arias` | `SVARRestrictions` |
 | Penalty function | `identify_uhlig(m, restrictions, H)` or `method=:uhlig` | `SVARRestrictions` |
-| Proxy | `irf(m, H; method=:proxy, instruments=Z)` | `instruments` |
+| Proxy | `irf(m, H; method=:proxy, instruments=Z)` | `instruments` (alias `instrument`) |
 | AB-model | `irf(m, H; method=:ab, pattern=…)` | `pattern` |
 | Max-share | `irf(m, H; method=:max_share, target=…)` | `target` |
 | Time-varying volatility | `irf(m, H; method=:lewis_tvv)` or `identify_lewis_tvv` | `K`, `weighting`, `n_starts` |
@@ -149,7 +149,7 @@ plot_result(result)
 
 The impact matrix is exactly lower triangular: the monetary shock moves the federal funds rate by ``0.105`` percentage points on impact while industrial production and prices are pinned at zero by construction. Reading down the first column, a one-standard-deviation output shock raises industrial production by ``0.0072`` log points (0.72 percent) and simultaneously raises the funds rate by ``0.019`` percentage points --- the systematic policy response, not a policy shock. Because the FRED-MD transformation codes put CPI in second log differences, the price entries are responses of monthly *inflation*, not of the price level. [`identify_cholesky`](@ref) returns this matrix directly, without running the IRF pipeline.
 
-Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering.
+Cholesky identification is exact (point identification). Different variable orderings produce different ``B_0`` and hence different IRFs --- there is no statistical test for the "correct" ordering. Economic theory must justify the assumed causal ordering. For AB-model maximum likelihood estimation, this recursive pattern is created using [`recursive_pattern`](@ref)`(n)` or its exported alias [`cholesky_pattern`](@ref)`(n)`.
 
 ---
 
@@ -381,7 +381,12 @@ The algorithm constructs ``Q`` column by column via QR decomposition in the null
 | Narrative shock | `narrative_shock_restriction(shock, dates, :positive)` | Rejection: ``ε_{j,t}`` has the given sign at residual-sample dates |
 | Narrative contribution | `narrative_contribution_restriction(var, shock, window; kind=:most_important)` | Rejection: Type A most important (``|H_j| > \max_{k\neq j}|H_k|``); `kind=:overwhelming` is Type B, `:least_important` is ``|H_j| < \min_{k\neq j}|H_k|`` |
 
-`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. `sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
+`SVARRestrictions` stores linear zeros and rejection restrictions in two lists. Zero restrictions can also be appended dynamically to an existing `SVARRestrictions` container using the mutating helper [`add_zero!`](@ref)`(restr, mat, var, shock; horizon=0)`:
+- `mat = :A` or `:A0`: contemporaneous zero restriction on ``A_0[\mathrm{var},\mathrm{shock}]`` via `A0ZeroRestriction`
+- `mat = :Ap` or `:Aplus`: lagged zero restriction on ``A_+[\mathrm{var},\mathrm{shock}]`` via `AplusZeroRestriction`
+- `mat = :B`, `:L`, or `:C`: impulse or long-run zero restriction at `horizon` via `zero_restriction`
+
+`sign_check(r)` returns an `irf -> Bool` closure for `identify_sign`, structural DFM, and counterfactuals; a handwritten predicate remains an escape hatch. Imposing all ``n(n-1)/2`` long-run zeros (on early-ordered shocks) recovers Blanchard–Quah as a just-identified special case, unique up to column sign. Cointegrated systems throw `IdentificationError` --- difference the data or use [`identify_svec`](@ref) on the VECM ([Vector Error Correction Models](@ref vecm_page)).
 
 ```@example sid
 r_h = SVARRestrictions(3;
@@ -473,6 +478,22 @@ The three recursive impact zeros recover Cholesky: ``\mathrm{rank}(M_j) = (2, 1,
 | `ranks` | `Vector{Int}` | ``\mathrm{rank}(M_j)`` for shock ``j`` (generic point) |
 | `orders` | `Vector{Int}` | Number of linear zeros on shock ``j`` |
 | `n_overidentifying` | `Int` | ``\sum_j \max(\mathrm{rank}_j - (n-j), 0)`` |
+
+Both `check_identification` and `estimate_svar` support bidirectional argument dispatch:
+- `check_identification(restrictions, model)` and `check_identification(model, restrictions)`
+- `check_identification(restrictions, n)` and `check_identification(n, restrictions)`
+- `check_identification(pattern, model)` and `check_identification(model, pattern)`
+- `check_identification(pattern, n)` and `check_identification(n, pattern)`
+- `estimate_svar(model, pattern; kwargs...)` and `estimate_svar(pattern, model; kwargs...)`
+
+### Direct Analysis on SVARModel
+
+When an SVAR is estimated via `svar = estimate_svar(model, pattern)`, impulse responses, forecast error variance decompositions, and historical decompositions can be invoked directly on the `SVARModel` without re-specifying the model or identification pattern:
+- `irf(svar, H; kwargs...)`
+- `fevd(svar, H; kwargs...)`
+- `historical_decomposition(svar; kwargs...)`
+
+These methods route through the underlying VAR model using `method=:svar` with `_svar_Q=svar.Q`, and propagate `svar.shock_names` to all downstream results.
 
 ### Effective Sample Size
 
@@ -643,6 +664,8 @@ All three sign conditions are satisfied (`converged = true`) at a total penalty 
 | Independence via higher moments | [GMM](@ref id_nongaussian_page) | Sandwich SEs and Hansen ``J`` |
 | Changing shock volatility | [Heteroskedastic](@ref id_heteroskedastic_page) | Regime covariances identify ``B_0`` |
 | Prior-robust set inference | Robust Bayes | Giacomini–Kitagawa multiple priors |
+
+For external-instrument identification ([Proxy SVAR](@ref id_proxy_page)), `identify_proxy` accepts both `instruments` and `instrument` (as a 1D vector or 2D matrix), and label aliases `instrument_names` and `instruments_names`.
 
 ---
 

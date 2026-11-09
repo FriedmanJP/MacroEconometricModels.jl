@@ -49,6 +49,15 @@ function VARModel(Y::AbstractMatrix, p::Int, B::AbstractMatrix, U::AbstractMatri
              T(aic), T(bic), T(hqic), varnames)
 end
 
+function Base.getproperty(m::VARModel, s::Symbol)
+    s === :residuals && return getfield(m, :U)
+    return getfield(m, s)
+end
+
+function Base.propertynames(::VARModel, private::Bool=false)
+    return (fieldnames(VARModel)..., :residuals)
+end
+
 # Accessors
 nvars(model::VARModel) = size(model.Y, 2)
 

@@ -22,6 +22,8 @@ identify_cholesky(model::VARModel{T}) where {T<:AbstractFloat} =
 """Lower-triangular Cholesky factor L of `model.Sigma` (Σ = LL')."""
 cholesky_factor(model::VARModel{T}) where {T<:AbstractFloat} = safe_cholesky(model.Sigma)
 
+_default_shock_names(n::Integer) = ["Shock $j" for j in 1:n]
+
 # =============================================================================
 # External-instrument (proxy) identification
 # =============================================================================
@@ -46,6 +48,37 @@ struct ProxySVARResult{T<:AbstractFloat} <: AbstractAnalysisResult
     is_partial::Bool
 end
 
+function Base.getproperty(r::ProxySVARResult, s::Symbol)
+    s === :instrument_names && return getfield(r, :instruments_names)
+    return getfield(r, s)
+end
+
+function Base.propertynames(::ProxySVARResult, private::Bool=false)
+    return (fieldnames(ProxySVARResult)..., :instrument_names)
+end
+
+function Base.haskey(::ProxySVARResult, s::Symbol)
+    return s === :instrument_names || hasfield(ProxySVARResult, s)
+end
+
+function Base.getindex(r::ProxySVARResult, s::Symbol)
+    return getproperty(r, s)
+end
+
+function ProxySVARResult(Q::AbstractMatrix{T}, B0::AbstractMatrix{T}, k::Int,
+                         first_stage_F::Real, reliability::Real,
+                         instruments_names::Vector{String}, varnames::Vector{String},
+                         shock_names::Vector{String}, is_partial::Bool;
+                         instrument_names::Union{Nothing,Vector{String}}=nothing,
+                         ) where {T<:AbstractFloat}
+    inames = instrument_names !== nothing ? instrument_names : instruments_names
+    return ProxySVARResult{T}(
+        Matrix{T}(Q), Matrix{T}(B0), k, T(first_stage_F), T(reliability),
+        Vector{String}(inames), Vector{String}(varnames),
+        Vector{String}(shock_names), is_partial,
+    )
+end
+
 function Base.show(io::IO, r::ProxySVARResult{T}) where {T}
     n = size(r.B0, 1)
     spec = Any[
@@ -68,6 +101,7 @@ function Base.show(io::IO, r::ProxySVARResult{T}) where {T}
         "Weak instrument: first-stage F < 10 (Montiel Olea, Stock & Watson 2021).")
     r.is_partial && println(io,
         "Partial identification: FEVD/HD of unidentified shocks are not identified.")
+    return nothing
 end
 
 """
@@ -135,6 +169,7 @@ function identify_proxy(model::VARModel{T}, Z::AbstractMatrix;
                         align::Bool=true,
                         normalize_var::Int=1,
                         instrument_names::Union{Nothing,Vector{String}}=nothing,
+                        instruments_names::Union{Nothing,Vector{String}}=nothing,
                         shock_names::Union{Nothing,Vector{String}}=nothing,
                         kwargs...) where {T<:AbstractFloat}
     n = nvars(model)
@@ -199,14 +234,46 @@ function identify_proxy(model::VARModel{T}, Z::AbstractMatrix;
     end
     rel = _proxy_reliability(Suz, model.Sigma, Sigmaz)
 
-    inames = something(instrument_names, ["z$i" for i in 1:k])
+    inames_raw = instrument_names !== nothing ? instrument_names : instruments_names
+    inames = something(inames_raw, ["z$i" for i in 1:k])
     length(inames) == k || throw(ArgumentError("instrument_names must have length k=$k"))
     snames = something(shock_names, _default_proxy_shock_names(n, k, sh))
     length(snames) == n || throw(ArgumentError("shock_names must have length n=$n"))
 
-    ProxySVARResult{T}(Matrix{T}(Q), Matrix{T}(B0), k, T(Fstat), T(rel),
-                       Vector{String}(inames), copy(model.varnames),
-                       Vector{String}(snames), k < n)
+    return ProxySVARResult{T}(
+        Matrix{T}(Q), Matrix{T}(B0), k, T(Fstat), T(rel),
+        Vector{String}(inames), copy(model.varnames),
+        Vector{String}(snames), k < n,
+    )
+end
+
+"""
+    identify_proxy(model::VARModel; instrument=nothing, instruments=nothing,
+                   instrument_names=nothing, instruments_names=nothing,
+                   shock_names=nothing, kwargs...) -> ProxySVARResult
+
+Keyword dispatch for external-instrument SVAR identification. Accepts `instrument` or
+`instruments` (as a 1D vector or 2D matrix) and delegates to the matrix estimator.
+"""
+function identify_proxy(model::VARModel{T};
+                        instrument=nothing,
+                        instruments=nothing,
+                        instrument_names::Union{Nothing,Vector{String}}=nothing,
+                        instruments_names::Union{Nothing,Vector{String}}=nothing,
+                        shock_names::Union{Nothing,Vector{String}}=nothing,
+                        kwargs...) where {T<:AbstractFloat}
+    inst = instruments !== nothing ? instruments : instrument
+    inst === nothing && throw(ArgumentError(
+        "identify_proxy requires instrument or instruments keyword argument",
+    ))
+    Z = inst isa AbstractVector ? reshape(inst, :, 1) : inst
+    inames = instrument_names !== nothing ? instrument_names : instruments_names
+    return identify_proxy(
+        model, Z;
+        instrument_names=inames,
+        shock_names=shock_names,
+        kwargs...,
+    )
 end
 
 function _default_proxy_shock_names(n::Int, k::Int, sh::Vector{Int})
@@ -471,6 +538,14 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
 
     if !store_all
         # Original behavior: return first valid Q
@@ -505,10 +580,10 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
     end
 
     acceptance_rate = T(n_accepted) / T(max_draws)
-
-    snames = isnothing(shock_names) ? model.varnames : shock_names
-    SignIdentifiedSet{T}(accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
-                         model.varnames, snames)
+    return SignIdentifiedSet{T}(
+        accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
+        model.varnames, snames,
+    )
 end
 
 """Pointwise IRF quantiles from a draw stack. Uniform weights use `quantile` so
@@ -614,6 +689,14 @@ function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Functi
                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n = nvars(model)
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        _default_shock_names(n)
+    end
 
     if !store_all
         for _ in 1:max_draws
@@ -650,9 +733,10 @@ function identify_narrative(model::VARModel{T}, horizon::Int, sign_check::Functi
     end
 
     acceptance_rate = T(n_accepted) / T(max_draws)
-    snames = isnothing(shock_names) ? model.varnames : shock_names
-    SignIdentifiedSet{T}(accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
-                         model.varnames, snames)
+    return SignIdentifiedSet{T}(
+        accepted_Q, irf_draws, n_accepted, max_draws, acceptance_rate,
+        model.varnames, snames,
+    )
 end
 
 # =============================================================================
@@ -867,8 +951,8 @@ Compute identification matrix Q for structural VAR analysis.
 """
 function compute_Q(model::VARModel{T}, method::Symbol;
                    horizon::Int=1, restrictions=nothing, check_func=nothing,
-                   narrative_check=nothing, instruments=nothing, pattern=nothing,
-                   target=nothing, max_draws::Int=1000,
+                   narrative_check=nothing, instruments=nothing, instrument=nothing,
+                   pattern=nothing, target=nothing, max_draws::Int=1000,
                    transition_var=nothing, regime_indicator=nothing,
                    rng::AbstractRNG=Random.default_rng(),
                    kwargs...) where {T<:AbstractFloat}
@@ -939,13 +1023,17 @@ function compute_Q(model::VARModel{T}, method::Symbol;
             throw(ArgumentError("external_volatility requires regime_indicator kwarg"))
         identify_external_volatility(model, regime_indicator).Q
     elseif method == :proxy
-        isnothing(instruments) &&
-            throw(ArgumentError("proxy requires instruments"))
-        Z = instruments isa AbstractVector ? reshape(instruments, :, 1) : instruments
+        inst = instruments !== nothing ? instruments : instrument
+        inst === nothing && throw(ArgumentError("proxy requires instruments"))
+        Z = inst isa AbstractVector ? reshape(inst, :, 1) : inst
         identify_proxy(model, Z; kwargs...).Q
     elseif method == :ab
         isnothing(pattern) && throw(ArgumentError("ab requires pattern"))
         estimate_svar(model, pattern; rng=rng, kwargs...).Q
+    elseif method == :svar
+        Qs = get(kwargs, :_svar_Q, nothing)
+        Qs === nothing && throw(ArgumentError("method=:svar requires _svar_Q"))
+        Matrix{T}(Qs)
     elseif method == :max_share
         isnothing(target) && throw(ArgumentError("max_share requires target"))
         identify_max_share(model; target=target, kwargs...).Q
@@ -992,6 +1080,7 @@ function _register_builtin_identification!()
         (:uhlig, false, false, false),
         (:proxy, true, false, true),
         (:ab, false, false, false),
+        (:svar, false, false, false),
         (:max_share, false, false, true),
         (:svec, false, false, false),
     )
@@ -1310,8 +1399,6 @@ function structural_shocks(result::AbstractNonGaussianSVAR)
         "structural_shocks(result): $(typeof(result).name.name) does not store shocks; " *
         "use structural_shocks(model, result.Q)"))
 end
-
-_default_shock_names(n::Int) = ["Shock $j" for j in 1:n]
 
 # =============================================================================
 # SID-20: shock labels (signed permutation of B₀)

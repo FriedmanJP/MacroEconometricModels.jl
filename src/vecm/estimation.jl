@@ -37,34 +37,37 @@ Y[:, 2] = Y[:, 1] + 0.1 * randn(200)
 m = estimate_vecm(Y, 2)
 ```
 """
-function estimate_vecm(Y::AbstractMatrix{T}, p::Int;
-                       rank::Union{Symbol,Int}=:auto,
-                       deterministic::Symbol=:constant,
-                       method::Symbol=:johansen,
-                       significance::Real=0.05,
-                       varnames::Vector{String}=["y$i" for i in 1:size(Y,2)]) where {T<:AbstractFloat}
-
-    deterministic ∈ (:none, :constant, :trend) ||
-        throw(ArgumentError("deterministic must be :none, :constant, or :trend"))
+function estimate_vecm(
+    Y::AbstractMatrix{T},
+    p::Int;
+    rank::Union{Symbol,Int}=:auto,
+    deterministic::Union{Symbol,Int}=:constant,
+    method::Symbol=:johansen,
+    significance::Real=0.05,
+    varnames::AbstractVector{<:AbstractString}=["y$i" for i in 1:size(Y, 2)],
+) where {T<:AbstractFloat}
+    vnames = String.(varnames)
+    case, det_sym = _parse_deterministic(deterministic)
     method ∈ (:johansen, :engle_granger) ||
         throw(ArgumentError("method must be :johansen or :engle_granger"))
 
     T_obs, n = size(Y)
     p < 1 && throw(ArgumentError("Number of lags p must be at least 1"))
-    T_obs < n + p + 10 && throw(ArgumentError("Not enough observations for VECM estimation"))
+    T_obs < n + p + 10 && throw(ArgumentError(
+        "Not enough observations for VECM estimation"
+    ))
 
     if method == :engle_granger
-        return _estimate_vecm_engle_granger(Y, p, deterministic, rank, varnames)
+        return _estimate_vecm_engle_granger(Y, p, det_sym, rank, vnames)
     end
 
     # === Johansen MLE ===
 
     # Run Johansen test for rank selection
-    joh = johansen_test(Y, p; deterministic=deterministic)
+    joh = johansen_test(Y, p; deterministic=det_sym, significance=significance)
 
     # Determine rank
     r = if rank === :auto
-        # Use trace test at the given significance level
         _select_rank_trace(joh, significance)
     else
         rank::Int
@@ -73,98 +76,133 @@ function estimate_vecm(Y::AbstractMatrix{T}, p::Int;
     r < 0 && throw(ArgumentError("rank must be non-negative"))
     r > n && throw(ArgumentError("rank cannot exceed number of variables ($n)"))
 
-    # Handle edge cases
+    # Handle edge case: r == 0
     if r == 0
-        # No cointegration: estimate as VAR in differences
-        return _vecm_rank_zero(Y, p, n, deterministic, joh, varnames)
+        return _vecm_rank_zero(Matrix{T}(Y), p, n, det_sym, joh, vnames)
     end
 
-    # Construct VECM matrices (parallels johansen.jl). The concentrated-out
-    # product-moment matrices are factored into `_johansen_moments` so the VECM
-    # restriction tests (EV-38/#446) reuse the identical S00/S11/S01. This
-    # refactor leaves the estimated β, α, Γ, Σ bit-for-bit unchanged.
-    mom = _johansen_moments(Y, p, deterministic)
-    Y_lag  = mom.Y_lag
+    mom = _johansen_moments(Y, p, det_sym)
+    T_eff = mom.T_eff
+    Y_lag_aug = mom.Y_lag_aug
     dY_lags = mom.dY_lags
     dY_eff = mom.dY_eff
-    T_eff  = mom.T_eff
     S00 = mom.S00
     S11 = mom.S11
     S01 = mom.S01
+    S10 = S01'
 
-    # Eigendecomposition for beta
+    # Solve generalized eigenvalue problem: |λ S11 - S10 S00⁻¹ S01| = 0
     S00_inv = robust_inv(S00)
-    A = S11 \ (S01' * S00_inv * S01)
+    A = S11 \ (S10 * S00_inv * S01)
     eig = eigen(A)
     idx = sortperm(real.(eig.values), rev=true)
     eigvecs = real.(eig.vectors[:, idx])
 
-    # Extract first r eigenvectors as beta
-    beta_raw = eigvecs[:, 1:r]
+    # Extract top r eigenvectors
+    beta_star_raw = eigvecs[:, 1:r]
 
-    # Phillips normalization: first r rows form identity
-    beta = beta_raw * robust_inv(beta_raw[1:r, :])
+    # Phillips normalization on the first r rows: first r rows form I_r
+    beta_star = beta_star_raw * robust_inv(Matrix{T}(beta_star_raw[1:r, :]))
 
-    # Alpha from the moment matrices
-    alpha = S01 * beta * robust_inv(beta' * S11 * beta)
+    # Endogenous cointegrating matrix: n × r
+    beta = Matrix{T}(beta_star[1:n, :])
 
-    # Recover Gamma and mu via OLS
-    ecm = Y_lag * beta  # Error correction terms (T_eff × r)
+    # Adjustment matrix alpha: n × r
+    alpha = Matrix{T}(S01 * beta_star * robust_inv(Matrix{T}(beta_star' * S11 * beta_star)))
 
-    # Build full RHS: [ECM, dY_lags, deterministic]
-    RHS = ecm
-    if size(dY_lags, 2) > 0
-        RHS = hcat(RHS, dY_lags)
+    # Cointegrating error-correction term: T_eff × r
+    ecm = Y_lag_aug * beta_star
+
+    # Target for short-run regression
+    target = dY_eff - ecm * alpha'
+
+    local Gamma::Vector{Matrix{T}}
+    local mu::Vector{T}
+    local U::Matrix{T}
+
+    if case == 1
+        mu = zeros(T, n)
+        if size(dY_lags, 2) > 0
+            B_sr = robust_inv(dY_lags' * dY_lags) * (dY_lags' * target)
+            U = target - dY_lags * B_sr
+            Gamma = Matrix{T}[]
+            col = 1
+            for _ in 1:(p-1)
+                push!(Gamma, Matrix{T}(B_sr[col:col+n-1, :]'))
+                col += n
+            end
+        else
+            U = target
+            Gamma = Matrix{T}[]
+        end
+    elseif case == 2
+        # Case 2: restricted constant rho in cointegrating relation
+        rho = vec(beta_star[n+1, :])  # r-element vector
+        mu = vec(alpha * rho)         # n-element vector (mu = alpha * rho)
+        if size(dY_lags, 2) > 0
+            B_sr = robust_inv(dY_lags' * dY_lags) * (dY_lags' * target)
+            U = target - dY_lags * B_sr
+            Gamma = Matrix{T}[]
+            col = 1
+            for _ in 1:(p-1)
+                push!(Gamma, Matrix{T}(B_sr[col:col+n-1, :]'))
+                col += n
+            end
+        else
+            U = target
+            Gamma = Matrix{T}[]
+        end
+    elseif case == 3 || case == 4
+        # Case 3: unrestricted constant in differences
+        # Case 4: restricted trend in ECM, unrestricted constant in differences
+        const_col = ones(T, T_eff)
+        X_reg = isempty(dY_lags) ? reshape(const_col, :, 1) : hcat(const_col, dY_lags)
+        B_sr = robust_inv(X_reg' * X_reg) * (X_reg' * target)
+        U = target - X_reg * B_sr
+        mu = vec(B_sr[1, :])
+        Gamma = Matrix{T}[]
+        col = 2
+        for _ in 1:(p-1)
+            push!(Gamma, Matrix{T}(B_sr[col:col+n-1, :]'))
+            col += n
+        end
+    else  # case == 5
+        # Case 5: unrestricted trend and constant in differences
+        const_col = ones(T, T_eff)
+        trend_col = T.(1:T_eff)
+        X_reg = if isempty(dY_lags)
+            hcat(const_col, trend_col)
+        else
+            hcat(const_col, trend_col, dY_lags)
+        end
+        B_sr = robust_inv(X_reg' * X_reg) * (X_reg' * target)
+        U = target - X_reg * B_sr
+        mu = vec(B_sr[1, :])
+        Gamma = Matrix{T}[]
+        col = 3
+        for _ in 1:(p-1)
+            push!(Gamma, Matrix{T}(B_sr[col:col+n-1, :]'))
+            col += n
+        end
     end
 
-    has_const = deterministic ∈ (:constant, :trend)
-    has_trend = deterministic == :trend
-    if has_const
-        RHS = hcat(RHS, ones(T, T_eff))
-    end
-    if has_trend
-        RHS = hcat(RHS, T.(1:T_eff))
-    end
+    Pi = alpha * beta'
+    Sigma = (U' * U) / T_eff
 
-    # OLS for full system
-    B_full = robust_inv(RHS'RHS) * (RHS' * dY_eff)
-    U = dY_eff - RHS * B_full
-
-    # Extract components
-    col = 1
-    alpha_ols = Matrix{T}(B_full[col:col+r-1, :]')  # n × r
-    col += r
-
-    Gamma = Matrix{T}[]
-    for _ in 1:(p-1)
-        push!(Gamma, Matrix{T}(B_full[col:col+n-1, :]'))
-        col += n
-    end
-
-    mu = if has_const
-        vec(B_full[col, :])
-    else
-        zeros(T, n)
-    end
-
-    # Pi = alpha * beta'
-    Pi = alpha_ols * beta'
-
-    # Residual covariance
-    Sigma = (U'U) / T_eff
-
-    # Log-likelihood and information criteria
-    log_det = logdet_safe(Sigma)
+    has_const = case ∈ (2, 3, 4, 5)
+    has_trend = case ∈ (4, 5)
     k_total = r * n + n * n * (p - 1) + (has_const ? n : 0) + (has_trend ? n : 0)
+
+    log_det = logdet_safe(Sigma)
     loglik = -T(T_eff * n / 2) * log(T(2π)) - T(T_eff / 2) * log_det - T(T_eff * n / 2)
     aic_val = log_det + 2 * k_total / T_eff
     bic_val = log_det + k_total * log(T_eff) / T_eff
     hqic_val = log_det + 2 * k_total * log(log(T_eff)) / T_eff
 
-    VECMModel{T}(
-        Matrix{T}(Y), p, r, alpha_ols, beta, Pi, Gamma, mu, U, Sigma,
+    return VECMModel{T}(
+        Matrix{T}(Y), p, r, alpha, beta, Pi, Gamma, mu, U, Sigma,
         aic_val, bic_val, hqic_val, loglik,
-        deterministic, :johansen, joh, varnames
+        det_sym, :johansen, joh, vnames,
     )
 end
 
@@ -179,19 +217,23 @@ end
 
 Select cointegrating rank using the Johansen trace or max-eigenvalue test.
 """
-function select_vecm_rank(Y::AbstractMatrix{T}, p::Int;
-                          criterion::Symbol=:trace,
-                          significance::Real=0.05,
-                          deterministic::Symbol=:constant) where {T<:AbstractFloat}
+function select_vecm_rank(
+    Y::AbstractMatrix{T},
+    p::Int;
+    criterion::Symbol=:trace,
+    significance::Real=0.05,
+    deterministic::Union{Symbol,Int}=:constant,
+) where {T<:AbstractFloat}
     criterion ∈ (:trace, :max_eigen) ||
         throw(ArgumentError("criterion must be :trace or :max_eigen"))
 
-    joh = johansen_test(Y, p; deterministic=deterministic)
+    _, det_sym = _parse_deterministic(deterministic)
+    joh = johansen_test(Y, p; deterministic=det_sym, significance=significance)
 
     if criterion == :trace
-        _select_rank_trace(joh, significance)
+        return _select_rank_trace(joh, significance)
     else
-        _select_rank_max_eigen(joh, significance)
+        return _select_rank_max_eigen(joh, significance)
     end
 end
 
@@ -274,62 +316,23 @@ StatsAPI.islinear(::VECMModel) = true
 function StatsAPI.dof(m::VECMModel)
     n = nvars(m)
     r = m.rank
-    has_const = m.deterministic ∈ (:constant, :trend)
-    has_trend = m.deterministic == :trend
+    case, _ = _parse_deterministic(m.deterministic)
+    has_const = case ∈ (2, 3, 4, 5)
+    has_trend = case ∈ (4, 5)
     n_per_eq = r + n * (m.p - 1) + (has_const ? 1 : 0) + (has_trend ? 1 : 0)
-    n * n_per_eq
+    return n * n_per_eq
 end
 
 function StatsAPI.predict(m::VECMModel{T}) where {T}
     # In-sample fitted values (in differences)
-    dY = diff(m.Y, dims=1)
+    dY = diff(m.Y; dims=1)
     dY_fitted = dY[m.p:end, :] - m.U
-    dY_fitted
+    return dY_fitted
 end
 
 # =============================================================================
 # Internal Helpers
 # =============================================================================
-
-# Johansen concentrated product-moment matrices for a VECM specification.
-# Factored out of estimate_vecm (EV-38/#446) so the restriction tests reuse the
-# IDENTICAL moments. The deterministic term is concentrated OUT (unrestricted
-# constant/trend), matching how estimate_vecm forms β and α. Returns a NamedTuple
-# with S00/S11/S01 (n×n), plus the pieces estimate_vecm needs downstream
-# (Y_lag, dY_lags, dY_eff, T_eff) and the concentrated residuals R0/R1.
-function _johansen_moments(Y::AbstractMatrix{T}, p::Int, deterministic::Symbol) where {T<:AbstractFloat}
-    T_obs = size(Y, 1)
-    dY = diff(Y, dims=1)
-    Y_lag = Y[p:end-1, :]                 # Y_{t-1}
-
-    T_eff = T_obs - p
-    dY_lags = if p > 1
-        hcat([dY[(p-j):(end-j), :] for j in 1:(p-1)]...)
-    else
-        Matrix{T}(undef, T_eff, 0)
-    end
-    dY_eff = dY[p:end, :]
-
-    # Deterministic terms for concentrating out
-    Z = _build_deterministic_Z(T, T_eff, dY_lags, deterministic)
-
-    # Concentrate out short-run dynamics
-    if size(Z, 2) > 0
-        ZtZ_inv = robust_inv(Z'Z)
-        M = I - Z * (ZtZ_inv * Z')
-        R0 = M * dY_eff
-        R1 = M * Y_lag
-    else
-        R0 = copy(dY_eff)
-        R1 = copy(Y_lag)
-    end
-
-    S00 = (R0'R0) / T_eff
-    S11 = (R1'R1) / T_eff
-    S01 = (R0'R1) / T_eff
-
-    (; S00, S11, S01, Y_lag, dY_lags, dY_eff, T_eff, R0, R1)
-end
 
 # Convenience overload: recompute the moments from an estimated VECMModel.
 _johansen_moments(m::VECMModel) = _johansen_moments(m.Y, m.p, m.deterministic)
@@ -348,24 +351,20 @@ function _select_rank_max_eigen(joh::JohansenResult{T}, significance::Real) wher
             break
         end
     end
-    r
+    return r
 end
 
-function _build_deterministic_Z(::Type{T}, T_eff::Int, dY_lags::Matrix{T}, deterministic::Symbol) where {T}
-    if deterministic == :none
-        dY_lags
-    elseif deterministic == :constant
-        isempty(dY_lags) ? ones(T, T_eff, 1) : hcat(ones(T, T_eff), dY_lags)
-    else  # :trend
-        trend = T.(1:T_eff)
-        isempty(dY_lags) ? hcat(ones(T, T_eff), trend) : hcat(ones(T, T_eff), trend, dY_lags)
-    end
-end
-
-function _vecm_rank_zero(Y::Matrix{T}, p::Int, n::Int, deterministic::Symbol,
-                         joh::JohansenResult{T}, varnames::Vector{String}) where {T}
+function _vecm_rank_zero(
+    Y::Matrix{T},
+    p::Int,
+    n::Int,
+    deterministic::Union{Symbol,Int},
+    joh::JohansenResult{T},
+    varnames::Vector{String},
+) where {T}
+    case, det_sym = _parse_deterministic(deterministic)
     # No cointegration: model in first differences
-    dY = diff(Y, dims=1)
+    dY = diff(Y; dims=1)
     T_obs = size(Y, 1)
     T_eff = T_obs - p
 
@@ -376,8 +375,8 @@ function _vecm_rank_zero(Y::Matrix{T}, p::Int, n::Int, deterministic::Symbol,
     end
     dY_eff = dY[p:end, :]
 
-    has_const = deterministic ∈ (:constant, :trend)
-    has_trend = deterministic == :trend
+    has_const = case ∈ (2, 3, 4, 5)
+    has_trend = case ∈ (4, 5)
 
     RHS = dY_lags
     if has_const
@@ -413,19 +412,23 @@ function _vecm_rank_zero(Y::Matrix{T}, p::Int, n::Int, deterministic::Symbol,
     bic_val = log_det + k_total * log(T_eff) / T_eff
     hqic_val = log_det + 2 * k_total * log(log(T_eff)) / T_eff
 
-    VECMModel{T}(
+    return VECMModel{T}(
         Y, p, 0,
         zeros(T, n, 0), zeros(T, n, 0), zeros(T, n, n),
         Gamma, mu, U, Sigma,
         aic_val, bic_val, hqic_val, loglik,
-        deterministic, :johansen, joh, varnames
+        det_sym, :johansen, joh, varnames,
     )
 end
 
-function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
-                                      deterministic::Symbol,
-                                      rank_input::Union{Symbol,Int},
-                                      varnames::Vector{String}) where {T}
+function _estimate_vecm_engle_granger(
+    Y::Matrix{T},
+    p::Int,
+    deterministic::Union{Symbol,Int},
+    rank_input::Union{Symbol,Int},
+    varnames::Vector{String},
+) where {T}
+    case, det_sym = _parse_deterministic(deterministic)
     T_obs, n = size(Y)
     n < 2 && throw(ArgumentError("Engle-Granger requires at least 2 variables"))
 
@@ -444,7 +447,7 @@ function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
     beta[2:end, 1] = -beta_ols[2:end]
 
     # Step 2: Estimate VECM with estimated ECM term
-    dY = diff(Y, dims=1)
+    dY = diff(Y; dims=1)
     T_eff = T_obs - p
 
     ecm = resid_coint[p:end-1]  # ECM_{t-1}
@@ -456,8 +459,8 @@ function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
         Matrix{T}(undef, T_eff, 0)
     end
 
-    has_const = deterministic ∈ (:constant, :trend)
-    has_trend = deterministic == :trend
+    has_const = case ∈ (2, 3, 4, 5)
+    has_trend = case ∈ (4, 5)
 
     RHS = reshape(ecm, :, 1)
     if size(dY_lags, 2) > 0
@@ -470,7 +473,7 @@ function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
         RHS = hcat(RHS, T.(1:T_eff))
     end
 
-    B_full = robust_inv(RHS'RHS) * (RHS' * dY_eff)
+    B_full = robust_inv(RHS' * RHS) * (RHS' * dY_eff)
     U = dY_eff - RHS * B_full
 
     # Extract alpha (adjustment speeds)
@@ -486,7 +489,7 @@ function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
     mu = has_const ? vec(B_full[col, :]) : zeros(T, n)
 
     Pi = alpha * beta'
-    Sigma = (U'U) / T_eff
+    Sigma = (U' * U) / T_eff
 
     log_det = logdet_safe(Sigma)
     k_total = n + n * n * (p - 1) + (has_const ? n : 0) + (has_trend ? n : 0)
@@ -495,9 +498,9 @@ function _estimate_vecm_engle_granger(Y::Matrix{T}, p::Int,
     bic_val = log_det + k_total * log(T_eff) / T_eff
     hqic_val = log_det + 2 * k_total * log(log(T_eff)) / T_eff
 
-    VECMModel{T}(
+    return VECMModel{T}(
         Y, p, 1, alpha, beta, Pi, Gamma, mu, U, Sigma,
         aic_val, bic_val, hqic_val, loglik,
-        deterministic, :engle_granger, nothing, varnames
+        det_sym, :engle_granger, nothing, varnames,
     )
 end

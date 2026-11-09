@@ -1044,10 +1044,10 @@ export identify_sign
 export identify_narrative
 export identify_long_run
 export identify_proxy, ProxySVARResult, proxy_ar_band
-export estimate_svar, SVARPattern, SVARModel, recursive_pattern
+export estimate_svar, SVARPattern, SVARModel, recursive_pattern, cholesky_pattern
 export identify_max_share, MaxShareResult
 export a_model_pattern, b_model_pattern, ab_model_pattern, blanchard_quah_pattern
-export generate_Q, haar_orthogonal
+export compute_Q, generate_Q, haar_orthogonal
 export compute_irf, compute_structural_shocks
 export IdentificationMethod, register_identification!
 
@@ -1062,8 +1062,9 @@ export NarrativeShockRestriction, NarrativeContributionRestriction
 export BayesianSetIdentifiedSVAR
 export identify_arias, identify_arias_bayesian
 export RobustBayesResult, identified_set_bounds, identify_robust_bayes
-export zero_restriction, sign_restriction
-export a0_zero_restriction, a0_sign_restriction, aplus_zero_restriction, aplus_sign_restriction
+export zero_restriction, sign_restriction, add_zero!
+export a0_zero_restriction, a0_sign_restriction
+export aplus_zero_restriction, aplus_sign_restriction
 export elasticity_bound, magnitude_bound, fevd_share_restriction, cumulative_restriction
 export narrative_shock_restriction, narrative_contribution_restriction
 export irf_percentiles, irf_mean

@@ -167,12 +167,15 @@ report(vecm)
 # Explicit rank specification
 vecm = estimate_vecm(Y, 2; rank=1, varnames=["GDPC1", "PCECC96", "GPDIC1"])
 
-# Different deterministic specifications
-vecm_none = estimate_vecm(Y, 2; rank=1, deterministic=:none)       # No deterministic terms
-vecm_const = estimate_vecm(Y, 2; rank=1, deterministic=:constant)  # Constant (default)
-vecm_trend = estimate_vecm(Y, 2; rank=1, deterministic=:trend)     # Linear trend
+# Different deterministic specifications (Johansen Cases 1–5)
+vecm_none = estimate_vecm(Y, 2; rank=1, deterministic=:none)       # Case 1: no deterministic terms
+vecm_const = estimate_vecm(Y, 2; rank=1, deterministic=:constant)  # Case 2: restricted constant in β
+vecm_drift = estimate_vecm(Y, 2; rank=1, deterministic=:drift)     # Case 3: unrestricted constant in VAR
+vecm_trend = estimate_vecm(Y, 2; rank=1, deterministic=:trend)     # Case 4: restricted trend in β
+vecm_utrend = estimate_vecm(Y, 2; rank=1, deterministic=5)         # Case 5: unrestricted trend in VAR
 
-round.([vec(vecm.beta) vec(vecm.alpha)], digits=4)
+# Ordered eigenvalues from Johansen reduced-rank regression
+round.(vecm.eigenvalues, digits=4)
 ```
 
 Left to itself the trace test selects ``r = 2`` on this system, so `estimate_vecm(Y, 2)` returns a rank-2 model. The examples below fix ``r = 1`` because a single cointegrating vector is easier to read: it normalizes to ``\log \text{GDP} + 0.372 \log C - 1.025 \log I``, a balanced-growth restriction tying output to the consumption-investment mix. The adjustment coefficients are ``\alpha = (-0.008, -0.016, 0.062)'``: output and consumption both fall when the relation is above equilibrium, and investment --- the fastest-adjusting and most volatile component --- moves in the opposite direction and about four times as hard. Johansen estimates ``\alpha`` and ``\beta`` jointly by maximum likelihood, so the estimates are efficient whatever the true rank.
@@ -193,7 +196,21 @@ Both criteria agree on ``r = 2`` here. The sequence behind that verdict is visib
 |---------|------|---------|-------------|
 | `criterion` | `Symbol` | `:trace` | Test statistic: `:trace` or `:max_eigen` |
 | `significance` | `Real` | `0.05` | Significance level for critical values |
-| `deterministic` | `Symbol` | `:constant` | Deterministic specification for Johansen test |
+| `deterministic` | `Union{Int,Symbol}` | `:constant` | Deterministic specification for Johansen test (Cases 1–5 or symbols) |
+
+### Johansen Deterministic Specifications
+
+Johansen (1995) classifies deterministic terms into five cases based on whether constant and linear trend terms are restricted to the cointegrating relations or enter unrestricted in the VAR:
+
+| Case | Symbols | Integer | Cointegrating Vector ``\beta`` | VAR Equations | Description |
+|:-----|:--------|:--------|:-------------------------------|:--------------|:------------|
+| Case 1 | `:none` | `1` | No constant | No constant | Zero means, no deterministic components |
+| Case 2 | `:constant`, `:restricted_constant` | `2` | Restricted constant ``\mu`` | No constant | Intercept in cointegration space, no linear drift in levels |
+| Case 3 | `:unrestricted_constant`, `:drift` | `3` | No constant | Unrestricted constant ``\mu_0`` | Linear drift in levels, unconstrained intercept in VECM |
+| Case 4 | `:trend`, `:restricted_trend` | `4` | Restricted linear trend ``\tau`` | Unrestricted constant | Common linear trends in levels without quadratic growth |
+| Case 5 | `:unrestricted_trend` | `5` | No trend | Unrestricted linear trend | Linear trend in VECM differences, quadratic trends in levels |
+
+Case 2 (`:constant`, default) restricts the constant to the cointegrating space so that the cointegrating relations have non-zero intercepts but the series in levels do not exhibit deterministic linear trends.
 
 ### Engle-Granger Two-Step
 
@@ -217,7 +234,7 @@ The two estimators disagree substantially here: Engle-Granger returns ``\beta = 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `rank` | `Union{Symbol,Int}` | `:auto` | Cointegrating rank; `:auto` selects via trace test |
-| `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none`, `:constant`, `:trend` |
+| `deterministic` | `Union{Int,Symbol}` | `:constant` | Deterministic terms: Cases 1–5 (`1:5`) or symbols (`:none`, `:constant`, `:drift`, `:trend`, `:unrestricted_trend`) |
 | `method` | `Symbol` | `:johansen` | Estimation method: `:johansen` or `:engle_granger` |
 | `significance` | `Real` | `0.05` | Significance level for automatic rank selection |
 | `varnames` | `Vector{String}` | `["y1", ...]` | Variable display names |
@@ -243,6 +260,7 @@ The two estimators disagree substantially here: Engle-Granger returns ``\beta = 
 | `deterministic` | `Symbol` | Deterministic specification |
 | `method` | `Symbol` | Estimation method used |
 | `johansen_result` | `JohansenResult{T}` | Johansen test result (if applicable) |
+| `eigenvalues` | `Vector{T}` | Ordered eigenvalues from Johansen reduced-rank regression (delegates to `johansen_result.eigenvalues`) |
 | `varnames` | `Vector{String}` | Variable display names |
 
 ---
@@ -482,6 +500,19 @@ report(rb)
 
 The spread restriction is not rejected: ``\mathrm{LR} = 1.30`` on ``\mathrm{df} = r(n-s) = 1 \times (4-3) = 1``, ``p = 0.254``. Imposing it barely moves the income elasticity (``-0.976`` to ``-0.970``) and replaces the two separate rate coefficients with a single spread coefficient of 6.15. The data are therefore consistent with money demand responding to the bond-deposit spread rather than to the two rates independently, which is the standard opportunity-cost specification.
 
+When the VECM is estimated under deterministic Case 2 (`:constant` / `:restricted_constant`) or Case 4 (`:trend` / `:restricted_trend`), the deterministic component is restricted into the cointegrating space, expanding the effective cointegrating regressor space to ``(n+1)`` dimensions. When testing restrictions on ``\beta``, the user provides an ``n \times s`` matrix ``H`` restricting only the ``n`` stochastic variables. `test_beta_restriction` automatically embeds ``H`` into ``(n+1) \times (s+1)`` space:
+
+```math
+H^* = \begin{bmatrix} H & 0 \\ 0 & 1 \end{bmatrix}
+```
+where:
+- ``H^*``: augmented ``(n+1) \times (s+1)`` design matrix
+- ``H``: user-specified ``n \times s`` restriction matrix on endogenous variables
+- ``0``: zero blocks conforming to dimension partition
+- ``1``: unconstrained loading on the deterministic term
+
+leaving the restricted constant ``\mu`` or trend coefficient unconstrained. This preserves the standard degrees of freedom ``\mathrm{df} = r(n-s)`` and re-estimates ``\mu`` in the returned `restricted_model`.
+
 ### ``\alpha`` restricted and weak exogeneity
 
 [`test_alpha_restriction(m, A)`](@ref) tests ``\alpha = A\psi`` (``\mathrm{df} = r(n-a)``, where `A` is ``n \times a``). Its headline special case is [`test_weak_exogeneity(m, vars)`](@ref): the named variables have zero rows in ``\alpha``, so they do not error-correct toward the long-run equilibrium — the central-bank question *"is the policy variable weakly exogenous for the long run?"* With ``m`` = number of tested variables, ``\mathrm{df} = r\cdot m``.
@@ -511,6 +542,8 @@ rj = test_joint_restriction(mdk, H, A)
 ```
 
 Dropping the interest rates entirely is decisively rejected: constant velocity with a unit income elasticity gives ``\mathrm{LR} = 29.35`` on ``\mathrm{df} = r(n-r) = 3``, ``p < 10^{-5}``. Combining the two restrictions that individually survived --- the interest-rate spread in ``\beta`` and weak exogeneity of income in ``\alpha`` --- is not rejected either: the switching algorithm converges to ``\mathrm{LR} = 1.74`` on 2 degrees of freedom, ``p = 0.419``. Jointly imposing them costs almost nothing in fit, which is the case for reporting the restricted system rather than the unrestricted one.
+
+As with `test_beta_restriction`, under deterministic Cases 2 and 4 `test_joint_restriction` automatically embeds ``H`` into ``(n+1)``-space via ``H^*``, leaving the restricted deterministic intercept or trend unconstrained during the Johansen–Juselius switching algorithm.
 
 Every test returns a `VECMRestrictionTest{T}` carrying the LR statistic, degrees of freedom, p-value, and a re-estimated `restricted_model::VECMModel` that imposes ``H_0``, so `irf`, `fevd`, and `historical_decomposition` all run on the restricted system:
 

@@ -416,15 +416,14 @@ function plot_result(r::SVSVARResult{T};
     n = size(r.B, 1)
     if view === :B
         id = _next_plot_id("svsvar_b")
-        js = _statid_heatmap_panel(id, r.B, _statid_var_names(n),
-                                   _statid_shock_names(n);
+        js = _statid_heatmap_panel(id, r.B, r.varnames, r.shock_names;
                                    scale=:diverging, xlabel="Shock", ylabel="Variable",
                                    tip_label="")
         panel = _PanelSpec(id, "Impact Matrix (B)", js)
         ftitle = isempty(title) ? "SV-SVAR — impact matrix" : title
     elseif view === :volatility
         id = _next_plot_id("svsvar_h")
-        js = _statid_line_panel(id, r.H_smooth, _statid_shock_names(n);
+        js = _statid_line_panel(id, r.H_smooth, r.shock_names;
                                 ylabel="Smoothed log-volatility")
         panel = _PanelSpec(id, "Smoothed Log-Volatilities", js)
         ftitle = isempty(title) ? "SV-SVAR — smoothed log-volatilities" : title
@@ -537,7 +536,7 @@ function plot_result(r::SVARModel{T};
     view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
     B0 = r.A \ r.B
     id = _next_plot_id("svar_b0")
-    js = _statid_heatmap_panel(id, B0, r.varnames, _statid_shock_names(n);
+    js = _statid_heatmap_panel(id, B0, r.varnames, r.shock_names;
                                scale=:diverging, xlabel="Shock", ylabel="Variable",
                                tip_label="")
     panel = _PanelSpec(id, "Impact Matrix (B₀)", js)
@@ -563,10 +562,8 @@ function plot_result(r::SVECResult{T};
                      save_path::Union{String,Nothing}=nothing) where {T}
     n = size(r.B0, 1)
     view === :B0 || throw(ArgumentError("Unknown view :$view. Valid views: :B0"))
-    snames = vcat(["P$i" for i in 1:r.n_permanent],
-                  ["T$i" for i in 1:(n - r.n_permanent)])
     id = _next_plot_id("svec_b0")
-    js = _statid_heatmap_panel(id, r.B0, r.vecm.varnames, snames;
+    js = _statid_heatmap_panel(id, r.B0, r.vecm.varnames, r.shock_names;
                                scale=:diverging, xlabel="Shock", ylabel="Variable",
                                tip_label="")
     panel = _PanelSpec(id, "Impact Matrix (B₀)", js)

@@ -48,7 +48,17 @@ function fevd(model::VARModel{T}, horizon::Int;
 ) where {T<:AbstractFloat}
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
-    snames = isnothing(shock_names) ? model.varnames : shock_names
+    snames = if shock_names !== nothing
+        length(shock_names) == nvars(model) || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match " *
+            "nvars ($(nvars(model)))",
+        ))
+        Vector{String}(shock_names)
+    elseif _is_set_identified(method)
+        _default_shock_names(nvars(model))
+    else
+        model.varnames
+    end
     # SID-05/19: FEVD of each accepted rotation, then pointwise median. The median
     # IRF is not Σ-orthonormal, so this is not FEVD-of-the-median-IRF.
     if _is_set_identified(method)
@@ -249,8 +259,16 @@ function fevd(post::BVARPosterior, horizon::Int;
     use_threaded = threaded || (samples * horizon * n * n > 100000)
     fevd_q, fevd_m = compute_posterior_quantiles(all_fevds, q_vec; threaded=use_threaded, central=point_estimate)
 
-    snames = isnothing(shock_names) ? post.varnames : shock_names
-    # MC honesty (#244): process_posterior_samples drops non-stationary / unidentified draws.
+    snames = if shock_names !== nothing
+        length(shock_names) == n || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match n ($n)",
+        ))
+        Vector{String}(shock_names)
+    else
+        post.varnames
+    end
+    # MC honesty (#244): process_posterior_samples drops non-stationary /
+    # unidentified draws.
     n_req = post.n_draws
     BayesianFEVD{ET}(fevd_q, fevd_m, horizon, post.varnames, snames, q_vec,
                      n_req, samples, n_req - samples)
@@ -336,9 +354,11 @@ function fevd(model::VARModel{T}, s::AriasSVARResult{T}, H::Int;
               shock_names::Union{Nothing,Vector{String}}=nothing) where {T<:AbstractFloat}
     draws = _setid_irfs_at_horizon(model, s.Q_draws, s.irf_draws, H)
     n_acc = length(s.Q_draws)
-    snames = isnothing(shock_names) ? s.varnames : shock_names
-    _fevd_from_irf_draws(draws, s.weights, H, s.varnames, snames,
-                         n_acc, 0; quantiles=quantiles, uniform_unweighted=false)
+    snames = isnothing(shock_names) ? s.shock_names : Vector{String}(shock_names)
+    return _fevd_from_irf_draws(
+        draws, s.weights, H, s.varnames, snames,
+        n_acc, 0; quantiles=quantiles, uniform_unweighted=false,
+    )
 end
 
 function fevd(model::VARModel{T}, r::UhligSVARResult{T}, H::Int;
@@ -346,8 +366,8 @@ function fevd(model::VARModel{T}, r::UhligSVARResult{T}, H::Int;
     irf_vals = (H == size(r.irf, 1)) ? r.irf : compute_irf(model, r.Q, H)
     n = nvars(model)
     decomp, props = _compute_fevd(irf_vals, n, H)
-    snames = isnothing(shock_names) ? r.varnames : shock_names
-    FEVD{T}(decomp, props, r.varnames, snames)
+    snames = isnothing(shock_names) ? r.shock_names : Vector{String}(shock_names)
+    return FEVD{T}(decomp, props, r.varnames, snames)
 end
 
 # =============================================================================

@@ -49,16 +49,33 @@ function build_docs()
 end
 
 # One symlink per minor series pointing at its highest patch, stable -> newest,
-# and versions.js regenerated from the folders actually present (idempotent).
+# superseded patch / pre-1.0 folders pruned so gh-pages stays under the GitHub
+# Pages 10-minute sync timeout, and versions.js regenerated (idempotent).
+function _is_release_dir(wt::AbstractString, d::AbstractString)
+    return occursin(r"^v\d+\.\d+\.\d+$", d) &&
+        isdir(joinpath(wt, d)) &&
+        !islink(joinpath(wt, d))
+end
+
 function update_version_index(wt)
-    vers = sort!([VersionNumber(d) for d in readdir(wt)
-                  if occursin(r"^v\d+\.\d+\.\d+$", d) && isdir(joinpath(wt, d)) && !islink(joinpath(wt, d))])
-    isempty(vers) && error("no release folders found on gh-pages")
-    newest = last(vers)
+    rel_dirs = filter(d -> _is_release_dir(wt, d), readdir(wt))
+    all_vers = sort!([VersionNumber(d) for d in rel_dirs])
+    isempty(all_vers) && error("no release folders found on gh-pages")
+    newest = last(all_vers)
     minors = Dict{Tuple{Int,Int},VersionNumber}()
-    for v in vers
+    for v in all_vers
+        v.major < 1 && continue
         k = (Int(v.major), Int(v.minor))
         minors[k] = max(get(minors, k, v), v)
+    end
+    keep = Set(values(minors))
+    for v in all_vers
+        v in keep || rm(joinpath(wt, "v$v"); recursive=true, force=true)
+    end
+    for d in readdir(wt)
+        if occursin(r"^v\d+\.\d+$", d) && islink(joinpath(wt, d))
+            rm(joinpath(wt, d); force=true)
+        end
     end
     links = Dict("stable" => "v$newest")
     for ((mj, mn), v) in minors
@@ -69,10 +86,15 @@ function update_version_index(wt)
         rm(p; force=true)
         symlink(dst, p)
     end
-    doc_versions = ["stable"; ["v$mj.$mn" for (mj, mn) in sort!(collect(keys(minors)); rev=true)]; "dev"]
-    write(joinpath(wt, "versions.js"),
-        "var DOC_VERSIONS = [\n" * join("  \"$v\",\n" for v in doc_versions) *
-        "];\nvar DOCUMENTER_NEWEST = \"v$newest\";\nvar DOCUMENTER_STABLE = \"stable\";\n")
+    minor_keys = sort!(collect(keys(minors)); rev=true)
+    doc_versions = ["stable"; ["v$mj.$mn" for (mj, mn) in minor_keys]; "dev"]
+    write(
+        joinpath(wt, "versions.js"),
+        "var DOC_VERSIONS = [\n" *
+        join("  \"$v\",\n" for v in doc_versions) *
+        "];\nvar DOCUMENTER_NEWEST = \"v$newest\";\nvar DOCUMENTER_STABLE = \"stable\";\n",
+    )
+    return nothing
 end
 
 function deploy(target, do_push)

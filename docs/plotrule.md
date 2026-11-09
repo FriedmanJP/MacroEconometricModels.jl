@@ -62,7 +62,7 @@ A variable named `GDP's "core"` or `x<y` must render, not break the document.
 
 **A10 — No positional struct-literal adapters.** Converting one result type to another for plot reuse (e.g. LPDiD → EventStudyLP) must go through a keyword constructor or a dedicated `Base.convert`/`_as_eventstudy(...)` function owned by the struct's module. A positional literal with dummy fields breaks silently when the struct gains a field.
 
-**A11 — IDs and global JS state.** Panel DOM ids come from `_next_plot_id` only. All JS state lives inside the per-panel IIFE except the shared core (`fmt`, `showTip`, `hideTip`, `tooltip`), which must be embed-safe: guard against redefinition (`if (typeof window.__mem_core === 'undefined') { ... }`) and select the tooltip node relative to the plot container, not by a fixed global `#tooltip` id, so that two `PlotOutput`s displayed in the same notebook DOM don't collide. Note the `_plot_counter` `Ref` is *not* atomic; if plots are ever generated from threads, use `Threads.Atomic{Int}`.
+**A11 — IDs, scoping, and global JS state.** Panel DOM ids come from `_next_plot_id` only. All JS state lives inside the per-panel IIFE except the shared core (`fmt`, `showTip`, `hideTip`, `tooltip`), which must be embed-safe: guard against redefinition (`if (typeof window.__mem_core === 'undefined') { ... }`) and select the tooltip node relative to the plot container, not by a fixed global `#tooltip` id, so that two `PlotOutput`s displayed in the same notebook DOM don't collide. Inlined D3 scripts use a single-injection guard (`if (typeof window.d3 === 'undefined')`) to eliminate redundant evaluation across multiple embedded fragments. Panel widths are scoped per figure container via CSS custom properties on `.panel-grid` (`--mem-panel-width: $(col_width);`), preventing style bleed and layout collision across multiple panels on a single page. Note the `_plot_counter` `Ref` is *not* atomic; if plots are ever generated from threads, use `Threads.Atomic{Int}`.
 
 **A12 — Self-contained output.** A saved plot must render offline. D3 must be vendored (inlined into the HTML from a copy shipped with the package or an artifact), not loaded from a CDN `<script src>`. If a CDN fallback is kept for size reasons, it requires an SRI `integrity` attribute and a documented offline limitation — but vendoring is the rule. This also protects the Documenter site (iframes) from third-party outages.
 
@@ -70,7 +70,7 @@ A variable named `GDP's "core"` or `x<y` must render, not break the document.
 
 ## API Contract
 
-**C1 — One entry point.** Users plot any result with `plot_result(result; kwargs...)` returning a `PlotOutput`. Exported names are exactly: `plot_result`, `PlotOutput`, `save_plot`, `display_plot`. Everything else is internal (`_`-prefixed).
+**C1 — One entry point.** Users plot any result with `plot_result(result; kwargs...)` returning a `PlotOutput`. Exported names are exactly: `plot_result`, `PlotOutput`, `save_plot`, `display_plot`. Everything else is internal (`_`-prefixed). Multi-plot batch operations are supported via vector and tuple overloads: `save_plot([p1, p2], path; title=...)` / `save_plot((p1, p2), path)` and `display_plot([p1, p2])` / `display_plot((p1, p2))` for saving and displaying multiple panels in a single unified HTML document.
 
 **C2 — Standard keyword vocabulary.** Use these names with these exact semantics; never invent synonyms:
 
@@ -80,7 +80,7 @@ A variable named `GDP's "core"` or `x<y` must render, not break the document.
 | `shock` | `Union{Int,String,Nothing}=nothing` | select one shock; `nothing` = all |
 | `vars` | `Union{Vector,Nothing}=nothing` | select multiple variables (data containers) |
 | `view` | `Symbol` | switch between named views of one result |
-| `ncols` | `Int=0` | grid columns; `0` = auto |
+| `ncols` | `Int=0` | grid columns; `0` = auto (defaults: `min(n_vars, 3)` for single-shock; `n_shocks` for all-shocks matrix IRF; `2` for HD; `min(n_vars, 3)` for OccBin) |
 | `title` | `String=""` | figure title; `""` = auto-generated |
 | `save_path` | `Union{String,Nothing}=nothing` | also write HTML to this path |
 | `history` / `n_history` | vector / `Int` | historical context for forecast fans |
@@ -149,7 +149,7 @@ If the object is a single headline number (a nowcast, a breakdown value), it bel
 - **Horizon conventions:** IRF x starts at 0; FEVD at 1; document any deviation in the docstring. Horizon, lag, and event-time axes force integer ticks — a tick at h = 2.5 is a bug.
 - **Date axes:** whenever the source object carries time metadata (`TimeSeriesData.time_index`, panel `time_id`, nowcast vintages), the x axis shows dates, not 1…T. Plots of HD/filters/forecasts over "Period 143" are unacceptable for empirical work; converters accept an optional `time_index` and `_json` learns `Date`. Where the estimation drops initial observations (VAR lags, Hamilton/BK trimming), the axis must reflect the *calendar* position of each point, which the `offset` mechanism must map correctly.
 - Every panel has x and y axis labels with units (`"Horizon (quarters)"` when known, `"Response (%)"` for percent-scaled IRFs).
-- Figure title = object + method + inference statement (`"Impulse Response Functions (bootstrap 90% CI)"`). Panel title = the specific slice (`"gdp ← monetary"` convention: *response ← shock*).
+- Figure title = object + method + inference statement (`"Impulse Response Functions (bootstrap 90% CI)"`). Panel title = the specific slice (`"gdp ← monetary"` convention: *response ← shock*). Multi-shock matrix IRF grids follow strict row-major panel ordering (variables along rows, shocks along columns).
 - Single-panel figures must not repeat the same string as both figure title and panel title; give the panel a specific subtitle or suppress one.
 - **Legend policy:** ≥2 series → legend always; 1 series → no legend (the title names it). Legend layout must be width-aware — fixed 90–130 px steps overflow with long names; wrap to a second row or truncate with full name in the tooltip. A legend may hold at most ~6 entries; beyond that use direct labels (scatter) or fold categories.
 - Anything drawn that is not a series also needs a legend entry when ambiguous: overlapping CI bands, binding-region shading, equality lines.

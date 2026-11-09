@@ -178,7 +178,15 @@ function irf(model::VARModel{T}, horizon::Int;
                                 "do not have theoretical residual-free coefficient bands; " *
                                 "use the default identified-set bands or set_inference=:bootstrap_x_rotations"))
         if ci_type !== :bootstrap
-            snames = isnothing(shock_names) ? model.varnames : shock_names
+            snames = if shock_names !== nothing
+                length(shock_names) == nvars(model) || throw(ArgumentError(
+                    "shock_names length ($(length(shock_names))) must match " *
+                    "nvars ($(nvars(model)))",
+                ))
+                Vector{String}(shock_names)
+            else
+                _default_shock_names(nvars(model))
+            end
             if method === :arias
                 isnothing(restrictions) && throw(ArgumentError("arias requires restrictions"))
                 s = identify_arias(model, restrictions, horizon;
@@ -295,7 +303,15 @@ function irf(model::VARModel{T}, horizon::Int;
         end
     end
 
-    snames = isnothing(shock_names) ? model.varnames : shock_names
+    snames = if shock_names !== nothing
+        length(shock_names) == nvars(model) || throw(ArgumentError(
+            "shock_names length ($(length(shock_names))) must match " *
+            "nvars ($(nvars(model)))",
+        ))
+        Vector{String}(shock_names)
+    else
+        model.varnames
+    end
     cl = ci_type == :none ? zero(T) : T(conf_level)
     # Attach a reproducibility manifest whenever the bands consume randomness.
     manifest = ci_type == :none ? nothing :
@@ -349,7 +365,7 @@ function _simulate_irfs(model::VARModel{T}, method::Symbol, horizon::Int,
         Y_init = model.Y[1:p, :]
         Z_eff = nothing
         if method === :proxy
-            inst = get(kwargs, :instruments, nothing)
+            inst = get(kwargs, :instruments, get(kwargs, :instrument, nothing))
             inst === nothing && throw(ArgumentError(":proxy requires instruments"))
             Z_eff = inst isa AbstractVector ?
                 reshape(collect(_align_instrument(inst, size(model.Y, 1), p, T_eff)), :, 1) :

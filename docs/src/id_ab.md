@@ -141,8 +141,24 @@ Just-identified recursive and Blanchard–Quah patterns use the Cholesky and lon
 | `lr_stat`, `lr_df`, `lr_pvalue` | `T`, `Int`, `T` | Overidentification LR test |
 | `identification` | `IdentificationStatus` | `:exact`, `:over`, or `:under` |
 | `pattern` | `SVARPattern{T}` | The restriction pattern |
+| `varnames` | `Vector{String}` | Endogenous variable names |
+| `shock_names` | `Vector{String}` | Structural shock names |
+| `model` | `Union{Nothing, VARModel{T}}` | Underlying reduced-form VAR model |
 
-Convenience constructors: [`recursive_pattern`](@ref), [`blanchard_quah_pattern`](@ref), [`a_model_pattern`](@ref), [`b_model_pattern`](@ref), [`ab_model_pattern`](@ref).
+Convenience constructors: [`recursive_pattern`](@ref) (exported alias [`cholesky_pattern`](@ref)), [`blanchard_quah_pattern`](@ref), [`a_model_pattern`](@ref), [`b_model_pattern`](@ref), [`ab_model_pattern`](@ref).
+
+The reduced-form residual matrix ``\hat{U}`` used in estimation can be accessed via `model.U` or through the dynamic property alias `model.residuals`.
+
+Both `estimate_svar` and `check_identification` support bidirectional dispatch:
+- `estimate_svar(model, pattern; kwargs...)` and `estimate_svar(pattern, model; kwargs...)`
+- `check_identification(pattern, model; kwargs...)` and `check_identification(model, pattern; kwargs...)`
+
+Downstream analysis methods can be called directly on an estimated `SVARModel`:
+- `irf(svar, H; kwargs...)`
+- `fevd(svar, H; kwargs...)`
+- `historical_decomposition(svar; kwargs...)`
+
+These direct calls automatically route through the underlying VAR model with `method=:svar` and `_svar_Q=svar.Q`, propagating `svar.shock_names` without requiring re-specification of the pattern or estimator.
 
 ---
 

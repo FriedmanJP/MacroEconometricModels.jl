@@ -469,7 +469,14 @@ where:
 - ``r`` is the cointegrating rank under the null hypothesis
 
 !!! note "Deterministic cases and p-values"
-    The `deterministic` keyword selects among Johansen's (1995) cases. `:constant` is Case 2: the intercept is restricted to the cointegrating space, so it enters ``\Pi y_{t-1}`` but not the short-run dynamics, ruling out linear trends in levels. `:trend` is Case 4: a linear trend is restricted to the cointegrating space and the constant is unrestricted, allowing linear trends in levels. Critical values are the Osterwald-Lenum (1992) tables for the matching case; p-values are the Doornik (1998) gamma approximation to the MacKinnon-Haug-Michelis (1999) asymptotic distributions. The two sources can disagree marginally near a critical value, and the reported `rank` follows the tabulated critical values.
+    The `deterministic` keyword selects among Johansen's (1995) Cases 1 through 5, accepting either integer IDs (`1:5`) or descriptive symbols:
+    - **Case 1** (`1` or `:none`): no deterministic terms in cointegrating relations or VAR
+    - **Case 2** (`2`, `:constant`, `:restricted_constant`): restricted intercept in cointegrating space, no trend in VAR levels
+    - **Case 3** (`3`, `:unrestricted_constant`, `:drift`): unrestricted constant in VAR, allowing linear drift in levels
+    - **Case 4** (`4`, `:trend`, `:restricted_trend`): restricted linear trend in cointegrating space, unrestricted constant in VAR
+    - **Case 5** (`5`, `:unrestricted_trend`): unrestricted linear trend in VAR, allowing quadratic trends in levels
+
+    Critical values follow the Osterwald-Lenum (1992) tables; p-values are computed via the Doornik (1998) gamma approximation to the MacKinnon-Haug-Michelis (1999) asymptotic distributions. For full VECM estimation, restriction testing, and structural identification, see [Vector Error Correction Models](@ref vecm_page).
 
 ```@example test_ur
 # Ten-year and three-month Treasury yields, two lags in the VECM
@@ -493,7 +500,7 @@ The lag order ``p`` is a positional argument giving the number of lags in the VE
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `deterministic` | `Symbol` | `:constant` | Deterministic terms: `:none` (Case 1), `:constant` (Case 2), or `:trend` (Case 4) |
+| `deterministic` | `Union{Symbol, Int}` | `:constant` | Deterministic terms: `1` / `:none` (Case 1), `2` / `:constant` / `:restricted_constant` (Case 2), `3` / `:unrestricted_constant` / `:drift` (Case 3), `4` / `:trend` / `:restricted_trend` (Case 4), `5` / `:unrestricted_trend` (Case 5) |
 | `significance` | `Real` | `0.05` | Level at which the trace sequence selects `rank` (`≤ 0.01`, `≤ 0.05`, else 10%) |
 
 ### Return Values
