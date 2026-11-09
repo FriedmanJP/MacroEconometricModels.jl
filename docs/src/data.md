@@ -49,12 +49,12 @@ pwt = load_example(:pwt)
 panel_summary(pwt)
 ```
 
-**Recipe 5: Subset rows the supported way**
+**Recipe 5: Subset rows and columns via direct 2D slicing**
 
 ```@example data
 usa = group_data(pwt, "USA")             # one country as TimeSeriesData
-postwar = keeprows(usa, collect(41:74))  # 1990-2023
-describe_data(postwar[:, ["rgdpna", "emp"]])
+postwar = usa[41:74, ["rgdpna", "emp"]]  # direct 2D slice: 1990-2023 for GDP and employment
+describe_data(postwar)
 ```
 
 **Recipe 6: Within-group panel transformations**
@@ -158,35 +158,43 @@ mroz = load_example(:mroz)
 
 ## Indexing and Accessors
 
-The containers implement a deliberately small indexing surface: column selection by name or index, and --- for a `TimeSeriesData` carrying date labels --- row selection by date string. **They are not `AbstractArray`s.** Anything outside the table below throws a `MethodError`.
+`TimeSeriesData` implements full 2D indexing `d[rows, cols]` alongside standard Julia array interface methods (`axes`, `size`, `firstindex`, `lastindex`). Row selectors can be integer ranges (`10:60`, `end-59:end`), boolean masks, date strings, or `:`. Column selectors can be strings, symbols (`[:INDPRO, :CPI]`), integers, boolean masks, or `:`.
+
+Indexing `TimeSeriesData` returns four distinct output shapes depending on the combination of row and column selectors:
+
+| Indexing pattern | Return type | Description |
+|---|---|---|
+| `d[collection, collection]` | `TimeSeriesData{T}` | Sub-container preserving metadata (`varnames`, `frequency`, `tcode`, `time_index`, `dates`, `vardesc`, `desc`, `source_refs`) |
+| `d[collection, single]` | `Vector{T}` | Values along rows for the single selected column |
+| `d[single, collection]` | `Vector{T}` | Values along columns for the single selected row |
+| `d[single, single]` | `T` | Scalar element |
+
+Across the three macro containers, supported indexing expressions are:
 
 | Expression | `TimeSeriesData` | `PanelData` | `CrossSectionData` |
 |---|---|---|---|
 | `d[:, "GDP"]` | `Vector{T}` | not supported | `Vector{T}` |
-| `d[:, ["GDP", "CPI"]]` | sub-container | not supported | not supported |
+| `d[:, ["GDP", "CPI"]]` | `TimeSeriesData` | not supported | not supported |
 | `d[:, 2]` | `Vector{T}` | not supported | not supported |
 | `d["2020Q1", :]` | `Vector{T}` (one row) | not supported | not supported |
-| `d[["2020Q1", "2020Q2"], :]` | sub-container | not supported | not supported |
-| `d[10:60, :]` | **not supported** | **not supported** | **not supported** |
-| `d[5, 2]` | **not supported** | **not supported** | **not supported** |
-
-!!! warning "Integer row ranges do not index a container"
-    `d[end-59:end, :]` throws `MethodError: no method matching axes(::TimeSeriesData{Float64}, ::Int64)`
-    --- `end` needs `axes`, which the containers do not define. To take a row window, either
-    use `keeprows` (which keeps the metadata aligned) or drop to the matrix with `to_matrix`
-    first and rebuild. Both idioms appear below.
+| `d[["2020Q1", "2020Q2"], :]` | `TimeSeriesData` | not supported | not supported |
+| `d[10:60, :]` | `TimeSeriesData` | not supported | not supported |
+| `d[end-59:end, :]` | `TimeSeriesData` | not supported | not supported |
+| `d[5, 2]` | scalar `T` | not supported | not supported |
 
 ```@example data
-# Column extraction
-ip  = fred[:, "INDPRO"]                              # Vector{Float64}, length 804
-sub2 = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]]   # new TimeSeriesData, metadata sliced
+# Direct 2D slicing preserving all metadata
+window = fred[end-59:end, ["INDPRO", "FEDFUNDS"]]    # TimeSeriesData (60 obs × 2 vars)
+sub2   = fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]] # full-sample 3-variable subset
 
-# Row selection --- keeprows takes a mask or explicit indices and keeps metadata aligned
+# Vector and scalar extractions
+ip_series = fred[1:12, "INDPRO"]                     # Vector{Float64} across rows
+first_row  = fred[1, ["INDPRO", "FEDFUNDS"]]         # Vector{Float64} across columns
+val        = fred[1, 1]                              # Float64 scalar
+
+# keeprows remains available for explicit index vectors or masks
 gm = keeprows(fred, collect(337:588))                # 1987:01-2007:12
-
-# Or drop to the raw matrix and rebuild (metadata must be re-supplied)
-gm2 = TimeSeriesData(to_matrix(fred)[337:588, :];
-    varnames=varnames(fred), frequency=Monthly, tcode=fred.tcode)
+(window_size = size(window), scalar_val = val)
 ```
 
 Dimensions and metadata come from accessor functions rather than field access, so the same call works across all three container types.

@@ -114,8 +114,16 @@ At ``h=1`` the recursive ordering fixes the answer: industrial production owes 1
 | `method` | `Symbol` | `:cholesky` | Identification method (`:cholesky`, `:sign`, `:long_run`, `:narrative`, ICA/ML/heteroskedasticity variants) |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
-| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+| `shock_names` | `Vector{String}` | method-specific | Labels for the shock dimension (default: `model.varnames` for Cholesky; `_default_shock_names(n)` for SVAR; `_svec_default_shock_names` for SVEC; `_default_proxy_shock_names` for Proxy) |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for set-identified methods |
+
+Default shock labels are standardized across identification schemes:
+- **Cholesky / reduced-form VAR**: `model.varnames`
+- **SVAR / set identification**: `["Shock 1", "Shock 2", ..., "Shock n"]` (or `_default_shock_names(n)`)
+- **Structural VECM (SVEC)**: `["P1", ..., "P(n-r)", "T1", ..., "Tr"]`
+- **Proxy SVAR**: `["Proxy", "Unidentified 1", ...]`
+
+Shock names propagate directly to `FEVD.shocks` and determine the legend labels in visualizations (`plot_result`). FEVD can also be called directly on structural models without re-specifying the method: [`fevd`](@ref)`(svar::SVARModel, H)` and [`fevd`](@ref)`(svec::SVECResult, H)`.
 
 ---
 

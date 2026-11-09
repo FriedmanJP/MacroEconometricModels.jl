@@ -948,15 +948,15 @@ The Kronecker reading of this equation, ``\text{vec}(\Sigma) = (I_{n^2} - G_1 \o
 ```@example dsge_nonlinear
 sol = solve(spec)
 
-# Unconditional covariance matrix
-Sigma = solve_lyapunov(sol.G1, sol.impact)
+# Unconditional covariance matrix (via sol.Sigma dynamic property)
+Sigma = sol.Sigma
 
 # Moment vector matching autocovariance_moments format
 m = analytical_moments(sol; lags=2)
 (std_devs = round.(sqrt.(diag(Sigma)); digits=5), n_moments = length(m))
 ```
 
-The moment vector contains two blocks: (1) the upper triangle of the variance-covariance matrix (``k(k+1)/2`` elements) and (2) diagonal autocovariances at each lag (``k`` elements per lag). With ``k = 4`` and two lags that is ``10 + 4 + 4 = 18`` entries. This format matches `autocovariance_moments(data, lags)` for direct comparison in [Estimation](@ref dsge_estimation).
+The moment vector contains two blocks: (1) the upper triangle of the variance-covariance matrix (``k_{\mathrm{obs}}(k_{\mathrm{obs}}+1)/2`` elements) and (2) diagonal autocovariances at each lag (``k_{\mathrm{obs}}`` elements per lag). With ``k = 4`` and two lags that is ``10 + 4 + 4 = 18`` entries. When `observable_indices` is specified, only moments for the selected observables are included. Setting `lags=0` extracts contemporaneous moments only (no autocovariances). This format matches `autocovariance_moments(data, lags)` for direct comparison in [Estimation](@ref dsge_estimation).
 
 ### Second-Order Moments (Andreasen et al. 2018)
 
@@ -987,8 +987,9 @@ mc = analytical_moments(psol2; lags=1)          # default :covariance format
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `lags` | `Int` | `1` | Number of autocovariance lags |
+| `lags` | `Union{Integer, AbstractVector{<:Integer}}` | `1` | Autocovariance lags; `0` computes contemporaneous moments only, or pass vector of lags |
 | `format` | `Symbol` | `:covariance` | `:covariance` for the backward-compatible vector, `:gmm` for mean shifts plus product moments |
+| `observable_indices` | `Union{Nothing, AbstractVector{<:Integer}}` | `nothing` | Subset of endogenous variable indices to include |
 
 The `:gmm` format returns 18 entries against 14 for `:covariance` at one lag: it carries the mean shifts that second-order perturbation induces, which the covariance format discards. Use `:gmm` when the estimation targets include the stochastic steady-state shift itself, `:covariance` when matching second moments against `autocovariance_moments`.
 

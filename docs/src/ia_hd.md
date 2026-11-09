@@ -152,8 +152,16 @@ Monetary shocks move industrial production by up to ``+0.271`` percent in a sing
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check function |
 | `max_draws` | `Int` | `1000` | Maximum rotation draws for sign/narrative identification |
-| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+| `shock_names` | `Vector{String}` | method-specific | Labels for the shock dimension (default: `model.varnames` for Cholesky; `_default_shock_names(n)` for SVAR; `_svec_default_shock_names` for SVEC; `_default_proxy_shock_names` for Proxy) |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for set-identified methods |
+
+Default shock labels are standardized across identification schemes:
+- **Cholesky / reduced-form VAR**: `model.varnames`
+- **SVAR / set identification**: `["Shock 1", "Shock 2", ..., "Shock n"]` (or `_default_shock_names(n)`)
+- **Structural VECM (SVEC)**: `["P1", ..., "P(n-r)", "T1", ..., "Tr"]`
+- **Proxy SVAR**: `["Proxy", "Unidentified 1", ...]`
+
+Shock names propagate directly to `HistoricalDecomposition.shock_names` and appear in stacked-bar legends and panel titles (`plot_result`). Historical decomposition can also be called directly on structural models without re-specifying the method: [`historical_decomposition`](@ref)`(svar::SVARModel)` and [`historical_decomposition`](@ref)`(svec::SVECResult)`.
 
 ---
 

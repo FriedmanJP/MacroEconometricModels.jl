@@ -6,6 +6,63 @@ output, not just documentation.
 
 ---
 
+## v1.0.3
+
+Robustness, interface alignment, and numerical precision release: DSGE analytical GMM
+observable subsetting and arbitrary vector lags, cointegration and VECM deterministic
+harmonization (Johansen Cases 1–5) and restriction tests in ``(n+1)``-space, HA-DSGE
+Reiter aggregate observation mapping, full 2D metadata-preserving `TimeSeriesData`
+indexing across four return shapes, SVAR and identification API unification, shock naming
+standardization across all structural models, and plotting grid layout defaults and CSS
+scoping (closes `#874`–`#881`). No breaking changes; struct constructors maintain backward
+compatibility. Numerical output changes for Reiter HA-DSGE impact multipliers (correcting
+initial impact ``h=1`` to non-zero aggregate responses) and VECM Case 2
+restricted-constant critical values and likelihood ratio tests.
+
+**New**
+
+- `analytical_moments` for DSGE models accepts `observable_indices` to subset moments to
+  observed series and arbitrary vector `lags` (e.g. `[1, 3]`), with lazy `sol.Sigma`
+  unconditional covariance property access via discrete Lyapunov recursion (`#874`).
+- Cointegration and VECM deterministic specification harmonized across Johansen Cases 1–5
+  (`:none`, `:constant`, `:unrestricted_constant`, `:trend`, `:unrestricted_trend`) with
+  Osterwald-Lenum (1992) critical values, cointegration restriction tests
+  (`test_beta_restriction`) in ``(n+1)``-space for restricted constants, and lazy
+  `m.eigenvalues` dynamic property exposure on `VECMModel` (`#875`).
+- Reiter HA-DSGE linearization computes aggregate observation maps (`C_obs`, `D_obs`),
+  and `sol.variables` exposes aggregate variable names (`["K"]`, `["r"]`) for automatic
+  downstream IRF and FEVD labeling (`#876`).
+- Full 2D indexing on `TimeSeriesData` (`ts[rows, cols]`) across all 4 return shapes with
+  Symbol, String, Date, range, and boolean selectors, array interfaces (`axes`, `size`,
+  `firstindex`, `lastindex`), and complete metadata preservation with mutation
+  isolation (`#877`).
+- SVAR ergonomics and API consistency: `cholesky_pattern(n)`, `add_zero!`,
+  bidirectional dispatch for `estimate_svar(model, pat)` and `check_identification`,
+  `instruments` keyword alias in `identify_proxy`, and `VARModel.residuals` property
+  accessor delegating to `m.U` (`#878`).
+- Standardized `shock_names` across all SVAR and SVEC result types (`AriasSVARResult`,
+  `UhligSVARResult`, `RobustBayesResult`, `SVARModel`, `SVECResult`, `SVSVARResult`,
+  `ProxySVARResult`, `HistoricalDecomposition`), with direct `irf()`, `fevd()`, and
+  `historical_decomposition()` methods and HTML-escaped plot title propagation (`#879`).
+- Plotting grid layout enhancements: single-shock IRF and OccBin plots default to
+  `ncols = min(n, 3)`, historical decomposition defaults to 2-column side-by-side panels,
+  and matrix IRFs render in strict row-major panel order (`#880`).
+- Plotting scoping and batch persistence: CSS custom property `--mem-panel-width` for
+  fragment isolation, D3 asset deduplication guard, and `save_plot` / `display_plot`
+  vector and tuple overloads for multi-plot standalone HTML persistence (`#881`).
+
+**Fixes**
+
+- `irf(::HADSGESolution)` under `:reiter` evaluates contemporaneous impact through `D_obs`,
+  eliminating the zero-impact anomaly at ``h=1`` and ensuring dynamic continuity with
+  state transitions (`#876`).
+- `test_beta_restriction` on Case 2 (`:constant`) VECMs correctly augments
+  ``n \times s`` design matrices to ``(n+1)``-space, ensuring non-binding identity
+  restrictions yield LR statistic ``\approx 0.0``, degrees of freedom ``0``,
+  and ``p = 1.0`` (`#875`).
+- `ProxySVARResult` property lookup supports both singular `instrument_names` and plural
+  `instruments_names` (`#878`).
+
 ## v1.0.2
 
 Machine-readability release: `Tables.jl` / `long_table` coverage for the TIDY

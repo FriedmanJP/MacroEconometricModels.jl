@@ -16,6 +16,10 @@ effective_nobs(::VARModel)
 
 ## VECM Models
 
+`VECMModel` stores estimated Vector Error Correction Model parameters (``\alpha``, ``\beta``, ``\Gamma``, ``\mu``, ``\Sigma``), cointegrating rank, and test diagnostics. It supports the dynamic property `m.eigenvalues`, which delegates to `m.johansen_result.eigenvalues` to expose the ordered eigenvalues from Johansen reduced-rank regression.
+
+`VECMRestrictionTest` holds log-likelihood ratio test statistics, degrees of freedom, and refitted models under restrictions on ``\beta`` (`test_beta_restriction`), ``\alpha`` (`test_alpha_restriction`), weak exogeneity (`test_weak_exogeneity`), known ``\beta`` (`test_known_beta`), and joint restrictions (`test_joint_restriction`). For Johansen Cases 2 and 4, restrictions on ``\beta`` automatically embed into ``(n+1)``-space via ``H^* = [H \; 0; 0 \; 1]``, leaving restricted deterministic terms unconstrained and preserving ``\mathrm{df} = r(n-s)``.
+
 ```@docs
 VECMModel
 VECMForecast
@@ -208,6 +212,13 @@ Order   = [:function]
 ```
 
 ### VECM Estimation
+
+`estimate_vecm` supports automatic rank selection via the Johansen trace test (`rank=:auto`) or explicit rank specification, and all five Johansen (1995) deterministic specifications via integer IDs (`1:5`) or symbols:
+- Case 1: `1` or `:none` (no deterministic terms)
+- Case 2: `2`, `:constant`, or `:restricted_constant` (restricted intercept in ``\beta``; default)
+- Case 3: `3`, `:unrestricted_constant`, or `:drift` (unrestricted constant in VAR)
+- Case 4: `4`, `:trend`, or `:restricted_trend` (restricted linear trend in ``\beta``)
+- Case 5: `5` or `:unrestricted_trend` (unrestricted trend in VAR)
 
 ```@docs
 estimate_vecm

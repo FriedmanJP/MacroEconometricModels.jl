@@ -166,12 +166,13 @@ The default moment vector is `autocovariance_moments(d; lags=1)`: the three dist
 
 ### Analytical GMM
 
-Analytical GMM computes model-implied moments from the unconditional distribution without simulation. For linear models, the Lyapunov equation provides exact second moments via `analytical_moments`. For higher-order perturbation solutions, moments are computed from pruned simulations.
+Analytical GMM computes model-implied moments from the unconditional distribution without simulation. For linear models, the Lyapunov equation provides exact second moments via `analytical_moments` (and the model covariance via `sol.Sigma`). When observables are a subset of model variables, pass `observable_indices` (e.g. `[1, 2]`); the input data matrix can be supplied either as pre-subsetted (``T \times k_{\mathrm{obs}}``) or full (``T \times n_{\mathrm{endog}}``) and will be aligned automatically. Parameter bounds can be supplied as a `ParameterTransform` or directly as a dictionary mapping parameter symbols to `(lower, upper)` intervals, such as `bounds=Dict(:rho => (0.2, 0.95))`. Vector autocovariance lags can be supplied via `auto_lags` (e.g. `auto_lags=[1, 2]`), or `lags=0` for contemporaneous moments only.
 
 ```@example dsge_estimation
 est_agmm = estimate_dsge(spec, Y_data, [:rho];
                     method=:analytical_gmm, solve_method=:gensys,
-                    solve_order=1, lags=1)
+                    solve_order=1, lags=1,
+                    bounds=Dict(:rho => (0.2, 0.95)))
 report(est_agmm)
 ```
 
@@ -224,12 +225,12 @@ A large J-statistic (low p-value) indicates model misspecification --- the model
 | `moments_fn` | `Function` | `d -> autocovariance_moments(d; lags=1)` | Custom moment function (SMM only) |
 | `contributions_fn` | `Function` | `d -> autocovariance_moment_contributions(d; lags=1)` | Per-observation moment contributions matching `moments_fn` (SMM only) |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator (SMM only) |
-| `bounds` | `ParameterTransform` | `nothing` | Parameter bounds via `ParameterTransform` (SMM and analytical GMM) |
+| `bounds` | `Union{Nothing, ParameterTransform, AbstractDict}` | `nothing` | Parameter bounds via `ParameterTransform` or `Dict` (e.g. `Dict(:rho => (0.2, 0.95))`) |
 | `solve_method` | `Symbol` | `:gensys` | DSGE solver for analytical GMM |
 | `solve_order` | `Int` | `1` | Perturbation order for analytical GMM |
-| `lags` | `Int` | `1` | Autocovariance lags when `solve_order=1` (analytical GMM) |
-| `auto_lags` | `Vector{Int}` | `[1]` | Autocovariance lags when `solve_order ≥ 2` (analytical GMM) |
-| `observable_indices` | `Vector{Int}` | `nothing` | Observable variable indices for analytical GMM |
+| `lags` | `Union{Integer, AbstractVector{<:Integer}}` | `1` | Autocovariance lags when `solve_order=1` (`0` for contemporaneous only) |
+| `auto_lags` | `AbstractVector{<:Integer}` | `[1]` | Autocovariance lags when `solve_order ≥ 2` (analytical GMM) |
+| `observable_indices` | `Union{Nothing, AbstractVector{<:Integer}}` | `nothing` | Observable variable indices; data may be ``T \times k_{\mathrm{obs}}`` or ``T \times n_{\mathrm{endog}}`` |
 
 !!! note "Weighting vocabularies differ by method"
     `:euler_gmm` and `:smm` route through `estimate_gmm`/`estimate_smm` and accept

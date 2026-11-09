@@ -79,8 +79,18 @@ FisherTestResult
 
 ADF, KPSS, Phillips-Perron, Zivot-Andrews, Ng-Perron, and Johansen, together with the
 Fourier, DF-GLS, LM, and two-break variants and the Gregory-Hansen cointegration test with
-a break. See [Unit Root Tests](@ref tests_unitroot_page) and
-[Advanced Unit Root Tests](@ref tests_unitroot_advanced_page).
+a break. See [Unit Root Tests](@ref tests_unitroot_page),
+[Advanced Unit Root Tests](@ref tests_unitroot_advanced_page), and
+[Vector Error Correction Models](@ref vecm_page) for VECM system estimation and restrictions.
+
+The Johansen cointegration test (`johansen_test`) supports all five deterministic specifications (Cases 1–5):
+- Case 1: `1` or `:none` (no deterministic terms)
+- Case 2: `2`, `:constant`, or `:restricted_constant` (restricted intercept in cointegrating space; default)
+- Case 3: `3`, `:unrestricted_constant`, or `:drift` (unrestricted constant in VAR / linear drift)
+- Case 4: `4`, `:trend`, or `:restricted_trend` (restricted linear trend in cointegrating space)
+- Case 5: `5` or `:unrestricted_trend` (unrestricted linear trend in VAR / quadratic drift)
+
+Results are returned in `JohansenResult`, which provides the trace test statistics, maximum eigenvalue statistics, critical values, and `res.eigenvalues` (the ordered eigenvalues from reduced-rank canonical correlation).
 
 ```@autodocs
 Modules = [MacroEconometricModels]

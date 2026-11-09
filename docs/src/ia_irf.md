@@ -119,7 +119,7 @@ plot_result(boot_irf)
 
 The impact matrix is lower triangular by construction: a funds-rate innovation moves industrial production and prices by exactly zero at ``h=1``, and the own impact effects are 0.466, 0.214, and 0.155 for the three variables. The policy shock is persistent — the funds rate itself is still 0.023 percentage points above baseline at ``h=8``, and within the policy-shock column it is the only response whose interval excludes zero beyond impact. Industrial production rises 0.050 percent at ``h=4`` before turning negative from ``h=8`` onward (``-0.015``), the standard delayed-contraction shape, but no output horizon has a 95% interval that excludes zero. The reverse channel is sharper: an industrial-production shock raises the funds rate by 0.024 on impact and 0.035 at ``h=4``, both starred, which is the systematic policy reaction rather than a policy shock.
 
-The point-estimate engine is also exposed for advanced users who supply their own rotation matrix ``Q``: [`compute_irf`](@ref)`(model, Q, horizon)` returns the ``H \times n \times n`` IRF array for any identification scheme. `irf` accepts a `VECMModel` as well, routing through `to_var` so that cointegrated systems reuse the same machinery — see [Vector Error Correction Models](@ref vecm_page).
+The point-estimate engine is also exposed for advanced users who supply their own rotation matrix ``Q``: [`compute_irf`](@ref)`(model, Q, horizon)` returns the ``H \times n \times n`` IRF array for any identification scheme. `irf` accepts a `VECMModel` as well, routing through `to_var` so that cointegrated systems reuse the same machinery — see [Vector Error Correction Models](@ref vecm_page). For a structural VECM, [`irf`](@ref)`(svec::SVECResult, horizon; kwargs...)` computes IRFs directly from the permanent–transitory decomposition.
 
 ### Keyword Arguments
 
@@ -137,7 +137,7 @@ The point-estimate engine is also exposed for advanced users who supply their ow
 | `bias_reps` | `Int` | `0` | Replications for the inner bias bootstrap; `0` reuses `reps` |
 | `check_func` | `Function` | `nothing` | Sign restriction check function (required for `:sign`) |
 | `narrative_check` | `Function` | `nothing` | Narrative restriction check (required for `:narrative`) |
-| `shock_names` | `Vector{String}` | variable names | Labels for the shock dimension |
+| `shock_names` | `Vector{String}` | method-specific | Labels for the shock dimension (default: `model.varnames` for Cholesky; `_default_shock_names(n)` for SVAR; `_svec_default_shock_names` for SVEC; `_default_proxy_shock_names` for Proxy) |
 | `seed` | `Integer` | `nothing` | Owns the RNG so bands reproduce bit-for-bit |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source when no `seed` is given |
 
@@ -153,6 +153,16 @@ The point-estimate engine is also exposed for advanced users who supply their ow
 | `shocks` | `Vector{String}` | Shock names |
 | `ci_type` | `Symbol` | CI method used (`:bootstrap`, `:theoretical`, `:none`) |
 | `manifest` | `ReproManifest` | Seed and settings recorded by the bootstrap path; `nothing` otherwise |
+
+### Shock Naming and Downstream Propagation
+
+Default shock labels are standardized across identification schemes to avoid conflating reduced-form variables with structural shocks:
+- **Cholesky / reduced-form VAR**: `model.varnames` (each shock matches the ordering of the respective endogenous variable)
+- **SVAR / set identification**: `["Shock 1", "Shock 2", ..., "Shock n"]` (or `_default_shock_names(n)`)
+- **Structural VECM (SVEC)**: `["P1", ..., "P(n-r)", "T1", ..., "Tr"]` separating ``n-r`` permanent and ``r`` transitory shocks
+- **Proxy SVAR**: `["Proxy", "Unidentified 1", ...]` (or `["Proxy 1", ..., "Proxy k", "Unidentified 1", ...]`)
+
+Shock names propagate directly to `ImpulseResponse.shocks` and determine the panel titles in visualizations (`plot_result`), which follow the standard convention `"var ← shock"`. Direct analysis can also be called on structural result objects: `irf(svar::SVARModel, H)` and `irf(svec::SVECResult, H)`.
 
 ---
 

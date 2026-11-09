@@ -204,6 +204,7 @@ The `report` output displays the VAR specification (number of variables, lags, o
 | `bic` | `T` | Bayesian Information Criterion |
 | `hqic` | `T` | Hannan-Quinn Information Criterion |
 | `varnames` | `Vector{String}` | Variable display names |
+| `residuals` | `Matrix{T}` | Dynamic property accessor (alias for `model.U`) |
 
 ---
 
@@ -336,6 +337,11 @@ A one-standard-deviation policy shock raises the funds rate by 0.082 percentage 
 | `narrative_check` | `Function` | `nothing` | Narrative-restriction predicate (`method=:narrative`) |
 | `seed` | `Integer` | `nothing` | Seed owning the bootstrap RNG; makes bands reproducible bit-for-bit |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator, when no `seed` is given |
+
+For alternative identification schemes:
+- In AB-model ML estimation ([AB-Model SVAR](@ref id_ab_page)), the recursive ordering pattern is constructed via `recursive_pattern(n)` or its exported alias `cholesky_pattern(n)`.
+- In external-instrument identification ([Proxy SVAR](@ref id_proxy_page)), `identify_proxy` and `irf(..., method=:proxy)` accept both `instruments` and `instrument` as keyword arguments.
+- Reduced-form residuals are available as `model.U` or through the property alias `model.residuals`.
 
 ### Bootstrap Schemes and Bias Correction
 

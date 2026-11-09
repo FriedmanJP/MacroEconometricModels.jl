@@ -47,7 +47,7 @@ Discrete and continuous time are alternative formulations of the same incomplete
 
 ## Child Pages
 
-- [Heterogeneous Agents](@ref dsge_ha) --- EGM and VFI individual problems, Young (2010) distribution tracking, sequence-space Jacobian, Reiter, and Krusell-Smith aggregate solvers, Winberry parametric distributions, two-asset HANK, multi-population `solve`, Khan–Thomas plants, Bewley Banks, and Bayesian estimation
+- [Heterogeneous Agents](@ref dsge_ha) --- EGM and VFI individual problems, Young (2010) distribution tracking, sequence-space Jacobian, Reiter and Winberry aggregate observation maps (`C_obs`, `D_obs`) with aggregate IRFs matching `sol.variables`, Krusell-Smith simulation, two-asset HANK, multi-population `solve`, and Bayesian estimation
 - [Overlapping Generations](@ref dsge_olg) --- Blanchard (1985) perpetual-youth steady state and saddle-path dynamics, annuity markets, non-Ricardian government debt, and age-dependent life-cycle EGM
 - [Continuous Time](@ref dsge_continuous) --- Achdou et al. (2022) HJB and Kolmogorov-Forward finite differences, MIT-shock transitions, and two-asset Kaplan-Moll-Violante HANK
 

@@ -102,11 +102,12 @@ Missing instrument observations are dropped pairwise against the VAR residuals (
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
+| `instrument` / `instruments` | `AbstractVector` / `AbstractMatrix` | `nothing` | External instrument(s) in keyword dispatch `identify_proxy(model; ...)` |
 | `shocks` | `AbstractVector{Int}` | `1:k` | Columns of ``Q`` assigned to the instrumented shocks |
 | `normalize` | `Symbol` | `:unit_effect` | `:unit_effect` or `:unit_variance` |
 | `normalize_var` | `Int` | `1` | Variable with unit impact under `:unit_effect` when ``k = 1`` |
 | `align` | `Bool` | `true` | Drop `NaN` rows pairwise; accept length ``T`` or ``T_{\mathrm{eff}}`` |
-| `instrument_names` | `Vector{String}` | `["z1", …]` | Labels for the instruments |
+| `instrument_names` | `Vector{String}` | `["z1", …]` | Labels for the instruments (alias: `instruments_names`) |
 | `shock_names` | `Vector{String}` | `"Proxy"` / `"Unidentified j"` | Shock labels |
 
 **Return value** (`ProxySVARResult`):
@@ -118,7 +119,12 @@ Missing instrument observations are dropped pairwise against the VAR residuals (
 | `k` | `Int` | Number of instruments / instrumented shocks |
 | `first_stage_F` | `T` | HAC first-stage ``F`` of the normalising residual on ``Z`` |
 | `reliability` | `T` | Mertens–Ravn reliability in ``[0, 1]`` |
+| `instruments_names` | `Vector{String}` | Instrument labels (also accessible via `result.instrument_names`) |
+| `varnames` | `Vector{String}` | Endogenous variable display names |
+| `shock_names` | `Vector{String}` | Structural shock labels |
 | `is_partial` | `Bool` | `true` when ``k < n`` |
+
+The underlying reduced-form VAR residual matrix ``\hat{U}`` can be inspected directly via `model.U` or through the dynamic property alias `model.residuals`.
 
 The one-argument method `identify_proxy(model, z::AbstractVector)` keeps the original NamedTuple `(Q, b1, first_stage_F, z_eff)` used by structural DFM.
 

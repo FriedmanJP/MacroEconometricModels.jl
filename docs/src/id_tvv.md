@@ -118,10 +118,17 @@ Persistent shock-specific volatility makes squared shocks serially correlated wi
 | `se` | `Matrix{T}` | Standard errors of `B0` (delta method) |
 | `J` | `T` | J-statistic at the estimate |
 | `J_pvalue` | `T` | ``\chi^2`` p-value of `J` |
+| `K` | `Int` | Number of lags used when `lags` not specified |
+| `lags` | `Vector{Int}` | Lags evaluated in the TVV moment conditions |
+| `weighting` | `Symbol` | GMM weighting scheme (`:one_step`, `:two_step`, `:cue`) |
+| `converged` | `Bool` | Optimizer convergence (not identification) |
+| `iters` | `Int` | Optimizer iterations run |
 | `weak_id` | `Bool` | True when the strength screen fails |
 | `id_strength` | `T` | Strength statistic relative to the 99.9% null value |
-| `converged` | `Bool` | Optimizer convergence (not identification) |
+| `message` | `String` | Diagnostic status or failure message |
 | `shocks` | `Matrix{T}` | Estimated structural shocks |
+| `varnames` | `Vector{String}` | Endogenous variable display names |
+| `shock_names` | `Vector{String}` | Structural shock labels |
 
 ---
 

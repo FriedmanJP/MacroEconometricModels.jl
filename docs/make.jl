@@ -55,7 +55,7 @@ makedocs(;
                 "ARDL & Bounds Test" => "ardl.md",
                 "Cointegrating Regression" => "cointreg.md",
             ],
-            "Projections & Factor Models" => [
+            "Local Projections & Factor Models" => [
                 "Local Projections" => "lp.md",
                 "Factor Models" => "factormodels.md",
                 "FAVAR" => "favar.md",

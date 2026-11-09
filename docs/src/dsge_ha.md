@@ -658,6 +658,9 @@ The SSJ method reduces the full sequence-space representation (dimension ``T``) 
 | `explained_variance` | `T` | Fraction of variance captured by truncation |
 | `linear_solution` | `DSGESolution{T}` | Reduced-form state-space representation |
 | `steady_state` | `HASteadyState{T}` | Underlying stationary equilibrium |
+| `C_obs` | `Matrix{T}` | Aggregate observation matrix mapping reduced states to aggregate variables |
+| `D_obs` | `Matrix{T}` | Direct shock feed-through matrix on impact onto aggregate variables |
+| `variables` | `Vector{String}` | Dynamic property listing aggregate variable names (`["K"]` or `["r"]`) |
 
 ---
 
@@ -689,7 +692,23 @@ plot_result(sol_reiter; view=:inequality, horizon=16) # Gini and percentile path
 
 Neither view is available from an `:ssj` solution: the Ho-Kalman realization's coordinates are abstract minimal-realization states with no map back to the ``(a, e)`` histogram, so `distribution_irf` raises an error there and directs you to `:reiter`.
 
-The Reiter method produces an equivalent reduced state-space form to SSJ. The explained variance confirms that 15 reduced states capture nearly all aggregate dynamics. The two methods yield identical IRFs up to numerical precision for the same `n_reduced`, but differ in computational cost: SSJ is faster for models with few aggregate inputs, while Reiter scales better when many prices affect household decisions.
+The Reiter method maps the reduced linear system to aggregate variables through the explicit observation equation:
+
+```math
+x_{t+1} = A \, x_t + B \, \varepsilon_t, \qquad y_t = C_{\text{obs}} \, x_t + D_{\text{obs}} \, \varepsilon_t
+```
+
+where:
+- ``x_t`` is the ``n_{\text{reduced}} \times 1`` reduced state vector
+- ``y_t`` is the vector of aggregate observed variables matching `sol.variables` (``K`` for Krusell-Smith / Aiyagari, ``r`` for Huggett)
+- ``A, B`` are the state transition and shock impact matrices of `sol.linear_solution`
+- ``C_{\text{obs}}`` is the aggregate observation matrix mapping reduced states to aggregate outputs
+- ``D_{\text{obs}}`` is the direct shock impact matrix
+- ``\varepsilon_t`` is the structural innovation vector
+
+Calling `irf(sol, H)` for Reiter solutions produces an aggregate `ImpulseResponse` matching `sol.variables`. The impact response at ``h = 1`` is the direct feed-through ``D_{\text{obs}}`` (which is non-zero), and subsequent horizons ``h \ge 2`` are ``C_{\text{obs}} A^{h-2} B``, yielding macroeconomic aggregates directly rather than raw reduced-state coordinates.
+
+The explained variance confirms that 15 reduced states capture nearly all aggregate dynamics. The two methods yield identical IRFs up to numerical precision for the same `n_reduced`, but differ in computational cost: SSJ is faster for models with few aggregate inputs, while Reiter scales better when many prices affect household decisions.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|

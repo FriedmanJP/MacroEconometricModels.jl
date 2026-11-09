@@ -82,6 +82,7 @@ is_linear_zero
 sign_check
 zero_restriction
 sign_restriction
+add_zero!
 a0_zero_restriction
 a0_sign_restriction
 aplus_zero_restriction
@@ -93,6 +94,10 @@ cumulative_restriction
 narrative_shock_restriction
 narrative_contribution_restriction
 ```
+
+`identify_narrative` provides two workflows:
+- **Typed ADRR restrictions**: `identify_narrative(model, restrictions::SVARRestrictions, horizon; kwargs...)` forwards keyword arguments directly to [`identify_arias`](@ref) (`n_draws=1000`, `n_rotations=1000`, `compute_weights=true`, `normalize_weights=true`, `n_narrative_sims=1000`, `rng`).
+- **Closure-based restrictions**: `identify_narrative(model, horizon, sign_check, narrative_check; max_draws=1000, store_all=false, shock_names=nothing, seed=nothing, rng)` returns either `(Q, irf, shocks)` (when `store_all=false`) or a `SignIdentifiedSet` (when `store_all=true`).
 
 ### Posterior Summaries of an Identified Set
 
@@ -129,6 +134,7 @@ identified_set_bounds
 ```@docs
 estimate_svar
 recursive_pattern
+cholesky_pattern
 blanchard_quah_pattern
 a_model_pattern
 b_model_pattern

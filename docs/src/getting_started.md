@@ -53,7 +53,7 @@ The horizon-``h`` entry of the `FEDFUNDS` block is the response of each variable
 
 **Recipe 4: Stay inside the data containers**
 
-`apply_tcode` returns a `TimeSeriesData` that carries variable names, frequency, and transformation codes, and every estimator accepts it directly — no manual matrix extraction. `describe_data` summarizes it and `diagnose` reports `NaN`, `Inf`, and constant columns before you estimate anything:
+`apply_tcode` returns a `TimeSeriesData` that carries variable names, frequency, and transformation codes, and every estimator accepts it directly — no manual matrix extraction. Containers support direct 2D indexing `fred[rows, cols]` (e.g. `fred[end-99:end, ["INDPRO", "FEDFUNDS"]]`), preserving all metadata across row slices and column selections. `describe_data` summarizes it and `diagnose` reports `NaN`, `Inf`, and constant columns before you estimate anything:
 
 ```@example gs
 describe_data(d)
