@@ -551,7 +551,7 @@ The slope rises monotonically with ``\tau`` — ``-0.186`` at the 10th percentil
 
 ### Solver and standard errors
 
-The check loss is piecewise linear, so the optimum is a **basic solution**: it interpolates ``k`` observations exactly. The solver minimizes by iteratively reweighted least squares with the weight floor annealed toward zero, which drives the iterate onto that vertex — verified against exhaustive enumeration of all ``k``-subsets on small problems, agreeing to ``10^{-12}``–``10^{-9}``.
+The check loss is piecewise linear, so the optimum is a **basic solution**: it interpolates ``k`` observations exactly. By default (`solver = :ipm`), `estimate_qreg` solves the bounded-variable dual linear program via the Portnoy & Koenker (1997) Frisch–Newton primal–dual Mehrotra predictor–corrector interior-point method (Koenker 2005, Appendix A), factoring one ``k \times k`` normal matrix per iteration with `safe_cholesky` and `robust_inv` fallbacks for collinear designs. Setting `solver = :irls` selects annealed iteratively reweighted least squares. Both solvers match exhaustive enumeration of all ``k``-subsets on small problems to ``10^{-12}``–``10^{-9}``.
 
 | `se` | Estimator |
 |------|-----------|
@@ -559,14 +559,16 @@ The check loss is piecewise linear, so the optimum is a **basic solution**: it i
 | `:robust` | Powell kernel sandwich, allowing the conditional density at the quantile to vary with ``x`` |
 | `:boot` | xy-pair bootstrap, assuming nothing about that density |
 
-The sparsity ``s(\tau)`` is estimated by the Siddiqui–Hendricks–Koenker difference quotient with the Hall–Sheather bandwidth. On a median regression with standard normal errors all three agree with the analytic ``\sqrt{\pi/2}/\sqrt{n}``.
+The Siddiqui–Hendricks–Koenker difference quotient with the Hall–Sheather bandwidth estimates the sparsity ``s(\tau)``. On a median regression with standard normal errors, all three estimators agree with the analytic ``\sqrt{\pi/2}/\sqrt{n}``.
 
 `tau` is the third **positional** argument of `estimate_qreg(y, X, tau=0.5)`, not a keyword; the remaining controls are keywords:
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `se` | `Symbol` | `:iid` | `:iid`, `:robust`, or `:boot` |
+| `se` | `Symbol` | `:iid` | Standard-error estimator (`:iid`, `:robust`, or `:boot`) |
+| `solver` | `Symbol` | `:ipm` | Check-loss solver (`:ipm` Frisch–Newton IPM or `:irls` annealed IRLS) |
 | `n_boot` | `Int` | `500` | Bootstrap replications when `se = :boot` |
+| `seed` | `Union{Integer,Nothing}` | `nothing` | Random seed for reproducible bootstrap draws |
 | `alpha` | `Real` | `0.05` | Level for the Hall–Sheather bandwidth |
 | `rng` | `AbstractRNG` | `default_rng()` | Generator for the xy-pair bootstrap |
 | `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
@@ -2017,6 +2019,11 @@ typeof(m2)
 
 - Koenker, R., & Bassett, G. (1978). Regression Quantiles.
   *Econometrica*, 46(1), 33-50. [DOI](https://doi.org/10.2307/1913643)
+
+- Koenker, R. (2005). *Quantile Regression*. Cambridge: Cambridge University Press. ISBN 978-0-521-60827-5. [DOI](https://doi.org/10.1017/CBO9780511754098)
+
+- Portnoy, S., & Koenker, R. (1997). The Gaussian Hare and the Laplacian Tortoise: Computability of Squared-Error versus Absolute-Error Estimators.
+  *Statistical Science*, 12(4), 279-300. [DOI](https://doi.org/10.1214/ss/1030037960)
 
 - Hausman, J. A., & Wise, D. A. (1977). Social Experimentation, Truncated Distributions, and Efficient Estimation.
   *Econometrica*, 45(4), 919-938. [DOI](https://doi.org/10.2307/1912682)

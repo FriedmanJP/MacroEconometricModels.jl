@@ -2130,6 +2130,336 @@ end
         # T159: y ≡ x exactly ⇒ the LAD minimizer is unique at β=[0,1] (objective 0
         # attained only at the exact fit); the solver must reproduce it, not just stay finite.
         @test vec(coef(mi)) ≈ [0.0, 1.0] atol = 1e-8
+        @test_throws ArgumentError estimate_qreg(y, X, 0.5; solver=:bogus)
+        @test_throws ArgumentError estimate_qreg(y, X, 0.5; solver=:simplex)
+    end
+
+    @testset "IPM matches IRLS and exact LP across extreme and central quantiles (#883)" begin
+        function brute_qreg(X, y, tau)
+            n, k = size(X); best = nothing; bl = Inf
+            function rec(start, acc)
+                if length(acc) == k
+                    Xs = X[acc, :]
+                    abs(det(Xs)) < 1e-10 && return
+                    b = Xs \ y[acc]; L = checkloss(y .- X * b, tau)
+                    L < bl - 1e-12 && (bl = L; best = b)
+                    return
+                end
+                for i in start:n
+                    rec(i + 1, vcat(acc, i))
+                end
+            end
+            rec(1, Int[]); return best, bl
+        end
+
+        rng = Random.Xoshiro(8831)
+        for tau in (0.05, 0.25, 0.50, 0.75, 0.95), (n, k) in ((14, 2), (16, 3))
+            X = hcat(ones(n), randn(rng, n, k - 1))
+            y = X * ones(k) .+ randn(rng, n)
+            b_exact, L_exact = brute_qreg(X, y, tau)
+            m_ipm = estimate_qreg(y, X, tau; solver=:ipm)
+            m_irls = estimate_qreg(y, X, tau; solver=:irls)
+            @test m_ipm.converged[1]
+            @test m_irls.converged[1]
+            @test m_ipm.objective[1] ≈ L_exact atol = 1e-9
+            @test m_ipm.objective[1] >= L_exact - 1e-12
+            @test abs(m_ipm.objective[1] - m_irls.objective[1]) <= 1e-9
+            @test vec(coef(m_ipm)) ≈ b_exact atol = 1e-6
+            @test m_ipm.manifest.settings["solver"] == "ipm"
+            @test m_irls.manifest.settings["solver"] == "irls"
+        end
+
+        # Medium well-conditioned design across all five quantiles
+        rng_m = Random.Xoshiro(88310)
+        n_m, k_m = 300, 4
+        X_m = hcat(ones(n_m), randn(rng_m, n_m, k_m - 1))
+        y_m = X_m * [1.0, -0.5, 2.0, 0.3] .+ randn(rng_m, n_m)
+        taus_5 = [0.05, 0.25, 0.50, 0.75, 0.95]
+        m_def = estimate_qreg(y_m, X_m, taus_5)
+        m_ipm = estimate_qreg(y_m, X_m, taus_5; solver=:ipm)
+        m_irls = estimate_qreg(y_m, X_m, taus_5; solver=:irls)
+        @test m_def.beta == m_ipm.beta
+        @test m_def.objective == m_ipm.objective
+        for j in 1:5
+            @test m_ipm.converged[j]
+            @test abs(m_ipm.objective[j] - m_irls.objective[j]) <= 1e-9
+            @test m_ipm.beta[:, j] ≈ m_irls.beta[:, j] atol = 1e-5
+        end
+    end
+
+    @testset "IPM convergence iterations, duality gap, and maxit (#883)" begin
+        rng = Random.Xoshiro(8835)
+        for (n, k) in ((50, 2), (400, 4), (1000, 8))
+            X = hcat(ones(n), randn(rng, n, k - 1))
+            y = X * collect(1.0:k) .+ randn(rng, n)
+            ws = M._QRegWorkspace(n, k)
+            beta = zeros(k)
+            for tau in (0.05, 0.25, 0.50, 0.75, 0.95)
+                _, conv = M._qreg_ipm!(beta, X, y, tau, ws)
+                @test conv
+                @test 1 <= ws.iters <= 60
+                @test ws.gap < 1e-10
+                @test all(0 .<= ws.d .<= 1)
+                @test maximum(abs, X' * ws.d .- (1.0 - tau) .* vec(sum(X; dims=1))) < 1e-10
+                p_obj = M._check_loss(y .- X * beta, tau)
+                d_obj = dot(y, ws.d) - (1.0 - tau) * sum(y)
+                @test abs(p_obj - d_obj) < 1e-10
+            end
+        end
+
+        # Convenience 4-arg method and non-convergence when maxit=2
+        X_mc = hcat(ones(400), randn(rng, 400, 3))
+        y_mc = X_mc * [1.0, 2.0, -1.0, 0.5] .+ randn(rng, 400)
+        b_4arg = zeros(4)
+        _, conv_4arg = M._qreg_ipm!(b_4arg, X_mc, y_mc, 0.5)
+        @test conv_4arg
+        ws_mc = M._QRegWorkspace{Float64}(400, 4)
+        b_mc = zeros(4)
+        _, conv_2 = M._qreg_ipm!(b_mc, X_mc, y_mc, 0.5, ws_mc; maxit=2)
+        @test !conv_2
+        @test ws_mc.iters == 2
+        @test ws_mc.gap > 1e-10
+    end
+
+    @testset "Batched _qreg_batch!, workspace allocations, Float32, and >= 10x speedup (#883)" begin
+        rng = Random.Xoshiro(8832)
+        T_obs, k_b, M_ser = 400, 4, 100
+        X = hcat(ones(T_obs), randn(rng, T_obs, k_b - 1))
+        Y_mat = X * randn(rng, k_b, M_ser) .+ randn(rng, T_obs, M_ser)
+        B_thr = zeros(k_b, M_ser)
+        B_ser = zeros(k_b, M_ser)
+
+        for tau in (0.25, 0.50, 0.95)
+            M._qreg_batch!(B_thr, X, Y_mat, tau; threaded=true)
+            M._qreg_batch!(B_ser, X, Y_mat, tau; threaded=false)
+            @test B_thr ≈ B_ser atol = 1e-12
+
+            ws_col = M._QRegWorkspace{Float64}(T_obs, k_b)
+            b_col = zeros(k_b)
+            for j in 1:M_ser
+                yj = Y_mat[:, j]
+                M._qreg_ipm!(b_col, X, yj, tau, ws_col)
+                @test B_thr[:, j] ≈ b_col atol = 1e-12
+                _, _ = begin
+                    b_irls, _ = M._qreg_fit(X, yj, tau)
+                    loss_ipm = checkloss(yj .- X * B_thr[:, j], tau)
+                    loss_irls = checkloss(yj .- X * b_irls, tau)
+                    @test loss_ipm <= loss_irls + 1e-9
+                    (b_irls, true)
+                end
+            end
+        end
+
+        # Warmup and >= 10x speedup over looping _qreg_fit
+        B_bench = zeros(k_b, M_ser)
+        M._qreg_batch!(B_bench, X, Y_mat, 0.5; threaded=true)
+        M._qreg_fit(X, Y_mat[:, 1], 0.5)
+        t_batch = minimum(_ -> (@elapsed M._qreg_batch!(B_bench, X, Y_mat, 0.5; threaded=true)), 1:3)
+        t_irls = @elapsed begin
+            for j in 1:M_ser
+                M._qreg_fit(X, Y_mat[:, j], 0.5)
+            end
+        end
+        @test t_irls / t_batch >= 10.0
+
+        # Zero / O(1) heap allocations with pre-allocated _QRegWorkspace
+        # Measure inside a typed function barrier to avoid @testset local-binding boxing
+        function qreg_alloc_check!(b, X_in, y_in, tau_val, ws_in)
+            MacroEconometricModels._qreg_ipm!(b, X_in, y_in, tau_val, ws_in)
+            MacroEconometricModels._qreg_ipm!(b, X_in, y_in, tau_val, ws_in)
+            return @allocated MacroEconometricModels._qreg_ipm!(b, X_in, y_in, tau_val, ws_in)
+        end
+        ws_sm = M._QRegWorkspace{Float64}(400, 4)
+        b_sm = zeros(4)
+        y_sm = Y_mat[:, 1]
+        alloc_sm = qreg_alloc_check!(b_sm, X, y_sm, 0.5, ws_sm)
+
+        X_lg = hcat(ones(4000), randn(rng, 4000, 3))
+        y_lg = X_lg * ones(4) .+ randn(rng, 4000)
+        ws_lg = M._QRegWorkspace{Float64}(4000, 4)
+        b_lg = zeros(4)
+        alloc_lg = qreg_alloc_check!(b_lg, X_lg, y_lg, 0.5, ws_lg)
+        @test alloc_sm == 0
+        @test alloc_lg == 0
+
+        # Float32 support (direct and batch)
+        X32 = Float32.(X[1:60, :])
+        Y32 = Float32.(Y_mat[1:60, 1:12])
+        ws32 = M._QRegWorkspace{Float32}(60, k_b)
+        b32 = zeros(Float32, k_b)
+        _, conv32 = M._qreg_ipm!(b32, X32, Y32[:, 1], 0.5f0, ws32)
+        @test conv32
+        @test eltype(b32) === Float32
+        @test all(isfinite, b32)
+        B32 = zeros(Float32, k_b, 12)
+        M._qreg_batch!(B32, X32, Y32, 0.5; threaded=true)
+        @test eltype(B32) === Float32
+        @test B32[:, 1] ≈ b32 atol = 1f-5
+    end
+
+    @testset "SE parity between :ipm and :irls (#883)" begin
+        rng = Random.Xoshiro(8833)
+        n, k = 500, 3
+        X = hcat(ones(n), randn(rng, n, k - 1))
+        y = X * [1.0, 2.0, -0.75] .+ randn(rng, n)
+        taus = [0.25, 0.50, 0.75]
+
+        for se_type in (:iid, :robust)
+            m_ipm = estimate_qreg(y, X, taus; se=se_type, solver=:ipm)
+            m_irls = estimate_qreg(y, X, taus; se=se_type, solver=:irls)
+            @test m_ipm.stderr ≈ m_irls.stderr rtol = 1e-5
+            for j in eachindex(taus)
+                @test m_ipm.vcov_mats[j] ≈ m_irls.vcov_mats[j] rtol = 1e-5
+            end
+        end
+
+        m_bt_ipm = estimate_qreg(y, X, taus; se=:boot, n_boot=200, seed=883, solver=:ipm)
+        m_bt_irls = estimate_qreg(y, X, taus; se=:boot, n_boot=200, seed=883, solver=:irls)
+        @test m_bt_ipm.stderr ≈ m_bt_irls.stderr rtol = 0.02
+        for j in eachindex(taus)
+            @test m_bt_ipm.vcov_mats[j] ≈ m_bt_irls.vcov_mats[j] rtol = 0.03
+        end
+
+        m_bt_rep = estimate_qreg(y, X, taus; se=:boot, n_boot=200, seed=883, solver=:ipm)
+        @test m_bt_ipm.stderr == m_bt_rep.stderr
+        @test m_bt_ipm.vcov_mats == m_bt_rep.vcov_mats
+    end
+
+    @testset "Degenerate/collinear X fallback without PosDefException (#883)" begin
+        rng = Random.Xoshiro(8834)
+        n = 80
+        x1 = randn(rng, n)
+        x2 = randn(rng, n)
+        y = 1.0 .+ 2.0 .* x1 .- 0.5 .* x2 .+ 0.5 .* randn(rng, n)
+
+        X_base1 = hcat(ones(n), x1)
+        m_base1 = estimate_qreg(y, X_base1, 0.5; se=:iid, solver=:ipm)
+        X_base2 = hcat(ones(n), x1, x2)
+        m_base2 = estimate_qreg(y, X_base2, 0.5; se=:iid, solver=:ipm)
+
+        X_dup = hcat(ones(n), x1, x1)
+        X_lin = hcat(ones(n), x1, x2, 2.0 .* x1 .- 3.0 .* x2)
+        X_nz = hcat(ones(n), x1, 1e-14 .* randn(rng, n))
+        X_zero = hcat(ones(n), x1, zeros(n))
+
+        for (X_deg, base) in ((X_dup, m_base1), (X_lin, m_base2),
+                              (X_nz, m_base1), (X_zero, m_base1))
+            for se_type in (:iid, :robust)
+                m_deg = estimate_qreg(y, X_deg, 0.5; se=se_type, solver=:ipm)
+                @test all(isfinite, coef(m_deg))
+                @test all(isfinite, stderror(m_deg))
+                if X_deg !== X_nz
+                    @test m_deg.objective[1] ≈ base.objective[1] atol = 1e-8
+                    @test fitted(m_deg) ≈ fitted(base) atol = 1e-6
+                end
+            end
+        end
+
+        Y_small = hcat(y, y .+ 0.2 .* randn(rng, n))
+        B_deg = zeros(3, 2)
+        M._qreg_batch!(B_deg, X_dup, Y_small, 0.5; threaded=false)
+        @test all(isfinite, B_deg)
+    end
+
+    @testset "Adjoint and non-unit-stride views in _qreg_batch! and _qreg_ipm! (#883)" begin
+        rng = Random.Xoshiro(8836)
+        N_q, T_q, r_q = 40, 80, 4
+        Lambda = hcat(ones(N_q), randn(rng, N_q, r_q - 1))
+        F_true = randn(rng, T_q, r_q)
+        X_panel = F_true * Lambda' .+ 0.4 .* randn(rng, T_q, N_q)
+
+        # QFM-02 alternating pattern: factor step (B_out = F', Y_mat = X_panel')
+        F_thr = zeros(T_q, r_q)
+        F_ser = zeros(T_q, r_q)
+        M._qreg_batch!(F_thr', Lambda, X_panel', 0.5; threaded=true)
+        M._qreg_batch!(F_ser', Lambda, X_panel', 0.5; threaded=false)
+        @test F_thr == F_ser
+        @test all(isfinite, F_thr)
+
+        ws_f = M._QRegWorkspace{Float64}(N_q, r_q)
+        b_col = zeros(r_q)
+        for t in 1:T_q
+            M._qreg_ipm!(b_col, Lambda, X_panel[t, :], 0.5, ws_f)
+            @test F_thr[t, :] ≈ b_col atol = 1e-12
+        end
+
+        # QFM-02 loading step (B_out = Lambda', X_design = F_thr, Y_mat = X_panel)
+        L_thr = zeros(N_q, r_q)
+        L_ser = zeros(N_q, r_q)
+        M._qreg_batch!(L_thr', F_thr, X_panel, 0.25; threaded=true)
+        M._qreg_batch!(L_ser', F_thr, X_panel, 0.25; threaded=false)
+        @test L_thr == L_ser
+        @test all(isfinite, L_thr)
+
+        # Float32 Adjoint B_out and Y_mat
+        F32_thr = zeros(Float32, T_q, r_q)
+        F32_ser = zeros(Float32, T_q, r_q)
+        M._qreg_batch!(F32_thr', Float32.(Lambda), Float32.(X_panel'), 0.5f0; threaded=true)
+        M._qreg_batch!(F32_ser', Float32.(Lambda), Float32.(X_panel'), 0.5f0; threaded=false)
+        @test F32_thr == F32_ser
+        @test all(isfinite, F32_thr)
+
+        # Non-unit-row-stride @view B_big[1:2:2k, 2:2:2M] and direct row @view in _qreg_ipm!
+        M_s = 12
+        B_big = fill(NaN, 2 * r_q, 2 * M_s)
+        B_sub_thr = @view B_big[1:2:(2 * r_q), 2:2:(2 * M_s)]
+        B_sub_ser = zeros(r_q, M_s)
+        Y_sub = X_panel'[1:N_q, 1:M_s]
+        M._qreg_batch!(B_sub_thr, Lambda, Y_sub, 0.75; threaded=true)
+        M._qreg_batch!(B_sub_ser, Lambda, Y_sub, 0.75; threaded=false)
+        @test B_sub_thr == B_sub_ser
+        @test all(isnan, B_big[2:2:(2 * r_q), :])
+
+        b_row = zeros(r_q)
+        F_row = zeros(3, r_q)
+        _, conv_row = M._qreg_ipm!(@view(F_row[2, :]), Lambda, X_panel[1, :], 0.5)
+        M._qreg_ipm!(b_row, Lambda, X_panel[1, :], 0.5)
+        @test conv_row
+        @test F_row[2, :] == b_row
+    end
+
+    @testset "Float32 estimate_qreg across all SE types and (n=50, k=16) convergence (#883)" begin
+        rng = Random.Xoshiro(8837)
+        X32 = Float32.(hcat(ones(100), randn(rng, 100, 2)))
+        y32 = Float32.(X32 * Float32[1.0, 2.0, -0.5] .+ randn(rng, 100))
+        for se_type in (:iid, :robust, :boot)
+            m32 = estimate_qreg(y32, X32, 0.5f0; se=se_type, n_boot=40, seed=883, solver=:ipm)
+            @test m32 isa QuantileRegModel{Float32}
+            @test all(m32.converged)
+            @test all(isfinite, coef(m32))
+            @test all(isfinite, stderror(m32))
+            @test eltype(stderror(m32)) === Float32
+        end
+        m32_multi = estimate_qreg(y32, X32, Float32[0.25, 0.5, 0.75]; se=:iid, solver=:ipm)
+        @test m32_multi isa QuantileRegModel{Float32}
+        @test all(m32_multi.converged)
+        @test all(isfinite, stderror(m32_multi))
+
+        # Float32 (n=50, k=16) IPM & batch convergence across seeds and quantiles
+        function f32_alloc_check!(b, X_in, y_in, tau_val, ws_in)
+            MacroEconometricModels._qreg_ipm!(b, X_in, y_in, tau_val, ws_in)
+            fill!(b, zero(Float32))
+            return @allocated MacroEconometricModels._qreg_ipm!(b, X_in, y_in, tau_val, ws_in)
+        end
+        ws50 = M._QRegWorkspace{Float32}(50, 16)
+        b50 = zeros(Float32, 16)
+        for seed in (15, 36, 40, 143), tau in (0.05f0, 0.5f0, 0.95f0)
+            rng50 = Random.MersenneTwister(seed)
+            X50 = Float32.(hcat(ones(50), randn(rng50, 50, 15)))
+            y50 = Float32.(X50 * ones(Float32, 16) .+ randn(rng50, 50))
+            al = f32_alloc_check!(b50, X50, y50, tau, ws50)
+            _, conv50 = M._qreg_ipm!(b50, X50, y50, tau, ws50)
+            @test conv50
+            @test ws50.iters < 20
+            @test al == 0
+            @test all(isfinite, b50)
+        end
+        rng_b = Random.MersenneTwister(143)
+        X_b = Float32.(randn(rng_b, 50, 16))
+        Y_b = Float32.(randn(rng_b, 50, 8))
+        B_b = zeros(Float32, 16, 8)
+        M._qreg_batch!(B_b, X_b, Y_b, 0.5f0; threaded=true)
+        @test all(isfinite, B_b)
     end
 end
 
