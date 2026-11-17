@@ -169,6 +169,32 @@ function _from_serializable(::Type{LPModel}, p::AbstractDict, ::Int)
             p["B"], p["residuals"], p["vcov"], p["T_eff"], cov, p["varnames"])
 end
 
+# v1 StateSpaceModel payloads written before `G` was added omit `"G"`; default
+# missing `"G"` to `nothing` here rather than relaxing the generic missing-key
+# check for unrelated types that carry a required `:G` field.
+function _from_serializable_statespace(p::AbstractDict, ::Int)
+    args = Any[]
+    for f in fieldnames(StateSpaceModel)
+        key = String(f)
+        if !haskey(p, key)
+            if f === :G
+                push!(args, nothing)
+                continue
+            end
+            throw(SerializationError(
+                "field '$key' of StateSpaceModel is missing from the payload — the file " *
+                "was saved by an older package version, before this field existed. " *
+                "Re-create and re-save the object with the current version."))
+        end
+        push!(args, _deser_field(p[key]))
+    end
+    return _generic_construct(StateSpaceModel, args)
+end
+_from_serializable(::Type{StateSpaceModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_statespace(p, ver)
+_from_serializable(::Type{<:StateSpaceModel}, p::AbstractDict, ver::Int) =
+    _from_serializable_statespace(p, ver)
+
 # Nested config struct inside `StateLPModel`: its inner constructor recomputes the
 # derived `F_values` field from (state_var, gamma, threshold, method), so route
 # through that 4-argument constructor rather than the full field list.

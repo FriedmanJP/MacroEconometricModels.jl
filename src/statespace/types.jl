@@ -41,6 +41,7 @@ Kalman filter / RTS smoother output and prediction-error-decomposition MLE resul
 - `d::Vector{T}`      — observation intercept (`n_obs`, zeros if absent)
 - `c::Vector{T}`      — state intercept (`n_state`, zeros if absent)
 - `R::Matrix{T}`      — state-noise loading (`n_state × r`, identity if absent)
+- `G::Union{Nothing,Matrix{T}}` — cross-covariance `Cov(ηₜ, εₜ)` (`r × n_obs`, `nothing` if uncorrelated)
 - `a1::Vector{T}`     — initial state mean (`n_state`)
 - `P1::Matrix{T}`     — initial state covariance (`n_state × n_state`)
 - `init_mode::Symbol` — kernel initialization mode (`:diffuse`/`:kappa`/`:stationary`/`:explicit`)
@@ -71,6 +72,7 @@ struct StateSpaceModel{T<:AbstractFloat} <: AbstractStateSpaceModel{T}
     d::Vector{T}
     c::Vector{T}
     R::Matrix{T}
+    G::Union{Nothing,Matrix{T}}
     a1::Vector{T}
     P1::Matrix{T}
     init_mode::Symbol
@@ -96,14 +98,16 @@ end
 # Fixed-matrix constructor — fully specifies the system (unfitted spec).
 # -----------------------------------------------------------------------------
 """
-    StateSpaceModel(Z, H, T_mat, Q; d=nothing, c=nothing, R=nothing,
+    StateSpaceModel(Z, H, T_mat, Q; d=nothing, c=nothing, R=nothing, G=nothing,
                     a1=nothing, P1=nothing, init_mode=:kappa, kappa=1e6)
 
 Build an (unfitted) `StateSpaceModel` from fixed system matrices. `d`/`c` default to
-zero vectors, `R` to the identity, and the initial `(a1, P1)` are formed via the
-kernel's `_kalman_init` under `init_mode` (`:kappa` by default). Filter, smooth, and
-log-likelihood-evaluate it with [`estimate_statespace`](@ref); forecast with
-[`forecast`](@ref) once fitted.
+zero vectors, `R` to the identity, `G` to `nothing` (uncorrelated state and observation
+disturbances; otherwise an `r × n_obs` matrix `Cov(ηₜ, εₜ)`), and the initial `(a1, P1)`
+are formed via the kernel's `_kalman_init` under `init_mode` (`:kappa` by default). Filter,
+smooth, and log-likelihood-evaluate it with [`estimate_statespace`](@ref); forecast with
+[`forecast`](@ref) once fitted; compute the asymptotic solution with
+[`steady_state_kalman`](@ref).
 
 `init_mode` selects the initial covariance when `a1`/`P1` are not supplied:
 `:kappa` (the default) puts `kappa*I` on every state direction; `:diffuse` puts
@@ -119,10 +123,12 @@ only when every direction is nonstationary, as in a pure local level.
 """
 function StateSpaceModel(Z::AbstractMatrix, H::AbstractMatrix,
                          T_mat::AbstractMatrix, Q::AbstractMatrix;
-                         d=nothing, c=nothing, R=nothing,
+                         d=nothing, c=nothing, R=nothing, G=nothing,
                          a1=nothing, P1=nothing,
                          init_mode::Symbol=:kappa, kappa::Real=1e6)
-    T = float(promote_type(eltype(Z), eltype(H), eltype(T_mat), eltype(Q)))
+    T = G === nothing ?
+        float(promote_type(eltype(Z), eltype(H), eltype(T_mat), eltype(Q))) :
+        float(promote_type(eltype(Z), eltype(H), eltype(T_mat), eltype(Q), eltype(G)))
     Zm = Matrix{T}(Z); Hm = Matrix{T}(H); Tm = Matrix{T}(T_mat); Qm = Matrix{T}(Q)
     n_obs, n_state = size(Zm)
     size(Hm) == (n_obs, n_obs) || throw(ArgumentError("H must be n_obs×n_obs = $((n_obs, n_obs)), got $(size(Hm))"))
@@ -130,6 +136,14 @@ function StateSpaceModel(Z::AbstractMatrix, H::AbstractMatrix,
     Rm = R === nothing ? Matrix{T}(I, n_state, size(Qm, 1)) : Matrix{T}(R)
     size(Rm, 1) == n_state || throw(ArgumentError("R must have n_state=$n_state rows, got $(size(Rm,1))"))
     size(Qm) == (size(Rm, 2), size(Rm, 2)) || throw(ArgumentError("Q must be r×r with r=size(R,2)=$(size(Rm,2)), got $(size(Qm))"))
+    Gm = if G === nothing
+        nothing
+    else
+        Gm0 = Matrix{T}(G)
+        size(Gm0) == (size(Rm, 2), n_obs) ||
+            throw(ArgumentError("G must be r×n_obs = $((size(Rm, 2), n_obs)), got $(size(Gm0))"))
+        Gm0
+    end
     dv = d === nothing ? zeros(T, n_obs) : Vector{T}(d)
     cv = c === nothing ? zeros(T, n_state) : Vector{T}(c)
     length(dv) == n_obs || throw(ArgumentError("d must have length n_obs=$n_obs"))
@@ -159,7 +173,7 @@ function StateSpaceModel(Z::AbstractMatrix, H::AbstractMatrix,
         a_init, P_init = _kalman_init(mode, Tm, RQR, n_state; kappa=T(kappa))
     end
     empty3 = Array{T,3}(undef, n_state, n_state, 0)
-    StateSpaceModel{T}(Zm, Hm, Tm, Qm, dv, cv, Rm, a_init, P_init, mode,
+    StateSpaceModel{T}(Zm, Hm, Tm, Qm, dv, cv, Rm, Gm, a_init, P_init, mode,
                        Matrix{T}(undef, 0, n_obs),
                        Matrix{T}(undef, 0, n_state), empty3,
                        Matrix{T}(undef, 0, n_state), empty3,
@@ -176,7 +190,7 @@ end
                     param_names=nothing)
 
 Build an (unfitted) parametric `StateSpaceModel`. `build(θ)` must return a
-`NamedTuple` with fields `Z, H, T, Q` and optional `d, c, R, a1, P1`. The system is
+`NamedTuple` with fields `Z, H, T, Q` and optional `d, c, R, G, a1, P1`. The system is
 materialized at `θ0`; pass the result to [`estimate_statespace`](@ref) to maximize the
 log-likelihood over θ.
 """
@@ -187,7 +201,7 @@ function StateSpaceModel(build::Function, θ0::AbstractVector;
     ss0 = _ss_from_namedtuple(nt; init_mode=init_mode, kappa=kappa)
     T = eltype(ss0.Z)
     names = param_names === nothing ? ["θ$i" for i in 1:length(θ0)] : collect(String.(param_names))
-    StateSpaceModel{T}(ss0.Z, ss0.H, ss0.Tt, ss0.Q, ss0.d, ss0.c, ss0.R, ss0.a1, ss0.P1,
+    StateSpaceModel{T}(ss0.Z, ss0.H, ss0.Tt, ss0.Q, ss0.d, ss0.c, ss0.R, ss0.G, ss0.a1, ss0.P1,
                        ss0.init_mode, ss0.y, ss0.filtered_state, ss0.filtered_cov,
                        ss0.smoothed_state, ss0.smoothed_cov, ss0.innovations, ss0.std_residuals,
                        ss0.loglik, Vector{T}(θ0), names, build, false, :spec,
@@ -200,7 +214,7 @@ function _ss_from_namedtuple(nt; init_mode::Symbol=:kappa, kappa::Real=1e6)
         throw(ArgumentError("state-space builder must return a NamedTuple with fields Z, H, T, Q"))
     StateSpaceModel(nt.Z, nt.H, nt.T, nt.Q;
                     d=get(nt, :d, nothing), c=get(nt, :c, nothing), R=get(nt, :R, nothing),
-                    a1=get(nt, :a1, nothing), P1=get(nt, :P1, nothing),
+                    G=get(nt, :G, nothing), a1=get(nt, :a1, nothing), P1=get(nt, :P1, nothing),
                     init_mode=init_mode, kappa=kappa)
 end
 

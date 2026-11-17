@@ -27,12 +27,14 @@ _ss_data(td::TimeSeriesData) = Matrix{Float64}(td.data)
 # -----------------------------------------------------------------------------
 function _ss_loglik(Z::Matrix{T}, Hobs::Matrix{T}, Tt::Matrix{T}, Q::Matrix{T},
                     d::Vector{T}, c::Vector{T}, R::Matrix{T},
-                    a1::Vector{T}, P1::Matrix{T}, ykern::Matrix{T}) where {T<:AbstractFloat}
+                    a1::Vector{T}, P1::Matrix{T}, ykern::Matrix{T};
+                    G::Union{Nothing,Matrix{T}}=nothing) where {T<:AbstractFloat}
     RQR = Matrix{T}(Hermitian(R * Q * R'))
     Hh  = Matrix{T}(Hermitian(Hobs))
     dvec = all(iszero, d) ? nothing : d
     cvec = all(iszero, c) ? nothing : c
-    return _kalman_filter!(nothing, ykern, Z, Tt, RQR, Hh; d=dvec, b=cvec, a0=a1, P0=P1)
+    G_kern = G === nothing ? nothing : Matrix{T}(R * G)
+    return _kalman_filter!(nothing, ykern, Z, Tt, RQR, Hh; d=dvec, b=cvec, a0=a1, P0=P1, G=G_kern)
 end
 
 # Build a spec from a builder θ and return its per-θ log-likelihood (optimizer hot loop).
@@ -40,7 +42,7 @@ function _ss_loglik_from_build(build::Function, θ::AbstractVector, ykern::Matri
                                init_mode::Symbol, kappa::Real) where {T<:AbstractFloat}
     spec = _ss_from_namedtuple(build(θ); init_mode=init_mode, kappa=kappa)
     return _ss_loglik(spec.Z, spec.H, spec.Tt, spec.Q, spec.d, spec.c, spec.R,
-                      spec.a1, spec.P1, ykern)
+                      spec.a1, spec.P1, ykern; G=spec.G)
 end
 
 # -----------------------------------------------------------------------------
@@ -55,10 +57,11 @@ function _ss_filter_smooth(spec::StateSpaceModel{T}, y::Matrix{T}) where {T<:Abs
     Hh  = Matrix{T}(Hermitian(spec.H))
     dvec = all(iszero, spec.d) ? nothing : spec.d
     cvec = all(iszero, spec.c) ? nothing : spec.c
+    G_kern = spec.G === nothing ? nothing : Matrix{T}(spec.R * spec.G)
     store = KalmanFilterStore{T}(n_state, T_obs; innovations=true)
     ll = _kalman_filter!(store, ykern, spec.Z, spec.Tt, RQR, Hh;
-                         d=dvec, b=cvec, a0=spec.a1, P0=spec.P1)
-    a_smooth, P_smooth, _ = _rts_smoother(store, spec.Tt)
+                         d=dvec, b=cvec, a0=spec.a1, P0=spec.P1, G=G_kern)
+    a_smooth, P_smooth, _ = _rts_smoother(store, spec.Tt; G=G_kern, y=ykern)
 
     filtered_state = Matrix{T}(permutedims(store.a_filt))   # T_obs × n_state
     smoothed_state = Matrix{T}(permutedims(a_smooth))
@@ -89,7 +92,7 @@ end
 function _ss_assemble(spec::StateSpaceModel{T}, y::Matrix{T}, fit, θ::Vector{T},
                       names::Vector{String}, builder, converged::Bool,
                       method::Symbol) where {T<:AbstractFloat}
-    StateSpaceModel{T}(spec.Z, spec.H, spec.Tt, spec.Q, spec.d, spec.c, spec.R,
+    StateSpaceModel{T}(spec.Z, spec.H, spec.Tt, spec.Q, spec.d, spec.c, spec.R, spec.G,
                        spec.a1, spec.P1, spec.init_mode, y,
                        fit.filtered_state, fit.filtered_cov,
                        fit.smoothed_state, fit.smoothed_cov,

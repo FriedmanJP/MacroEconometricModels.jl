@@ -246,6 +246,49 @@ end
         @test ssm.builder isa Function      # original carried a builder…
         @test ssm2.builder === nothing       # …reload drops it
         _assert_report_equal(ssm, ssm2)
+
+        # v1 StateSpaceModel payloads written before `G` was added reload with G === nothing
+        let c = _MEM._build_container(ssm)
+            delete!(c["payload"], "G")
+            old_ssm = _MEM._reconstruct_from_container(c)
+            @test old_ssm isa StateSpaceModel
+            @test old_ssm.G === nothing
+            @test old_ssm.filtered_state == ssm.filtered_state
+            @test old_ssm.loglik == ssm.loglik
+        end
+        # Missing a required field on StateSpaceModel still throws SerializationError
+        let c_bad = _MEM._build_container(ssm)
+            delete!(c_bad["payload"], "Z")
+            @test_throws _MEM.SerializationError _MEM._reconstruct_from_container(c_bad)
+        end
+
+        # Correlated-noise StateSpaceModel (G !== nothing) round-trips
+        spec_g = StateSpaceModel(reshape([1.0], 1, 1), reshape([0.5], 1, 1),
+                                 reshape([0.7], 1, 1), reshape([0.8], 1, 1);
+                                 G=reshape([0.3], 1, 1), init_mode=:stationary)
+        ssm_g = estimate_statespace(spec_g, yss)
+        ssm_g2 = _cover(ssm_g; skip=[:builder])
+        @test ssm_g2.G == ssm_g.G
+        _assert_report_equal(ssm_g, ssm_g2)
+    end
+
+    @testset "SteadyStateKalman" begin
+        ssk = steady_state_kalman(reshape([1.0], 1, 1), reshape([0.5], 1, 1),
+                                  reshape([0.7], 1, 1), reshape([0.8], 1, 1);
+                                  G=reshape([0.3], 1, 1))
+        @test _from_serializable_is_generic(SteadyStateKalman)
+        ssk2 = _assert_roundtrip(ssk)
+        _assert_report_equal(ssk, ssk2)
+        let pth = joinpath(mktempdir(), "ssk.jld2")
+            save_model(ssk, pth)
+            ssk3 = load_model(pth)
+            @test ssk3 isa SteadyStateKalman{Float64}
+            @test ssk3.P_pred == ssk.P_pred
+            @test ssk3.P_filt == ssk.P_filt
+            @test ssk3.K_gain == ssk.K_gain
+            @test ssk3.F_innov == ssk.F_innov
+            @test ssk3.closed_loop_eigs == ssk.closed_loop_eigs
+        end
     end
 
     @testset "discrete / limited-dependent choice" begin

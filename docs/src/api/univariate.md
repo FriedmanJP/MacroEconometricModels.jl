@@ -112,6 +112,8 @@ See [State-Space Models](@ref statespace_page) for theory and examples.
 
 ```@docs
 StateSpaceModel
+SteadyStateKalman
+steady_state_kalman
 estimate_statespace
 local_level
 local_linear_trend

@@ -123,6 +123,7 @@ Linear Gaussian state-space models estimated by the Kalman filter and smoother. 
 | `estimate_statespace(ss, y)` | Run the filter/smoother on a built `StateSpaceModel` |
 | `estimate_statespace(build, theta0, y; ...)` | Estimate free parameters by MLE from a builder function |
 | `estimate_tvp_reg(y, X; intercept=true)` | Time-varying-parameter regression |
+| `steady_state_kalman(ss)` / `steady_state_kalman(Z, H, Tt, RQR; G=nothing)` | Steady-state Kalman filter via discrete algebraic Riccati equation |
 
 Threshold, smooth-transition, and Markov-switching regression for univariate series. See [Nonlinear Time Series](@ref nonlinear_page).
 
@@ -572,7 +573,7 @@ const _SER_GROUPS = [
         "GPHResult", "LocalWhittleResult", "ARDLModel", "ARDLLongRun", "ARDLBoundsTest",
         "NARDLModel", "NARDLMultipliers", "NARDLSymmetryTest", "PMGModel",
         "ThresholdModel", "STARModel", "MSRegModel", "HansenLinearityTest",
-        "MidasModel", "StateSpaceModel"],
+        "MidasModel", "StateSpaceModel", "SteadyStateKalman"],
     "SVAR identification" => ["ProxySVARResult", "SVARModel", "MaxShareResult",
         "SVECResult", "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
         "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",

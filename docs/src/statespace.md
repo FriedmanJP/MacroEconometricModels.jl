@@ -4,9 +4,9 @@ The state-space module provides a general, user-specified linear-Gaussian state-
 
 The univariate siblings are [ARIMA Models](@ref arima_page), whose exact MLE runs through the same kernel, and [Volatility Models](@ref volatility_page).
 
-- **General system** — any single-block observation/state pair via [`StateSpaceModel`](@ref) and [`estimate_statespace`](@ref).
+- **General system** — any single-block observation/state pair via [`StateSpaceModel`](@ref) and [`estimate_statespace`](@ref), with optional state-observation noise cross-covariance `G`.
 - **Convenience wrappers** — [`local_level`](@ref), [`local_linear_trend`](@ref), [`estimate_tvp_reg`](@ref).
-- **Diagnostics & forecasting** — standardized one-step residuals, filtered/smoothed states with variances, and multi-step [`forecast`](@ref).
+- **Steady-state & forecasting** — generalized Schur Riccati solver via [`steady_state_kalman`](@ref) / [`SteadyStateKalman`](@ref), standardized one-step residuals, filtered/smoothed states with variances, and multi-step [`forecast`](@ref).
 
 ## Quick Start
 
@@ -57,8 +57,8 @@ Every model in this module is a single-block linear-Gaussian system:
 
 ```math
 \begin{aligned}
-y_t &= Z \, \alpha_t + d + \varepsilon_t, \qquad \varepsilon_t \sim N(0, H) \\
-\alpha_{t+1} &= T \, \alpha_t + c + R \, \eta_t, \qquad \eta_t \sim N(0, Q)
+y_t &= Z \, \alpha_t + d + \varepsilon_t \\
+\alpha_{t+1} &= T \, \alpha_t + c + R \, \eta_t, \qquad \operatorname{Cov}\begin{pmatrix} \eta_t \\ \varepsilon_t \end{pmatrix} = \begin{pmatrix} Q & G \\ G' & H \end{pmatrix}
 \end{aligned}
 ```
 
@@ -72,6 +72,7 @@ where:
 - ``c`` is the ``n_x \times 1`` state intercept vector
 - ``R`` is the ``n_x \times n_\eta`` state innovation selection matrix
 - ``\eta_t \sim N(0, Q)`` is the ``n_\eta \times 1`` state disturbance vector with ``n_\eta \times n_\eta`` covariance ``Q``
+- ``G`` is the optional ``n_\eta \times n_\text{obs}`` cross-covariance ``\operatorname{Cov}(\eta_t, \varepsilon_t)`` (`nothing` when disturbances are uncorrelated)
 
 Filtering and smoothing run through the shared kernel `_kalman_filter!` / `_rts_smoother`; the estimator maximizes the prediction-error-decomposition log-likelihood ``\sum_t \log p(y_t \mid y_{1:t-1})``.
 
@@ -241,7 +242,64 @@ round(tanh(m_ar.theta[1]), digits=2)   # recovered persistence φ
 
 The builder returns ``\hat\varphi = 0.75`` against the simulated 0.7, with ``\hat\sigma^2_\eta = 0.84`` and ``\hat\sigma^2_\varepsilon = 0.29`` against the true 1.0 and 0.25 — the usual trade-off in an unobserved-components model, where a slightly overstated persistence buys a slightly understated state variance. `theta` holds the raw ``\hat\theta`` here, not natural variances, because the default `theta_transform=identity` applies; the wrappers pass `exp` instead, which is why their `theta` is directly readable as variances.
 
-A fixed-matrix `StateSpaceModel(Z, H, T, Q; ...)` builds an unfitted spec that `estimate_statespace(ss, y)` filters and smooths without optimization.
+A fixed-matrix `StateSpaceModel(Z, H, T, Q; G=nothing, ...)` builds an unfitted spec that `estimate_statespace(ss, y)` filters and smooths without optimization; parametric builders also accept `G` in the returned `NamedTuple`.
+
+---
+
+## Steady-State Kalman Filter
+
+For time-invariant observable systems, [`steady_state_kalman`](@ref) computes the asymptotic one-step-ahead predicted covariance, filtered covariance, Kalman gain, innovation covariance, and closed-loop eigenvalues without iterating over a sample. Following Anderson & Moore (1979, §5.5) and Durbin & Koopman (2012, §4.11), the asymptotic predicted covariance solves the discrete-time algebraic Riccati equation (DARE):
+
+```math
+\begin{aligned}
+P_\text{pred} &= T \, P_\text{pred} \, T' + R Q R' - \bigl(T P_\text{pred} Z' + R G\bigr) \, F_\text{innov}^{-1} \, \bigl(T P_\text{pred} Z' + R G\bigr)' \\
+F_\text{innov} &= Z \, P_\text{pred} \, Z' + H, \qquad K_\text{gain} = P_\text{pred} \, Z' \, F_\text{innov}^{-1}
+\end{aligned}
+```
+
+where:
+- ``P_\text{pred}`` is the ``n_x \times n_x`` steady-state predicted state covariance
+- ``T`` is the ``n_x \times n_x`` state transition matrix
+- ``R`` is the ``n_x \times n_\eta`` state innovation selection matrix
+- ``Q`` is the ``n_\eta \times n_\eta`` state disturbance covariance
+- ``Z`` is the ``n_\text{obs} \times n_x`` observation matrix
+- ``G`` is the ``n_\eta \times n_\text{obs}`` cross-covariance ``\operatorname{Cov}(\eta_t, \varepsilon_t)`` (zero when `G === nothing`)
+- ``H`` is the ``n_\text{obs} \times n_\text{obs}`` observation noise covariance
+- ``F_\text{innov}`` is the ``n_\text{obs} \times n_\text{obs}`` steady-state innovation covariance
+- ``K_\text{gain}`` is the ``n_x \times n_\text{obs}`` steady-state filtered Kalman gain
+
+!!! note "Technical Note"
+    The internal solver computes the ``2n_x \times 2n_x`` symplectic pencil generalized real Schur decomposition (Pappas, Laub & Sandell 1980), switches to a Van Dooren (1981) QR-compressed extended pencil when ``H`` is singular or zero, falls back to the Structure-Preserving Doubling Algorithm if needed, and applies Newton–Kleinman Lyapunov polishing. Closed-loop eigenvalues use ``T - K_\text{dare} Z`` with ``K_\text{dare} = (T P_\text{pred} Z' + R G) F_\text{innov}^{-1}``.
+
+```@example ss
+ssk = steady_state_kalman(m)
+(P_pred = round.(ssk.P_pred, digits=2),
+ P_filt = round.(ssk.P_filt, digits=2),
+ K_gain = round.(ssk.K_gain, digits=4),
+ eigs = round.(abs.(ssk.closed_loop_eigs), digits=4))
+```
+
+On the Nile local-level fit, the steady-state predicted variance equals ``5490.62`` and the steady-state filtered variance equals ``4027.16``, matching the terminal filtered covariance ``m.\text{filtered\_cov}[:, :, \text{end}]`` directly. The steady-state Kalman gain ``0.2665`` places roughly one quarter of each new innovation into the level update, while the closed-loop eigenvalue modulus ``0.7335`` confirms exponential stability of the filter recursion.
+
+For a system with correlated state and observation disturbances, pass `G` to [`StateSpaceModel`](@ref) or directly to `steady_state_kalman(Z, H, Tt, RQR; G=G)`:
+
+```@example ss
+Z_c = [1.0 0.0]; H_c = reshape([0.5], 1, 1)
+T_c = [0.8 0.1; 0.0 0.5]; Q_c = [0.6 0.0; 0.0 0.3]
+G_c = reshape([0.3, 0.1], 2, 1)
+ssk_c = steady_state_kalman(Z_c, H_c, T_c, Q_c; G=G_c)
+round.(ssk_c.K_gain, digits=4)
+```
+
+With positive cross-covariance ``G_c = [0.3, 0.1]'``, the steady-state filtered gain shifts to ``[0.4635, -0.0558]'`` and both closed-loop eigenvalues remain inside the unit circle (``0.1346`` and ``0.4783``).
+
+| Field | Type | Description |
+|---|---|---|
+| `P_pred` | `Matrix{T}` | ``n_x \times n_x`` steady-state predicted state covariance |
+| `P_filt` | `Matrix{T}` | ``n_x \times n_x`` steady-state filtered state covariance |
+| `K_gain` | `Matrix{T}` | ``n_x \times n_\text{obs}`` steady-state filtered Kalman gain |
+| `F_innov` | `Matrix{T}` | ``n_\text{obs} \times n_\text{obs}`` steady-state innovation covariance |
+| `closed_loop_eigs` | `Vector{Complex{T}}` | Closed-loop filter transition eigenvalues |
 
 ---
 
@@ -292,5 +350,8 @@ refs(m)
 
 ## References
 
+- Anderson, B. D. O., & Moore, J. B. (1979). *Optimal Filtering*. Prentice-Hall. ISBN 978-0136381224.
 - Durbin, J. and Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*, 2nd ed. Oxford University Press. [doi:10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
 - Harvey, A. C. (1989). *Forecasting, Structural Time Series Models and the Kalman Filter*. Cambridge University Press. [doi:10.1017/CBO9781107049994](https://doi.org/10.1017/CBO9781107049994)
+- Pappas, T., Laub, A. J., & Sandell, N. R. (1980). On the Numerical Solution of the Discrete-Time Algebraic Riccati Equation. *IEEE Transactions on Automatic Control*, 25(4), 631–641. [doi:10.1109/TAC.1980.1102434](https://doi.org/10.1109/TAC.1980.1102434)
+- Van Dooren, P. (1981). A Generalized Eigenvalue Approach for Solving Riccati Equations. *SIAM Journal on Scientific and Statistical Computing*, 2(2), 121–135. [doi:10.1137/0902010](https://doi.org/10.1137/0902010)

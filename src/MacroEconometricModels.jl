@@ -1287,7 +1287,8 @@ export estimate_arfima, ARFIMAModel
 export gph_test, local_whittle, GPHResult, LocalWhittleResult
 
 # State-space module (EV-37, #445): public Kalman MLE + TVP regression
-export StateSpaceModel, estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
+export StateSpaceModel, SteadyStateKalman, steady_state_kalman
+export estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
 
 # =============================================================================
 # Exports - Non-Gaussian VAR Identification

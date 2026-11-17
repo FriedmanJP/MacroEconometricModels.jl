@@ -117,6 +117,7 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "HansenLinearityTest"           => HansenLinearityTest,
     "MidasModel"                    => MidasModel,
     "StateSpaceModel"               => StateSpaceModel,
+    "SteadyStateKalman"             => SteadyStateKalman,
     # ── SVAR identification results (SID-24 / #753) ──────────────────────────
     "ProxySVARResult"               => ProxySVARResult,
     "SVARModel"                     => SVARModel,
