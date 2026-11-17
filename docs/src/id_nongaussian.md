@@ -5,7 +5,7 @@ Non-Gaussian structural VAR identification recovers the structural impact matrix
 This page covers three complementary approaches:
 
 - **ICA-based methods** (nonparametric): FastICA, JADE, SOBI, distance covariance, HSIC
-- **Maximum likelihood methods** (parametric): Student-t, mixture of normals, PML, skew-normal, plus a unified dispatcher
+- **Maximum likelihood methods** (parametric): Student-t, symmetric and asymmetric mixture of normals, PML, skew-normal, plus a unified dispatcher
 - **Moment-based GMM** (semiparametric): coskewness and cokurtosis conditions (Keweloh 2021; Lanne & Luoto 2021)
 
 For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For heteroskedasticity-based identification, see [Heteroskedasticity](@ref id_heteroskedastic_page). For GMM on time-varying-volatility moments instead of skewness and kurtosis, see [Time-Varying Volatility](@ref id_tvv_page). For the diagnostics that decide whether these methods are applicable at all, see [Testing](@ref id_testing_page). For schemes built on economic rather than statistical restrictions, see [Structural Identification](@ref structural_identification_page).
@@ -34,15 +34,15 @@ report(ica)
 
 ```@example id_ng
 # Parametric ML with shock-specific degrees of freedom (Lanne, Meitz & Saikkonen 2017)
-ml = identify_student_t(model)
+ml = identify_student_t(model; seed=42)
 report(ml)
 ```
 
 **Recipe 3: Mixture of normals**
 
 ```@example id_ng
-# Two-component Gaussian mixture shocks (Lanne & Lütkepohl 2010)
-mix = identify_mixture_normal(model; max_iter=2000)
+# Two-component Gaussian mixture shocks (Lanne & Lütkepohl 2010; Gouriéroux et al. 2020)
+mix = identify_mixture_normal(model; asymmetric=true, seed=42)
 report(mix)
 ```
 
@@ -53,8 +53,8 @@ comparison = [(dist = d,
                logL = round(m.loglik, digits=2),
                AIC = round(m.aic, digits=2),
                BIC = round(m.bic, digits=2))
-              for d in [:student_t, :mixture_normal, :skew_normal]
-              for m in (identify_nongaussian_ml(model; distribution=d, max_iter=2000),)]
+              for d in [:student_t, :mixture_normal, :mixture_normal_asym, :skew_normal]
+              for m in (identify_nongaussian_ml(model; distribution=d, seed=42),)]
 ```
 
 **Recipe 5: Second-order identification via SOBI**
@@ -129,8 +129,8 @@ The deflation fit converges in 14 fixed-point iterations at a negentropy objecti
 | `tol` | `Real` | ``10^{-6}`` | Convergence tolerance |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Generator for the random starting directions |
 
-!!! note "FastICA is the only randomized method here"
-    FastICA starts each component from a random unit vector, so results shift with the RNG state. Pass `rng` for reproducibility. JADE, SOBI, dCov, HSIC, and all ML estimators on this page are deterministic given the data.
+!!! note "RNG state and reproducibility"
+    FastICA starts each component from a random unit vector, and multi-start ML estimators (`n_starts > 1`) use a FastICA warm-start plus random orthogonal rotations. Pass `rng` or `seed` for reproducibility. JADE, SOBI, and dCov are deterministic given the data; HSIC uses `rng` only for its median-heuristic subsample on long samples.
 
 ### JADE
 
@@ -263,9 +263,9 @@ where:
 - ``f_j(\cdot;\, \theta_j)`` is the marginal density of shock ``j`` with parameters ``\theta_j``
 - ``B_0 = L Q`` is parameterized by ``n(n-1)/2`` Givens rotation angles
 
-The optimizer searches over rotation angles and distribution parameters simultaneously with Nelder-Mead. Standard errors for ``B_0`` come from the numerical Hessian of the log-likelihood, propagated from the angles through a finite-difference Jacobian.
+The optimizer searches over rotation angles and distribution parameters simultaneously with multi-start `Optim.LBFGS()` and `ForwardDiff` gradients, warm-started from Cholesky, JADE, FastICA, and random orthogonal rotations (`n_starts` controls the start count; `rng`/`seed` control reproducibility). The `vcov_type` keyword selects the parameter covariance estimator: `:auto` (default) chooses the Gouriéroux, Monfort & Renne (2017) Huber–White sandwich ``H^{-1} J_{\text{OPG}} H^{-1}`` computed from per-observation `ForwardDiff` scores for pseudo-ML specifications (`:pml`, `:mixture_normal`, `:mixture_normal_asym`) and the inverse `ForwardDiff` Hessian ``H^{-1}`` for `:student_t` and `:skew_normal`. Standard errors for ``B_0`` propagate the full angle covariance block ``V_\theta`` through the `ForwardDiff` delta-method Jacobian ``J_B V_\theta J_B'``.
 
-All distribution parameters use unconstrained reparameterizations internally, so the reported values in `dist_params` are already mapped back to their natural scales. Student-t degrees of freedom are ``\nu = \exp(\theta) + 2.01``, which enforces ``\nu > 2`` and hence finite variance. Mixture probabilities use the logistic transform ``p = 1/(1 + \exp(-\theta))``, and the first mixture variance uses a sigmoid bound on ``(0, 1/p)``, which guarantees that the second variance implied by the unit-variance constraint stays positive.
+All distribution parameters use unconstrained reparameterizations internally, so the reported values in `dist_params` are already mapped back to their natural scales. Student-t degrees of freedom are ``\nu = \exp(\theta) + 2.01``, which enforces ``\nu > 2`` and hence finite variance. Mixture probabilities use a logistic map on ``(10^{-4}, 1 - 10^{-4})``; in the symmetric mixture (`asymmetric=false`), the first variance uses a bounded split ``w \in (10^{-4}, 1 - 10^{-4})`` with ``\sigma_1^2 = w/p`` and ``\sigma_2^2 = (1 - w)/(1 - p)``; in the asymmetric mixture (`asymmetric=true`), a hyperbolic-tangent mean shift ``r_\mu = (1 - 10^{-4}) \tanh(\theta_\mu)`` pins ``\mu_1 = \sqrt{(1-p)/p}\, r_\mu`` and ``\mu_2 = -\sqrt{p/(1-p)}\, r_\mu`` while splitting the remaining variance budget ``1 - r_\mu^2 > 0`` across ``\sigma_1^2`` and ``\sigma_2^2`` so zero mean and unit variance hold identically.
 
 ### Student-t
 
@@ -282,7 +282,7 @@ where:
 Low ``\nu_j`` indicates heavy tails; as ``\nu_j \to \infty``, shock ``j`` approaches Gaussianity.
 
 ```@example id_ng
-ml = identify_student_t(model)
+ml = identify_student_t(model; seed=42)
 report(ml)
 ```
 
@@ -294,28 +294,39 @@ All three degrees-of-freedom estimates --- ``3.32``, ``6.53`` and ``2.46`` --- s
 
 ### Mixture of Normals
 
-Each shock follows a two-component Gaussian mixture (Lanne & Lütkepohl 2010):
+Each shock follows a two-component Gaussian mixture (Lanne & Lütkepohl 2010; Gouriéroux, Monfort & Renne 2020):
 
 ```math
-f_j(x;\, p_j, \sigma_{1j}, \sigma_{2j}) = p_j \, \phi(x / \sigma_{1j}) / \sigma_{1j} + (1 - p_j) \, \phi(x / \sigma_{2j}) / \sigma_{2j}
+f_j(x;\, p_j, \mu_{1j}, \sigma_{1j}, \mu_{2j}, \sigma_{2j}) = \frac{p_j}{\sigma_{1j}} \, \phi\!\left(\frac{x - \mu_{1j}}{\sigma_{1j}}\right) + \frac{1 - p_j}{\sigma_{2j}} \, \phi\!\left(\frac{x - \mu_{2j}}{\sigma_{2j}}\right)
 ```
 
 where:
 - ``\phi(\cdot)`` is the standard normal density
 - ``p_j \in (0,1)`` is the mixing probability of the first component
+- ``\mu_{1j}, \mu_{2j}`` are the component means (fixed to zero when `asymmetric=false`)
 - ``\sigma_{1j}, \sigma_{2j}`` are the component standard deviations
 
-The unit-variance constraint ``p_j \sigma_{1j}^2 + (1 - p_j) \sigma_{2j}^2 = 1`` reduces the free parameters to ``p_j`` and ``\sigma_{1j}`` per shock; the second variance follows as ``\sigma_{2j}^2 = (1 - p_j \sigma_{1j}^2) / (1 - p_j)``.
+The zero-mean constraint ``p_j \mu_{1j} + (1 - p_j)\mu_{2j} = 0`` and unit-variance constraint ``p_j(\mu_{1j}^2 + \sigma_{1j}^2) + (1 - p_j)(\mu_{2j}^2 + \sigma_{2j}^2) = 1`` leave two free parameters ``(p_j, \sigma_{1j})`` per shock in the symmetric mixture (`asymmetric=false`, `:mixture_normal`) and three free parameters ``(p_j, \mu_{1j}, \sigma_{1j})`` in the asymmetric mixture (`asymmetric=true`, `:mixture_normal_asym`), which accommodates skewness and skewed bimodal shocks. Both specifications default to `vcov_type=:auto` resolving to Gouriéroux, Monfort & Renne (2017) sandwich SEs.
 
 ```@example id_ng
-mix = identify_mixture_normal(model; max_iter=2000)
+mix = identify_mixture_normal(model; seed=42)
 (p_mix = round.(mix.dist_params[:p_mix], digits=3),
  sigma1 = round.(mix.dist_params[:sigma1], digits=3),
+ sigma2 = round.(mix.dist_params[:sigma2], digits=3),
  converged = mix.converged,
  iterations = mix.iterations)
 ```
 
-The mixture needs 1321 Nelder-Mead iterations to converge, so the default `max_iter=500` stops it short --- always check `converged` before reading the parameters. The first shock loads a 10% high-variance component (``\sigma_1 = 2.43``) against a 90% quiet component, the classic "occasional large disturbance" shape. Identification requires the two components to differ within each shock: a fitted ``\sigma_{1j} \approx \sigma_{2j}`` returns that shock to Gaussianity and removes it from the identifying moments.
+```@example id_ng
+mix_asym = identify_mixture_normal(model; asymmetric=true, seed=42)
+(p_mix = round.(mix_asym.dist_params[:p_mix], digits=3),
+ mu1 = round.(mix_asym.dist_params[:mu1], digits=3),
+ sigma1 = round.(mix_asym.dist_params[:sigma1], digits=3),
+ loglik = round(mix_asym.loglik, digits=2),
+ vcov_type = mix_asym.dist_params[:vcov_type])
+```
+
+With multi-start L-BFGS, the symmetric mixture converges in ``55`` iterations (log-likelihood ``1034.27``), capturing high-kurtosis regime components with ``\sigma_{1} = (1.53, 2.46, 2.45)`` and ``\sigma_{2} = (0.27, 0.90, 0.66)``. Enabling `asymmetric=true` lifts the log-likelihood to ``1039.11`` by fitting a sharp negative outlier tail on the first shock (``p_1 = 0.010, \mu_{1,1} = -4.361``) and right-skewed tail on the third shock (``p_3 = 0.101, \mu_{1,3} = 0.846``). Identification requires the two components to differ within each shock: ``\sigma_{1j} = \sigma_{2j}`` with ``\mu_{1j} = \mu_{2j} = 0`` collapses that shock to Gaussianity and removes it from the identifying moments.
 
 ### PML (Pearson Type IV)
 
@@ -335,17 +346,18 @@ where:
 - ``\lambda_j`` is the location parameter pinned by the zero-mean restriction
 - ``k_j`` is the normalizing constant involving ``|\Gamma(m_j + i\nu_j/2)|^2`` ensuring unit area
 
-Because the density integrates to one for every parameter value, `loglik`, AIC/BIC, and the likelihood-ratio test against Gaussian shocks are all valid statistics — earlier releases used an unnormalized cubic-tilt approximation whose objective was unbounded in the skewness parameter ([#566](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/566)).
+Because the density integrates to one for every parameter value, `loglik`, AIC/BIC, and the likelihood-ratio test against Gaussian shocks are all valid statistics — earlier releases used an unnormalized cubic-tilt approximation whose objective was unbounded in the skewness parameter ([#566](https://github.com/FriedmanJP/MacroEconometricModels.jl/issues/566)). Under `vcov_type=:auto`, `:pml` defaults to Gouriéroux, Monfort & Renne (2017) sandwich SEs.
 
 ```@example id_ng
-pml = identify_pml(model; max_iter=3000)
+pml = identify_pml(model; seed=42)
 (kappa = round.(pml.dist_params[:kappa], digits=2),
  m = round.(pml.dist_params[:nu], digits=2),
- loglik = round(pml.loglik, digits=1),
- converged = pml.converged)
+ loglik = round(pml.loglik, digits=2),
+ converged = pml.converged,
+ iterations = pml.iterations)
 ```
 
-In `dist_params`, `:kappa` holds the skewness parameters ``\nu_j`` and `:nu` the tail exponents ``m_j``. All three shocks come out right-skewed (``\kappa`` between 0.12 and 0.82) with heavy tails — ``m`` for the first and third shocks sits at the ``m > 2`` boundary that unit variance requires, the Pearson-IV way of saying the tails are barely square-integrable. The log-likelihood of 1034.57 now sits a plausible 55 points above the Gaussian benchmark of 979.75 rather than the pre-#566 fabricated 20157. Like the mixture, the fit needs more than the default `max_iter=500` Nelder-Mead iterations (535 here) — always check `converged`.
+In `dist_params`, `:kappa` holds the skewness parameters ``\nu_j`` and `:nu` the tail exponents ``m_j``. The fit converges in ``55`` L-BFGS iterations to a log-likelihood of ``1034.57`` (54.8 points above the Gaussian benchmark of ``979.75``), with heavy tails (``m_j \in [2.05, 3.82]``) and moderate skewness (``\kappa_j \in [-0.82, 0.12]``).
 
 ### Skew-Normal
 
@@ -363,7 +375,7 @@ where:
 When ``\alpha_j = 0`` the distribution reduces to the standard normal.
 
 ```@example id_ng
-skew = identify_skew_normal(model)
+skew = identify_skew_normal(model; seed=42)
 (alpha = round.(skew.dist_params[:alpha], digits=4),
  loglik = round(skew.loglik, digits=3),
  loglik_gaussian = round(skew.loglik_gaussian, digits=3))
@@ -381,17 +393,22 @@ comparison = [(dist = d,
                AIC = round(m.aic, digits=2),
                BIC = round(m.bic, digits=2),
                converged = m.converged)
-              for d in [:student_t, :mixture_normal, :pml, :skew_normal]
-              for m in (identify_nongaussian_ml(model; distribution=d, max_iter=3000),)]
+              for d in [:student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal]
+              for m in (identify_nongaussian_ml(model; distribution=d, seed=42),)]
 ```
 
-Student-t wins on both criteria (AIC ``-2059.88`` against ``-2051.13`` for the Pearson IV, ``-2048.98`` for the mixture, and ``-1947.50`` for the skew-normal), consistent with the fitted degrees of freedom near 3. Since the #566 normalization, `:pml` competes on equal terms and lands where a two-parameter-per-shock density should — a slightly better log-likelihood than the one-parameter Student-t, not enough to pay its extra three parameters. The skew-normal is the worst fit precisely because it spends parameters on asymmetry that the data barely exhibit. The `loglik_gaussian` field carries the Gaussian benchmark for the likelihood-ratio test formalized on [Testing](@ref id_testing_page).
+Student-t wins on both criteria (AIC ``-2059.88`` against ``-2054.22`` for the asymmetric mixture, ``-2051.13`` for the Pearson IV, ``-2050.53`` for the symmetric mixture, and ``-1947.50`` for the skew-normal), consistent with the fitted degrees of freedom near 3. The asymmetric mixture improves the log-likelihood over the symmetric mixture and Pearson IV, though its extra three parameters leave AIC slightly behind Student-t. The skew-normal is the worst fit precisely because it spends parameters on pure skewness without accommodating heavy tails. The `loglik_gaussian` field carries the Gaussian benchmark for the likelihood-ratio test formalized on [Testing](@ref id_testing_page).
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `distribution` | `Symbol` | `:student_t` | Distribution: `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal` |
-| `max_iter` | `Int` | `500` | Maximum Nelder-Mead iterations |
-| `tol` | `Real` | ``10^{-6}`` | Convergence tolerance |
+| `distribution` | `Symbol` | `:student_t` | Distribution: `:student_t`, `:mixture_normal`, `:mixture_normal_asym`, `:pml`, `:skew_normal` |
+| `asymmetric` | `Bool` | `false` | Use asymmetric 3-parameter mixture (`identify_mixture_normal` and dispatcher when `distribution=:mixture_normal`) |
+| `vcov_type` | `Symbol` | `:auto` | Covariance estimator: `:auto`, `:hessian`, `:sandwich`, `:opg` |
+| `n_starts` | `Int` | `5` | Number of multi-start initializations (Cholesky, JADE, FastICA, random rotations) |
+| `max_iter` | `Int` | `500` | Maximum L-BFGS iterations per start |
+| `tol` | `Real` | ``10^{-6}`` | Gradient convergence tolerance |
+| `rng` | `AbstractRNG` | `Random.default_rng()` | RNG for FastICA warm-start and random orthogonal starts |
+| `seed` | `Union{Integer,Nothing}` | `nothing` | Optional seed overriding `rng` for reproducibility |
 
 ### NonGaussianMLResult Fields
 
@@ -402,16 +419,17 @@ All ML methods return a `NonGaussianMLResult{T}`:
 | `B0` | `Matrix{T}` | Structural impact matrix (``n \times n``) |
 | `Q` | `Matrix{T}` | Rotation matrix: ``B_0 = L Q`` |
 | `shocks` | `Matrix{T}` | Structural shocks (``T_{\text{eff}} \times n``) |
-| `distribution` | `Symbol` | Distribution used: `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal` |
+| `distribution` | `Symbol` | Distribution used: `:student_t`, `:mixture_normal`, `:mixture_normal_asym`, `:pml`, `:skew_normal` |
 | `loglik` | `T` | Log-likelihood at the MLE |
 | `loglik_gaussian` | `T` | Gaussian log-likelihood (for the LR test) |
-| `dist_params` | `Dict{Symbol,Any}` | Distribution parameters (`:nu`; `:p_mix`, `:sigma1`; `:kappa`, `:nu`; `:alpha`) |
+| `dist_params` | `Dict{Symbol,Any}` | Distribution parameters (`:nu`; `:p_mix`, `:mu1`, `:sigma1`, `:mu2`, `:sigma2`; `:kappa`, `:nu`; `:alpha`) and `:vcov_type` |
 | `vcov` | `Matrix{T}` | Asymptotic covariance of all parameters (angles and distribution parameters) |
-| `se` | `Matrix{T}` | Standard errors for the ``B_0`` elements |
+| `se` | `Matrix{T}` | Full Jacobian delta-method standard errors for the ``B_0`` elements |
 | `converged` | `Bool` | Convergence status |
-| `iterations` | `Int` | Nelder-Mead iterations used |
+| `iterations` | `Int` | L-BFGS iterations used by the winning start |
 | `aic` | `T` | Akaike information criterion |
 | `bic` | `T` | Bayesian information criterion |
+| `shock_names` | `Vector{String}` | Labels for the ``n`` structural shocks |
 
 ---
 
@@ -540,13 +558,13 @@ Step 3 reports, for each FastICA column, the smallest angular distance to any St
 
 2. **Column ordering is not structural.** Statistical identification recovers ``B_0`` up to column permutation and sign. The package normalizes signs to a positive diagonal; `label_shocks` then applies the economic labelling. `test_label_stability` is a match-fraction, not a Procrustes strength test --- see Lewis (2025, Section 6.4). In the FastICA example above the funds-rate column is second, not third, until `label_shocks` moves it.
 
-3. **Check `converged` before reading parameters.** `identify_mixture_normal` needs roughly 1300 Nelder-Mead iterations on this sample and stops short at the default `max_iter=500`. `identify_jade` and `identify_sobi` end on their iteration cap and report `converged = false`; cross-check their ``B_0`` against FastICA rather than treating it as final.
+3. **Check `converged` before reading parameters.** `identify_jade` and `identify_sobi` can end on their iteration cap and report `converged = false`; cross-check their ``B_0`` against FastICA and multi-start ML rather than treating an unconverged iterate as final.
 
 4. **Small samples weaken ICA.** FastICA and JADE estimate higher-order statistics that converge slowly. Below 100 observations, prefer the ML estimators, which impose parametric structure, or SOBI, which relies on second-order autocovariances.
 
-5. **Nelder-Mead finds local optima.** The ML estimators and the dCov/HSIC objectives are all derivative-free. For ``n > 4``, run several initializations or compare across methods; consistent ``B_0`` estimates across objectives are the practical convergence diagnostic.
+5. **Non-convex rotation objectives can have local optima.** Multi-start ML uses `Optim.LBFGS()` with `ForwardDiff` gradients across Cholesky, JADE, FastICA, and random orthogonal starts (controlled by `n_starts`), whereas `identify_dcov` and `identify_hsic` remain single-start Nelder-Mead. For ``n > 4``, increase `n_starts` or compare across methods; consistent ``B_0`` estimates across objectives are the practical convergence diagnostic.
 
-6. **The LR test requires correct nesting.** Comparing the non-Gaussian and Gaussian likelihoods is valid only when the Gaussian model is nested in the non-Gaussian one: ``\nu_j \to \infty`` for Student-t, ``\sigma_{1j} = \sigma_{2j}`` for the mixture, ``\alpha_j = 0`` for the skew-normal, and ``(\nu_j, m_j) \to (0, \infty)`` for the Pearson IV — approached through the scaled Student-t as ``m_j`` grows, with the tail cap at ``m \approx 10^4`` making the limit numerically reachable.
+6. **The LR test requires correct nesting.** Comparing the non-Gaussian and Gaussian likelihoods is valid only when the Gaussian model is nested in the non-Gaussian one: ``\nu_j \to \infty`` for Student-t, ``\sigma_{1j} = \sigma_{2j}`` (and ``\mu_{1j} = \mu_{2j} = 0``) for the mixture, ``\alpha_j = 0`` for the skew-normal, and ``(\nu_j, m_j) \to (0, \infty)`` for the Pearson IV — approached through the scaled Student-t as ``m_j`` grows, with the tail cap at ``m \approx 10^4`` making the limit numerically reachable.
 
 7. **Match the moment block to the source of non-Gaussianity.** `:coskewness` has no identifying power under symmetric shocks (Student-t, Laplace); `:cokurtosis` is silent when shocks are skewed but mesokurtic. Use `:both` if unsure, and read Hansen ``J`` together with `test_gaussian_shock_count`: two Gaussian recovered shocks mean ``B_0`` is not identified, regardless of how small ``J`` is.
 
@@ -565,6 +583,12 @@ Step 3 reports, for each FastICA column, the smallest angular distance to any St
 
 - Comon, Pierre. 1994. "Independent Component Analysis, A New Concept?"
   *Signal Processing* 36 (3): 287--314. [DOI](https://doi.org/10.1016/0165-1684(94)90029-9)
+
+- Gouriéroux, Christian, Alain Monfort, and Jean-Paul Renne. 2017. "Statistical Inference for Independent Component Analysis: Application to Structural VAR Models."
+  *Journal of Econometrics* 196 (1): 111--126. [DOI](https://doi.org/10.1016/j.jeconom.2016.09.007)
+
+- Gouriéroux, Christian, Alain Monfort, and Jean-Paul Renne. 2020. "Identification and Estimation in Non-Fundamental Structural VARMA Models."
+  *Review of Economic Studies* 87 (4): 1915--1953. [DOI](https://doi.org/10.1093/restud/rdz028)
 
 - Gretton, Arthur, Olivier Bousquet, Alex Smola, and Bernhard Schölkopf. 2005. "Measuring Statistical Dependence with Hilbert-Schmidt Norms."
   In *Algorithmic Learning Theory*, 63--77. Berlin: Springer. [DOI](https://doi.org/10.1007/11564089_7)

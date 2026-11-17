@@ -520,6 +520,11 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Statistical Inference for Independent Component Analysis: Application to Structural VAR Models",
         journal="Journal of Econometrics", volume="196", issue="1", pages="111--126",
         doi="10.1016/j.jeconom.2016.09.007", isbn="", publisher="", entry_type=:article),
+    :gourieroux_monfort_renne2020 => (key=:gourieroux_monfort_renne2020,
+        authors="Gourieroux, Christian and Monfort, Alain and Renne, Jean-Paul", year=2020,
+        title="Identification and Estimation in Non-Fundamental Structural VARMA Models",
+        journal="Review of Economic Studies", volume="87", issue="4", pages="1915--1953",
+        doi="10.1093/restud/rdz028", isbn="", publisher="", entry_type=:article),
     :keweloh2021 => (key=:keweloh2021,
         authors="Keweloh, Sascha A.", year=2021,
         title="A Generalized Method of Moments Estimator for Structural Vector Autoregressions Based on Higher Moments",
@@ -2160,6 +2165,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # Non-Gaussian ML methods (symbol dispatch)
     :student_t => [:lanne_meitz_saikkonen2017, :lewis2025],
     :mixture_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :mixture_normal_asym => [:lanne_meitz_saikkonen2017, :gourieroux_monfort_renne2020, :lewis2025],
     :pml => [:lanne_meitz_saikkonen2017, :lewis2025],
     :skew_normal => [:lanne_meitz_saikkonen2017, :lewis2025],
     :nongaussian_ml => [:lanne_meitz_saikkonen2017, :lewis2025],
@@ -2494,6 +2500,7 @@ const _ICA_METHOD_REFS = Dict{Symbol, Vector{Symbol}}(
 const _ML_DIST_REFS = Dict{Symbol, Vector{Symbol}}(
     :student_t => Symbol[],
     :mixture_normal => [:lanne_lutkepohl2010],
+    :mixture_normal_asym => [:gourieroux_monfort_renne2020],
     :pml => [:gourieroux_monfort_renne2017],
     :skew_normal => [:azzalini1985],
 )

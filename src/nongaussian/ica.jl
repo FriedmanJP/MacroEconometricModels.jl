@@ -189,7 +189,7 @@ function _fastica_symmetric(Z::Matrix{T}, n::Int; contrast::Symbol=:logcosh,
 
         # Symmetric decorrelation: W = (W W')^{-1/2} W
         F = eigen(Symmetric(W * W'))
-        D_inv_sqrt = Diagonal(1.0 ./ sqrt.(max.(F.values, eps(T))))
+        D_inv_sqrt = Diagonal(one(T) ./ sqrt.(max.(F.values, eps(T))))
         W = F.vectors * D_inv_sqrt * F.vectors' * W
 
         # Check convergence

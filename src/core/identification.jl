@@ -923,6 +923,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:hsic` — HSIC independence ICA (Gretton et al. 2005)
 - `:student_t` — Student-t ML (Lanne, Meitz & Saikkonen 2017)
 - `:mixture_normal` — Mixture of normals ML (Lanne & Lütkepohl 2010)
+- `:mixture_normal_asym` — Asymmetric mixture of normals ML (Gouriéroux, Monfort & Renne 2020)
 - `:pml` — Pseudo-ML with Pearson Type IV (Gouriéroux, Monfort & Renne 2017)
 - `:skew_normal` — Skew-normal ML (Azzalini 1985 density)
 - `:nongaussian_ml` — Unified non-Gaussian ML dispatcher (default: Student-t)
@@ -991,15 +992,17 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_hsic(model).Q
     # Non-Gaussian ML methods (defined in nongaussian_ml.jl)
     elseif method == :student_t
-        identify_student_t(model).Q
+        identify_student_t(model; rng=rng).Q
     elseif method == :mixture_normal
-        identify_mixture_normal(model).Q
+        identify_mixture_normal(model; rng=rng).Q
+    elseif method == :mixture_normal_asym
+        identify_mixture_normal(model; asymmetric=true, rng=rng).Q
     elseif method == :pml
-        identify_pml(model).Q
+        identify_pml(model; rng=rng).Q
     elseif method == :skew_normal
-        identify_skew_normal(model).Q
+        identify_skew_normal(model; rng=rng).Q
     elseif method == :nongaussian_ml
-        identify_nongaussian_ml(model).Q
+        identify_nongaussian_ml(model; rng=rng).Q
     elseif method == :gmm_moments
         identify_gmm_moments(model; kwargs...).Q
     elseif method == :lewis_tvv
@@ -1066,6 +1069,7 @@ function _register_builtin_identification!()
         (:hsic, true, false, false),
         (:student_t, true, false, false),
         (:mixture_normal, true, false, false),
+        (:mixture_normal_asym, true, false, false),
         (:pml, true, false, false),
         (:skew_normal, true, false, false),
         (:nongaussian_ml, true, false, false),
@@ -1684,19 +1688,28 @@ end
 function _permute_dist_params(d::Dict, perm::Vector{Int}, signs::Vector{Int}, n::Int)
     out = Dict{Symbol,Any}()
     for (k, v) in d
-        if v isa AbstractVector && length(v) == n
+        if k === :all_params && v isa AbstractVector && !isempty(v) && length(v) % n == 0
+            nblk = length(v) ÷ n
+            parts = [v[((b - 1) * n + 1):(b * n)][perm] for b in 1:nblk]
+            if (haskey(d, :alpha) && nblk == 1) || (haskey(d, :kappa) && nblk == 2)
+                @inbounds for j in 1:n
+                    signs[j] < 0 && (parts[1][j] = -parts[1][j])
+                end
+            elseif haskey(d, :mu1) && nblk == 3
+                @inbounds for j in 1:n
+                    signs[j] < 0 && (parts[2][j] = -parts[2][j])
+                end
+            end
+            out[k] = vcat(parts...)
+        elseif v isa AbstractVector && length(v) == n
             vv = v[perm]
-            if k === :alpha || k === :kappa
+            if k === :alpha || k === :kappa || k === :mu1 || k === :mu2
                 vv = copy(vv)
                 @inbounds for j in 1:n
                     signs[j] < 0 && (vv[j] = -vv[j])
                 end
             end
             out[k] = vv
-        elseif k === :all_params && v isa AbstractVector && !isempty(v) && length(v) % n == 0
-            nblk = length(v) ÷ n
-            parts = [v[((b - 1) * n + 1):(b * n)][perm] for b in 1:nblk]
-            out[k] = vcat(parts...)
         else
             out[k] = v
         end
@@ -1729,6 +1742,9 @@ function _permute_statid_field(f::Symbol, v, perm::Vector{Int}, signs::Vector{In
     v
 end
 
+_transform_statid_vcov(result, perm::Vector{Int}, signs::Vector{Int}, n::Int, Q_new) =
+    hasfield(typeof(result), :vcov) ? getfield(result, :vcov) : nothing
+
 function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
                              shock_names::Union{Nothing,Vector{String}}=nothing) where {R}
     n = size(result.B0, 2)
@@ -1738,6 +1754,7 @@ function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
         @warn "label_shocks: det(Q) < 0 after signed permutation; Givens angles (theta) " *
               "parameterize SO(n) and are set to NaN. Use Q as the source of truth."
     end
+    vcov_new = hasfield(R, :vcov) ? _transform_statid_vcov(result, perm, signs, n, Q_new) : nothing
     names_new = if shock_names !== nothing
         Vector{String}(shock_names)
     elseif hasfield(R, :shock_names)
@@ -1748,7 +1765,8 @@ function _signed_perm_result(result::R, perm::Vector{Int}, signs::Vector{Int};
     vals = ntuple(fieldcount(R)) do i
         f = fieldname(R, i)
         v = getfield(result, f)
-        _permute_statid_field(f, v, perm, signs, n, names_new, Q_new, theta_from_q)
+        f === :vcov && vcov_new !== nothing ? vcov_new :
+            _permute_statid_field(f, v, perm, signs, n, names_new, Q_new, theta_from_q)
     end
     R(vals...)
 end
