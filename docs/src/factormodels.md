@@ -395,7 +395,7 @@ plot_result(fc)
 Factor forecast standard errors widen with the horizon and then flatten: for this two-factor model they are 0.52 and 0.61 at ``h = 1`` and 0.83 and 0.86 by ``h = 10``. Because the factors are normalized to unit variance, a standard error of one *is* the unconditional standard deviation, so the bands are already three-quarters of the way to conveying no information at all — which is what weakly persistent monthly factors imply. Bootstrap intervals are preferred to theoretical ones whenever the innovations are visibly non-Gaussian, since they inherit the empirical residual distribution rather than assuming normality.
 
 !!! note "Technical Note"
-    Observable forecast standard errors combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``. GDFM forecasts instead extrapolate each factor as an AR(1) with the closed-form variance ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}``.
+    Observable forecast standard errors combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``. Under `method=:ar`, GDFM forecasts extrapolate each two-sided factor as an AR(1) with variance ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}``; under `method=:one_sided` (or `:spectral`), theoretical standard errors combine common-component projection error ``\hat\Gamma_\chi(0) - W_h G_z W_h'`` with idiosyncratic variance.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -451,7 +451,7 @@ where:
 In the frequency domain the spectral density splits as ``\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)``. Common factors produce eigenvalues that **diverge** with ``N`` while idiosyncratic components produce **bounded** ones, and that separation identifies the factor space without any finite-order restriction on factor dynamics.
 
 !!! note "Technical Note"
-    The default estimator is the FHLR lag-window spectrum ``\hat\Sigma_X(\theta)=(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}``, evaluated on ``\theta_h=\pi h/M``. The Hermitian eigendecomposition at each grid point supplies the leading-``q`` dynamic principal components; those loadings are interpolated onto the Fourier ordinates so the time-domain projector ``L L^H`` can reconstruct ``\chi_t``. Pass `spectral=:smoothed_periodogram` for the older kernel-smoothed periodogram. Under `:lag_window`, `bandwidth=0` selects ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``, which is 4 for the 60-observation panel used here.
+    The default estimator is the FHLR lag-window spectrum ``\hat\Sigma_X(\theta)=(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}``, evaluated on ``\theta_h=\pi h/M``. The Hermitian eigendecomposition at each grid point supplies the leading-``q`` dynamic principal components ``L(\theta)``; inverting ``L(\theta) L(\theta)^H`` yields finite-lag symmetric time-domain filter coefficients ``K_k`` (``|k| \le M``) applied with reflection boundary padding to reconstruct ``\chi_t``. Pass `spectral=:smoothed_periodogram` for the older kernel-smoothed periodogram. Under `:lag_window`, `bandwidth=0` selects ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``, which is 4 for the 60-observation panel used here.
 
 ```@example factor
 gdfm = estimate_gdfm(X, 2;
@@ -472,7 +472,7 @@ shares = common_variance_share(gdfm)
  mean_r2=round(mean(r2(gdfm)), digits=3))
 ```
 
-Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cumulative). The reconstructed common component accounts for a median 26.9% of the variance of an individual series (mean 31.3%). Three *static* factors deliver 37.8% of contemporaneous co-movement on the same panel. With ``T=60`` and ``M=4`` the lag-window common component is more conservative than static PCA: a short lag truncation on a wide panel does not automatically recover more variance than three contemporaneous factors.
+Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cumulative). The finite-lag two-sided common component accounts for a median 49.5% of the variance of an individual series (mean 52.5%, mean ``R^2 = 0.515``), exceeding the 37.8% explained by three *static* factors on the same panel because dynamic loadings capture lead-lag co-movement across the ``M = 4`` lag window.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -504,7 +504,7 @@ Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cu
 | `factors_onesided` | `Matrix{T}` | ``T \times r`` contemporaneous factors ``F_t = Z' X_t`` |
 | `common_component_onesided` | `Matrix{T}` | ``T \times N`` one-sided common component |
 
-`factors` and `common_component` are the **two-sided** FHLR (2000) reconstruction (inverse FFT over the sample). They use future observations and wrap at the sample ends, so they are for in-sample decomposition and historical decomposition. `Z` and `factors_onesided` are the **one-sided** FHLR (2005) filter: ``F_t`` depends on ``X_t`` only, given ``Z``.
+`factors` and `common_component` are the **two-sided** FHLR (2000) reconstruction computed via a non-circular finite-lag symmetric time-domain filter ``\sum_{k=-M}^{M} K_k X_{t-k}`` with reflection padding at the sample boundaries. They use future observations within the ``\pm M`` window without wrapping end-of-sample shocks to the start of the sample, so they are for in-sample decomposition and historical decomposition. `Z` and `factors_onesided` are the **one-sided** FHLR (2005) filter: ``F_t`` depends on ``X_t`` only, given ``Z``.
 
 ### Selecting the Number of Dynamic Factors
 
@@ -563,14 +563,31 @@ where:
 - ``\hat\Gamma_X(0)`` is the contemporaneous covariance matrix of the panel observables
 - ``X_T`` is the observed panel data vector at forecast origin ``T``
 
-`forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path. `method=:ar` is the older AR(1) recursion on the two-sided factors. `:spectral` is no longer a silent alias for `:ar`.
+`forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path, while `method=:ar` runs an AR(1) recursion on the two-sided factors (`:spectral` is not an alias for `:ar`). Under `ci_method=:theoretical`, observable forecast error variances combine the common-component projection error with idiosyncratic variance:
+
+```math
+\text{Var}(x_{T+h} - \hat\chi_{T+h|T}) = \mathrm{diag}\!\left(\hat\Gamma_\chi(0) - W_h G_z W_h'\right) + \mathrm{diag}(\hat\Sigma_\xi)
+```
+
+where:
+- ``x_{T+h}`` is the ``N \times 1`` observable vector at horizon ``T+h``
+- ``\hat\chi_{T+h|T}`` is the ``h``-step-ahead FHLR common-component projection
+- ``W_h = W_1 \Phi_F^{h-1}`` is the ``h``-step projection weight matrix propagated via the stationary factor VAR(1) transition ``\Phi_F`` from ``W_1 = \hat\Gamma_\chi(1) Z G_z^{-1}``
+- ``G_z = Z'\hat\Gamma_X(0) Z`` is the covariance matrix of the one-sided factors ``F_t = Z' X_t``
+- ``\hat\Gamma_\chi(0)`` is the contemporaneous covariance matrix of the common components
+- ``\hat\Sigma_\xi`` is the diagonal idiosyncratic residual covariance matrix
+
+Factor standard errors follow ``\mathrm{diag}(G_z - \Phi_F^h G_z (\Phi_F^h)')``, and `ci_method=:bootstrap` resamples factor VAR(1) innovations alongside idiosyncratic residuals (reproducible via `rng` or `seed`).
 
 ```@example factor
-fc_fhlr = forecast(gdfm, 4; method=:one_sided, ci_method=:none)
+fc_fhlr = forecast(gdfm, 4; method=:one_sided, ci_method=:theoretical)
 fc_ar = forecast(gdfm, 4; method=:ar, ci_method=:none)
 (size_os=size(fc_fhlr.observables), size_ar=size(fc_ar.observables),
- maxabs_diff=round(maximum(abs, fc_fhlr.observables - fc_ar.observables); digits=3))
+ maxabs_diff=round(maximum(abs, fc_fhlr.observables - fc_ar.observables); digits=3),
+ factor_se=round.(fc_fhlr.factors_se[:, 1]; digits=3))
 ```
+
+The FHLR projection forecast differs substantially from the two-sided AR(1) recursion (`maxabs_diff = 12.114`), and the factor forecast standard errors widen monotonically with the horizon (0.92, 0.954, 0.973, 0.984 for the first factor across ``h = 1, \dots, 4``).
 
 ### DFM vs GDFM
 

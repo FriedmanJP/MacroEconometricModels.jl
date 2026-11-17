@@ -151,10 +151,10 @@ function estimate_gdfm(X::AbstractMatrix{T}, q::Int;
     eigenvalues, eigenvectors = _spectral_eigendecomposition(spectral_X)
     loadings = eigenvectors[:, 1:q, :]
     spectral_chi = _compute_common_spectral_density(loadings, eigenvalues[1:q, :])
-    loadings_td = spectral === :lag_window ?
-        _interp_loadings_to_fft_grid(loadings, frequencies, T_obs) : loadings
-    common = _reconstruct_time_domain(loadings_td, X_proc)
-    factors = _extract_time_domain_factors(X_proc, loadings_td, frequencies)
+    common = _reconstruct_time_domain(loadings, X_proc, frequencies;
+        spectral=spectral, bandwidth=bandwidth)
+    factors = _extract_time_domain_factors(X_proc, loadings, frequencies;
+        spectral=spectral, bandwidth=bandwidth)
     var_explained = _compute_variance_explained(eigenvalues, q)
 
     Z, F_os, chi_os = _gdfm_onesided(X_proc, spectral_X, spectral_chi, frequencies, r_static)
@@ -306,8 +306,9 @@ function _align_eigenvector_phases(loadings::Array{Complex{T},3}) where {T<:Abst
     @inbounds for j in 2:n_freq
         for k in 1:q
             overlap = dot(L[:, k, j - 1], L[:, k, j])
-            if overlap != 0
-                L[:, k, j] .*= conj(overlap) / abs(overlap)
+            a = abs(overlap)
+            if a > eps(T)
+                L[:, k, j] .*= conj(overlap) / a
             end
         end
     end
@@ -385,37 +386,222 @@ function _compute_common_spectral_density(loadings::Array{Complex{T},3}, eigenva
     spectral_chi
 end
 
-"""Reconstruct common component in time domain via inverse FFT."""
-function _reconstruct_time_domain(loadings::Array{Complex{T},3}, X::AbstractMatrix{T}) where {T}
-    T_obs, N = size(X)
-    n_freq = size(loadings, 3)
-    X_fft = FFTW.fft(X, 1)
-    chi_fft = zeros(Complex{T}, T_obs, N)
-
-    @inbounds for j in 1:n_freq
-        # Forni idempotent dynamic-principal-component projector on the leading-q eigenvectors of
-        # the SMOOTHED spectrum: χ(ω_j) = (Σ_k v_k v_k^H) X_fft(ω_j) = L Lᴴ X_fft(ω_j). The old
-        # code inverted the raw rank-1 periodogram X_fft·X_fftᴴ/T — a degenerate/noisy filter.
-        L = @view loadings[:, :, j]        # N × q, columns orthonormal (LᴴL ≈ I_q)
-        chi_fft[j, :] = L * (L' * @view(X_fft[j, :]))
-        j > 1 && j < n_freq && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
+"""Reflect out-of-range sample index `s` symmetrically into `1:T_obs`."""
+function _reflect_index(s::Int, T_obs::Int)
+    T_obs <= 1 && return 1
+    while s < 1 || s > T_obs
+        s = s < 1 ? 2 - s : 2 * T_obs - s
     end
-    real(FFTW.ifft(chi_fft, 1))
+    s
 end
 
-"""Extract time-domain factors via frequency-domain projection."""
-function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Complex{T},3}, frequencies::Vector{T}) where {T}
+"""Symmetric reflection padding of `X` (`T_obs × N`) by `M` lags/leads (`(T_obs + 2M) × N`)."""
+function _reflect_pad(X::AbstractMatrix{T}, M::Int) where {T<:AbstractFloat}
     T_obs, N = size(X)
-    _, q, n_freq = size(loadings)
-    X_fft, F_fft = FFTW.fft(X, 1), zeros(Complex{T}, T_obs, q)
+    M <= 0 && return Matrix{T}(X)
+    X_pad = Matrix{T}(undef, T_obs + 2 * M, N)
+    @inbounds for s in (1 - M):(T_obs + M)
+        idx = _reflect_index(s, T_obs)
+        X_pad[s + M, :] .= @view(X[idx, :])
+    end
+    X_pad
+end
 
+"""Finite half-width `M` for symmetric two-sided time-domain GDFM filtering."""
+function _gdfm_filter_halfwidth(T_obs::Int, n_freq::Int, spectral::Symbol, bandwidth::Int)
+    T_obs <= 1 && return 0
+    if spectral === :lag_window
+        return min(max(n_freq - 1, 0), T_obs - 1)
+    end
+    M = bandwidth > 0 ? bandwidth : _select_lag_window(T_obs)
+    min(max(M, 0), div(T_obs - 1, 2))
+end
+
+"""Invert `P(θ) = L(θ) L(θ)ᴴ` to real lag-`k` filter matrices `K_0, ..., K_M` (`K_{-k} = K_kᵀ`)."""
+function _projector_filter_kernels(loadings::AbstractArray{Complex{T},3}, T_obs::Int,
+    spectral::Symbol, M::Int) where {T<:AbstractFloat}
+    N, _, n_freq = size(loadings)
+    R_list = Vector{Matrix{T}}(undef, n_freq)
+    I_list = Vector{Matrix{T}}(undef, n_freq)
     @inbounds for j in 1:n_freq
-        L = loadings[:, :, j]
-        F_fft[j, :] = (L' * L + T(1e-10) * I) \ (L' * X_fft[j, :])
-        j > 1 && j < n_freq && (F_fft[T_obs - j + 2, :] = conj(F_fft[j, :]))
+        Lj = @view loadings[:, :, j]
+        Pj = Lj * Lj'
+        R_list[j] = real.(Pj)
+        I_list[j] = imag.(Pj)
+    end
+    K_list = Vector{Matrix{T}}(undef, M + 1)
+    if n_freq == 1
+        K_list[1] = R_list[1]
+        @inbounds for k in 1:M
+            K_list[k + 1] = zeros(T, N, N)
+        end
+        return K_list
+    end
+    if spectral === :lag_window
+        M_grid = n_freq - 1
+        inv_n = one(T) / T(2 * M_grid)
+        @inbounds for k in 0:M
+            K = copy(R_list[1])
+            isodd(k) ? (K .-= R_list[n_freq]) : (K .+= R_list[n_freq])
+            for j in 2:(n_freq - 1)
+                θ = T(π * (j - 1) / M_grid)
+                c, s = cos(k * θ), sin(k * θ)
+                K .+= (2 * c) .* R_list[j] .+ (2 * s) .* I_list[j]
+            end
+            w_k = k == M_grid ? T(0.5) : one(T)
+            K .*= w_k * inv_n
+            K_list[k + 1] = K
+        end
+    else
+        inv_T = one(T) / T(T_obs)
+        has_nyquist = iseven(T_obs)
+        j_hi = has_nyquist ? n_freq - 1 : n_freq
+        @inbounds for k in 0:M
+            K = copy(R_list[1])
+            if has_nyquist
+                isodd(k) ? (K .-= R_list[n_freq]) : (K .+= R_list[n_freq])
+            end
+            for j in 2:j_hi
+                ω = T(2π * (j - 1) / T_obs)
+                c, s = cos(k * ω), sin(k * ω)
+                K .+= (2 * c) .* R_list[j] .- (2 * s) .* I_list[j]
+            end
+            K .*= inv_T
+            K_list[k + 1] = K
+        end
+    end
+    K_list
+end
+
+"""Apply finite-lag symmetric two-sided filter `χ_t = K_0 X_t + Σ_{k=1}^M (K_k X_{t-k} + K_kᵀ X_{t+k})`."""
+function _apply_symmetric_filter(X::AbstractMatrix{T}, X_pad::AbstractMatrix{T},
+    K_list::Vector{Matrix{T}}) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    M = length(K_list) - 1
+    chi = X * transpose(K_list[1])
+    @inbounds for k in 1:M
+        Kk = K_list[k + 1]
+        X_lag = @view X_pad[(M + 1 - k):(M + T_obs - k), :]
+        X_lead = @view X_pad[(M + 1 + k):(M + T_obs + k), :]
+        mul!(chi, X_lag, transpose(Kk), one(T), one(T))
+        mul!(chi, X_lead, Kk, one(T), one(T))
+    end
+    chi
+end
+
+"""Invert `B(θ) = (L(θ)ᴴ L(θ) + 1e-10 I)⁻¹ L(θ)ᴴ` to real lag filters `B_0`, `B_pos`, `B_neg`."""
+function _factor_filter_kernels(loadings::Array{Complex{T},3}, T_obs::Int,
+    spectral::Symbol, M::Int) where {T<:AbstractFloat}
+    N, q, n_freq = size(loadings)
+    L_al = _align_eigenvector_phases(loadings)
+    BR_list = Vector{Matrix{T}}(undef, n_freq)
+    BI_list = Vector{Matrix{T}}(undef, n_freq)
+    reg = T(1e-10) * I
+    @inbounds for j in 1:n_freq
+        Lj = @view L_al[:, :, j]
+        Bj = (Lj' * Lj + reg) \ Lj'
+        BR_list[j] = real.(Bj)
+        BI_list[j] = imag.(Bj)
+    end
+    B0 = zeros(T, q, N)
+    B_pos = Vector{Matrix{T}}(undef, M)
+    B_neg = Vector{Matrix{T}}(undef, M)
+    if n_freq == 1
+        B0 .= BR_list[1]
+        @inbounds for k in 1:M
+            B_pos[k] = zeros(T, q, N)
+            B_neg[k] = zeros(T, q, N)
+        end
+        return B0, B_pos, B_neg
+    end
+    if spectral === :lag_window
+        M_grid = n_freq - 1
+        inv_n = one(T) / T(2 * M_grid)
+        @inbounds for k in 0:M
+            Ck = copy(BR_list[1])
+            isodd(k) ? (Ck .-= BR_list[n_freq]) : (Ck .+= BR_list[n_freq])
+            Sk = zeros(T, q, N)
+            for j in 2:(n_freq - 1)
+                θ = T(π * (j - 1) / M_grid)
+                c, s = cos(k * θ), sin(k * θ)
+                Ck .+= (2 * c) .* BR_list[j]
+                Sk .+= (2 * s) .* BI_list[j]
+            end
+            w_k = k == M_grid ? T(0.5) : one(T)
+            scale = w_k * inv_n
+            if k == 0
+                B0 .= scale .* Ck
+            else
+                B_pos[k] = scale .* (Ck .+ Sk)
+                B_neg[k] = scale .* (Ck .- Sk)
+            end
+        end
+    else
+        inv_T = one(T) / T(T_obs)
+        has_nyquist = iseven(T_obs)
+        j_hi = has_nyquist ? n_freq - 1 : n_freq
+        @inbounds for k in 0:M
+            Ck = copy(BR_list[1])
+            if has_nyquist
+                isodd(k) ? (Ck .-= BR_list[n_freq]) : (Ck .+= BR_list[n_freq])
+            end
+            Sk = zeros(T, q, N)
+            for j in 2:j_hi
+                ω = T(2π * (j - 1) / T_obs)
+                c, s = cos(k * ω), sin(k * ω)
+                Ck .+= (2 * c) .* BR_list[j]
+                Sk .+= (2 * s) .* BI_list[j]
+            end
+            if k == 0
+                B0 .= inv_T .* Ck
+            else
+                B_pos[k] = inv_T .* (Ck .- Sk)
+                B_neg[k] = inv_T .* (Ck .+ Sk)
+            end
+        end
+    end
+    B0, B_pos, B_neg
+end
+
+"""Reconstruct common component in time domain via finite-lag symmetric filtering."""
+function _reconstruct_time_domain(loadings::Array{Complex{T},3}, X::AbstractMatrix{T},
+    frequencies::Vector{T}=T[]; spectral::Symbol=:auto, bandwidth::Int=0) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    n_freq = size(loadings, 3)
+    spec = if spectral === :auto
+        (n_freq == div(T_obs, 2) + 1 && !isempty(frequencies) && n_freq > 1 &&
+         abs(frequencies[2] - T(2π / T_obs)) < T(1e-6)) ? :smoothed_periodogram : :lag_window
+    else
+        spectral
+    end
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, spec, bandwidth)
+    X_pad = _reflect_pad(X, M)
+    K_list = _projector_filter_kernels(loadings, T_obs, spec, M)
+    _apply_symmetric_filter(X, X_pad, K_list)
+end
+
+"""Extract time-domain factors via finite-lag symmetric projection."""
+function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Complex{T},3},
+    frequencies::Vector{T}; spectral::Symbol=:auto, bandwidth::Int=0) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    _, q, n_freq = size(loadings)
+    spec = if spectral === :auto
+        (n_freq == div(T_obs, 2) + 1 && !isempty(frequencies) && n_freq > 1 &&
+         abs(frequencies[2] - T(2π / T_obs)) < T(1e-6)) ? :smoothed_periodogram : :lag_window
+    else
+        spectral
+    end
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, spec, bandwidth)
+    X_pad = _reflect_pad(X, M)
+    B0, B_pos, B_neg = _factor_filter_kernels(loadings, T_obs, spec, M)
+    factors = X * transpose(B0)
+    @inbounds for k in 1:M
+        X_lag = @view X_pad[(M + 1 - k):(M + T_obs - k), :]
+        X_lead = @view X_pad[(M + 1 + k):(M + T_obs + k), :]
+        mul!(factors, X_lag, transpose(B_pos[k]), one(T), one(T))
+        mul!(factors, X_lead, transpose(B_neg[k]), one(T), one(T))
     end
 
-    factors = real(FFTW.ifft(F_fft, 1))
     # Normalize factors to unit variance
     for i in 1:q
         σ = std(factors[:, i])
@@ -428,9 +614,10 @@ end
     historical_decomposition(gdfm::GeneralizedDynamicFactorModel; by=:dynamic_pc) -> HistoricalDecomposition
 
 Decompose each series into the `q` dynamic principal-component paths plus the
-idiosyncratic remainder. `χ^{(j)}(ω) = L_{:j}(ω) L_{:j}(ω)ᴴ X(ω)`, inverted
-by IFFT. The `q` paths reconstruct `gdfm.common_component` (including the
-series mean under `standardize=true`, matching `estimate_gdfm`).
+idiosyncratic remainder via finite-lag symmetric time-domain filtering
+``\\hat{\\chi}_t^{(j)} = \\sum_{k=-M}^{M} K_k^{(j)} X_{t-k}`` with reflection boundary
+padding. The `q` paths reconstruct `gdfm.common_component` (including the series
+mean under `standardize=true`, matching `estimate_gdfm`).
 """
 function historical_decomposition(gdfm::GeneralizedDynamicFactorModel{T};
     by::Symbol=:dynamic_pc) where {T<:AbstractFloat}
@@ -440,20 +627,15 @@ function historical_decomposition(gdfm::GeneralizedDynamicFactorModel{T};
     q = gdfm.q
     X_proc = gdfm.standardized ? _standardize(X) : X
     L = gdfm.loadings_spectral
-    n_fft = div(T_obs, 2) + 1
-    L_td = size(L, 3) == n_fft ? L : _interp_loadings_to_fft_grid(L, gdfm.frequencies, T_obs)
-    X_fft = FFTW.fft(X_proc, 1)
+    n_freq = size(L, 3)
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, gdfm.spectral, gdfm.bandwidth)
+    X_pad = _reflect_pad(X_proc, M)
+    σ = gdfm.standardized ? max.(vec(std(X; dims=1)), T(1e-10)) : ones(T, N)
     contrib = zeros(T, T_obs, N, q + 1)
     @inbounds for k in 1:q
-        chi_fft = zeros(Complex{T}, T_obs, N)
-        for j in 1:n_fft
-            lk = @view L_td[:, k, j]
-            chi_fft[j, :] = lk .* (lk' * @view(X_fft[j, :]))
-            j > 1 && j < n_fft && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
-        end
-        chi = real(FFTW.ifft(chi_fft, 1))
+        K_list = _projector_filter_kernels(@view(L[:, k:k, :]), T_obs, gdfm.spectral, M)
+        chi = _apply_symmetric_filter(X_proc, X_pad, K_list)
         if gdfm.standardized
-            σ = max.(vec(std(X; dims=1)), T(1e-10))
             chi .*= σ'
         end
         contrib[:, :, k] = chi
@@ -970,7 +1152,7 @@ end
 # =============================================================================
 
 """
-    forecast(model::GeneralizedDynamicFactorModel, h; method=:ar, ci_method=:theoretical, conf_level=0.95, n_boot=1000)
+    forecast(model::GeneralizedDynamicFactorModel, h; method=:ar, ci_method=:theoretical, conf_level=0.95, n_boot=1000, rng=Random.default_rng(), seed=nothing)
 
 Forecast `h` steps ahead from a GDFM.
 
@@ -983,21 +1165,29 @@ Forecast `h` steps ahead from a GDFM.
   and `:spectral` are the FHLR (2005) projection
   ``\\hat\\chi_{T+h|T} = \\hat\\Gamma_\\chi(h) Z (Z'\\hat\\Gamma_X(0) Z)^{-1} Z' X_T``.
   `:spectral` is **not** an alias for `:ar`.
-- `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, or `:bootstrap`
+- `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, or `:bootstrap`.
+  Under `:one_sided`/`:spectral`, `:theoretical` combines common-component projection
+  error ``\\hat\\Gamma_\\chi(0) - W_h G_z W_h'`` with idiosyncratic variance (and
+  ``h``-step factor projection error for `factors_se`), and `:bootstrap` simulates
+  factor VAR(1) innovations alongside resampled idiosyncratic residuals.
 - `conf_level::Real=0.95`: Confidence level for intervals
 - `n_boot::Int=1000`: Bootstrap replications (for `:bootstrap`)
+- `rng::AbstractRNG=Random.default_rng()`: Random number generator for bootstrap draws
+- `seed::Union{Integer,Nothing}=nothing`: Optional integer seed overriding `rng` via `Xoshiro(seed)`
 
 # Returns
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbol=:ar,
     ci_method::Symbol=:theoretical, conf_level::Real=0.95, n_boot::Int=1000,
-    rng::AbstractRNG=Random.default_rng()) where {T}
+    rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing) where {T}
 
     h < 1 && throw(ArgumentError("h must be positive"))
     method ∈ (:ar, :one_sided, :spectral) || throw(ArgumentError(
         "method must be :ar, :one_sided, or :spectral, got :$method"))
     ci_method ∈ (:none, :theoretical, :bootstrap) || throw(ArgumentError("ci_method must be :none, :theoretical, or :bootstrap"))
+    rng = _resolve_repro_rng(rng, seed)
     if method === :one_sided || method === :spectral
         return _forecast_gdfm_fhlr(model, h; ci_method=ci_method, conf_level=conf_level,
             n_boot=n_boot, rng=rng)
@@ -1122,13 +1312,48 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
     r = size(model.Z, 2)
     r < 1 && throw(ArgumentError("one-sided weights Z are empty; re-estimate the GDFM"))
     X_proc = model.standardized ? _standardize(X) : X
+    Z = model.Z
     xT = vec(X_proc[end, :])
-    F_now = model.Z' * xT
+    F_now = Z' * xT
     F_fc = repeat(F_now', h, 1)
+
+    # Put Γχ(0) and ΓX(0) on the sample-variance scale (smoothed periodogram omits 1/(2π))
+    scale_spec = model.spectral === :smoothed_periodogram ? T(2π) : one(T)
+    Γχ0 = _gamma_from_spectrum(model.spectral_density_chi, model.frequencies, 0) ./ scale_spec
+    ΓX0 = _gamma_from_spectrum(model.spectral_density_X, model.frequencies, 0) ./ scale_spec
+    Gz_raw = Z' * ΓX0 * Z
+    Gz = Symmetric((Gz_raw + Gz_raw') / 2)
+
+    # Estimate stationary VAR(1) transition Φ_F on centered one-sided factors F_os = X_proc * Z
+    F_os = X_proc * Z
+    Fc = F_os .- mean(F_os; dims=1)
+    Φ_F = zeros(T, r, r)
+    if T_obs >= 3
+        Fc_lag = @view Fc[1:end-1, :]
+        Fc_lead = @view Fc[2:end, :]
+        S_lag = Fc_lag' * Fc_lag
+        Φ_F = (Fc_lead' * Fc_lag) * robust_inv(Symmetric((S_lag + S_lag') / 2); silent=true)
+        if any(!isfinite, Φ_F)
+            Φ_F .= zero(T)
+        else
+            ρ = maximum(abs, eigvals(Φ_F))
+            if !isfinite(ρ)
+                Φ_F .= zero(T)
+            elseif ρ >= T(0.995)
+                Φ_F .*= T(0.995) / ρ
+            end
+        end
+    end
+
+    W_list = Vector{Matrix{T}}(undef, h)
+    W_list[1] = _fhlr_projection_weights(model, 1)
+    @inbounds for hh in 2:h
+        W_list[hh] = W_list[hh - 1] * Φ_F
+    end
+
     X_fc = Matrix{T}(undef, h, N)
     @inbounds for hh in 1:h
-        W = _fhlr_projection_weights(model, hh)
-        X_fc[hh, :] = W * F_now
+        X_fc[hh, :] = W_list[hh] * F_now
     end
     conf_T = T(conf_level)
     chi_os_proc = if model.standardized
@@ -1150,8 +1375,17 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
 
     if ci_method === :theoretical
         z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
-        X_se = repeat(sqrt.(max.(idio_var, zero(T)))', h, 1)
-        F_se = zeros(T, h, r)
+        X_se = Matrix{T}(undef, h, N)
+        F_se = Matrix{T}(undef, h, r)
+        C_F = Matrix{T}(I, r, r)
+        idio_var_pos = max.(idio_var, zero(T))
+        @inbounds for hh in 1:h
+            C_F = C_F * Φ_F
+            Wh = W_list[hh]
+            common_err_var = max.(diag(Γχ0 - Wh * Gz * Wh'), zero(T))
+            X_se[hh, :] = sqrt.(common_err_var .+ idio_var_pos)
+            F_se[hh, :] = sqrt.(max.(diag(Gz - C_F * Gz * C_F'), zero(T)))
+        end
         F_lo, F_hi = F_fc .- z_val .* F_se, F_fc .+ z_val .* F_se
         X_lo, X_hi = X_fc .- z_val .* X_se, X_fc .+ z_val .* X_se
         if model.standardized
@@ -1160,15 +1394,22 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
         return _build_factor_forecast(F_fc, X_fc, F_lo, F_hi, X_lo, X_hi, F_se, X_se, h, conf_T, :theoretical)
     end
 
-    # Bootstrap: resample idiosyncratic rows and add to the projection
+    # Bootstrap: propagate VAR(1) factor innovations alongside resampled idiosyncratic rows
     n_idio = size(idio_proc, 1)
+    idio_c = idio_proc .- mean(idio_proc; dims=1)
+    U_F = T_obs >= 3 ? (Fc[2:end, :] - Fc[1:end-1, :] * Φ_F') : zeros(T, 1, r)
+    U_F .-= mean(U_F; dims=1)
+    n_u = size(U_F, 1)
+    W0 = (Γχ0 * Z) * robust_inv(Gz; silent=true)
     X_boot = zeros(T, n_boot, h, N)
     F_boot = zeros(T, n_boot, h, r)
     @inbounds for b in 1:n_boot
+        δF = zeros(T, r)
         for hh in 1:h
-            row = idio_proc[rand(rng, 1:n_idio), :]
-            X_boot[b, hh, :] = X_fc[hh, :] .+ row
-            F_boot[b, hh, :] = F_now
+            δF = Φ_F * δF .+ U_F[rand(rng, 1:n_u), :]
+            F_boot[b, hh, :] = F_fc[hh, :] .+ δF
+            row = idio_c[rand(rng, 1:n_idio), :]
+            X_boot[b, hh, :] = X_fc[hh, :] .+ W0 * δF .+ row
         end
     end
     if model.standardized

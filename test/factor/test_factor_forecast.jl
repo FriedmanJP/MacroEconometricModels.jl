@@ -113,6 +113,15 @@ end
         @test fc.observables == fc_ref.observables
         @test fc.factors == fc_ref.factors
     end
+    gdfm = estimate_gdfm(X, 2)
+    fc_os_none = forecast(gdfm, 5; method=:one_sided, ci_method=:none)
+    fc_os_ref = forecast(gdfm, 5; method=:one_sided)
+    @test all(fc_os_none.observables_lower .== 0)
+    @test all(fc_os_none.observables_upper .== 0)
+    @test all(fc_os_none.observables_se .== 0)
+    @test all(fc_os_none.factors_lower .== 0) && all(fc_os_none.factors_se .== 0)
+    @test fc_os_none.observables == fc_os_ref.observables
+    @test fc_os_none.factors == fc_os_ref.factors
 end
 
 @testset "FactorModel Forecast - VAR Lag" begin
@@ -358,4 +367,100 @@ end
     @test all(isfinite, fc_sp.observables)
     @test fc_sp.observables ≈ fc_os.observables atol=1e-10
     @test !(fc_ar.observables ≈ fc_sp.observables)
+end
+
+@testset "GDFM FHLR Forecast - Theoretical SE Monotonicity & Asymptotic Variance (#893)" begin
+    rng = Random.Xoshiro(89301)
+    N, T_obs = 40, 300
+    d1 = dgp_dynamic_factors(rng; A=reshape([0.8], 1, 1), r=1, N=N, T=T_obs, idio_sd=0.5)
+    X1 = d1.X
+    gdfm = estimate_gdfm(X1, 1)
+
+    fc12 = forecast(gdfm, 12; method=:one_sided, ci_method=:theoretical)
+    @test fc12.ci_method == :theoretical
+    @test all(fc12.observables_se .> 0)
+    @test all(fc12.factors_se .> 0)
+    for hh in 2:12
+        @test all(fc12.observables_se[hh, :] .> fc12.observables_se[hh - 1, :])
+        @test all(fc12.factors_se[hh, :] .> fc12.factors_se[hh - 1, :])
+    end
+    z95 = 1.959963984540054
+    @test maximum(abs, (fc12.observables_upper .- fc12.observables_lower) .- 2 * z95 .* fc12.observables_se) < 1e-10
+    @test maximum(abs, (fc12.factors_upper .- fc12.factors_lower) .- 2 * z95 .* fc12.factors_se) < 1e-10
+
+    fc40 = forecast(gdfm, 40; method=:one_sided, ci_method=:theoretical)
+    x_sd = vec(std(X1; dims=1))
+    @test all(abs(fc40.observables_se[40, i] - x_sd[i]) / x_sd[i] < 0.05 for i in 1:N)
+
+    # :spectral alias parity on theoretical CIs and SEs
+    fc12_sp = forecast(gdfm, 12; method=:spectral, ci_method=:theoretical)
+    @test fc12_sp.observables_se ≈ fc12.observables_se atol=1e-12
+    @test fc12_sp.factors_se ≈ fc12.factors_se atol=1e-12
+    @test fc12_sp.observables_lower ≈ fc12.observables_lower atol=1e-12
+    @test fc12_sp.observables_upper ≈ fc12.observables_upper atol=1e-12
+
+    # standardize=false
+    gdfm_nostd = estimate_gdfm(X1, 1; standardize=false)
+    fc40_nostd = forecast(gdfm_nostd, 40; method=:one_sided, ci_method=:theoretical)
+    for hh in 2:12
+        @test all(fc40_nostd.observables_se[hh, :] .> fc40_nostd.observables_se[hh - 1, :])
+        @test all(fc40_nostd.factors_se[hh, :] .> fc40_nostd.factors_se[hh - 1, :])
+    end
+    @test all(abs(fc40_nostd.observables_se[40, i] - x_sd[i]) / x_sd[i] < 0.05 for i in 1:N)
+
+    # r > q (q=1, r=2)
+    gdfm_rq = estimate_gdfm(X1, 1; r=2)
+    fc40_rq = forecast(gdfm_rq, 40; method=:one_sided, ci_method=:theoretical)
+    @test size(fc40_rq.factors_se) == (40, 2)
+    for hh in 2:12
+        @test all(fc40_rq.observables_se[hh, :] .> fc40_rq.observables_se[hh - 1, :])
+        @test all(fc40_rq.factors_se[hh, :] .> fc40_rq.factors_se[hh - 1, :])
+    end
+    @test all(abs(fc40_rq.observables_se[40, i] - x_sd[i]) / x_sd[i] < 0.05 for i in 1:N)
+
+    # spectral=:smoothed_periodogram
+    gdfm_sp = estimate_gdfm(X1, 1; spectral=:smoothed_periodogram)
+    fc40_sp = forecast(gdfm_sp, 40; method=:one_sided, ci_method=:theoretical)
+    for hh in 2:12
+        @test all(fc40_sp.observables_se[hh, :] .> fc40_sp.observables_se[hh - 1, :])
+        @test all(fc40_sp.factors_se[hh, :] .> fc40_sp.factors_se[hh - 1, :])
+    end
+    @test all(abs(fc40_sp.observables_se[40, i] - x_sd[i]) / x_sd[i] < 0.05 for i in 1:N)
+
+    # q=2, r=2
+    d2 = dgp_dynamic_factors(Random.Xoshiro(89303); A=[0.8 0.05; 0.0 0.75], r=2, N=N, T=T_obs, idio_sd=0.5)
+    gdfm2 = estimate_gdfm(d2.X, 2)
+    fc40_2 = forecast(gdfm2, 40; method=:one_sided, ci_method=:theoretical)
+    x2_sd = vec(std(d2.X; dims=1))
+    for hh in 2:12
+        @test all(fc40_2.observables_se[hh, :] .> fc40_2.observables_se[hh - 1, :])
+        @test all(fc40_2.factors_se[hh, :] .> fc40_2.factors_se[hh - 1, :])
+    end
+    @test all(abs(fc40_2.observables_se[40, i] - x2_sd[i]) / x2_sd[i] < 0.05 for i in 1:N)
+end
+
+@testset "GDFM FHLR Forecast - Bootstrap SE Widening & Reproducibility (#893)" begin
+    rng = Random.Xoshiro(89302)
+    d = dgp_dynamic_factors(rng; A=reshape([0.8], 1, 1), r=1, N=30, T=250, idio_sd=0.5)
+    gdfm = estimate_gdfm(d.X, 1)
+    n_b = FAST ? 100 : 400
+
+    fc_b1 = forecast(gdfm, 12; method=:one_sided, ci_method=:bootstrap, n_boot=n_b, seed=893)
+    fc_b2 = forecast(gdfm, 12; method=:one_sided, ci_method=:bootstrap, n_boot=n_b, seed=893)
+    fc_b3 = forecast(gdfm, 12; method=:one_sided, ci_method=:bootstrap, n_boot=n_b, rng=Random.Xoshiro(893))
+    @test fc_b1.observables_se == fc_b2.observables_se
+    @test fc_b1.factors_se == fc_b2.factors_se
+    @test fc_b1.observables_se == fc_b3.observables_se
+    @test all(fc_b1.factors_se .> 0)
+    @test all(fc_b1.observables_se .> 0)
+    @test all(fc_b1.observables_upper .>= fc_b1.observables_lower)
+    @test all(fc_b1.factors_upper .>= fc_b1.factors_lower)
+    @test all(fc_b1.observables_se[12, :] .> fc_b1.observables_se[1, :])
+    @test all(fc_b1.factors_se[12, :] .> fc_b1.factors_se[1, :])
+
+    # seed reproducibility also applies to method=:ar bootstrap
+    fc_ar1 = forecast(gdfm, 6; method=:ar, ci_method=:bootstrap, n_boot=50, seed=42)
+    fc_ar2 = forecast(gdfm, 6; method=:ar, ci_method=:bootstrap, n_boot=50, seed=42)
+    @test fc_ar1.observables_se == fc_ar2.observables_se
+    @test fc_ar1.factors_se == fc_ar2.factors_se
 end

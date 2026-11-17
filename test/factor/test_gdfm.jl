@@ -351,8 +351,8 @@ using Random
         # Forecasts should be finite
         @test all(isfinite, fc.observables)
         @test all(isfinite, fc.factors)
-        # T159: white-noise input ⇒ AR forecasts stay near zero (observed 4e-4/0.16).
-        @test maximum(abs, fc.factors) < 0.01
+        # T159: white-noise input ⇒ AR forecasts stay near zero (observed 0.014/0.16).
+        @test maximum(abs, fc.factors) < 0.05
         @test maximum(abs, fc.observables) < 0.5
     end
 
@@ -926,7 +926,7 @@ using Random
         @test norm(Γ1 - w .* sample) < norm(Γ1 - w .* ((sample + sample') / 2))
     end
 
-    @testset "one-sided FHLR factors: contemporaneous identity and two-sided wrap" begin
+    @testset "one-sided FHLR factors: contemporaneous identity and two-sided leads" begin
         # DGP-06: shared simulator (was: bespoke AR loop). O(1) loadings keep
         # the strong-signal regime the 0.9 one-sided/two-sided bound needs.
         rng = Random.Xoshiro(721)
@@ -947,7 +947,8 @@ using Random
         @test opnorm((I - Qo * Qo') * Qt) < 0.5
         # Drop last 10: contemporaneous filter is unchanged on the common sample
         # (the defining one-sided property). Re-estimating Z from the truncated
-        # sample is O(1/T); two-sided IFFT factors move because they wrap.
+        # sample is O(1/T); two-sided finite-lag factors move because of future
+        # leads and boundary reflection.
         @test m.factors_onesided[1:end-10, :] ≈ X[1:end-10, :] * m.Z atol=1e-8
         mt = estimate_gdfm(X[1:end-10, :], q; standardize=false)
         @test mt.factors_onesided ≈ X[1:end-10, :] * mt.Z atol=1e-8
@@ -993,6 +994,87 @@ using Random
         fc_sp = forecast(m, 2; method=:spectral, ci_method=:none)
         fc_os = forecast(m, 2; method=:one_sided, ci_method=:none)
         @test fc_sp.observables ≈ fc_os.observables atol=1e-10
+    end
+
+    @testset "Non-circular finite-lag filter: 20σ end-of-sample spike invariance (#893)" begin
+        rng = Random.Xoshiro(89310)
+        T_obs, N, q = 150, 12, 2
+        X = dgp_dynamic_factors(rng; N=N, T=T_obs, idio_sd=0.2).X
+        X_spike = copy(X)
+        X_spike[end, :] .+= 20.0 .* vec(std(X; dims=1))
+
+        for spec in (:lag_window, :smoothed_periodogram)
+            m = estimate_gdfm(X, q; spectral=spec, standardize=false)
+            n_freq = size(m.loadings_spectral, 3)
+            M = MacroEconometricModels._gdfm_filter_halfwidth(T_obs, n_freq, spec, m.bandwidth)
+            t_hi = T_obs - M - 1
+            @test t_hi >= 1
+
+            # Fixed-loadings time-domain common component reconstruction
+            chi_base = MacroEconometricModels._reconstruct_time_domain(
+                m.loadings_spectral, X, m.frequencies; spectral=spec, bandwidth=m.bandwidth)
+            chi_spike = MacroEconometricModels._reconstruct_time_domain(
+                m.loadings_spectral, X_spike, m.frequencies; spectral=spec, bandwidth=m.bandwidth)
+            @test maximum(abs, chi_spike[1:t_hi, :] - chi_base[1:t_hi, :]) < 1e-12
+
+            # Fixed-loadings factor filter kernels (unnormalized and normalized up to global std)
+            B0, B_pos, B_neg = MacroEconometricModels._factor_filter_kernels(
+                m.loadings_spectral, T_obs, spec, M)
+            X_pad_b = MacroEconometricModels._reflect_pad(X, M)
+            X_pad_s = MacroEconometricModels._reflect_pad(X_spike, M)
+            F_raw_b = X * transpose(B0)
+            F_raw_s = X_spike * transpose(B0)
+            for k in 1:M
+                F_raw_b .+= @view(X_pad_b[(M + 1 - k):(M + T_obs - k), :]) * transpose(B_pos[k])
+                F_raw_b .+= @view(X_pad_b[(M + 1 + k):(M + T_obs + k), :]) * transpose(B_neg[k])
+                F_raw_s .+= @view(X_pad_s[(M + 1 - k):(M + T_obs - k), :]) * transpose(B_pos[k])
+                F_raw_s .+= @view(X_pad_s[(M + 1 + k):(M + T_obs + k), :]) * transpose(B_neg[k])
+            end
+            @test maximum(abs, F_raw_s[1:t_hi, :] - F_raw_b[1:t_hi, :]) < 1e-12
+
+            F_norm_b = MacroEconometricModels._extract_time_domain_factors(
+                X, m.loadings_spectral, m.frequencies; spectral=spec, bandwidth=m.bandwidth)
+            F_norm_s = MacroEconometricModels._extract_time_domain_factors(
+                X_spike, m.loadings_spectral, m.frequencies; spectral=spec, bandwidth=m.bandwidth)
+            for j in 1:q
+                s_j = dot(F_norm_b[1:t_hi, j], F_norm_s[1:t_hi, j]) /
+                      dot(F_norm_b[1:t_hi, j], F_norm_b[1:t_hi, j])
+                @test maximum(abs, F_norm_s[1:t_hi, j] .- s_j .* F_norm_b[1:t_hi, j]) < 1e-12
+            end
+        end
+    end
+
+    @testset "Dynamic-lag reconstruction & q == N exactness (#893)" begin
+        rng = Random.Xoshiro(89311)
+        T_obs = 500
+        u = randn(rng, T_obs)
+        X_dyn = hcat(u, vcat(0.0, u[1:end-1]))
+        for spec in (:lag_window, :smoothed_periodogram)
+            m = estimate_gdfm(X_dyn, 1; spectral=spec, bandwidth=10, standardize=false)
+            rmse = sqrt(mean(abs2, m.common_component[15:end-15, :] - X_dyn[15:end-15, :]))
+            @test rmse < 0.1
+        end
+
+        for T_exact in (80, 81)
+            X_ex = randn(Random.Xoshiro(89312 + T_exact), T_exact, 5)
+            for spec in (:lag_window, :smoothed_periodogram)
+                m_full = estimate_gdfm(X_ex, 5; spectral=spec, standardize=false)
+                @test maximum(abs, m_full.common_component - X_ex) < 1e-12
+            end
+        end
+    end
+
+    @testset "GDFM HD exactness (< 1e-10) for both spectral estimators (#893)" begin
+        rng = Random.Xoshiro(89313)
+        X = dgp_dynamic_factors(rng; N=12, T=150, idio_sd=0.2).X .+ 3.0
+        for spec in (:lag_window, :smoothed_periodogram), std_flag in (true, false)
+            gdfm = estimate_gdfm(X, 2; spectral=spec, standardize=std_flag)
+            hd = historical_decomposition(gdfm)
+            @test verify_decomposition(hd; tol=1e-10)
+            chi_hat = dropdims(sum(hd.contributions[:, :, 1:2]; dims=3); dims=3)
+            @test maximum(abs, chi_hat - gdfm.common_component) < 1e-10
+            @test maximum(abs, dropdims(sum(hd.contributions; dims=3); dims=3) - gdfm.X) < 1e-10
+        end
     end
 
 end
