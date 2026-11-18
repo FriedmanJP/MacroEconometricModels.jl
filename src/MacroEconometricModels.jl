@@ -284,6 +284,7 @@ include("spectral/diagnostics.jl")
 include("spectral/filtering.jl")
 include("spectral/show.jl")
 
+include("factor/fhlz.jl")
 include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
@@ -1127,6 +1128,7 @@ export is_stationary
 
 # Generalized Dynamic Factor Model functions
 export estimate_gdfm
+export FHLZModel, estimate_gdfm_fhlz
 export ic_criteria_gdfm
 export hallin_liska, HallinLiskaResult
 export bai_ng_q, BaiNgQResult
