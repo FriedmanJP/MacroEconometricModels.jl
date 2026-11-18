@@ -575,6 +575,33 @@ With ``k = 4`` variables and two lags that is ``10 + 4 + 4 = 18`` moments. With 
 
 ---
 
+## Canonical ABCD State-Space Representation
+
+Evaluating whether a VAR can recover the structural shocks of a DSGE model — and extracting exact analytical state-space objects without re-deriving model equations — relies on the canonical ``(A, B, C, D)`` representation of Fernández-Villaverde, Rubio-Ramírez, Sargent & Watson (2007):
+
+```math
+x_t = c_{\text{state}} + A \, x_{t-1} + B \, w_t, \qquad y_t = d_{\text{obs}} + C \, x_{t-1} + D \, w_t
+```
+
+where:
+- ``x_t \in \mathbb{R}^n`` is the state vector (reduced by default via `reduction=:predetermined` to predetermined variables or via `reduction=:minimal` Kalman staircase deflation to a controllable and observable realization),
+- ``y_t \in \mathbb{R}^k`` selects the observed variables (supporting optional measurement error augmentation),
+- ``w_t \in \mathbb{R}^m`` are the structural shocks (`nshocks`),
+- ``(A, B, C, D)`` determine the exact impact response ``D``, horizon-``h`` response ``C A^{h-2} B``, and invertibility (poor man's invertibility when ``A - B D^{-1} C`` has eigenvalues strictly inside the unit circle for a square system).
+
+[`abcd_representation`](@ref) builds an [`ABCDSystem`](@ref) uniformly across [`DSGESolution`](@ref), first-order [`PerturbationSolution`](@ref), [`HADSGESolution`](@ref), and [`StateSpaceModel`](@ref), providing unified [`nstates`](@ref), [`nobservables`](@ref), [`is_square`](@ref), [`is_stable`](@ref), [`irf`](@ref), [`fevd`](@ref), [`analytical_moments`](@ref), and [`report`](@ref).
+
+```@example dsge_linear
+sys = abcd_representation(sol, [:Y, :C]; reduction=:minimal)
+report(sys)
+(n_states = nstates(sys),
+ n_obs = nobservables(sys),
+ square = is_square(sys),
+ irf_agree = maximum(abs, irf(sys, 10).values[:, :, :] .- irf(sol, 10).values[:, 1:2, :]))
+```
+
+---
+
 ## Complete Example
 
 This example combines all the linear solution tools: specification, solving with three methods, simulation, IRFs, FEVD, and unconditional moments.
@@ -639,6 +666,9 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 
 - Blanchard, O. J., & Kahn, C. M. (1980). The Solution of Linear Difference Models under Rational Expectations.
   *Econometrica*, 48(5), 1305--1311. [DOI](https://doi.org/10.2307/1912186)
+
+- Fernández-Villaverde, J., Rubio-Ramírez, J. F., Sargent, T. J., & Watson, M. W. (2007). ABCs (and Ds) of Understanding VARs.
+  *American Economic Review*, 97(3), 1021--1026. [DOI](https://doi.org/10.1257/aer.97.3.1021)
 
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)

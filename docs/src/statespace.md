@@ -303,6 +303,35 @@ With positive cross-covariance ``G_c = [0.3, 0.1]'``, the steady-state filtered 
 
 ---
 
+## Steady-State LQG Rational Inattention
+
+Sims (2003) models an agent tracking an evolving linear-Gaussian state who chooses an endogenous signal distribution subject to a Shannon mutual-information constraint. In steady state, the joint tracking and filtering problem is a Linear-Quadratic-Gaussian (LQG) **Rational Inattention** problem (Sims 2003; Afrouzi & Yang 2021):
+
+```math
+\min_{\{\Sigma_{\text{post}}, Y\}} \operatorname{tr}\!\left(\Omega_{\text{benefit}} \, \Sigma_{\text{post}}\right) + \omega \cdot \frac{1}{2}\log\det\!\left(\Sigma_{\text{prior}} \Sigma_{\text{post}}^{-1}\right)
+\qquad \text{s.t.} \qquad 0 \preceq \Sigma_{\text{post}} \preceq \Sigma_{\text{prior}}, \quad \Sigma_{\text{prior}} = A \Sigma_{\text{post}} A' + B B'
+```
+
+where:
+- ``(A, B)`` govern state transitions ``x_{t+1} = A x_t + B \varepsilon_{t+1}`` with tracking target matrix ``H`` and quadratic action weight ``M`` (`\Omega_{\text{benefit}}` derived from `H`, `M`, discount ``\beta``, and feedback `B_u`),
+- ``\omega > 0`` is the shadow cost per nat of mutual information (or supplied indirectly via Shannon channel capacity `capacity` in `:bits` or `:nats`),
+- ``\Sigma_{\text{prior}}`` and ``\Sigma_{\text{post}}`` are the steady-state prior and posterior error covariance matrices linked by a water-filling eigenvalue floor,
+- ``Y`` is the low-rank endogenous signal extraction matrix giving steady-state Kalman gain ``K_{\text{gain}}``.
+
+[`RationalInattentionProblem`](@ref) specifies the LQG tracking problem and [`solve_ri_kalman`](@ref) returns a [`SimsKalmanSolution`](@ref) using either inverse-free whitened water-filling (`method=:water_filling`) or a Woodbury log-det barrier L-BFGS solver (`method=:logdet_barrier`).
+
+```@example ss
+prob_ri = RationalInattentionProblem([0.85 0.1; 0.0 0.6], [0.5 0.0; 0.0 0.4],
+                                     [1.0 0.0; 0.0 0.5]; beta=0.99, capacity=1.0, units=:bits)
+ri_sol = solve_ri_kalman(prob_ri)
+report(ri_sol)
+(capacity_bits = round(ri_sol.capacity_bits, digits=4),
+ signal_rank = ri_sol.signal_rank,
+ loss = round(ri_sol.expected_loss, digits=4))
+```
+
+---
+
 ## Complete Example
 
 Estimate the Nile local level, inspect residual diagnostics, and forecast five years ahead:
@@ -350,8 +379,10 @@ refs(m)
 
 ## References
 
+- Afrouzi, H., & Yang, C. (2021). Dynamic Rational Inattention and the Phillips Curve. CESifo Working Paper No. 8840.
 - Anderson, B. D. O., & Moore, J. B. (1979). *Optimal Filtering*. Prentice-Hall. ISBN 978-0136381224.
 - Durbin, J. and Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*, 2nd ed. Oxford University Press. [doi:10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
 - Harvey, A. C. (1989). *Forecasting, Structural Time Series Models and the Kalman Filter*. Cambridge University Press. [doi:10.1017/CBO9781107049994](https://doi.org/10.1017/CBO9781107049994)
 - Pappas, T., Laub, A. J., & Sandell, N. R. (1980). On the Numerical Solution of the Discrete-Time Algebraic Riccati Equation. *IEEE Transactions on Automatic Control*, 25(4), 631–641. [doi:10.1109/TAC.1980.1102434](https://doi.org/10.1109/TAC.1980.1102434)
+- Sims, C. A. (2003). Implications of Rational Inattention. *Journal of Monetary Economics*, 50(3), 665–690. [doi:10.1016/S0304-3932(03)00029-1](https://doi.org/10.1016/S0304-3932(03)00029-1)
 - Van Dooren, P. (1981). A Generalized Eigenvalue Approach for Solving Riccati Equations. *SIAM Journal on Scientific and Statistical Computing*, 2(2), 121–135. [doi:10.1137/0902010](https://doi.org/10.1137/0902010)

@@ -259,3 +259,19 @@ end
 function reproduce(::NARDLMultipliers)
     _needs_source_report("NARDLMultipliers", "dynamic_multipliers(m, H; seed=N)")
 end
+
+function reproduce(::QuantileFactorModel)
+    _needs_source_report("QuantileFactorModel", "estimate_qfm(X, r, tau; seed=N)")
+end
+
+function reproduce(::FHLZModel)
+    _needs_source_report("FHLZModel", "estimate_gdfm_fhlz(X, q; seed=N)")
+end
+
+function reproduce(::LMSSVARResult)
+    _needs_source_report("LMSSVARResult", "estimate_lms_svar(Y, p; seed=N)")
+end
+
+function reproduce(::RILogitModel)
+    _needs_source_report("RILogitModel", "estimate_ri_logit(choices, menu_attributes, env_id; seed=N)")
+end

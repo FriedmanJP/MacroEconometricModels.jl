@@ -552,6 +552,45 @@ Step 3 reports, for each FastICA column, the smallest angular distance to any St
 
 ---
 
+## Complete Identification and 1/3-Step Non-Gaussian ML (LMS 2017)
+
+While rotation-based non-Gaussian estimators hold the reduced-form OLS slope coefficients fixed, Lanne, Meitz & Saikkonen (2017) show that joint maximum likelihood over the reduced-form coefficients and the structural impact matrix can strictly improve finite-sample and asymptotic efficiency when shocks are non-Gaussian. They also prove complete identification on a canonical parameter set ``\mathcal{B}`` with unit diagonal and unique lexicographic column ordering via the projection operator ``\Pi(B_0)`` implemented by [`lms_project_B`](@ref):
+
+```math
+y_t = \Pi X_t + B_0 u_t = \Pi X_t + B \operatorname{diag}(\sigma) \varepsilon_t, \qquad B \in \mathcal{B} \ (\operatorname{diag}(B) = \mathbf{1})
+```
+
+where:
+- ``\Pi`` is the ``n \times (np + 1)`` matrix of reduced-form intercept and autoregressive slope matrices,
+- ``B \in \mathcal{B}`` has unit diagonal and uniquely permutes and scales any invertible ``B_0`` into the identified parameter space,
+- ``\sigma \in \mathbb{R}_{>0}^n`` collects shock scale parameters so standardized shocks ``\varepsilon_{it}`` satisfy ``E[\varepsilon_{it}] = 0`` and ``\operatorname{Var}(\varepsilon_{it}) = 1``,
+- ``\theta = [\operatorname{vec}(\Pi'); \operatorname{vecd}^0(B); \sigma; \lambda]`` is the full joint parameter vector with analytical score and exact 16-block analytical Hessian.
+
+[`estimate_lms_svar`](@ref) implements both the joint 1-step full MLE (`method=:full_ml`) and the asymptotically efficient 3-step estimator (`method=:three_step`), which refines an OLS initial estimate with a single analytical Newton-Fisher step on ``\Pi``. Heterogenous shock families (`:student_t`, `:skewed_t`, `:mixture_normal_asym`, `:pearson_iv`, `:skew_normal`, `:ged`) can be assigned globally or per shock, and `method=:lms` integrates directly into [`irf`](@ref), [`fevd`](@ref), and [`historical_decomposition`](@ref).
+
+```@example id_ng
+lms = estimate_lms_svar(model; distributions=:student_t, method=:three_step,
+                        n_starts=3, seed=42)
+report(lms)
+```
+
+```@example id_ng
+# Verify canonical projection into the unit-diagonal LMS parameter space B
+proj = lms_project_B(lms.B0)
+(diag_B = round.(diag(proj.B), digits=6),
+ B0_error = round(maximum(abs, lms.B0 .- proj.B * Diagonal(proj.sigma)), digits=10))
+```
+
+```@example id_ng
+# Compare slope estimates from full ML vs three-step adaptive ML
+lms_full = estimate_lms_svar(model; distributions=:student_t, method=:full_ml,
+                             n_starts=3, seed=42)
+(loglik_3step = round(lms.loglik, digits=2),
+ loglik_full = round(lms_full.loglik, digits=2))
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Gaussian shocks defeat identification.** Non-Gaussian methods require at most one Gaussian shock. Run `normality_test_suite` on the residuals and `test_shock_gaussianity` on the recovered shocks before interpreting anything. If the residuals are multivariate normal, use heteroskedasticity-based methods instead.

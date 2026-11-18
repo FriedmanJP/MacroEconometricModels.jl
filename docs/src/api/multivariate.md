@@ -68,6 +68,8 @@ AbstractHistoricalDecomposition
 FactorModel
 DynamicFactorModel
 GeneralizedDynamicFactorModel
+QuantileFactorModel
+FHLZModel
 FactorForecast
 AbstractFactorModel
 ```
@@ -380,7 +382,16 @@ AmengualWatsonResult
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["factor/generalized.jl"]
+Pages   = ["factor/generalized.jl", "factor/fhlz.jl"]
+Order   = [:function]
+Private = false
+```
+
+### Quantile Factor Model
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["factor/quantile.jl"]
 Order   = [:function]
 Private = false
 ```

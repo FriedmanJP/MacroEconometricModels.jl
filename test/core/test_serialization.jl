@@ -208,6 +208,12 @@ end
         _cover(estimate_gdfm(X, 2))
         _cover(estimate_favar(X, [1, 2], 2, 2))            # nested FactorModel
         _cover(estimate_structural_dfm(X, 2; p=1, H=10))   # nested GDFM + VARModel
+        qfm = estimate_qfm(X, 2, 0.5; max_iter=10, n_starts=1, seed=1)
+        @test qfm isa QuantileFactorModel
+        _cover(qfm)
+        fhlz = estimate_gdfm_fhlz(randn(Xoshiro(902), 80, 12), 2; n_perm=5, p_max=2, seed=1)
+        @test fhlz isa FHLZModel
+        _cover(fhlz)
     end
 
     @testset "ARIMA / ARDL / nonlinear / MIDAS / state space" begin
@@ -270,6 +276,16 @@ end
         ssm_g2 = _cover(ssm_g; skip=[:builder])
         @test ssm_g2.G == ssm_g.G
         _assert_report_equal(ssm_g, ssm_g2)
+
+        # RationalInattentionProblem / SimsKalmanSolution (#917)
+        prob_ri = RationalInattentionProblem([0.7;;], [0.5;;], [1.0;;]; M=[1.0;;], beta=0.99, omega=0.2)
+        @test prob_ri isa RationalInattentionProblem
+        prob_ri2 = _assert_roundtrip(prob_ri)
+        _assert_report_equal(prob_ri, prob_ri2)
+        sol_ri = solve_ri_kalman(prob_ri)
+        @test sol_ri isa SimsKalmanSolution
+        sol_ri2 = _assert_roundtrip(sol_ri)
+        _assert_report_equal(sol_ri, sol_ri2)
     end
 
     @testset "SteadyStateKalman" begin
@@ -299,6 +315,27 @@ end
         Xm = hcat(ones(200), randn(Xoshiro(15), 200, 2))
         ym = rand(Xoshiro(16), 1:3, 200)
         _cover(estimate_mlogit(ym, Xm; varnames=["c", "x1", "x2"]))
+
+        # Rational Inattention discrete choice (#922)
+        U_ri = [1.0 0.0; 0.0 1.0]
+        mu_ri = [0.5, 0.5]
+        sol_dc = solve_ri_discrete(U_ri, mu_ri; omega=0.4)
+        @test sol_dc isa RIDiscreteChoiceSolution
+        sol_dc2 = _assert_roundtrip(sol_dc)
+        _assert_report_equal(sol_dc, sol_dc2)
+
+        iia_ri = ri_iia_diagnostic(U_ri, mu_ri, [0.99, 0.01]; omega=0.4)
+        @test iia_ri isa RIIIADiagnostic
+        iia_ri2 = _assert_roundtrip(iia_ri)
+        _assert_report_equal(iia_ri, iia_ri2)
+
+        menu_ri = randn(Xoshiro(922), 3, 2, 2, 4)
+        choices_ri = rand(Xoshiro(923), 1:3, 40)
+        env_ri = repeat(1:4, inner=10)
+        state_ri = repeat(1:2, outer=20)
+        m_ri = estimate_ri_logit(choices_ri, menu_ri, env_ri; state_id=state_ri, max_iter=30)
+        @test m_ri isa RILogitModel
+        _cover(m_ri)
     end
 
     @testset "local-projection variants" begin
@@ -1048,6 +1085,23 @@ end
         @test r3 isa IdentifiabilityTestResult
         @test isnan(r3.pvalue)
         _assert_report_equal(r, r3)
+    end
+end
+
+@testset "NGID-02 LMSSVARResult serialization (#902)" begin
+    Y_lms = randn(Xoshiro(902), 80, 2)
+    res_lms = estimate_lms_svar(Y_lms, 1; distributions=:student_t, method=:three_step, n_starts=2, seed=1)
+    @test res_lms isa LMSSVARResult
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "LMSSVARResult")
+    res_lms2 = _cover(res_lms)
+    @test res_lms2.B0 == res_lms.B0
+    @test res_lms2.distributions == res_lms.distributions
+    mktempdir() do d
+        p = joinpath(d, "lms.jld2")
+        save_model(res_lms, p)
+        loaded = load_model(p)
+        @test loaded isa LMSSVARResult
+        @test loaded.loglik == res_lms.loglik
     end
 end
 

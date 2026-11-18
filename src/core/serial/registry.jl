@@ -60,10 +60,13 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "PanelIVModel"                  => PanelIVModel,
     "PanelLogitModel"               => PanelLogitModel,
     "PanelProbitModel"              => PanelProbitModel,
-    # ── ordered / multinomial choice ─────────────────────────────────────────
+    # ── ordered / multinomial / discrete RI choice ───────────────────────────
     "OrderedLogitModel"             => OrderedLogitModel,
     "OrderedProbitModel"            => OrderedProbitModel,
     "MultinomialLogitModel"         => MultinomialLogitModel,
+    "RIDiscreteChoiceSolution"      => RIDiscreteChoiceSolution,
+    "RIIIADiagnostic"               => RIIIADiagnostic,
+    "RILogitModel"                  => RILogitModel,
     # ── local-projection variants ────────────────────────────────────────────
     "LPIVModel"                     => LPIVModel,
     "SmoothLPModel"                 => SmoothLPModel,
@@ -91,6 +94,8 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "FactorModel"                   => FactorModel,
     "DynamicFactorModel"            => DynamicFactorModel,
     "GeneralizedDynamicFactorModel" => GeneralizedDynamicFactorModel,
+    "QuantileFactorModel"           => QuantileFactorModel,
+    "FHLZModel"                     => FHLZModel,
     "FAVARModel"                    => FAVARModel,
     "BayesianFAVAR"                 => BayesianFAVAR,
     "StructuralDFM"                 => StructuralDFM,
@@ -118,6 +123,8 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "MidasModel"                    => MidasModel,
     "StateSpaceModel"               => StateSpaceModel,
     "SteadyStateKalman"             => SteadyStateKalman,
+    "RationalInattentionProblem"    => RationalInattentionProblem,
+    "SimsKalmanSolution"            => SimsKalmanSolution,
     # ── SVAR identification results (SID-24 / #753) ──────────────────────────
     "ProxySVARResult"               => ProxySVARResult,
     "SVARModel"                     => SVARModel,
@@ -125,6 +132,7 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     "SVECResult"                    => SVECResult,
     "ICASVARResult"                 => ICASVARResult,
     "NonGaussianMLResult"           => NonGaussianMLResult,
+    "LMSSVARResult"                 => LMSSVARResult,
     "NonGaussianGMMResult"          => NonGaussianGMMResult,
     "LewisTVVResult"                => LewisTVVResult,
     "MarkovSwitchingSVARResult"     => MarkovSwitchingSVARResult,
@@ -324,6 +332,7 @@ const _SERIALIZABLE_TYPES = Dict{String,Type}(
     # ── DSER-04 representative-agent solutions ───────────────────────────────
     "LinearDSGE"                    => LinearDSGE,
     "DSGESolution"                  => DSGESolution,
+    "ABCDSystem"                    => ABCDSystem,
     "PerturbationSolution"          => PerturbationSolution,
     "ProjectionSolution"            => ProjectionSolution,
     "PerfectForesightPath"          => PerfectForesightPath,

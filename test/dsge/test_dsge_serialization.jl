@@ -2099,3 +2099,28 @@ end
     @test hh.individual.beta == 0.99322
     @test hh.grid.n_points == [20]
 end
+
+@testset "DSER-12 ABCDSystem round-trip (#909)" begin
+    sol = solve(_dser04_rbc(); method=:gensys)
+    sys = abcd_representation(sol)
+    @test sys isa ABCDSystem
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "ABCDSystem")
+    @test _from_serializable_is_generic(ABCDSystem)
+    sys2 = _assert_roundtrip(sys)
+    _assert_report_equal(sys, sys2)
+    @test irf(sys2, 10).values == irf(sys, 10).values
+
+    sys0 = ABCDSystem(zeros(0, 0), zeros(0, 1), ones(1, 0), [1.0;;])
+    @test sys0 isa ABCDSystem{Float64}
+    sys0_2 = _assert_roundtrip(sys0)
+    @test nstates(sys0_2) == 0
+
+    mktempdir() do d
+        p = joinpath(d, "abcd.jld2")
+        save_model(sys, p)
+        sys3 = load_model(p)
+        @test sys3 isa ABCDSystem
+        @test sys3.A == sys.A && sys3.D == sys.D
+        _assert_report_equal(sys, sys3)
+    end
+end

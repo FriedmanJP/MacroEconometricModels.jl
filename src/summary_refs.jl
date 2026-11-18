@@ -1970,6 +1970,49 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         journal="Journal of the American Statistical Association", volume="74", issue="368",
         pages="829--836", doi="10.1080/01621459.1979.10481038", isbn="", publisher="",
         entry_type=:article),
+    # --- Wave-2 v1.1.0 (#884, #894, #909, #917, #922) ---
+    :chen_dolado_gonzalo2021 => (key=:chen_dolado_gonzalo2021,
+        authors="Chen, Liang and Dolado, Juan J. and Gonzalo, Jes\\'us", year=2021,
+        title="Quantile Factor Models",
+        journal="Econometrica", volume="89", issue="2", pages="875--910",
+        doi="10.3982/ECTA16881", isbn="", publisher="", entry_type=:article),
+    :forni_hallin_lippi_zaffaroni2015 => (key=:forni_hallin_lippi_zaffaroni2015,
+        authors="Forni, Mario and Hallin, Marc and Lippi, Marco and Zaffaroni, Paolo", year=2015,
+        title="Dynamic Factor Models with Infinite-Dimensional Factor Spaces: One-Sided Representations",
+        journal="Journal of Econometrics", volume="185", issue="2", pages="359--371",
+        doi="10.1016/j.jeconom.2013.10.017", isbn="", publisher="", entry_type=:article),
+    :forni_hallin_lippi_zaffaroni2017 => (key=:forni_hallin_lippi_zaffaroni2017,
+        authors="Forni, Mario and Hallin, Marc and Lippi, Marco and Zaffaroni, Paolo", year=2017,
+        title="Dynamic Factor Models with Infinite-Dimensional Factor Space: Asymptotic Analysis",
+        journal="Journal of Econometrics", volume="199", issue="1", pages="74--92",
+        doi="10.1016/j.jeconom.2017.04.002", isbn="", publisher="", entry_type=:article),
+    :fernandez_villaverde_rubio_ramirez_sargent_watson2007 => (
+        key=:fernandez_villaverde_rubio_ramirez_sargent_watson2007,
+        authors="Fern\\'andez-Villaverde, Jes\\'us and Rubio-Ram\\'irez, Juan F. and Sargent, Thomas J. and Watson, Mark W.",
+        year=2007,
+        title="ABCs (and Ds) of Understanding VARs",
+        journal="American Economic Review", volume="97", issue="3", pages="1021--1026",
+        doi="10.1257/aer.97.3.1021", isbn="", publisher="", entry_type=:article),
+    :sims2003 => (key=:sims2003,
+        authors="Sims, Christopher A.", year=2003,
+        title="Implications of Rational Inattention",
+        journal="Journal of Monetary Economics", volume="50", issue="3", pages="665--690",
+        doi="10.1016/S0304-3932(03)00029-1", isbn="", publisher="", entry_type=:article),
+    :afrouzi_yang2021 => (key=:afrouzi_yang2021,
+        authors="Afrouzi, Hassan and Yang, Choongryul", year=2021,
+        title="Dynamic Rational Inattention and the Phillips Curve",
+        journal="CESifo Working Paper", volume="8840", issue="", pages="",
+        doi="", isbn="", publisher="CESifo", entry_type=:techreport),
+    :matejka_mckay2015 => (key=:matejka_mckay2015,
+        authors="Mat\\v{e}jka, Filip and McKay, Alisdair", year=2015,
+        title="Rational Inattention to Discrete Choices: A New Foundation for the Multinomial Logit Model",
+        journal="American Economic Review", volume="105", issue="1", pages="272--298",
+        doi="10.1257/aer.20130047", isbn="", publisher="", entry_type=:article),
+    :caplin_dean_leahy2019 => (key=:caplin_dean_leahy2019,
+        authors="Caplin, Andrew and Dean, Mark and Leahy, John", year=2019,
+        title="Rational Inattention, Optimal Consideration Sets, and Stochastic Choice",
+        journal="The Review of Economic Studies", volume="86", issue="3", pages="1061--1094",
+        doi="10.1093/restud/rdy037", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2485,6 +2528,26 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :kernel_reg => [:nadaraya1964, :watson1964, :fan_gijbels1996],
     :LowessFit => [:cleveland1979],
     :lowess => [:cleveland1979],
+    # Wave-2 v1.1.0 (#884, #894, #902, #909, #917, #922)
+    :QuantileFactorModel => [:chen_dolado_gonzalo2021, :koenker_bassett1978],
+    :estimate_qfm => [:chen_dolado_gonzalo2021],
+    :FHLZModel => [:forni_hallin_lippi_zaffaroni2015, :forni_hallin_lippi_zaffaroni2017],
+    :estimate_gdfm_fhlz => [:forni_hallin_lippi_zaffaroni2015, :forni_hallin_lippi_zaffaroni2017],
+    :LMSSVARResult => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :estimate_lms_svar => [:lanne_meitz_saikkonen2017],
+    :lms_project_B => [:lanne_meitz_saikkonen2017],
+    :lms => [:lanne_meitz_saikkonen2017, :lewis2025],
+    :ABCDSystem => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :abcd_representation => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :RationalInattentionProblem => [:sims2003, :afrouzi_yang2021],
+    :SimsKalmanSolution => [:sims2003, :afrouzi_yang2021],
+    :solve_ri_kalman => [:sims2003, :afrouzi_yang2021],
+    :RIDiscreteChoiceSolution => [:matejka_mckay2015, :caplin_dean_leahy2019],
+    :RIIIADiagnostic => [:matejka_mckay2015],
+    :RILogitModel => [:matejka_mckay2015, :caplin_dean_leahy2019],
+    :solve_ri_discrete => [:matejka_mckay2015, :caplin_dean_leahy2019],
+    :ri_iia_diagnostic => [:matejka_mckay2015],
+    :estimate_ri_logit => [:matejka_mckay2015, :caplin_dean_leahy2019],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2743,7 +2806,11 @@ refs(io::IO, ::AmengualWatsonResult; kw...) = refs(io, _TYPE_REFS[:AmengualWatso
 # FAVAR & Structural DFM
 refs(io::IO, ::FAVARModel; kw...) = refs(io, _TYPE_REFS[:FAVARModel]; kw...)
 refs(io::IO, ::BayesianFAVAR; kw...) = refs(io, _TYPE_REFS[:BayesianFAVAR]; kw...)
-refs(io::IO, ::StructuralDFM; kw...) = refs(io, _TYPE_REFS[:StructuralDFM]; kw...)
+refs(io::IO, m::StructuralDFM; kw...) =
+    refs(io, m.method === :fhlz ? [:forni_hallin_lippi_zaffaroni2015, :forni_hallin_lippi_zaffaroni2017] :
+             _TYPE_REFS[:StructuralDFM]; kw...)
+refs(io::IO, ::QuantileFactorModel; kw...) = refs(io, _TYPE_REFS[:QuantileFactorModel]; kw...)
+refs(io::IO, ::FHLZModel; kw...) = refs(io, _TYPE_REFS[:FHLZModel]; kw...)
 
 # Unit root tests
 refs(io::IO, ::ADFResult; kw...) = refs(io, _TYPE_REFS[:ADFResult]; kw...)
@@ -3059,6 +3126,15 @@ refs(io::IO, ::ModelBankMember; kw...) = refs(io, _TYPE_REFS[:ModelBankMember]; 
 refs(io::IO, ::SpanningDiagnostic; kw...) = refs(io, _TYPE_REFS[:SpanningDiagnostic]; kw...)
 refs(io::IO, ::ForecastSufficiency; kw...) = refs(io, _TYPE_REFS[:ForecastSufficiency]; kw...)
 refs(io::IO, ::CounterfactualHistory; kw...) = refs(io, _TYPE_REFS[:CounterfactualHistory]; kw...)
+
+# --- Wave-2 v1.1.0 (#902, #909, #917, #922) ---
+refs(io::IO, ::LMSSVARResult; kw...) = refs(io, _TYPE_REFS[:LMSSVARResult]; kw...)
+refs(io::IO, ::ABCDSystem; kw...) = refs(io, _TYPE_REFS[:ABCDSystem]; kw...)
+refs(io::IO, ::RationalInattentionProblem; kw...) = refs(io, _TYPE_REFS[:RationalInattentionProblem]; kw...)
+refs(io::IO, ::SimsKalmanSolution; kw...) = refs(io, _TYPE_REFS[:SimsKalmanSolution]; kw...)
+refs(io::IO, ::RIDiscreteChoiceSolution; kw...) = refs(io, _TYPE_REFS[:RIDiscreteChoiceSolution]; kw...)
+refs(io::IO, ::RIIIADiagnostic; kw...) = refs(io, _TYPE_REFS[:RIIIADiagnostic]; kw...)
+refs(io::IO, ::RILogitModel; kw...) = refs(io, _TYPE_REFS[:RILogitModel]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

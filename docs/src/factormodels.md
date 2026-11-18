@@ -1000,6 +1000,72 @@ IC2 selects four factors, one more than the three used in the sections above, an
 
 ---
 
+## Quantile Factor Models
+
+Principal components and linear dynamic factor models extract common factors under a symmetric quadratic loss targeting conditional means. When heavy tails, skewness, or tail comovement shift the factor loading structure across the conditional distribution, **Quantile Factor Models (QFM)** (Chen, Dolado & Gonzalo 2021) estimate quantile-specific latent factors by minimizing the check-function loss at quantile level ``\tau \in (0, 1)``:
+
+```math
+Q_{\tau}(X_{it} \mid f_t) = \lambda_i(\tau)' f_t(\tau), \qquad \min_{F, \Lambda} \frac{1}{NT} \sum_{t=1}^{T} \sum_{i=1}^{N} \rho_{\tau}\!\left(X_{it} - \lambda_i' f_t\right)
+```
+
+where:
+- ``X_{it}`` is observable series ``i`` at time ``t`` (standardized optionally by median and IQR when `standardize=true`),
+- ``f_t(\tau) \in \mathbb{R}^r`` is the quantile-``\tau`` latent factor vector normalized so ``F'F / T = I_r``,
+- ``\lambda_i(\tau) \in \mathbb{R}^r`` is the loading vector for variable ``i`` normalized so ``\Lambda'\Lambda / N`` is diagonal with non-increasing entries,
+- ``\rho_{\tau}(u) = u \left(\tau - \mathbf{1}\{u < 0\}\right)`` is the asymmetric check loss function.
+
+[`estimate_qfm`](@ref) alternates batched primal-dual interior-point quantile regressions across rows (`T` factor updates) and columns (`N` loading updates) with strict objective monotonicity guards and multi-start initialization (`init=:pca`, `:quantile_svd`, or `:random`).
+
+```@example factor
+qfm_med = estimate_qfm(X, 2, 0.5; standardize=true, seed=42)
+qfm_tail = estimate_qfm(X, 2, 0.9; standardize=true, seed=42)
+report(qfm_med)
+(median_r2 = round(mean(r2(qfm_med)), digits=3),
+ upper_tail_r2 = round(mean(r2(qfm_tail)), digits=3))
+```
+
+### Options (`estimate_qfm`)
+
+| Option | Default | Description |
+|---|---|---|
+| `tau` | `0.5` | Quantile level in ``(0, 1)`` |
+| `standardize` | `false` | Center and scale columns prior to estimation |
+| `robust_scale` | `true` | Use median and IQR (`false` uses mean and SD) when `standardize=true` |
+| `init` | `:pca` | Starting factor initializer (`:pca`, `:quantile_svd`, or `:random`) |
+| `n_starts` | `3` | Multi-start runs retained by lowest check loss |
+
+---
+
+## One-Sided Infinite-Order GDFM (FHLZ)
+
+When observables respond to dynamic shocks with infinite-order rational distributed lags (the generic case in DSGE equilibrium laws of motion), a finite-dimensional static factor representation (`r` static factors in `FGLR`) suffers truncation bias whenever ``r`` is capped below the true lag span. Forni, Hallin, Lippi & Zaffaroni (2015, 2017) (**FHLZ**) avoid finite static-rank truncation by estimating the spectral density matrix of common components ``\hat{\Sigma}_{\chi}(\theta)``, factorizing it into an autoregressive panel operator ``A^{(b)}(L)`` over cross-sectional blocks of size ``q + 1``, averaging across random variable permutations to eliminate ordering noise, and inverting each block filter recursively into strict one-sided moving-average responses:
+
+```math
+\chi_{it} = \sum_{h=0}^{\infty} B_{ih} u_{t-h}, \qquad A^{(b)}(L) \chi_{b,t} = R_b u_t
+```
+
+where:
+- ``\chi_{it}`` is the one-sided common component of variable ``i`` at time ``t``,
+- ``u_t \in \mathbb{R}^q`` are the fundamental orthonormal dynamic common innovations,
+- ``A^{(b)}(L) = I - \sum_{k=1}^{p_b} \Phi_k^{(b)} L^k`` is the blockwise autoregressive filter estimated from the block covariance sequence implied by ``\hat{\Sigma}_{\chi}(\theta)``,
+- ``R_b`` maps the ``q`` common shocks onto block ``b`` of size ``q + 1``.
+
+[`estimate_gdfm_fhlz`](@ref) estimates the reduced-form one-sided FHLZ model, and [`estimate_structural_dfm`](@ref) accepts `method=:fhlz` so all structural identification schemes (Cholesky, sign, narrative, non-Gaussian/heteroskedastic, max-share), `irf`, `fevd`, `historical_decomposition`, and `forecast` apply directly to infinite-order panels.
+
+```@example factor
+X_sub = X[:, 1:24]
+fhlz = estimate_gdfm_fhlz(X_sub, 2; n_perm=10, bandwidth=6, p_max=3, seed=42)
+report(fhlz)
+```
+
+```@example factor
+sdfm_fhlz = estimate_structural_dfm(X_sub, 2; method=:fhlz, identification=:cholesky,
+                                    order=[1, 2], n_perm=10, bandwidth=6, H=12, seed=42)
+report(sdfm_fhlz)
+```
+
+---
+
 ## Saving Results
 
 [`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
@@ -1073,11 +1139,20 @@ typeof(fm2)
 - Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2005). The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting.
   *Journal of the American Statistical Association*, 100(471), 830-840. [DOI](https://doi.org/10.1198/016214504000002050)
 
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2015). Dynamic Factor Models with Infinite-Dimensional Factor Spaces: One-Sided Representations.
+  *Journal of Econometrics*, 185(2), 359-371. [DOI](https://doi.org/10.1016/j.jeconom.2013.10.017)
+
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2017). Dynamic Factor Models with Infinite-Dimensional Factor Space: Asymptotic Analysis.
+  *Journal of Econometrics*, 199(1), 74-92. [DOI](https://doi.org/10.1016/j.jeconom.2017.04.002)
+
 - Hallin, M., & Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model.
   *Journal of the American Statistical Association*, 102(478), 603-617. [DOI](https://doi.org/10.1198/016214506000001275)
 
 - Bai, J., & Ng, S. (2007). Determining the Number of Primitive Shocks in Factor Models.
   *Journal of Business & Economic Statistics*, 25(1), 52-60. [DOI](https://doi.org/10.1198/073500106000000413)
+
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile Factor Models.
+  *Econometrica*, 89(2), 875-910. [DOI](https://doi.org/10.3982/ECTA16881)
 
 - Amengual, D., & Watson, M. W. (2007). Consistent Estimation of the Number of Dynamic Factors in a Large N and T Panel.
   *Journal of Business & Economic Statistics*, 25(1), 91-96. [DOI](https://doi.org/10.1198/073500106000000613)

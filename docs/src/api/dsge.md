@@ -73,6 +73,19 @@ evaluate_policy
 max_euler_error
 ```
 
+### Canonical ABCD Representation
+
+```@docs
+ABCDSystem
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/abcd.jl"]
+Order   = [:function]
+Private = false
+```
+
 ### Global Solution Methods
 
 ```@docs

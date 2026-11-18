@@ -178,14 +178,14 @@ end
 const _SDFM_ID_METHODS = (
     :cholesky, :sign, :narrative, :long_run, :proxy, :max_share,
     :fastica, :jade, :sobi, :dcov, :hsic,
-    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml,
+    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml, :lms,
     :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
     :arias, :uhlig,
 )
 const _SDFM_COMPUTE_Q_METHODS = (
     :narrative, :fastica, :jade, :sobi, :dcov, :hsic,
-    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml,
+    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml, :lms,
     :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
 )

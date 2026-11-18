@@ -698,7 +698,7 @@ function _solve_ri_omega_unique(U_mat::Matrix{T}, mu_norm::Vector{T}, ω::T,
 end
 
 """Brent's 1D root-finder on bracket [a, b] with f(a) * f(b) <= 0."""
-function _ri_brent_root(f, a0::T, b0::T, fa0::T, fb0::T;
+function _ri_dc_brent_root(f, a0::T, b0::T, fa0::T, fb0::T;
                         xtol::T=T(1e-12), ftol::T=T(1e-11),
                         maxiter::Int=80) where {T<:AbstractFloat}
     a, b = a0, b0
@@ -859,7 +859,7 @@ function solve_ri_discrete(U::AbstractMatrix, mu::AbstractVector;
         "Failed to bracket upper shadow cost ω for requested capacity κ_nats=$(κ_nats)"
     ))
 
-    ω_star = _ri_brent_root(f_cap, ω_lo, ω_hi, f_lo, f_hi;
+    ω_star = _ri_dc_brent_root(f_cap, ω_lo, ω_hi, f_lo, f_hi;
                             xtol=max(T(1e-12), T(16) * eps(T)) * max(one(T), ω_hi),
                             ftol=max(T(1e-11), T(64) * eps(T)))
     _solve_ri_omega(U_mat, mu_norm, ω_star, tol_T, max_iter)

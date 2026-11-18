@@ -124,6 +124,7 @@ Linear Gaussian state-space models estimated by the Kalman filter and smoother. 
 | `estimate_statespace(build, theta0, y; ...)` | Estimate free parameters by MLE from a builder function |
 | `estimate_tvp_reg(y, X; intercept=true)` | Time-varying-parameter regression |
 | `steady_state_kalman(ss)` / `steady_state_kalman(Z, H, Tt, RQR; G=nothing)` | Steady-state Kalman filter via discrete algebraic Riccati equation |
+| `solve_ri_kalman(prob; method=:water_filling)` | Steady-state LQG rational inattention filter (Sims 2003; Afrouzi–Yang 2021) |
 
 Threshold, smooth-transition, and Markov-switching regression for univariate series. See [Nonlinear Time Series](@ref nonlinear_page).
 
@@ -168,8 +169,10 @@ VAR, VECM, BVAR, Local Projections, Factor Models, and Panel VAR estimation. See
 | `estimate_propensity_lp(Y, treatment, covariates, H; ...)` | LP with propensity scores |
 | `doubly_robust_lp(Y, treatment, covariates, H; ...)` | Doubly robust LP estimator |
 | `estimate_factors(X, r; ...)` | Static factor model via PCA |
+| `estimate_qfm(X, r, tau; ...)` | Quantile factor model via iterative quantile regression (CDG 2021) |
 | `estimate_dynamic_factors(X, r, p; ...)` | Dynamic factor model |
 | `estimate_gdfm(X, q; ...)` | Generalized dynamic factor model |
+| `estimate_gdfm_fhlz(X, q; ...)` | One-sided infinite-order GDFM via blockwise VAR (FHLZ 2015, 2017) |
 | `estimate_pvar(pd, p; ...)` | Panel VAR via GMM (FD or System) |
 | `estimate_pvar_feols(pd, p; ...)` | Panel VAR via Fixed-Effects OLS |
 | `estimate_gmm(moment_fn, theta0, data; ...)` | GMM estimation |
@@ -254,6 +257,7 @@ Impulse response functions, forecast error variance decomposition, historical de
 | `identify_pml(model; ...)` | Pseudo-ML SVAR identification |
 | `identify_skew_normal(model; ...)` | Skew-normal ML SVAR identification |
 | `identify_nongaussian_ml(model; ...)` | Unified non-Gaussian ML dispatcher |
+| `estimate_lms_svar(model; ...)` / `lms_project_B(B)` | LMS (2017) complete identification, analytical 16-block Hessian, and 1/3-step ML |
 | `identify_gmm_moments(model; ...)` | Coskewness / cokurtosis GMM SVAR identification |
 | `identify_lewis_tvv(model; ...)` | Time-varying-volatility GMM SVAR identification (Lewis 2021) |
 | `identify_sv_svar(Y, p; ...)` | Stochastic-volatility SVAR via EM (Bertsche–Braun 2022) |
@@ -556,7 +560,8 @@ const _SER_GROUPS = [
         "GLPHyperparameters"],
     "Regression / panel / discrete choice" => ["RegModel", "LogitModel", "ProbitModel",
         "PanelRegModel", "PanelIVModel", "PanelLogitModel", "PanelProbitModel",
-        "OrderedLogitModel", "OrderedProbitModel", "MultinomialLogitModel"],
+        "OrderedLogitModel", "OrderedProbitModel", "MultinomialLogitModel",
+        "RIDiscreteChoiceSolution", "RIIIADiagnostic", "RILogitModel"],
     "Local projections" => ["LPModel", "LPIVModel", "SmoothLPModel", "StateLPModel",
         "PropensityLPModel", "MontielOleaPfluegerF", "LPIVARBand", "BSplineBasis",
         "PropensityScoreConfig"],
@@ -566,16 +571,19 @@ const _SER_GROUPS = [
         "APARCHModel", "CGARCHModel", "FIGARCHModel", "FIEGARCHModel", "IGARCHModel",
         "GarchMidasModel", "SVModel", "MGARCHModel"],
     "Factor / FAVAR" => ["FactorModel", "DynamicFactorModel",
-        "GeneralizedDynamicFactorModel", "FAVARModel", "BayesianFAVAR",
+        "GeneralizedDynamicFactorModel", "QuantileFactorModel", "FHLZModel",
+        "FAVARModel", "BayesianFAVAR",
         "StructuralDFM", "HallinLiskaResult", "BaiNgQResult", "AmengualWatsonResult"],
     "ARIMA / ARDL / nonlinear / MIDAS / state space" => ["ARModel", "MAModel",
         "ARMAModel", "ARIMAModel", "SARIMAModel", "ARFIMAModel", "ARIMAOrderSelection",
         "GPHResult", "LocalWhittleResult", "ARDLModel", "ARDLLongRun", "ARDLBoundsTest",
         "NARDLModel", "NARDLMultipliers", "NARDLSymmetryTest", "PMGModel",
         "ThresholdModel", "STARModel", "MSRegModel", "HansenLinearityTest",
-        "MidasModel", "StateSpaceModel", "SteadyStateKalman"],
+        "MidasModel", "StateSpaceModel", "SteadyStateKalman",
+        "RationalInattentionProblem", "SimsKalmanSolution"],
     "SVAR identification" => ["ProxySVARResult", "SVARModel", "MaxShareResult",
-        "SVECResult", "ICASVARResult", "NonGaussianMLResult", "NonGaussianGMMResult",
+        "SVECResult", "ICASVARResult", "NonGaussianMLResult", "LMSSVARResult",
+        "NonGaussianGMMResult",
         "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
         "ExternalVolatilitySVARResult", "LewisTVVResult", "SVSVARResult",
         "AriasSVARResult", "UhligSVARResult",
@@ -629,7 +637,7 @@ const _SER_GROUPS = [
         "ForecastSufficiency", "PathFloorConstraint", "FunctionConstraint"],
     "DSGE / HA / OLG / continuous time" => ["ModelSpec", "NamedEquation", "ModelIR",
         "IREquation", "IRDecl", "TimingInfo", "LinearDSGE", "DSGESolution",
-        "PerturbationSolution", "ProjectionSolution", "PerfectForesightPath",
+        "ABCDSystem", "PerturbationSolution", "ProjectionSolution", "PerfectForesightPath",
         "PrunedStateSpace", "DeterminacyMap", "KalmanSmootherResult",
         "DSGEEstimation", "OccBinConstraint", "OccBinRegime", "OccBinSolution",
         "OccBinIRF", "DSGEPrior", "DSGEStateSpace", "NonlinearStateSpace",
@@ -743,6 +751,7 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `solve_lyapunov(G1, impact)` | Unconditional covariance (Lyapunov equation) |
 | `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
 | `pruned_state_space(sol)` | Pruned state-space object (shared recursion + control map) |
+| `abcd_representation(sol; ...)` | Canonical `(A, B, C, D)` representation (`nstates`, `nobservables`) |
 | `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
 
 ### DSGE Estimation
@@ -825,6 +834,7 @@ OLS, WLS, IV/2SLS, logit, probit, ordered, and multinomial estimation for cross-
 | `estimate_ologit(y, X)` | Ordered logit MLE |
 | `estimate_oprobit(y, X)` | Ordered probit MLE |
 | `estimate_mlogit(y, X)` | Multinomial logit MLE |
+| `solve_ri_discrete(U, prior; ...)` | Rational inattention discrete choice (`ri_iia_diagnostic`, `estimate_ri_logit`) |
 | `estimate_poisson(y, X; exposure)` | Poisson regression, QMLE sandwich SEs by default |
 | `estimate_nbreg(y, X)` | Negative-Binomial-2 regression (`Var = mu + alpha*mu^2`) |
 | `dispersion_test(m::PoissonModel)` | Cameron-Trivedi (1990) overdispersion test (NB1 & NB2 forms) |

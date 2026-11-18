@@ -49,6 +49,7 @@ NormalityTestResult
 NormalityTestSuite
 ICASVARResult
 NonGaussianMLResult
+LMSSVARResult
 NonGaussianGMMResult
 LewisTVVResult
 MarkovSwitchingSVARResult
@@ -196,6 +197,13 @@ identify_mixture_normal
 identify_pml
 identify_skew_normal
 identify_nongaussian_ml
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["nongaussian/lms.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ### Moment-Based GMM Identification

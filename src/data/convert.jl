@@ -94,6 +94,15 @@ estimate_dynamic_factors(d::TimeSeriesData, r::Int, p::Int; kwargs...) =
 estimate_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
     estimate_gdfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
 
+estimate_qfm(d::TimeSeriesData, r::Int, tau::Real=0.5; kwargs...) =
+    estimate_qfm(to_matrix(d), r, tau; varnames=d.varnames, kwargs...)
+
+estimate_gdfm_fhlz(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_gdfm_fhlz(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+estimate_lms_svar(d::TimeSeriesData, p::Int; kwargs...) =
+    estimate_lms_svar(to_matrix(d), p; varnames=d.varnames, kwargs...)
+
 hallin_liska(d::TimeSeriesData, q_max::Int; kwargs...) =
     hallin_liska(to_matrix(d), q_max; kwargs...)
 

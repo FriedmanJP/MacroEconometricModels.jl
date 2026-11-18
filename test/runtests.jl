@@ -86,6 +86,8 @@ const TEST_GROUPS = [
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
+        "factor/test_qfm.jl",
+        "factor/test_fhlz.jl",
         "factor/test_factor_forecast.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
@@ -111,6 +113,8 @@ const TEST_GROUPS = [
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "arima/test_sarima.jl",   # T242 (#341): multiplicative seasonal ARIMA
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
+        "ri/test_ri_kalman.jl",           # RI-02 (#917): Sims steady-state LQG rational inattention
+        "ri/test_ri_discrete.jl",         # RI-07 (#922): Matejka-McKay & CDL discrete-choice RI
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
@@ -164,6 +168,7 @@ const TEST_GROUPS = [
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
+        "nongaussian/test_lms_svar.jl",     # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML
         "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
         "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
         "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
@@ -206,6 +211,7 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_dsge_gmm.jl",          # v1.0.3 (#874, #876): GMM & Reiter IRF
+        "dsge/test_abcd.jl",              # ABCD-01 (#909): canonical ABCD representation
         "dsge/test_perfect_foresight_sparse.jl",
         "dsge/test_dcegm_spec.jl",
         "dsge/test_modelspec_kinds.jl",

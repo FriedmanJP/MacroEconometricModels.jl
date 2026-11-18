@@ -118,6 +118,15 @@ estimate_statespace
 local_level
 local_linear_trend
 estimate_tvp_reg
+RationalInattentionProblem
+SimsKalmanSolution
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["ri/types.jl", "ri/steady_state.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---

@@ -30,6 +30,9 @@ report(::IO, ::RDDResult{T}) where {T}
 OrderedLogitModel
 OrderedProbitModel
 MultinomialLogitModel
+RIDiscreteChoiceSolution
+RIIIADiagnostic
+RILogitModel
 ```
 
 ---
@@ -98,6 +101,13 @@ estimate_mlogit
 brant_test
 hausman_iia
 generalized_residuals
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["ri/discrete_choice.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---
