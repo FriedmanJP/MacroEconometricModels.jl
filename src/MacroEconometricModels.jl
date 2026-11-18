@@ -1173,6 +1173,8 @@ export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 
 # Quantile Factor Model types and estimation
 export QuantileFactorModel, QFMICResult, estimate_qfm, ic_criteria_qfm
+export QuantileFactorGrid, QFMSpanningResult, QFMLoadingConstancyTest
+export test_qfm_spanning, test_qfm_loading_constancy
 
 # =============================================================================
 # Exports - Utility Functions

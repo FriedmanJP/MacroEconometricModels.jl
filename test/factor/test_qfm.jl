@@ -10,6 +10,7 @@ using Statistics
 using Distributions
 using Random
 using ForwardDiff
+using StatsAPI
 using MacroEconometricModels
 
 if !@isdefined(FAST)
@@ -869,6 +870,233 @@ end
             @test_throws ArgumentError ic_criteria_qfm(X, 4, 0.5; method=:invalid_method)
             @test_throws ArgumentError estimate_qfm(X, :bogus, 0.5)
             @test_throws ArgumentError estimate_qfm(X, :auto, 0.5; criterion=:invalid_crit)
+        end
+    end
+
+    # =========================================================================
+    # QFM-05 (#887): QuantileFactorGrid, Spanning Diagnostics & Loading Constancy
+    # =========================================================================
+    @testset "Multi-Quantile Grid, Spanning & Loading Constancy (QFM-05)" begin
+        @testset "Homoskedastic Gaussian DGP: spanning cancor > 0.95 & non-rejection" begin
+            rng = Random.Xoshiro(88707)
+            T_obs, N, r = 200, 80, 2
+            F0 = randn(rng, T_obs, r)
+            L0 = randn(rng, N, r)
+            X_hom = F0 * L0' .+ 0.2 .* randn(rng, T_obs, N)
+            taus = [0.1, 0.5, 0.9]
+            vnames = ["S$i" for i in 1:N]
+
+            grid = estimate_qfm(X_hom, r, taus; varnames=vnames, seed=42, threaded=true)
+            grid_seq = estimate_qfm(X_hom, r, taus; varnames=vnames, seed=42, threaded=false)
+
+            @test grid isa QuantileFactorGrid{Float64}
+            @test length(grid) == 3
+            @test eachindex(grid) == 1:3
+            @test firstindex(grid) == 1
+            @test lastindex(grid) == 3
+            @test collect(grid) == grid.models
+            @test grid.r_by_tau == [2, 2, 2]
+            @test grid.varnames == vnames
+            @test qfm_nobs(grid) == T_obs
+            @test grid[1] === grid.models[1]
+            @test grid[tau=0.1] === grid[1]
+            @test grid[tau=0.5] === grid[2]
+            @test grid[tau=0.9] === grid[3]
+            @test grid[tau=0.5 + 5e-9] === grid[2]
+            @test_throws KeyError grid[tau=0.25]
+            @test_throws BoundsError grid[4]
+
+            # Threading parity & manifest
+            for j in 1:3
+                @test grid[j].factors == grid_seq[j].factors
+                @test grid[j].loadings == grid_seq[j].loadings
+                @test grid[j].objective == grid_seq[j].objective
+            end
+            @test grid.manifest isa ReproManifest
+            @test grid.manifest.seed == 42
+
+            # PCA-vs-QFM spanning diagnostic
+            pca = estimate_factors(X_hom, r)
+            span_grid = test_qfm_spanning(grid, pca)
+            span_mat = test_qfm_spanning(grid, X_hom; r_pca=r, standardize=pca.standardized)
+            span_auto = test_qfm_spanning(grid)
+            span_single = test_qfm_spanning(grid[tau=0.1], pca)
+
+            @test span_grid isa QFMSpanningResult{Float64}
+            @test span_grid.r_pca == r
+            @test span_grid.r_qfm == [2, 2, 2]
+            @test qfm_nobs(span_grid) == T_obs
+            for j in 1:3
+                @test length(span_grid.cancor[j]) == r
+                @test all(>(0.95), span_grid.cancor[j])
+                @test all(>(0.90), span_grid.ols_r2[j])
+                @test all(>(0.70), span_grid.quantile_r1[j])
+                @test !any(span_grid.unspanned[j])
+            end
+            @test span_grid.cancor == span_mat.cancor
+            @test span_auto.r_pca == r
+            @test span_single.ols_r2[1] == span_grid.ols_r2[1]
+            @test span_single.quantile_r1[1] == span_grid.quantile_r1[1]
+            @test span_single.cancor[1] == span_grid.cancor[1]
+
+            # Loading constancy test: does not reject at 5% under homoskedastic DGP
+            ct_block = test_qfm_loading_constancy(grid, 0.1, 0.5;
+                                                  n_boot=299, bootstrap=:block, seed=101)
+            @test ct_block isa QFMLoadingConstancyTest{Float64}
+            @test ct_block isa StatsAPI.HypothesisTest
+            @test StatsAPI.pvalue(ct_block) >= 0.05
+            @test StatsAPI.nobs(ct_block) == T_obs
+            @test StatsAPI.dof(ct_block) == 2 * (N - 2)
+            @test ct_block.n_boot == 299
+            @test length(ct_block.boot_stats) == 299
+
+            ct_wild = test_qfm_loading_constancy(grid, 0.1, 0.9;
+                                                 n_boot=99, bootstrap=:wild, seed=102)
+            @test StatsAPI.pvalue(ct_wild) >= 0.05
+
+            # Threading parity on constancy test
+            ct_seq = test_qfm_loading_constancy(grid, 0.1, 0.5;
+                                                n_boot=49, bootstrap=:block,
+                                                threaded=false, seed=101)
+            ct_par = test_qfm_loading_constancy(grid, 0.1, 0.5;
+                                                n_boot=49, bootstrap=:block,
+                                                threaded=true, seed=101)
+            @test ct_seq.statistic == ct_par.statistic
+            @test ct_seq.boot_stats == ct_par.boot_stats
+            @test ct_seq.pvalue == ct_par.pvalue
+
+            # Self-comparison yields statistic 0 and p-value 1
+            ct_same = test_qfm_loading_constancy(grid, 0.5, 0.5; n_boot=29, seed=1)
+            @test ct_same.statistic == 0.0
+            @test StatsAPI.pvalue(ct_same) == 1.0
+        end
+
+        @testset "Tail-risk factor DGP: unspanned 2nd factor & loading constancy rejection" begin
+            rng = Random.Xoshiro(88702)
+            T_obs, N = 200, 80
+            f1 = 1.7 .* randn(rng, T_obs)
+            lam1 = 1.5 .* randn(rng, N)
+            g = 0.2 .+ 1.9 .* Float64.(rand(rng, T_obs) .> 0.5)
+            lam2 = 0.6 .+ 0.8 .* rand(rng, N)
+            X_tail = f1 * lam1' .+ (g * lam2') .* randn(rng, T_obs, N)
+
+            taus = [0.1, 0.5, 0.9]
+            grid_tail = estimate_qfm(X_tail, :auto, taus; r_max=5,
+                                     init=:quantile_svd, seed=77)
+            @test grid_tail.r_by_tau == [2, 1, 2]
+
+            span_tail = test_qfm_spanning(grid_tail, X_tail)
+            @test span_tail.r_pca == 1
+            @test span_tail.ols_r2[1][1] > 0.85
+            @test span_tail.ols_r2[1][2] < 0.25
+            @test span_tail.unspanned[1] == [false, true]
+            @test span_tail.unspanned[2] == [false]
+            @test span_tail.ols_r2[3][2] < 0.25
+            @test span_tail.unspanned[3][2] == true
+
+            # Even with r_pca=2, second PCA factor is noise -> still low R² < 0.25
+            span_pca2 = test_qfm_spanning(grid_tail[tau=0.1], X_tail; r_pca=2)
+            @test span_pca2.ols_r2[1][2] < 0.25
+            @test span_pca2.unspanned[1][2] == true
+
+            # Loading constancy test rejects at < 5% (both forward and reversed tau order)
+            ct_tail = test_qfm_loading_constancy(grid_tail, 0.1, 0.5;
+                                                 n_boot=299, bootstrap=:block, seed=77)
+            @test StatsAPI.pvalue(ct_tail) < 0.05
+
+            ct_rev = test_qfm_loading_constancy(grid_tail, 0.5, 0.1;
+                                                n_boot=49, bootstrap=:block, seed=77)
+            @test StatsAPI.pvalue(ct_rev) < 0.05
+
+            # Matrix input with fixed r=2 also detects quantile-varying loadings (< 5%)
+            ct_mat = test_qfm_loading_constancy(X_tail, 0.1, 0.5; r=2,
+                                                init=:quantile_svd, n_boot=49,
+                                                bootstrap=:wild, seed=77)
+            @test StatsAPI.pvalue(ct_mat) < 0.05
+        end
+
+        @testset "Vector rank specification, smoothed grid, constructors, display & Float32" begin
+            rng = Random.Xoshiro(88703)
+            T_obs, N = 100, 30
+            F0 = randn(rng, T_obs, 2)
+            L0 = randn(rng, N, 2)
+            X = F0 * L0' .+ 0.2 .* randn(rng, T_obs, N)
+
+            # Vector of ranks
+            grid_vec = estimate_qfm(X, [2, 1, 2], [0.1, 0.5, 0.9]; seed=12)
+            @test grid_vec.r_by_tau == [2, 1, 2]
+            @test grid_vec[2].r == 1
+
+            # Smoothed QFA grid + constancy
+            grid_sm = estimate_qfm(X, 2, [0.25, 0.75]; method=:smoothed_iqr, seed=13)
+            ct_sm = test_qfm_loading_constancy(grid_sm, 0.25, 0.75; n_boot=29, seed=13)
+            @test ct_sm isa QFMLoadingConstancyTest{Float64}
+            @test 0.0 < StatsAPI.pvalue(ct_sm) <= 1.0
+
+            # RSER-01 positional constructors matching fieldnames order
+            g_copy = QuantileFactorGrid{Float64}(
+                grid_vec.taus, grid_vec.models, grid_vec.r_by_tau,
+                grid_vec.varnames, grid_vec.manifest,
+            )
+            @test g_copy.taus == grid_vec.taus && g_copy.r_by_tau == grid_vec.r_by_tau
+
+            span_v = test_qfm_spanning(grid_vec, X; r_pca=2)
+            s_copy = QFMSpanningResult{Float64}(
+                span_v.taus, span_v.r_qfm, span_v.r_pca, span_v.ols_r2,
+                span_v.quantile_r1, span_v.cancor, span_v.unspanned,
+                span_v.threshold, span_v.n_obs, span_v.n_vars,
+            )
+            @test s_copy.ols_r2 == span_v.ols_r2
+
+            ct_copy = QFMLoadingConstancyTest{Float64}(
+                ct_sm.tau1, ct_sm.tau2, ct_sm.r1, ct_sm.r2, ct_sm.statistic,
+                ct_sm.pvalue, ct_sm.boot_stats, ct_sm.n_boot, ct_sm.block_length,
+                ct_sm.bootstrap, ct_sm.n_obs, ct_sm.n_vars, ct_sm.dof, ct_sm.manifest,
+            )
+            @test ct_copy.statistic == ct_sm.statistic && ct_copy.pvalue == ct_sm.pvalue
+
+            # Display across backends and repro=true
+            for obj in (grid_vec, span_v, ct_sm)
+                for be in (:text, :latex, :html)
+                    MacroEconometricModels.with_display_backend(be) do
+                        @test !isempty(sprint(show, obj))
+                        @test !isempty(sprint(report, obj))
+                    end
+                end
+            end
+            @test occursin("Reproducibility: seed=12", sprint(io -> report(io, grid_vec; repro=true)))
+            @test occursin("Reproducibility: seed=13", sprint(io -> report(io, ct_sm; repro=true)))
+
+            # Float32 precision & Integer fallback
+            X32 = Float32.(X)
+            g32 = estimate_qfm(X32, 2, Float32[0.2, 0.8]; seed=32)
+            @test g32 isa QuantileFactorGrid{Float32}
+            @test eltype(g32.taus) === Float32
+            sp32 = test_qfm_spanning(g32, X32; r_pca=2)
+            @test sp32 isa QFMSpanningResult{Float32}
+            ct32 = test_qfm_loading_constancy(g32, 0.2f0, 0.8f0; n_boot=19, seed=32)
+            @test ct32 isa QFMLoadingConstancyTest{Float32}
+
+            X_int = round.(Int, 10 .* X)
+            g_int = estimate_qfm(X_int, 2, [0.25, 0.75]; seed=1)
+            @test g_int isa QuantileFactorGrid{Float64}
+            ct_int = test_qfm_loading_constancy(X_int, 0.25, 0.75; r=2, n_boot=19, seed=1)
+            @test ct_int isa QFMLoadingConstancyTest{Float64}
+
+            # Validation errors
+            @test_throws ArgumentError estimate_qfm(X, 2, Float64[])
+            @test_throws ArgumentError estimate_qfm(X, 2, [0.0, 0.5])
+            @test_throws ArgumentError estimate_qfm(X, 2, [0.5, 1.0])
+            @test_throws ArgumentError estimate_qfm(X, [1, 2], [0.2, 0.5, 0.8])
+            @test_throws ArgumentError estimate_qfm(X, :bogus, [0.2, 0.8])
+            @test_throws ArgumentError estimate_qfm(X, 2, [0.2, 0.8]; varnames=["bad"])
+            @test_throws ArgumentError test_qfm_spanning(grid_vec, X; threshold=1.5)
+            @test_throws ArgumentError test_qfm_spanning(grid_vec, X; r_pca=:bogus)
+            @test_throws ArgumentError test_qfm_loading_constancy(grid_vec, 0.1, 0.5; n_boot=0)
+            @test_throws ArgumentError test_qfm_loading_constancy(grid_vec, 0.1, 0.5; block_length=-1)
+            @test_throws ArgumentError test_qfm_loading_constancy(grid_vec, 0.1, 0.5; bootstrap=:bogus)
+            @test_throws ArgumentError test_qfm_loading_constancy(X, 0.0, 0.5; r=2)
+            @test_throws ArgumentError test_qfm_loading_constancy(X, 0.1, 0.5; r=[1])
         end
     end
 

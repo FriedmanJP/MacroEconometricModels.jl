@@ -1636,3 +1636,954 @@ function estimate_qfm(X::AbstractMatrix{T}, r::Symbol, tau::Real=0.5;
     end
     return estimate_qfm(X, r_sel, tau; est_kw...)
 end
+
+# =============================================================================
+# QFM-05 (#887): Multi-Quantile Grid, Spanning Diagnostics & Loading Constancy
+# =============================================================================
+
+"""
+    QuantileFactorGrid{T<:AbstractFloat}
+
+Container for a grid of [`QuantileFactorModel`](@ref) fits across quantile levels
+``\\tau_1, \\dots, \\tau_M``, permitting quantile-specific factor counts ``r(\\tau_j)``.
+
+# Fields
+- `taus::Vector{T}` — quantile levels strictly in `(0, 1)`
+- `models::Vector{QuantileFactorModel{T}}` — fitted QFM objects, one per quantile
+- `r_by_tau::Vector{Int}` — factor count ``r(\\tau_j)`` at each quantile
+- `varnames::Vector{String}` — variable names (`length N`)
+- `manifest::Union{ReproManifest,Nothing}` — reproducibility metadata
+"""
+struct QuantileFactorGrid{T<:AbstractFloat}
+    taus::Vector{T}
+    models::Vector{QuantileFactorModel{T}}
+    r_by_tau::Vector{Int}
+    varnames::Vector{String}
+    manifest::Union{ReproManifest,Nothing}
+end
+
+QuantileFactorGrid{T}(taus, models, r_by_tau, varnames;
+                      manifest=nothing) where {T<:AbstractFloat} =
+    QuantileFactorGrid{T}(taus, models, r_by_tau, varnames, manifest)
+
+QuantileFactorGrid(taus::Vector{T}, models::Vector{QuantileFactorModel{T}},
+                   r_by_tau::Vector{Int}, varnames::Vector{String};
+                   manifest=nothing) where {T<:AbstractFloat} =
+    QuantileFactorGrid{T}(taus, models, r_by_tau, varnames, manifest)
+
+Base.length(g::QuantileFactorGrid) = length(g.models)
+Base.eachindex(g::QuantileFactorGrid) = eachindex(g.models)
+Base.firstindex(g::QuantileFactorGrid) = firstindex(g.models)
+Base.lastindex(g::QuantileFactorGrid) = lastindex(g.models)
+Base.iterate(g::QuantileFactorGrid, state...) = iterate(g.models, state...)
+Base.getindex(g::QuantileFactorGrid, j::Integer) = g.models[j]
+
+function Base.getindex(g::QuantileFactorGrid{T}; tau::Real) where {T<:AbstractFloat}
+    target = Float64(tau)
+    idx = findfirst(t -> abs(Float64(t) - target) <= 1e-8, g.taus)
+    idx === nothing && throw(KeyError(tau))
+    return g.models[idx]
+end
+
+StatsAPI.nobs(g::QuantileFactorGrid) = isempty(g.models) ? 0 : StatsAPI.nobs(g.models[1])
+
+function Base.show(io::IO, g::QuantileFactorGrid{T}) where {T}
+    M = length(g.models)
+    T_obs = M > 0 ? size(g.models[1].X, 1) : 0
+    N = length(g.varnames)
+    r_min, r_max = M > 0 ? extrema(g.r_by_tau) : (0, 0)
+    r_str = r_min == r_max ? string(r_min) : "$(r_min)–$(r_max)"
+    tau_str = M > 0 ? join([_fmt(t; digits=3) for t in g.taus], ", ") : "—"
+    method_str = M > 0 ? string(g.models[1].method) : "—"
+
+    spec = Any[
+        "Quantiles"     M;
+        "τ grid"        tau_str;
+        "Factors r(τ)"  r_str;
+        "Variables"     N;
+        "Observations"  T_obs;
+        "Method"        method_str
+    ]
+    _pretty_table(io, spec;
+        title = "Quantile Factor Model Grid (M=$M)",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    if M > 0
+        rows = Matrix{Any}(undef, M, 6)
+        for j in 1:M
+            mj = g.models[j]
+            rows[j, 1] = _fmt(g.taus[j]; digits=3)
+            rows[j, 2] = g.r_by_tau[j]
+            rows[j, 3] = _fmt(mj.objective; digits=4)
+            rows[j, 4] = _fmt(Statistics.mean(mj.pseudo_r2); digits=4)
+            rows[j, 5] = isempty(mj.sigma_sq) ? "—" : _fmt(mj.sigma_sq[1]; digits=4)
+            rows[j, 6] = mj.converged ? "Yes" : "No"
+        end
+        _pretty_table(io, rows;
+            title = "Per-Quantile Summary",
+            column_labels = ["τ", "r(τ)", "Check Loss", "Mean R¹", "Leading σ₁²", "Converged"],
+            alignment = [:r, :r, :r, :r, :r, :c],
+        )
+    end
+    _manifest_footer(io, g.manifest)
+end
+
+"""
+    report(g::QuantileFactorGrid; repro=false)
+
+Print a summary table across all quantile levels in the [`QuantileFactorGrid`](@ref).
+Pass `repro=true` to include the reproducibility manifest footer.
+"""
+report(g::QuantileFactorGrid; repro::Bool=false) = report(stdout, g; repro=repro)
+report(io::IO, g::QuantileFactorGrid; repro::Bool=false) =
+    (show(IOContext(io, :repro => repro), g); nothing)
+
+"""
+    estimate_qfm(X, r_or_auto, taus; threaded=true, rng=Random.default_rng(),
+                 seed=nothing, kwargs...) -> QuantileFactorGrid{T}
+
+Estimate a [`QuantileFactorGrid`](@ref) of quantile factor models across a vector of
+quantiles `taus`.
+
+```math
+Q_{\\tau_j}(X_{it} \\mid f_t) = \\lambda_i(\\tau_j)' f_t(\\tau_j), \\qquad j = 1, \\dots, M
+```
+
+where:
+- ``X_{it}`` is the panel observation for unit ``i`` at time ``t``
+- ``\\tau_j \\in (0, 1)`` is the ``j``-th quantile level in `taus`
+- ``\\lambda_i(\\tau_j) \\in \\mathbb{R}^{r(\\tau_j)}`` is the quantile loading vector for unit ``i``
+- ``f_t(\\tau_j) \\in \\mathbb{R}^{r(\\tau_j)}`` is the quantile factor vector at time ``t``
+
+# Arguments
+- `X::AbstractMatrix` — data panel (`T_obs × N`)
+- `r_or_auto::Union{Int,Symbol,AbstractVector{<:Integer}}` — fixed factor count `r`,
+  `:auto` (per-quantile selection via [`ic_criteria_qfm`](@ref)), or a vector of ranks
+  aligned with `taus`
+- `taus::AbstractVector{<:Real}` — non-empty vector of quantile levels strictly in `(0, 1)`
+
+# Keyword Arguments
+- `threaded::Bool = true` — parallelize across quantiles with pre-seeded per-slot RNGs
+- `rng::AbstractRNG = Random.default_rng()` — RNG used to derive per-quantile slot seeds
+- `seed::Union{Integer,Nothing} = nothing` — integer seed overriding `rng` via `Xoshiro(seed)`
+- `kwargs...` — keyword arguments forwarded to single-quantile [`estimate_qfm`](@ref)
+
+# Returns
+A [`QuantileFactorGrid`](@ref) supporting integer indexing `grid[j]` and keyword lookup
+`grid[tau=0.1]`.
+
+# References
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile factor models.
+  *Econometrica*, 89(2), 875–910.
+"""
+function estimate_qfm(X::AbstractMatrix{T},
+                      r_or_auto::Union{Int,Symbol,AbstractVector{<:Integer}},
+                      taus::AbstractVector{<:Real};
+                      threaded::Bool=true,
+                      rng::AbstractRNG=Random.default_rng(),
+                      seed::Union{Integer,Nothing}=nothing,
+                      kwargs...) where {T<:AbstractFloat}
+    _validate_data(X, "X")
+    T_obs, N = size(X)
+    !isempty(taus) || throw(ArgumentError("taus must not be empty"))
+
+    taus_T = Vector{T}(undef, length(taus))
+    for (j, tj) in enumerate(taus)
+        t_val = T(tj)
+        (isfinite(tj) && zero(T) < t_val < one(T)) ||
+            throw(ArgumentError("every tau must lie strictly in (0, 1), got $tj at index $j"))
+        taus_T[j] = t_val
+    end
+    M = length(taus_T)
+
+    if r_or_auto isa Int
+        validate_factor_inputs(T_obs, N, r_or_auto)
+    elseif r_or_auto isa Symbol
+        r_or_auto === :auto || throw(ArgumentError(
+            "r_or_auto must be a positive integer, :auto, or a vector of integers, got :$r_or_auto"))
+    else
+        length(r_or_auto) == M || throw(ArgumentError(
+            "length(r_or_auto)=$(length(r_or_auto)) must match length(taus)=$M"))
+        for rk in r_or_auto
+            validate_factor_inputs(T_obs, N, Int(rk))
+        end
+    end
+
+    kw_dict = Dict{Symbol,Any}(pairs(kwargs))
+    vn_kw = get(kw_dict, :varnames, nothing)
+    vn = vn_kw === nothing ? ["Var $i" for i in 1:N] : Vector{String}(vn_kw)
+    length(vn) == N || throw(ArgumentError(
+        "varnames has $(length(vn)) entries but X has $N columns"))
+    kw_dict[:varnames] = vn
+    fwd_kw = (; kw_dict...)
+
+    X_orig = Matrix{T}(X)
+    rng_use = _resolve_repro_rng(rng, seed)
+    slot_seeds = rand(rng_use, UInt64, M)
+
+    models = Vector{QuantileFactorModel{T}}(undef, M)
+    r_by_tau = Vector{Int}(undef, M)
+
+    function _fit_slot(j::Int, inner_threaded::Bool)
+        slot_rng = Random.Xoshiro(slot_seeds[j])
+        r_spec = r_or_auto isa AbstractVector ? Int(r_or_auto[j]) : r_or_auto
+        mj = estimate_qfm(X_orig, r_spec, taus_T[j];
+                          fwd_kw..., threaded=inner_threaded, rng=slot_rng, seed=nothing)
+        models[j] = mj
+        r_by_tau[j] = mj.r
+        return nothing
+    end
+
+    if threaded && Threads.nthreads() > 1 && M > 1
+        Threads.@threads for j in 1:M
+            _fit_slot(j, false)
+        end
+    else
+        inner_t = M == 1 ? threaded : false
+        for j in 1:M
+            _fit_slot(j, inner_t)
+        end
+    end
+
+    r_spec_meta = r_or_auto isa Symbol ? String(r_or_auto) :
+                  r_or_auto isa Int ? r_or_auto : Int[Int(rk) for rk in r_or_auto]
+    grid = QuantileFactorGrid{T}(taus_T, models, r_by_tau, vn, nothing)
+    return _with_manifest(grid, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}(
+            "taus" => Float64.(taus_T),
+            "r_by_tau" => r_by_tau,
+            "r_spec" => r_spec_meta,
+            "threaded" => threaded,
+        )))
+end
+
+# -----------------------------------------------------------------------------
+# PCA-vs-QFM Factor Spanning Diagnostic (CDG 2021, §5 Table III)
+# -----------------------------------------------------------------------------
+
+"""
+    QFMSpanningResult{T<:AbstractFloat}
+
+Result of comparing quantile factors ``\\hat{F}(\\tau)`` against conditional-mean PCA
+factors ``\\hat{F}_{\\text{PCA}}`` via [`test_qfm_spanning`](@ref) (Chen, Dolado & Gonzalo
+2021, §5 Table III).
+
+# Fields
+- `taus::Vector{T}` — quantile levels evaluated
+- `r_qfm::Vector{Int}` — number of quantile factors at each quantile
+- `r_pca::Int` — number of conditional-mean PCA factors
+- `ols_r2::Vector{Vector{T}}` — per-quantile, per-factor OLS ``R^2`` from regressing ``\\hat{F}_k(\\tau)`` on ``[1, \\hat{F}_{\\text{PCA}}]``
+- `quantile_r1::Vector{Vector{T}}` — per-quantile, per-factor Koenker–Machado ``R^1(\\tau)`` from quantile regression on ``[1, \\hat{F}_{\\text{PCA}}]``
+- `cancor::Vector{Vector{T}}` — canonical correlations between ``\\hat{F}(\\tau)`` and ``\\hat{F}_{\\text{PCA}}`` (descending, length ``\\min(r(\\tau), r_{\\text{PCA}})``)
+- `unspanned::Vector{Vector{Bool}}` — `true` where `ols_r2[j][k] < threshold`
+- `threshold::T` — OLS ``R^2`` threshold flagging unspanned tail factors
+- `n_obs::Int` — number of time-series observations ``T``
+- `n_vars::Int` — number of cross-sectional series ``N``
+"""
+struct QFMSpanningResult{T<:AbstractFloat}
+    taus::Vector{T}
+    r_qfm::Vector{Int}
+    r_pca::Int
+    ols_r2::Vector{Vector{T}}
+    quantile_r1::Vector{Vector{T}}
+    cancor::Vector{Vector{T}}
+    unspanned::Vector{Vector{Bool}}
+    threshold::T
+    n_obs::Int
+    n_vars::Int
+end
+
+StatsAPI.nobs(res::QFMSpanningResult) = res.n_obs
+
+function Base.show(io::IO, res::QFMSpanningResult{T}) where {T}
+    n_unspanned = sum(count, res.unspanned)
+    spec = Any[
+        "Quantiles"              length(res.taus);
+        "PCA factors (r_pca)"    res.r_pca;
+        "Observations (T)"       res.n_obs;
+        "Variables (N)"          res.n_vars;
+        "Spanning R² threshold"  _fmt(res.threshold; digits=3);
+        "Unspanned tail factors" n_unspanned
+    ]
+    _pretty_table(io, spec;
+        title = "PCA-vs-QFM Factor Spanning Diagnostic",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    total_rows = sum(res.r_qfm)
+    rows = Matrix{Any}(undef, total_rows, 6)
+    row = 0
+    for j in eachindex(res.taus)
+        cc = res.cancor[j]
+        for k in 1:res.r_qfm[j]
+            row += 1
+            rows[row, 1] = _fmt(res.taus[j]; digits=3)
+            rows[row, 2] = "Factor $k"
+            rows[row, 3] = _fmt(res.ols_r2[j][k]; digits=4)
+            rows[row, 4] = _fmt(res.quantile_r1[j][k]; digits=4)
+            rows[row, 5] = k <= length(cc) ? _fmt(cc[k]; digits=4) : "—"
+            rows[row, 6] = res.unspanned[j][k] ? "No (tail)" : "Yes"
+        end
+    end
+    _pretty_table(io, rows;
+        title = "Factor Spanning by Quantile",
+        column_labels = ["τ", "Factor", "OLS R²", "Quantile R¹", "Cancor", "Spanned?"],
+        alignment = [:r, :l, :r, :r, :r, :c],
+    )
+end
+
+"""
+    report(res::QFMSpanningResult)
+
+Print the PCA-vs-QFM factor spanning diagnostic table.
+"""
+report(res::QFMSpanningResult) = report(stdout, res)
+report(io::IO, res::QFMSpanningResult) = (show(io, res); nothing)
+
+"""Compute centered canonical correlations between `A` (`T × r₁`) and `B` (`T × r₂`)."""
+function _qfm_grid_cancor(A::AbstractMatrix{T}, B::AbstractMatrix{T}) where {T<:AbstractFloat}
+    T_obs, r1 = size(A)
+    r2 = size(B, 2)
+    m = min(r1, r2)
+    m == 0 && return T[]
+
+    Ac = A .- Statistics.mean(A; dims=1)
+    Bc = B .- Statistics.mean(B; dims=1)
+
+    svA = svd(Ac)
+    tolA = max(T_obs, r1) * eps(T) * (isempty(svA.S) ? one(T) : svA.S[1])
+    keepA = svA.S .> tolA
+
+    svB = svd(Bc)
+    tolB = max(T_obs, r2) * eps(T) * (isempty(svB.S) ? one(T) : svB.S[1])
+    keepB = svB.S .> tolB
+
+    (!any(keepA) || !any(keepB)) && return zeros(T, m)
+
+    UA = @view svA.U[:, keepA]
+    UB = @view svB.U[:, keepB]
+    svals = svdvals(UA' * UB)
+
+    out = zeros(T, m)
+    n_copy = min(length(svals), m)
+    @inbounds for k in 1:n_copy
+        out[k] = clamp(T(svals[k]), zero(T), one(T))
+    end
+    return out
+end
+
+"""Compute OLS R² and Koenker–Machado quantile R¹(τ) for each column of `F_qfm` on `[1, F_pca]`."""
+function _qfm_grid_span_metrics(F_qfm::Matrix{T}, F_pca::Matrix{T},
+                                tau::T) where {T<:AbstractFloat}
+    T_obs, r_q = size(F_qfm)
+    r_p = size(F_pca, 2)
+    Z = Matrix{T}(undef, T_obs, r_p + 1)
+    Z[:, 1] .= one(T)
+    Z[:, 2:end] .= F_pca
+
+    # Rank-safe projection via SVD of Z
+    svZ = svd(Z)
+    tolZ = max(T_obs, r_p + 1) * eps(T) * (isempty(svZ.S) ? one(T) : svZ.S[1])
+    keepZ = svZ.S .> tolZ
+    UZ = @view svZ.U[:, keepZ]
+
+    ws = _QRegWorkspace{T}(T_obs, r_p + 1)
+    b_qr = Vector{T}(undef, r_p + 1)
+    resid_qr = Vector{T}(undef, T_obs)
+    resid_0 = Vector{T}(undef, T_obs)
+
+    r2_vec = Vector{T}(undef, r_q)
+    r1_vec = Vector{T}(undef, r_q)
+    var_floor = max(T(1e-12), eps(T))
+
+    for k in 1:r_q
+        y = @view F_qfm[:, k]
+        ym = Statistics.mean(y)
+        tss = sum(t -> (y[t] - ym)^2, 1:T_obs)
+        if tss <= var_floor
+            r2_vec[k] = zero(T)
+            r1_vec[k] = zero(T)
+            continue
+        end
+        proj = UZ * (UZ' * y)
+        rss = sum(t -> (y[t] - proj[t])^2, 1:T_obs)
+        r2_vec[k] = clamp(one(T) - rss / tss, zero(T), one(T))
+
+        _qreg_ipm!(b_qr, Z, y, tau, ws)
+        mul!(resid_qr, Z, b_qr)
+        @inbounds for t in 1:T_obs
+            resid_qr[t] = y[t] - resid_qr[t]
+        end
+        v_hat = _check_loss(resid_qr, tau)
+
+        q0 = T(Statistics.quantile(y, tau))
+        @inbounds for t in 1:T_obs
+            resid_0[t] = y[t] - q0
+        end
+        v_tilde = _check_loss(resid_0, tau)
+        r1_vec[k] = v_tilde > var_floor ? clamp(one(T) - v_hat / v_tilde, zero(T), one(T)) : zero(T)
+    end
+
+    return r2_vec, r1_vec
+end
+
+function _qfm_grid_spanning_core(models::Vector{QuantileFactorModel{T}},
+                                 F_pca::Matrix{T},
+                                 threshold::T) where {T<:AbstractFloat}
+    M = length(models)
+    M >= 1 || throw(ArgumentError("models must not be empty"))
+    T_obs, N = size(models[1].X)
+    size(F_pca, 1) == T_obs || throw(DimensionMismatch(
+        "PCA factors have $(size(F_pca, 1)) rows but QFM has $T_obs observations"))
+    r_pca = size(F_pca, 2)
+
+    taus = Vector{T}(undef, M)
+    r_qfm = Vector{Int}(undef, M)
+    ols_r2 = Vector{Vector{T}}(undef, M)
+    quantile_r1 = Vector{Vector{T}}(undef, M)
+    cancor_vec = Vector{Vector{T}}(undef, M)
+    unspanned = Vector{Vector{Bool}}(undef, M)
+
+    for j in 1:M
+        mj = models[j]
+        taus[j] = mj.tau
+        r_qfm[j] = mj.r
+        r2_j, r1_j = _qfm_grid_span_metrics(mj.factors, F_pca, mj.tau)
+        ols_r2[j] = r2_j
+        quantile_r1[j] = r1_j
+        cancor_vec[j] = _qfm_grid_cancor(mj.factors, F_pca)
+        unspanned[j] = Bool[val < threshold for val in r2_j]
+    end
+
+    return QFMSpanningResult{T}(
+        taus, r_qfm, r_pca, ols_r2, quantile_r1, cancor_vec, unspanned, threshold, T_obs, N,
+    )
+end
+
+function _qfm_grid_resolve_pca(X::AbstractMatrix{T}, r_pca::Union{Int,Symbol},
+                               r_max::Int, criterion::Symbol,
+                               standardize::Bool) where {T<:AbstractFloat}
+    T_obs, N = size(X)
+    X_mat = Matrix{T}(X)
+    r_sel = if r_pca === :auto
+        validate_factor_inputs(T_obs, N, r_max; context="max PCA factors")
+        validate_option(criterion, "criterion", (:ic1, :ic2, :ic3))
+        ic = ic_criteria(X_mat, r_max; standardize=standardize)
+        criterion === :ic1 ? ic.r_IC1 : (criterion === :ic2 ? ic.r_IC2 : ic.r_IC3)
+    elseif r_pca isa Int
+        validate_factor_inputs(T_obs, N, r_pca; context="PCA factors")
+        r_pca
+    else
+        throw(ArgumentError("r_pca must be a positive Int or :auto, got :$r_pca"))
+    end
+    return estimate_factors(X_mat, r_sel; standardize=standardize)
+end
+
+"""
+    test_qfm_spanning(qfm_or_grid, pca_or_X; threshold=0.5, r_pca=:auto,
+                      r_max=min(10, max(1, min(size(X)...) - 1)),
+                      criterion=:ic2, standardize=nothing) -> QFMSpanningResult
+
+Test whether quantile factors ``\\hat{F}(\\tau)`` are spanned by conditional-mean PCA factors
+``\\hat{F}_{\\text{PCA}}`` (Chen, Dolado & Gonzalo 2021, §5 Table III).
+
+```math
+R^2_k(\\tau) = 1 - \\frac{\\|(I - P_{[1, \\hat{F}_{\\text{PCA}}]}) \\hat{F}_k(\\tau)\\|_2^2}
+{\\|\\hat{F}_k(\\tau) - \\bar{F}_k(\\tau)\\|_2^2},
+\\qquad
+R^1_k(\\tau) = 1 - \\frac{\\min_\\beta \\sum_t \\rho_\\tau(\\hat{F}_{kt}(\\tau) - [1, \\hat{F}_{t,\\text{PCA}}]'\\beta)}
+{\\min_c \\sum_t \\rho_\\tau(\\hat{F}_{kt}(\\tau) - c)}
+```
+
+where:
+- ``\\hat{F}_k(\\tau)`` is the ``k``-th estimated quantile factor at quantile ``\\tau``
+- ``\\hat{F}_{\\text{PCA}}`` is the ``T \\times r_{\\text{PCA}}`` matrix of conditional-mean PCA factors
+- ``P_{[1, \\hat{F}_{\\text{PCA}}]}`` is the orthogonal projection onto the intercept and PCA factors
+- ``R^2_k(\\tau)`` is the centered OLS R-squared for quantile factor ``k``
+- ``R^1_k(\\tau)`` is the Koenker–Machado quantile pseudo-R-squared at level ``\\tau``
+
+# Arguments
+- `qfm_or_grid` — a [`QuantileFactorModel`](@ref) or [`QuantileFactorGrid`](@ref)
+- `pca_or_X` — a [`FactorModel`](@ref) from [`estimate_factors`](@ref), or the data matrix `X`
+  (omitting `pca_or_X` uses the panel stored on `qfm_or_grid`)
+
+# Keyword Arguments
+- `threshold::Real = 0.5` — OLS ``R^2`` cutoff below which a quantile factor is flagged as unspanned
+- `r_pca::Union{Int,Symbol} = :auto` — number of PCA factors when `pca_or_X` is a matrix (or omitted);
+  `:auto` selects via Bai–Ng [`ic_criteria`](@ref)
+- `r_max::Int` — upper bound for Bai–Ng PCA factor selection when `r_pca == :auto`
+- `criterion::Symbol = :ic2` — Bai–Ng criterion (`:ic1`, `:ic2`, or `:ic3`) when `r_pca == :auto`
+- `standardize::Union{Bool,Nothing} = nothing` — passed to [`estimate_factors`](@ref) when computing
+  PCA from `X`; `nothing` matches `qfm.standardized` (or `grid[1].standardized`)
+
+# Returns
+A [`QFMSpanningResult`](@ref) reporting `ols_r2`, `quantile_r1`, `cancor`, and `unspanned` flags.
+
+# References
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile factor models.
+  *Econometrica*, 89(2), 875–910.
+- Koenker, R., & Machado, J. A. F. (1999). Goodness of fit and related inference
+  processes for quantile regression. *JASA*, 94(448), 1296–1310.
+"""
+function test_qfm_spanning(qfm::QuantileFactorModel{T}, pca::FactorModel;
+                           threshold::Real=0.5) where {T<:AbstractFloat}
+    (isfinite(threshold) && zero(T) <= T(threshold) <= one(T)) ||
+        throw(ArgumentError("threshold must be in [0, 1], got $threshold"))
+    F_pca = Matrix{T}(pca.factors)
+    return _qfm_grid_spanning_core(QuantileFactorModel{T}[qfm], F_pca, T(threshold))
+end
+
+function test_qfm_spanning(grid::QuantileFactorGrid{T}, pca::FactorModel;
+                           threshold::Real=0.5) where {T<:AbstractFloat}
+    (isfinite(threshold) && zero(T) <= T(threshold) <= one(T)) ||
+        throw(ArgumentError("threshold must be in [0, 1], got $threshold"))
+    F_pca = Matrix{T}(pca.factors)
+    return _qfm_grid_spanning_core(grid.models, F_pca, T(threshold))
+end
+
+function test_qfm_spanning(qfm::QuantileFactorModel{T}, X::AbstractMatrix;
+                           r_pca::Union{Int,Symbol}=:auto,
+                           r_max::Int=min(10, max(1, min(size(X)...) - 1)),
+                           criterion::Symbol=:ic2,
+                           standardize::Union{Bool,Nothing}=nothing,
+                           threshold::Real=0.5) where {T<:AbstractFloat}
+    (isfinite(threshold) && zero(T) <= T(threshold) <= one(T)) ||
+        throw(ArgumentError("threshold must be in [0, 1], got $threshold"))
+    std_flag = standardize === nothing ? qfm.standardized : standardize
+    pca = _qfm_grid_resolve_pca(T.(X), r_pca, r_max, criterion, std_flag)
+    return test_qfm_spanning(qfm, pca; threshold=threshold)
+end
+
+function test_qfm_spanning(grid::QuantileFactorGrid{T}, X::AbstractMatrix;
+                           r_pca::Union{Int,Symbol}=:auto,
+                           r_max::Int=min(10, max(1, min(size(X)...) - 1)),
+                           criterion::Symbol=:ic2,
+                           standardize::Union{Bool,Nothing}=nothing,
+                           threshold::Real=0.5) where {T<:AbstractFloat}
+    isempty(grid.models) && throw(ArgumentError("QuantileFactorGrid must not be empty"))
+    (isfinite(threshold) && zero(T) <= T(threshold) <= one(T)) ||
+        throw(ArgumentError("threshold must be in [0, 1], got $threshold"))
+    std_flag = standardize === nothing ? grid.models[1].standardized : standardize
+    pca = _qfm_grid_resolve_pca(T.(X), r_pca, r_max, criterion, std_flag)
+    return test_qfm_spanning(grid, pca; threshold=threshold)
+end
+
+test_qfm_spanning(qfm::QuantileFactorModel; kwargs...) = test_qfm_spanning(qfm, qfm.X; kwargs...)
+function test_qfm_spanning(grid::QuantileFactorGrid; kwargs...)
+    isempty(grid.models) && throw(ArgumentError("QuantileFactorGrid must not be empty"))
+    return test_qfm_spanning(grid, grid.models[1].X; kwargs...)
+end
+
+# -----------------------------------------------------------------------------
+# Quantile Loading Constancy Test (H₀: span(Λ(τ₁)) = span(Λ(τ₂)))
+# -----------------------------------------------------------------------------
+
+"""
+    QFMLoadingConstancyTest{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+
+Result of testing loading-space constancy across quantiles ``\\tau_1`` and ``\\tau_2``
+via [`test_qfm_loading_constancy`](@ref).
+
+```math
+H_0: \\mathrm{span}(\\Lambda(\\tau_1)) = \\mathrm{span}(\\Lambda(\\tau_2)),
+\\qquad
+S = \\|(I - P_{\\hat{\\Lambda}(\\tau_2)}) \\hat{\\Lambda}(\\tau_1)\\|_F^2
+```
+
+where:
+- ``\\Lambda(\\tau_1), \\Lambda(\\tau_2)`` are the quantile loading matrices at ``\\tau_1`` and ``\\tau_2``
+- ``P_{\\hat{\\Lambda}(\\tau_2)}`` is the orthogonal projector onto ``\\mathrm{span}(\\hat{\\Lambda}(\\tau_2))``
+- ``S`` is the Frobenius-squared projection residual norm
+
+# Fields
+- `tau1::T` — first quantile level
+- `tau2::T` — second quantile level
+- `r1::Int` — factor rank at `tau1`
+- `r2::Int` — factor rank at `tau2`
+- `statistic::T` — observed projection residual norm squared
+- `pvalue::T` — bootstrap p-value `(1 + #{S* ≥ S}) / (n_boot + 1)`
+- `boot_stats::Vector{T}` — bootstrap null draws of length `n_boot`
+- `n_boot::Int` — number of bootstrap replications
+- `block_length::Int` — moving-block length used
+- `bootstrap::Symbol` — `:block` or `:wild`
+- `n_obs::Int` — number of time-series observations ``T``
+- `n_vars::Int` — number of cross-sectional series ``N``
+- `dof::Int` — nominal residual subspace degrees of freedom
+- `manifest::Union{ReproManifest,Nothing}` — reproducibility metadata
+"""
+struct QFMLoadingConstancyTest{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+    tau1::T
+    tau2::T
+    r1::Int
+    r2::Int
+    statistic::T
+    pvalue::T
+    boot_stats::Vector{T}
+    n_boot::Int
+    block_length::Int
+    bootstrap::Symbol
+    n_obs::Int
+    n_vars::Int
+    dof::Int
+    manifest::Union{ReproManifest,Nothing}
+end
+
+QFMLoadingConstancyTest{T}(tau1, tau2, r1, r2, statistic, pvalue, boot_stats,
+                           n_boot, block_length, bootstrap, n_obs, n_vars, dof;
+                           manifest=nothing) where {T<:AbstractFloat} =
+    QFMLoadingConstancyTest{T}(tau1, tau2, r1, r2, statistic, pvalue, boot_stats,
+                               n_boot, block_length, bootstrap, n_obs, n_vars, dof, manifest)
+
+StatsAPI.pvalue(t::QFMLoadingConstancyTest) = t.pvalue
+StatsAPI.nobs(t::QFMLoadingConstancyTest) = t.n_obs
+StatsAPI.dof(t::QFMLoadingConstancyTest) = t.dof
+
+function Base.show(io::IO, t::QFMLoadingConstancyTest{T}) where {T}
+    boot_str = t.bootstrap === :block ? "Moving-block (ℓ=$(t.block_length))" :
+                                        "Wild-panel (ℓ=$(t.block_length))"
+    spec = Any[
+        "H₀"             "span(Λ($( _fmt(t.tau1; digits=3)))) = span(Λ($( _fmt(t.tau2; digits=3))))";
+        "Quantiles"      "$(_fmt(t.tau1; digits=3)) vs $(_fmt(t.tau2; digits=3))";
+        "Ranks (r₁, r₂)" "($(t.r1), $(t.r2))";
+        "Observations"   t.n_obs;
+        "Variables"      t.n_vars;
+        "Bootstrap"      boot_str;
+        "Replications"   t.n_boot
+    ]
+    _pretty_table(io, spec;
+        title = "QFM Loading Constancy Test",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+
+    stars = _significance_stars(t.pvalue)
+    res_data = Any[
+        "Projection residual ‖(I−P)Λ‖²" string(_fmt(t.statistic; digits=4), " ", stars);
+        "Bootstrap p-value"            _format_pvalue(t.pvalue);
+        "DOF"                          t.dof
+    ]
+    _pretty_table(io, res_data;
+        title = "Results",
+        column_labels = ["", "Value"],
+        alignment = [:l, :r],
+    )
+
+    conclusion = if t.pvalue < T(0.01)
+        "Reject H₀ at 1% level: quantile-varying factor loadings"
+    elseif t.pvalue < T(0.05)
+        "Reject H₀ at 5% level: quantile-varying factor loadings"
+    elseif t.pvalue < T(0.10)
+        "Reject H₀ at 10% level: quantile-varying factor loadings"
+    else
+        "Fail to reject H₀: loading space is consistent with constancy"
+    end
+    conc_data = Any["Conclusion" conclusion; "Note" "*** p<0.01, ** p<0.05, * p<0.10"]
+    _pretty_table(io, conc_data; column_labels=["", ""], alignment=[:l, :l])
+    _manifest_footer(io, t.manifest)
+end
+
+"""
+    report(t::QFMLoadingConstancyTest; repro=false)
+
+Print a summary of the quantile factor loading constancy test.
+Pass `repro=true` to include the reproducibility manifest footer.
+"""
+report(t::QFMLoadingConstancyTest; repro::Bool=false) = report(stdout, t; repro=repro)
+report(io::IO, t::QFMLoadingConstancyTest; repro::Bool=false) =
+    (show(IOContext(io, :repro => repro), t); nothing)
+
+"""Orthogonal projection residual `(I - P_B) * A` computed via rank-safe SVD of `B`."""
+function _qfm_grid_proj_resid(A::AbstractMatrix{T}, B::AbstractMatrix{T}) where {T<:AbstractFloat}
+    sv = svd(B)
+    tol_r = max(size(B)...) * eps(T) * (isempty(sv.S) ? one(T) : sv.S[1])
+    keep = sv.S .> tol_r
+    !any(keep) && return copy(A)
+    U_B = @view sv.U[:, keep]
+    return A - U_B * (U_B' * A)
+end
+
+"""Orthogonal Procrustes alignment of bootstrap loadings `L_b` to `L_ref`."""
+function _qfm_grid_procrustes_align(L_b::AbstractMatrix{T},
+                                    L_ref::AbstractMatrix{T}) where {T<:AbstractFloat}
+    sv = svd(L_b' * L_ref)
+    return L_b * (sv.U * sv.V')
+end
+
+"""Sample `T_obs` time indices by concatenating moving blocks of length `ell`."""
+function _qfm_grid_block_indices!(idx::Vector{Int}, rng::AbstractRNG, T_obs::Int, ell::Int)
+    last_start = max(T_obs - ell + 1, 1)
+    pos = 1
+    @inbounds while pos <= T_obs
+        s = rand(rng, 1:last_start)
+        take = min(ell, T_obs - pos + 1)
+        for j in 0:(take - 1)
+            idx[pos + j] = s + j
+        end
+        pos += take
+    end
+    return idx
+end
+
+"""Core recentered bootstrap routine for [`test_qfm_loading_constancy`](@ref)."""
+function _qfm_grid_constancy_core(m1::QuantileFactorModel{T}, m2::QuantileFactorModel{T},
+                                   n_boot::Int, block_length::Int, bootstrap::Symbol,
+                                   threaded::Bool, max_iter::Int, tol::Real,
+                                   rng::AbstractRNG,
+                                   seed::Union{Integer,Nothing}) where {T<:AbstractFloat}
+    validate_option(bootstrap, "bootstrap", (:block, :wild))
+    n_boot >= 1 || throw(ArgumentError("n_boot must be >= 1, got $n_boot"))
+    block_length >= 0 || throw(ArgumentError("block_length must be >= 0, got $block_length"))
+    max_iter >= 1 || throw(ArgumentError("max_iter must be >= 1, got $max_iter"))
+    (isfinite(tol) && tol > 0) || throw(ArgumentError("tol must be > 0, got $tol"))
+
+    X_orig = m1.X
+    T_obs, N = size(X_orig)
+    size(m2.X) == (T_obs, N) || throw(DimensionMismatch(
+        "m1 and m2 must share the same panel dimensions"))
+
+    r1, r2 = m1.r, m2.r
+    L1, L2 = m1.loadings, m2.loadings
+    F1, F2 = m1.factors, m2.factors
+    tau1, tau2 = m1.tau, m2.tau
+
+    swap = r1 < r2
+    dof_val = swap ? r2 * max(N - r1, 1) : r1 * max(N - r2, 1)
+    ell = block_length > 0 ? min(block_length, T_obs) : clamp(ceil(Int, cbrt(T_obs)), 1, T_obs)
+    rng_use = _resolve_repro_rng(rng, seed)
+
+    if abs(Float64(tau1) - Float64(tau2)) <= 1e-8 && r1 == r2
+        boot_zeros = zeros(T, n_boot)
+        res = QFMLoadingConstancyTest{T}(
+            tau1, tau2, r1, r2, zero(T), one(T), boot_zeros,
+            n_boot, ell, bootstrap, T_obs, N, dof_val, nothing,
+        )
+        return _with_manifest(res, capture_manifest(; seed=seed,
+            settings=Dict{String,Any}(
+                "tau1" => Float64(tau1), "tau2" => Float64(tau2),
+                "r1" => r1, "r2" => r2, "n_boot" => n_boot,
+                "block_length" => ell, "bootstrap" => String(bootstrap),
+            )))
+    end
+
+    R_obs = swap ? _qfm_grid_proj_resid(L2, L1) : _qfm_grid_proj_resid(L1, L2)
+    stat_obs = T(sum(abs2, R_obs))
+
+    std_flag = m1.standardized
+    X_proc = std_flag ? _qfm_standardize(X_orig, true)[1] : X_orig
+
+    # Precompute PCA decomposition for wild-panel bootstrap
+    M_pca = Matrix{T}(undef, 0, 0)
+    E_pca = Matrix{T}(undef, 0, 0)
+    if bootstrap === :wild
+        r_pca = min(max(r1, r2), min(T_obs, N))
+        pca_ref = estimate_factors(X_proc, r_pca; standardize=false)
+        M_pca = pca_ref.factors * pca_ref.loadings'
+        E_pca = X_proc - M_pca
+    end
+
+    method_b = m1.method
+    h_b = zero(T)
+    if method_b === :smoothed_iqr
+        h_b = _qfm_smooth_bandwidth(X_proc, F1, :auto)
+    end
+    tol_eff = max(T(tol), T(10) * eps(T))
+    sqrt_T = sqrt(T(T_obs))
+
+    boot_seeds = rand(rng_use, UInt64, n_boot)
+    boot_stats = Vector{T}(undef, n_boot)
+
+    function _run_boot!(b::Int, X_b::Matrix{T}, X_bt::Matrix{T},
+                        idx::Vector{Int}, F1_init::Matrix{T}, F2_init::Matrix{T})
+        local_rng = Random.Xoshiro(boot_seeds[b])
+        _qfm_grid_block_indices!(idx, local_rng, T_obs, ell)
+
+        if bootstrap === :block
+            @inbounds for j in 1:N, t in 1:T_obs
+                X_b[t, j] = X_orig[idx[t], j]
+            end
+            if std_flag
+                X_b_std, _, _ = _qfm_standardize(X_b, true)
+                copyto!(X_b, X_b_std)
+            end
+        else
+            @inbounds for j in 1:N, t in 1:T_obs
+                w = rand(local_rng, Bool) ? one(T) : -one(T)
+                X_b[t, j] = M_pca[idx[t], j] + w * E_pca[idx[t], j]
+            end
+        end
+
+        copyto!(F1_init, sqrt_T .* Matrix(qr(@view(F1[idx, :])).Q))
+        copyto!(F2_init, sqrt_T .* Matrix(qr(@view(F2[idx, :])).Q))
+
+        if method_b === :iqr
+            transpose!(X_bt, X_b)
+            res1 = _qfm_iqr_single(X_b, X_bt, F1_init, tau1, max_iter, tol_eff, false)
+            res2 = _qfm_iqr_single(X_b, X_bt, F2_init, tau2, max_iter, tol_eff, false)
+        else
+            res1 = _qfm_smooth_single(X_b, F1_init, tau1, h_b, :gaussian, max_iter, tol_eff)
+            res2 = _qfm_smooth_single(X_b, F2_init, tau2, h_b, :gaussian, max_iter, tol_eff)
+        end
+
+        Rb = if swap
+            L2_al = _qfm_grid_procrustes_align(res2.loadings, L2)
+            _qfm_grid_proj_resid(L2_al, res1.loadings) .- R_obs
+        else
+            L1_al = _qfm_grid_procrustes_align(res1.loadings, L1)
+            _qfm_grid_proj_resid(L1_al, res2.loadings) .- R_obs
+        end
+        boot_stats[b] = T(sum(abs2, Rb))
+        return nothing
+    end
+
+    if threaded && Threads.nthreads() > 1 && n_boot > 1
+        n_workers = min(n_boot, Threads.nthreads())
+        X_pool = [Matrix{T}(undef, T_obs, N) for _ in 1:n_workers]
+        Xt_pool = [Matrix{T}(undef, N, T_obs) for _ in 1:n_workers]
+        idx_pool = [Vector{Int}(undef, T_obs) for _ in 1:n_workers]
+        F1_pool = [Matrix{T}(undef, T_obs, r1) for _ in 1:n_workers]
+        F2_pool = [Matrix{T}(undef, T_obs, r2) for _ in 1:n_workers]
+        base, rem = divrem(n_boot, n_workers)
+        Threads.@threads for c in 1:n_workers
+            start_b = (c - 1) * base + min(c - 1, rem) + 1
+            len_b = base + (c <= rem ? 1 : 0)
+            for b in start_b:(start_b + len_b - 1)
+                _run_boot!(b, X_pool[c], Xt_pool[c], idx_pool[c], F1_pool[c], F2_pool[c])
+            end
+        end
+    else
+        X_b = Matrix{T}(undef, T_obs, N)
+        X_bt = Matrix{T}(undef, N, T_obs)
+        idx = Vector{Int}(undef, T_obs)
+        F1_init = Matrix{T}(undef, T_obs, r1)
+        F2_init = Matrix{T}(undef, T_obs, r2)
+        for b in 1:n_boot
+            _run_boot!(b, X_b, X_bt, idx, F1_init, F2_init)
+        end
+    end
+
+    pval = T((1 + count(>=(stat_obs), boot_stats)) / (n_boot + 1))
+    res = QFMLoadingConstancyTest{T}(
+        tau1, tau2, r1, r2, stat_obs, pval, boot_stats,
+        n_boot, ell, bootstrap, T_obs, N, dof_val, nothing,
+    )
+    return _with_manifest(res, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}(
+            "tau1" => Float64(tau1), "tau2" => Float64(tau2),
+            "r1" => r1, "r2" => r2, "n_boot" => n_boot,
+            "block_length" => ell, "bootstrap" => String(bootstrap),
+        )))
+end
+
+"""
+    test_qfm_loading_constancy(grid_or_X, tau1, tau2; r=:auto, n_boot=299,
+                               block_length=0, bootstrap=:block, threaded=true,
+                               max_iter=60, tol=1e-5, rng=Random.default_rng(),
+                               seed=nothing, kwargs...) -> QFMLoadingConstancyTest
+
+Test equality of quantile factor loading subspaces across quantiles `tau1` and `tau2`:
+
+```math
+H_0: \\mathrm{span}(\\Lambda(\\tau_1)) = \\mathrm{span}(\\Lambda(\\tau_2)),
+\\qquad
+S = \\|(I - P_{\\hat{\\Lambda}(\\tau_2)}) \\hat{\\Lambda}(\\tau_1)\\|_F^2
+```
+
+where:
+- ``\\Lambda(\\tau_1)`` is the ``N \\times r_1`` loading matrix at quantile ``\\tau_1``
+- ``\\Lambda(\\tau_2)`` is the ``N \\times r_2`` loading matrix at quantile ``\\tau_2``
+- ``P_{\\hat{\\Lambda}(\\tau_2)}`` is the orthogonal projector onto ``\\mathrm{span}(\\hat{\\Lambda}(\\tau_2))``
+- ``S`` is the Frobenius-squared projection residual norm (when ``r_1 < r_2``, the higher-rank loadings are projected onto the lower-rank subspace so rank differences are detected symmetrically)
+
+P-values are computed via a recentered moving-block (`bootstrap=:block`) or wild-panel
+(`bootstrap=:wild`) bootstrap with Procrustes rotation alignment.
+
+# Arguments
+- `grid_or_X` — a [`QuantileFactorGrid`](@ref) containing both `tau1` and `tau2`, or a data panel `X` (`T_obs × N`)
+- `tau1::Real`, `tau2::Real` — quantile levels strictly in `(0, 1)`
+
+# Keyword Arguments
+- `r::Union{Int,Symbol,AbstractVector{<:Integer}} = :auto` — factor rank specification when
+  passing a raw matrix `X` (fixed `Int`, `:auto`, or 2-element rank vector `[r₁, r₂]`)
+- `n_boot::Int = 299` — number of bootstrap replications
+- `block_length::Int = 0` — moving-block length (`0` uses `⌈T^{1/3}⌉`)
+- `bootstrap::Symbol = :block` — `:block` (recentered moving-block) or `:wild` (recentered wild-panel)
+- `threaded::Bool = true` — parallelize bootstrap draws across threads with pre-seeded per-slot RNGs
+- `max_iter::Int = 60` — maximum IQR iterations per warm-started bootstrap draw
+- `tol::Real = 1e-5` — convergence tolerance per bootstrap draw
+- `rng::AbstractRNG = Random.default_rng()` — RNG for bootstrap resampling
+- `seed::Union{Integer,Nothing} = nothing` — integer seed overriding `rng` via `Xoshiro(seed)`
+- `kwargs...` — additional keywords forwarded to [`estimate_qfm`](@ref) when passing `X`
+
+# Returns
+A [`QFMLoadingConstancyTest`](@ref) subtyping `StatsAPI.HypothesisTest`.
+
+# References
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile factor models.
+  *Econometrica*, 89(2), 875–910.
+"""
+function test_qfm_loading_constancy(grid::QuantileFactorGrid{T},
+                                    tau1::Real, tau2::Real;
+                                    n_boot::Int=299,
+                                    block_length::Int=0,
+                                    bootstrap::Symbol=:block,
+                                    threaded::Bool=true,
+                                    max_iter::Int=60,
+                                    tol::Real=1e-5,
+                                    rng::AbstractRNG=Random.default_rng(),
+                                    seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
+    m1 = grid[tau=tau1]
+    m2 = grid[tau=tau2]
+    return _qfm_grid_constancy_core(m1, m2, n_boot, block_length, bootstrap,
+                                    threaded, max_iter, tol, rng, seed)
+end
+
+function test_qfm_loading_constancy(X::AbstractMatrix{T},
+                                    tau1::Real, tau2::Real;
+                                    r::Union{Int,Symbol,AbstractVector{<:Integer}}=:auto,
+                                    n_boot::Int=299,
+                                    block_length::Int=0,
+                                    bootstrap::Symbol=:block,
+                                    threaded::Bool=true,
+                                    max_iter::Int=60,
+                                    tol::Real=1e-5,
+                                    rng::AbstractRNG=Random.default_rng(),
+                                    seed::Union{Integer,Nothing}=nothing,
+                                    kwargs...) where {T<:AbstractFloat}
+    _validate_data(X, "X")
+    T_obs, N = size(X)
+    tau1_T = T(tau1)
+    tau2_T = T(tau2)
+    (isfinite(tau1) && zero(T) < tau1_T < one(T)) ||
+        throw(ArgumentError("tau1 must lie strictly in (0, 1), got $tau1"))
+    (isfinite(tau2) && zero(T) < tau2_T < one(T)) ||
+        throw(ArgumentError("tau2 must lie strictly in (0, 1), got $tau2"))
+
+    r1_spec, r2_spec = if r isa AbstractVector
+        length(r) == 2 || throw(ArgumentError("rank vector r must have length 2, got $(length(r))"))
+        (Int(r[1]), Int(r[2]))
+    else
+        (r, r)
+    end
+
+    rng_use = _resolve_repro_rng(rng, seed)
+    s1 = rand(rng_use, UInt64)
+    s2 = rand(rng_use, UInt64)
+    X_orig = Matrix{T}(X)
+    m1 = estimate_qfm(X_orig, r1_spec, tau1_T; kwargs..., rng=Random.Xoshiro(s1), seed=nothing)
+    m2 = estimate_qfm(X_orig, r2_spec, tau2_T; kwargs..., rng=Random.Xoshiro(s2), seed=nothing)
+
+    # Pass already-resolved rng_use with seed=nothing for the bootstrap loop, then attach manifest with user's seed
+    res = _qfm_grid_constancy_core(m1, m2, n_boot, block_length, bootstrap,
+                                   threaded, max_iter, tol, rng_use, nothing)
+    return _with_manifest(res, capture_manifest(; seed=seed,
+        settings=Dict{String,Any}(
+            "tau1" => Float64(tau1_T), "tau2" => Float64(tau2_T),
+            "r1" => m1.r, "r2" => m2.r, "n_boot" => n_boot,
+            "block_length" => res.block_length, "bootstrap" => String(bootstrap),
+        )))
+end
+
+@float_fallback test_qfm_loading_constancy X
