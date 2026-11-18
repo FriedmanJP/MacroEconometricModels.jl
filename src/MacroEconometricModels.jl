@@ -567,6 +567,7 @@ include("vecm/granger.jl")
 # FAVAR analysis and forecast (after irf + fevd + hd)
 include("favar/analysis.jl")
 include("favar/forecast.jl")
+include("factor/gdfm_i1.jl")
 
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
@@ -1157,6 +1158,7 @@ export is_stationary
 # Generalized Dynamic Factor Model functions
 export estimate_gdfm
 export FHLZModel, estimate_gdfm_fhlz
+export CointegratedGDFM, estimate_gdfm_i1
 export ic_criteria_gdfm
 export hallin_liska, HallinLiskaResult
 export bai_ng_q, BaiNgQResult
