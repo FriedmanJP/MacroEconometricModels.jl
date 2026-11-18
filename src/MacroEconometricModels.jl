@@ -168,6 +168,7 @@ include("reg/stability.jl")     # EV-32 (#440): recursive residuals / CUSUM(SQ) 
 include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
+include("ri/discrete_choice.jl")
 
 # Systems estimation — SUR / 3SLS (EV-35, #443) — after reg/ (reuses robust_inv,
 # _coef_table, _pretty_table, _sig_legend). Greenfield src/system/ module.
@@ -1516,6 +1517,7 @@ export RegModel, LogitModel, ProbitModel, MarginalEffects
 export OrderedLogitModel, OrderedProbitModel, estimate_ologit, estimate_oprobit
 export generalized_residuals   # #507: ordered-model score residual
 export MultinomialLogitModel, estimate_mlogit
+export RIDiscreteChoiceSolution, RIIIADiagnostic, RILogitModel, solve_ri_discrete, ri_iia_diagnostic, estimate_ri_logit
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
