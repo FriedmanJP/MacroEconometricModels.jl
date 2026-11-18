@@ -563,6 +563,8 @@ include("lp/fevd.jl")
 # DSGE simulation, IRF/FEVD bridge (after var/irf.jl, var/fevd.jl, lp/fevd.jl)
 include("dsge/simulation.jl")
 include("dsge/analytical.jl")
+include("ri/types.jl")
+include("ri/steady_state.jl")
 include("dsge/pruning.jl")
 
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
@@ -917,6 +919,9 @@ export CounterfactualHistory, counterfactual_forecast, counterfactual_history
 # Spanning + forecast-sufficiency diagnostics (CF-19, #399)
 export SpanningDiagnostic, ForecastSufficiency
 export spanning_diagnostic, forecast_sufficiency
+
+# Rational Inattention (Sims 2003 steady-state LQG Kalman filter)
+export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
