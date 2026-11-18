@@ -1314,6 +1314,213 @@ using Random
         @test_throws ArgumentError spectral_fevd(sdfm_fglr, (0.5, π + 0.1))
     end
 
+    # ==========================================================================
+    # Ragged-Edge EM-Spectral GDFM, Multi-Lag Projection & nowcast_gdfm (#899)
+    # ==========================================================================
+
+    @testset "EM-spectral GDFM missing-data & ragged-edge recovery (#899)" begin
+        rng = Random.Xoshiro(89901)
+        T_obs, N, q = 250, 40, 2
+        d = dgp_dynamic_factors(rng; A=[0.7 0.1; 0.05 0.65], N=N, T=T_obs, idio_sd=0.3)
+        X = d.X
+        chi_true = d.F * d.Lambda'
+
+        X_nan = copy(X)
+        for t in 1:(T_obs - 1), j in 1:N
+            rand(rng) < 0.10 && (X_nan[t, j] = NaN)
+        end
+        tail_idx = sort(randperm(rng, N)[1:round(Int, 0.30 * N)])
+        X_nan[T_obs, tail_idx] .= NaN
+        miss_mask = isnan.(X_nan)
+        obs_mask = .!miss_mask
+
+        # Default allow_missing=false rejects NaN and Inf
+        @test_throws ArgumentError estimate_gdfm(X_nan, q)
+        X_inf = copy(X); X_inf[5, 3] = Inf
+        @test_throws ArgumentError estimate_gdfm(X_inf, q)
+        @test_throws ArgumentError estimate_gdfm(X_inf, q; allow_missing=true)
+
+        # All-NaN row/column and invalid EM keyword arguments
+        X_bad_row = copy(X); X_bad_row[10, :] .= NaN
+        @test_throws ArgumentError estimate_gdfm(X_bad_row, q; allow_missing=true)
+        X_bad_col = copy(X); X_bad_col[:, 4] .= NaN
+        @test_throws ArgumentError estimate_gdfm(X_bad_col, q; allow_missing=true)
+        @test_throws ArgumentError estimate_gdfm(X_nan, q; allow_missing=true, em_max_iter=0)
+        @test_throws ArgumentError estimate_gdfm(X_nan, q; allow_missing=true, em_tol=0.0)
+        @test_throws ArgumentError estimate_gdfm(X, q; n_lags_proj=-1)
+        @test_throws ArgumentError estimate_gdfm(X, q; n_lags_proj=T_obs)
+
+        m_em = estimate_gdfm(X_nan, q; allow_missing=true)
+        @test m_em isa GeneralizedDynamicFactorModel{Float64}
+        @test all(isfinite, m_em.X)
+        @test all(isfinite, m_em.common_component)
+        @test all(isfinite, m_em.common_component_onesided)
+        @test all(isfinite, m_em.factors)
+        @test m_em.X[obs_mask] ≈ X[obs_mask]
+        @test m_em.common_component + m_em.idiosyncratic ≈ m_em.X atol=1e-10
+
+        @test cor(m_em.common_component[miss_mask], chi_true[miss_mask]) > 0.88
+
+        # Downstream methods work cleanly on EM-imputed GDFM without NaN
+        fc_em = forecast(m_em, 4; method=:one_sided)
+        @test all(isfinite, fc_em.observables)
+        @test all(isfinite, fc_em.observables_se)
+        bp_em = bandpass_gdfm(m_em, (0.0, π / 4))
+        @test all(isfinite, bp_em.common_twosided)
+        hd_em = historical_decomposition(m_em)
+        @test verify_decomposition(hd_em; tol=1e-9)
+
+        # Clean data with allow_missing=true matches allow_missing=false
+        m_clean_a = estimate_gdfm(X, q; allow_missing=false)
+        m_clean_b = estimate_gdfm(X, q; allow_missing=true)
+        @test m_clean_a.common_component ≈ m_clean_b.common_component atol=1e-12
+        @test m_clean_a.Z ≈ m_clean_b.Z atol=1e-12
+
+        # Unstandardized allow_missing=true
+        m_nostd = estimate_gdfm(X_nan, q; allow_missing=true, standardize=false)
+        @test all(isfinite, m_nostd.X)
+        @test cor(m_nostd.common_component[miss_mask], chi_true[miss_mask]) > 0.88
+    end
+
+    @testset "Multi-lag stacked FHLR projection (n_lags_proj) (#899)" begin
+        rng = Random.Xoshiro(89902)
+        T_obs, N, q = 200, 18, 2
+        d = dgp_dynamic_factors(rng; A=[0.7 0.1; 0.05 0.65], N=N, T=T_obs, idio_sd=0.25)
+        X = d.X
+
+        m0 = estimate_gdfm(X, q; r=3, n_lags_proj=0)
+        m0_def = estimate_gdfm(X, q; r=3)
+        @test m0.Z ≈ m0_def.Z atol=1e-12
+        @test size(m0.Z) == (N, 3)
+
+        m2 = estimate_gdfm(X, q; r=3, n_lags_proj=2)
+        @test size(m2.Z) == (N * 3, 3)
+        @test size(m2.factors_onesided) == (T_obs, 3)
+        @test size(m2.common_component_onesided) == (T_obs, N)
+        @test all(isfinite, m2.Z)
+        @test all(isfinite, m2.factors_onesided)
+        @test all(isfinite, m2.common_component_onesided)
+
+        # Stacked projection forecasts agree across stored vs on-the-fly n_lags_proj and methods
+        fc2_stored = forecast(m2, 4; method=:one_sided, ci_method=:theoretical)
+        fc2_onthefly = forecast(m0, 4; method=:one_sided, n_lags_proj=2, ci_method=:theoretical)
+        fc2_spectral = forecast(m2, 4; method=:spectral, ci_method=:theoretical)
+        @test fc2_stored.observables ≈ fc2_onthefly.observables atol=1e-10
+        @test fc2_stored.observables_se ≈ fc2_onthefly.observables_se atol=1e-10
+        @test fc2_stored.observables ≈ fc2_spectral.observables atol=1e-10
+        @test all(isfinite, fc2_stored.observables)
+        @test all(fc2_stored.observables_se .> 0)
+
+        fc2_none = forecast(m2, 4; method=:one_sided, ci_method=:none)
+        @test all(fc2_none.observables_lower .== 0)
+        @test fc2_none.observables ≈ fc2_stored.observables atol=1e-12
+
+        fc2_boot = forecast(m2, 4; method=:one_sided, ci_method=:bootstrap, n_boot=30, seed=7)
+        @test all(isfinite, fc2_boot.observables_se)
+        @test all(fc2_boot.observables_upper .>= fc2_boot.observables_lower)
+
+        # Smoothed periodogram with n_lags_proj=2
+        m2_sp = estimate_gdfm(X, q; spectral=:smoothed_periodogram, n_lags_proj=2)
+        @test size(m2_sp.Z) == (N * 3, q)
+        @test all(isfinite, forecast(m2_sp, 3; method=:one_sided).observables)
+        @test_throws ArgumentError forecast(m0, 3; method=:one_sided, n_lags_proj=-1)
+    end
+
+    @testset "nowcast_gdfm Wiener-Kolmogorov nowcasting, RSER-01, Float32 & display (#899)" begin
+        rng = Random.Xoshiro(89903)
+        T_obs, N, q = 250, 40, 2
+        d = dgp_dynamic_factors(rng; A=[0.7 0.1; 0.05 0.65], N=N, T=T_obs, idio_sd=0.3)
+        X = d.X
+        names = ["v$i" for i in 1:N]
+
+        X_nan = copy(X)
+        for t in 1:(T_obs - 1), j in 1:N
+            rand(rng) < 0.10 && (X_nan[t, j] = NaN)
+        end
+        tail_idx = sort(randperm(rng, N)[1:round(Int, 0.30 * N)])
+        X_nan[T_obs, tail_idx] .= NaN
+
+        gdfm_clean = estimate_gdfm(X, q; varnames=names)
+        nc = nowcast_gdfm(gdfm_clean, X_nan, 0)
+        @test nc isa GDFMNowcastResult{Float64}
+        @test fieldnames(GDFMNowcastResult) == (
+            :nowcast, :se, :panel_imputed, :horizon, :n_lags, :observed_mask, :varnames)
+        @test length(nc.nowcast) == N
+        @test length(nc.se) == N
+        @test size(nc.panel_imputed) == size(X_nan)
+        @test nc.horizon == 0
+        @test nc.n_lags == 2
+        @test nc.observed_mask == BitMatrix(.!isnan.(X_nan))
+        @test nc.varnames == names
+        @test all(isfinite, nc.nowcast)
+        @test all(>(0.0), nc.se)
+        @test all(isfinite, nc.panel_imputed)
+        @test nc.panel_imputed[nc.observed_mask] == X_nan[nc.observed_mask]
+
+        # Lower RMSE on masked T_obs entries than univariate AR(2) benchmark
+        rmse_nc = sqrt(mean(abs2, nc.nowcast[tail_idx] .- X[T_obs, tail_idx]))
+        ar2_preds = Float64[]
+        for j in tail_idx
+            y = X_nan[1:(T_obs - 1), j]
+            medj = median(filter(!isnan, y))
+            yc = [isnan(v) ? medj : v for v in y]
+            Y_t = yc[3:end]
+            Z_t = hcat(ones(length(Y_t)), yc[2:(end - 1)], yc[1:(end - 2)])
+            b = Z_t \ Y_t
+            push!(ar2_preds, b[1] + b[2] * yc[end] + b[3] * yc[end - 1])
+        end
+        rmse_ar2 = sqrt(mean(abs2, ar2_preds .- X[T_obs, tail_idx]))
+        @test rmse_nc < rmse_ar2
+
+        # Multi-horizon (h > 0 forecast, h < 0 backcast), unstandardized, smoothed_periodogram
+        nc_h1 = nowcast_gdfm(gdfm_clean, X_nan, 1; n_lags=3)
+        nc_back = nowcast_gdfm(gdfm_clean, X_nan, -1; n_lags=2)
+        @test nc_h1.horizon == 1 && nc_h1.n_lags == 3 && all(isfinite, nc_h1.nowcast)
+        @test nc_back.horizon == -1 && all(isfinite, nc_back.nowcast)
+        @test all(nc_h1.se .> 0) && all(nc_back.se .> 0)
+
+        gdfm_nostd = estimate_gdfm(X, q; standardize=false, spectral=:smoothed_periodogram)
+        nc_nostd = nowcast_gdfm(gdfm_nostd, X_nan, 0)
+        @test all(isfinite, nc_nostd.nowcast) && all(>(0.0), nc_nostd.se)
+
+        # Single-row ragged panel and all-NaN tail row edge cases
+        nc_1row = nowcast_gdfm(gdfm_clean, X_nan[end:end, :], 0)
+        @test size(nc_1row.panel_imputed) == (1, N) && all(isfinite, nc_1row.nowcast)
+        X_allnan_tail = copy(X_nan)
+        X_allnan_tail[end, :] .= NaN
+        nc_allnan = nowcast_gdfm(gdfm_clean, X_allnan_tail, 0; n_lags=2)
+        @test all(isfinite, nc_allnan.nowcast) && all(isfinite, nc_allnan.panel_imputed)
+
+        # Display, report, RSER-01 _generic_construct & Float32
+        buf = IOBuffer()
+        show(buf, nc)
+        @test occursin("GDFM Ragged-Edge Nowcast", String(take!(buf)))
+        redirect_stdout(devnull) do
+            report(nc)
+        end
+        vals = ntuple(i -> getfield(nc, fieldnames(GDFMNowcastResult)[i]), fieldcount(GDFMNowcastResult))
+        @test GDFMNowcastResult{Float64}(vals...).nowcast == nc.nowcast
+        @test MacroEconometricModels._generic_construct(GDFMNowcastResult, Any[vals...]) isa GDFMNowcastResult{Float64}
+
+        gdfm32 = estimate_gdfm(Float32.(X_nan), q; allow_missing=true, n_lags_proj=2)
+        @test gdfm32 isa GeneralizedDynamicFactorModel{Float32}
+        @test size(gdfm32.Z) == (N * 3, q)
+        nc32 = nowcast_gdfm(gdfm32, Float32.(X_nan), 0)
+        @test nc32 isa GDFMNowcastResult{Float32}
+        @test eltype(nc32.nowcast) === Float32
+        @test eltype(nc32.se) === Float32
+        @test eltype(nc32.panel_imputed) === Float32
+        vals32 = ntuple(i -> getfield(nc32, fieldnames(GDFMNowcastResult)[i]), fieldcount(GDFMNowcastResult))
+        @test MacroEconometricModels._generic_construct(GDFMNowcastResult, Any[vals32...]) isa GDFMNowcastResult{Float32}
+
+        # Validation errors
+        X_bad_inf = copy(X_nan); X_bad_inf[2, 2] = -Inf
+        @test_throws ArgumentError nowcast_gdfm(gdfm_clean, X_bad_inf, 0)
+        @test_throws ArgumentError nowcast_gdfm(gdfm_clean, X_nan[:, 1:(N - 1)], 0)
+        @test_throws ArgumentError nowcast_gdfm(gdfm_clean, zeros(0, N), 0)
+        @test_throws ArgumentError nowcast_gdfm(gdfm_clean, X_nan, 0; n_lags=-1)
+    end
+
 end
 
 # Run all tests

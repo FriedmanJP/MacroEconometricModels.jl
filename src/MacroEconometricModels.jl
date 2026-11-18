@@ -1176,6 +1176,7 @@ export is_stationary
 
 # Generalized Dynamic Factor Model functions
 export estimate_gdfm
+export GDFMNowcastResult, nowcast_gdfm
 export FHLZModel, estimate_gdfm_fhlz
 export CointegratedGDFM, estimate_gdfm_i1
 export BandPassGDFMResult, EurocoinResult, SpectralFEVDResult

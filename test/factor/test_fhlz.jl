@@ -340,4 +340,68 @@ using MacroEconometricModels
         @test isfinite(sdfm_px.first_stage_F)
         @test irf(sdfm_px, 10).values[1, 1, 1] ≈ 1.0 atol=1e-10
     end
+
+    # =========================================================================
+    # 6. EM Missing-Data / Ragged-Edge Support (#899)
+    # =========================================================================
+
+    @testset "EM-FHLZ missing-data & ragged-edge recovery (#899)" begin
+        rng = Random.Xoshiro(89911)
+        T_obs, N, q = 250, 40, 2
+        d = dgp_dynamic_factors(rng; A=[0.7 0.1; 0.05 0.65], N=N, T=T_obs, idio_sd=0.3)
+        X = d.X
+        chi_true = d.F * d.Lambda'
+
+        X_nan = copy(X)
+        for t in 1:(T_obs - 1), j in 1:N
+            rand(rng) < 0.10 && (X_nan[t, j] = NaN)
+        end
+        tail_idx = sort(randperm(rng, N)[1:round(Int, 0.30 * N)])
+        X_nan[T_obs, tail_idx] .= NaN
+        miss_mask = isnan.(X_nan)
+        obs_mask = .!miss_mask
+
+        # Default allow_missing=false rejects NaN and Inf
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_nan, q; n_perm=8, seed=42)
+        X_inf = copy(X); X_inf[3, 4] = Inf
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_inf, q; allow_missing=true, n_perm=8, seed=42)
+
+        # All-NaN row/column and invalid EM kwargs
+        X_bad_row = copy(X); X_bad_row[7, :] .= NaN
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_bad_row, q; allow_missing=true, n_perm=4, seed=42)
+        X_bad_col = copy(X); X_bad_col[:, 5] .= NaN
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_bad_col, q; allow_missing=true, n_perm=4, seed=42)
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_nan, q; allow_missing=true, em_max_iter=0, n_perm=4, seed=42)
+        @test_throws ArgumentError estimate_gdfm_fhlz(X_nan, q; allow_missing=true, em_tol=0.0, n_perm=4, seed=42)
+
+        m = estimate_gdfm_fhlz(X_nan, q; allow_missing=true, n_perm=8, seed=42)
+        @test m isa FHLZModel{Float64}
+        @test all(isfinite, m.X)
+        @test all(isfinite, m.common_component)
+        @test all(isfinite, m.idiosyncratic)
+        @test all(isfinite, m.innovations)
+        @test all(isfinite, m.impulse_filters)
+        @test m.X[obs_mask] ≈ X[obs_mask]
+
+        offset = T_obs - size(m.common_component, 1)
+        @test m.common_component + m.idiosyncratic ≈ m.X[(offset + 1):end, :] atol=1e-10
+        miss_eff = miss_mask[(offset + 1):end, :]
+        @test cor(m.common_component[miss_eff], chi_true[(offset + 1):end, :][miss_eff]) > 0.85
+
+        # Thread determinism under allow_missing=true
+        m_seq = estimate_gdfm_fhlz(X_nan, q; allow_missing=true, n_perm=8, threaded=false, seed=42)
+        @test m.common_component ≈ m_seq.common_component atol=1e-10
+        @test m.X ≈ m_seq.X atol=1e-10
+
+        # Complete data with allow_missing=true matches allow_missing=false
+        m_c1 = estimate_gdfm_fhlz(X, q; allow_missing=false, n_perm=6, seed=9)
+        m_c2 = estimate_gdfm_fhlz(X, q; allow_missing=true, n_perm=6, seed=9)
+        @test m_c1.common_component ≈ m_c2.common_component atol=1e-12
+
+        # Float32 precision support under allow_missing=true
+        m32 = estimate_gdfm_fhlz(Float32.(X_nan), q; allow_missing=true, n_perm=4, seed=42)
+        @test m32 isa FHLZModel{Float32}
+        @test all(isfinite, m32.X)
+        @test all(isfinite, m32.common_component)
+    end
 end

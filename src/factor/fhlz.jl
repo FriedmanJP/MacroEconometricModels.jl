@@ -73,7 +73,18 @@ end
 
 Estimate the one-sided infinite-dimensional Generalized Dynamic Factor Model of
 Forni, Hallin, Lippi & Zaffaroni (2015, 2017) using random-permutation blockwise
-Yule–Walker VARs.
+Yule–Walker VARs, with optional EM missing-data and ragged-edge imputation:
+
+```math
+X_t = \\chi_t + \\xi_t, \\qquad \\chi_t = \\sum_{h=0}^{\\infty} B_h u_{t-h}
+```
+
+where:
+- ``X_t`` is the ``N \\times 1`` observed panel vector at time ``t``
+- ``\\chi_t`` is the ``N \\times 1`` one-sided common component
+- ``\\xi_t`` is the ``N \\times 1`` weakly correlated idiosyncratic component
+- ``B_h`` is the ``N \\times q`` impulse-response filter matrix at lag ``h``
+- ``u_t`` is the ``q \\times 1`` vector of orthonormal dynamic common innovations
 
 # Arguments
 - `X::AbstractMatrix`: Panel data matrix (`T_obs × N`)
@@ -91,6 +102,17 @@ Yule–Walker VARs.
 - `varnames::Union{Nothing,Vector{String}}=nothing`: Panel variable names (length `N`)
 - `seed::Union{Integer,Nothing}=nothing`: Optional RNG seed recorded in `manifest`
 - `rng::AbstractRNG=Random.default_rng()`: RNG for permutation draws
+- `allow_missing::Bool=false`: Allow `NaN` entries (interior or ragged-edge) and impute via
+  cross-sectional EM-PCA warm-start followed by EM-FHLZ iteration (`Inf`/`-Inf` and
+  all-`NaN` rows or columns are rejected)
+- `em_max_iter::Int=50`: Maximum EM iterations when `allow_missing=true` and `X` contains `NaN`
+- `em_tol::Real=1e-4`: Relative convergence tolerance on missing-cell updates
+  ``\\max |\\Delta \\hat{\\chi}_{\\text{missing}}|``
+
+# Returns
+[`FHLZModel`](@ref) storing one-sided common/idiosyncratic components, orthonormal
+innovations, impulse filters, and (when `allow_missing=true`) the converged finite
+EM-imputed panel in `model.X`.
 """
 function estimate_gdfm_fhlz(
     X::AbstractMatrix{T},
@@ -106,15 +128,24 @@ function estimate_gdfm_fhlz(
     varnames::Union{Nothing,Vector{String}}=nothing,
     seed::Union{Integer,Nothing}=nothing,
     rng::AbstractRNG=Random.default_rng(),
+    allow_missing::Bool=false,
+    em_max_iter::Int=50,
+    em_tol::Real=1e-4,
 ) where {T<:AbstractFloat}
-    _validate_data(X, "X")
     T_obs, N = size(X)
+    if allow_missing
+        _gdfm_validate_missing_data(X, "X")
+    else
+        _validate_data(X, "X")
+    end
     validate_factor_inputs(T_obs, N, q; context="dynamic factors")
     validate_option(kernel, "kernel", (:bartlett, :parzen, :tukey))
     validate_option(lag_criterion, "lag_criterion", (:bic, :aic))
     p_max >= 1 || throw(ArgumentError("p_max must be >= 1, got $p_max"))
     n_perm >= 1 || throw(ArgumentError("n_perm must be >= 1, got $n_perm"))
     irf_horizon >= 1 || throw(ArgumentError("irf_horizon must be >= 1, got $irf_horizon"))
+    em_max_iter >= 1 || throw(ArgumentError("em_max_iter must be >= 1, got $em_max_iter"))
+    em_tol > 0 || throw(ArgumentError("em_tol must be > 0, got $em_tol"))
 
     p_max_use = min(p_max, T_obs - 2)
     T_eff = T_obs - p_max_use
@@ -126,14 +157,70 @@ function estimate_gdfm_fhlz(
         "varnames has $(length(vn)) entries but X has $N columns"))
 
     rng = _resolve_repro_rng(rng, seed)
+    M_bw = bandwidth > 0 ? bandwidth : _select_lag_window(T_obs)
+    # Pre-generate per-permutation seeds sequentially for thread and EM determinism
+    seeds = rand(rng, UInt64, n_perm)
 
-    X_orig = Matrix{T}(X)
+    has_missing = allow_missing && any(isnan, X)
+    X_orig = if has_missing
+        _fhlz_em_impute(
+            X, q, M_bw, kernel, p_max_use, lag_criterion,
+            n_perm, irf_horizon, standardize, threaded, seeds,
+            em_max_iter, T(em_tol))
+    else
+        Matrix{T}(X)
+    end
+
+    core = _fhlz_core(
+        X_orig, q, M_bw, kernel, p_max_use, lag_criterion,
+        n_perm, irf_horizon, standardize, threaded, seeds)
+    idiosyncratic = X_orig[(p_max_use + 1):end, :] - core.common_component
+
+    model = FHLZModel{T}(
+        X_orig, q, core.common_component, idiosyncratic, core.U_final, core.B_final,
+        core.p_blocks, n_perm, M_bw, kernel, standardize, core.var_explained, vn, nothing,
+    )
+    settings = Dict{String,Any}(
+        "q" => q,
+        "bandwidth" => M_bw,
+        "kernel" => String(kernel),
+        "p_max" => p_max_use,
+        "lag_criterion" => String(lag_criterion),
+        "n_perm" => n_perm,
+        "irf_horizon" => irf_horizon,
+        "standardize" => standardize,
+        "threaded" => threaded,
+    )
+    allow_missing && (settings["allow_missing"] = true)
+    return _with_manifest(model, capture_manifest(; seed=seed, settings=settings))
+end
+
+@float_fallback estimate_gdfm_fhlz X
+
+# =============================================================================
+# Internal Helpers
+# =============================================================================
+
+"""Core complete-panel FHLZ estimator returning common component, innovations, filters, and spectra."""
+function _fhlz_core(
+    X_orig::Matrix{T},
+    q::Int,
+    M_bw::Int,
+    kernel::Symbol,
+    p_max_use::Int,
+    lag_criterion::Symbol,
+    n_perm::Int,
+    irf_horizon::Int,
+    standardize::Bool,
+    threaded::Bool,
+    seeds::Vector{UInt64},
+) where {T<:AbstractFloat}
+    T_obs, N = size(X_orig)
     μ = vec(mean(X_orig; dims=1))
     σ = max.(vec(std(X_orig; dims=1)), T(1e-10))
     X_proc = standardize ? (X_orig .- μ') ./ σ' : copy(X_orig)
 
     # Step 1: Lag-window spectral estimation, common spectral density, and Γ_χ(0..p_max_use)
-    M_bw = bandwidth > 0 ? bandwidth : _select_lag_window(T_obs)
     frequencies, spectral_X = _fhlz_lag_window_spectrum(X_proc, M_bw, kernel, p_max_use)
     eigenvalues, eigenvectors = _spectral_eigendecomposition(spectral_X)
     loadings = eigenvectors[:, 1:q, :]
@@ -150,10 +237,7 @@ function estimate_gdfm_fhlz(
         Γ_chi_pos[k + 1] = Gk
     end
 
-    # Step 2: Pre-generate per-permutation seeds sequentially for thread determinism
-    seeds = rand(rng, UInt64, n_perm)
     n_blocks = max(1, div(N, q + 1))
-
     PermResultT = NamedTuple{
         (:p_blocks_m, :chi_m, :U_m, :B_m),
         Tuple{Vector{Int},Matrix{T},Matrix{T},Array{T,3}},
@@ -214,31 +298,88 @@ function estimate_gdfm_fhlz(
     else
         common_component = chi_bar
     end
-    idiosyncratic = X_orig[(p_max_use + 1):end, :] - common_component
 
-    model = FHLZModel{T}(
-        X_orig, q, common_component, idiosyncratic, U_final, B_final,
-        p_blocks, n_perm, M_bw, kernel, standardize, var_explained, vn, nothing,
+    (
+        common_component = common_component,
+        U_final = U_final,
+        B_final = B_final,
+        p_blocks = p_blocks,
+        var_explained = var_explained,
+        frequencies = frequencies,
+        spectral_X = spectral_X,
+        spectral_chi = spectral_chi,
+        μ = μ,
+        σ = σ,
     )
-    return _with_manifest(model, capture_manifest(; seed=seed,
-        settings=Dict{String,Any}(
-            "q" => q,
-            "bandwidth" => M_bw,
-            "kernel" => String(kernel),
-            "p_max" => p_max_use,
-            "lag_criterion" => String(lag_criterion),
-            "n_perm" => n_perm,
-            "irf_horizon" => irf_horizon,
-            "standardize" => standardize,
-            "threaded" => threaded,
-        )))
 end
 
-@float_fallback estimate_gdfm_fhlz X
+"""EM missing-data imputation for `estimate_gdfm_fhlz(..., allow_missing=true)`."""
+function _fhlz_em_impute(
+    X::AbstractMatrix{T},
+    q::Int,
+    M_bw::Int,
+    kernel::Symbol,
+    p_max_use::Int,
+    lag_criterion::Symbol,
+    n_perm::Int,
+    irf_horizon::Int,
+    standardize::Bool,
+    threaded::Bool,
+    seeds::Vector{UInt64},
+    em_max_iter::Int,
+    em_tol::T,
+) where {T<:AbstractFloat}
+    T_obs, N = size(X)
+    X_cur, obs_mask, miss_mask, scale_obs = _gdfm_init_em_pca(
+        X, min(2 * q, max(1, N - 1)), standardize; tol=min(em_tol, T(1e-4)))
+    X_raw = Matrix{T}(X)
+    L_em = min(max(p_max_use, 2), max(T_obs - 1, 0))
+    t_bnd_start = max(1, T_obs - 2)
+    wk_rows = Int[]
+    @inbounds for t in 1:T_obs
+        if (t <= p_max_use || t >= t_bnd_start) && any(!, @view(obs_mask[t, :]))
+            push!(wk_rows, t)
+        end
+    end
 
-# =============================================================================
-# Internal Helpers
-# =============================================================================
+    for _ in 1:em_max_iter
+        prev_miss = X_cur[miss_mask]
+        core = _fhlz_core(
+            X_cur, q, M_bw, kernel, p_max_use, lag_criterion,
+            n_perm, irf_horizon, standardize, threaded, seeds)
+
+        X_next = copy(X_cur)
+        @inbounds for t in (p_max_use + 1):(t_bnd_start - 1)
+            t_eff = t - p_max_use
+            for j in 1:N
+                obs_mask[t, j] || (X_next[t, j] = core.common_component[t_eff, j])
+            end
+        end
+
+        if !isempty(wk_rows)
+            k_max_wk = min(max(T_obs - 1, 0), 2 * L_em)
+            Γ_X_pos, Γ_chi_pos = _gdfm_spectral_autocovariances(
+                core.spectral_X, core.spectral_chi, core.frequencies, :lag_window, T_obs, k_max_wk)
+            σ_use = standardize ? core.σ : ones(T, N)
+            X_obs_proc = (X_raw .- core.μ') ./ σ_use'
+            for t in wk_rows
+                t_lo = max(1, t - L_em)
+                t_hi = min(T_obs, t + L_em)
+                chi_bnd, _ = _gdfm_wk_project(
+                    X_obs_proc, obs_mask, Γ_X_pos, Γ_chi_pos, t_lo, t_hi, t)
+                @inbounds for j in 1:N
+                    obs_mask[t, j] || (X_next[t, j] = chi_bnd[j] * σ_use[j] + core.μ[j])
+                end
+            end
+        end
+
+        X_cur .= X_next
+        new_miss = X_cur[miss_mask]
+        denom = max(maximum(abs, new_miss), scale_obs, T(1e-10))
+        maximum(abs.(new_miss .- prev_miss)) / denom < em_tol && break
+    end
+    X_cur
+end
 
 """Evaluate lag-window spectrum with truncation `M_bw` on a frequency grid of `max(M_bw, min_grid) + 1` points to prevent DFT lag aliasing when `M_bw < p_max`."""
 function _fhlz_lag_window_spectrum(X::AbstractMatrix{T}, M_bw::Int, kernel::Symbol,
