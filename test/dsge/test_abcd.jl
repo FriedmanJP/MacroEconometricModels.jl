@@ -1599,3 +1599,238 @@ end
         @test_throws ArgumentError compare_dsge_svar_irf(sys32, 1, 10; identification=:nonexistent)
     end
 end
+
+@testset "Observable-Set Invertibility Search (#913)" begin
+    MEM = MacroEconometricModels
+
+    # =========================================================================
+    # 1. FVRSW (2007) Permanent Income observable search & Tables.jl / DataFrame
+    # =========================================================================
+    @testset "FVRSW Permanent Income search & Tables/DataFrame interface" begin
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, surplus
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            surplus[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            surplus[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+
+        res_fv = @test_nowarn search_invertible_observables(sol_fv, 1)
+        res_def = search_invertible_observables(sol_fv)
+        @test res_fv isa ObservableSearchResult{Float64}
+        @test res_def.k == 1
+        @test res_fv.n_evaluated == 3
+        @test res_fv.total_combinations == 3
+        @test !res_fv.used_greedy
+        @test is_invertible(res_fv)
+
+        # Top 2 must be [:c] and [:y], both invertible with min_R2 ≈ 1.0
+        top2 = Set(res_fv.observables[1:2])
+        @test top2 == Set([[:c], [:y]])
+        @test res_fv.is_invertible[1] == true
+        @test res_fv.is_invertible[2] == true
+        @test res_fv.min_R2[1] ≈ 1.0 atol=1e-10
+        @test res_fv.min_R2[2] ≈ 1.0 atol=1e-10
+        @test res_fv.mean_R2[1] ≈ 1.0 atol=1e-10
+
+        # Rank 3 must be [:surplus], non-invertible with rho ≈ 1.2
+        @test res_fv.observables[3] == [:surplus]
+        @test res_fv.is_invertible[3] == false
+        @test res_fv.rho[3] ≈ 1.2 atol=1e-10
+        @test res_fv.min_R2[3] ≈ 25.0 / 36.0 atol=1e-10
+        @test res_fv.status[3] === :non_invertible_zeros
+
+        # Tables.jl / DataFrame integration
+        @test MEM.Tables.istable(typeof(res_fv))
+        @test MEM.Tables.rowaccess(typeof(res_fv))
+        sch = MEM.Tables.schema(res_fv)
+        @test sch.names == (:observables, :is_invertible, :rho, :min_R2, :mean_R2, :cond_D, :status)
+        df = @test_nowarn DataFrame(res_fv)
+        @test nrow(df) == 3
+        @test names(df) == ["observables", "is_invertible", "rho", "min_R2", "mean_R2", "cond_D", "status"]
+        @test df.is_invertible == [true, true, false]
+        @test df.rho[3] ≈ 1.2 atol=1e-10
+
+        # Tall search (k = 2 for 1-shock model)
+        res_tall = search_invertible_observables(sol_fv, 2)
+        @test res_tall.k == 2
+        @test res_tall.n_evaluated == 3
+        @test all(res_tall.is_invertible)
+    end
+
+    # =========================================================================
+    # 2. Fiscal-foresight / news-shock @dsge search with must_include
+    # =========================================================================
+    @testset "Fiscal foresight news-shock search (must_include=[:output])" begin
+        spec_ff = @dsge begin
+            parameters: rho_a = 0.7, rho_tau = 0.5, phi_y = 0.3, psi_c = 0.4, theta_n = 0.6
+            endogenous: output, tax, news_lag, consum, bond
+            exogenous: eps_y, eps_news
+            linear: true
+
+            news_lag[t] = eps_news[t]
+            tax[t] = rho_tau * tax[t-1] + news_lag[t-1]
+            output[t] = rho_a * output[t-1] - phi_y * tax[t] + eps_y[t]
+            consum[t] = 0.8 * consum[t-1] + 0.5 * output[t] - 0.1 * tax[t]
+            bond[t] = 0.5 * bond[t-1] + theta_n * tax[t+1] + psi_c * output[t]
+        end
+        sol_ff = solve(spec_ff; method=:gensys)
+        @test is_determined(sol_ff)
+
+        # Baseline [output, tax] is non-invertible (singular D due to delayed tax news)
+        @test !is_invertible(sol_ff, [:output, :tax])
+        @test poor_mans_invertibility(sol_ff, [:output, :tax]; reduction=:minimal).status === :non_invertible_singular_D
+
+        # Search over realistic macro observables (excluding latent news_lag) with must_include=[:output]
+        res_ff = search_invertible_observables(
+            sol_ff, 2;
+            candidates=[:output, :tax, :consum, :bond],
+            must_include=[:output],
+        )
+        @test res_ff.k == 2
+        @test res_ff.n_evaluated == 3
+        @test res_ff.total_combinations == 3
+        @test !res_ff.used_greedy
+        @test all(obs -> :output in obs, res_ff.observables)
+
+        # Rank 1 identifies adding forward-looking :bond to restore invertibility!
+        @test Set(res_ff.observables[1]) == Set([:output, :bond])
+        @test res_ff.is_invertible[1] == true
+        @test res_ff.min_R2[1] ≈ 1.0 atol=1e-10
+        @test res_ff.rho[1] < 1.0
+        @test res_ff.is_invertible[2] == false
+        @test res_ff.is_invertible[3] == false
+
+        # Targeted shock scoring by Symbol & Integer index
+        res_news = search_invertible_observables(
+            sol_ff, 2;
+            candidates=[:output, :tax, :consum, :bond],
+            must_include=[:output],
+            target_shocks=[:eps_news],
+        )
+        @test res_news.shock_names == ["eps_news"]
+        @test Set(res_news.observables[1]) == Set([:output, :bond])
+        @test res_news.min_R2[1] ≈ 1.0 atol=1e-10
+        @test res_news.min_R2[end] < 0.5
+    end
+
+    # =========================================================================
+    # 3. Greedy / beam-search fallback when binomial > max_combinations
+    # =========================================================================
+    @testset "Greedy / beam-search fallback (binomial > max_combinations)" begin
+        # 8 observables, 2 shocks; obs 7 & 8 reveal shocks cleanly while others are noisy/lagged
+        A_g = [0.6 0.0; 0.0 0.5]
+        B_g = [1.0 0.0; 0.0 1.0]
+        C_g = [0.1 0.0; 0.0 0.1; 0.2 0.0; 0.0 0.2; 0.3 0.0; 0.0 0.3; 0.2 0.1; -0.1 0.2]
+        D_g = [0.0 0.0; 0.0 0.0; 0.5 0.0; 0.5 0.0; 0.0 0.5; 0.0 0.5; 1.0 0.0; 0.0 1.0]
+        sys_g = ABCDSystem(A_g, B_g, C_g, D_g;
+                           obs_names=[:v1, :v2, :v3, :v4, :v5, :v6, :v7, :v8],
+                           shock_names=[:w1, :w2])
+        # Choose k = 3 from 8 -> C(8, 3) = 56 > max_combinations = 16
+        res_gr = search_invertible_observables(sys_g, 3; max_combinations=16)
+        @test res_gr.used_greedy == true
+        @test res_gr.total_combinations == 56
+        @test 1 <= res_gr.n_evaluated <= 16
+        @test res_gr.is_invertible[1] == true
+        @test res_gr.min_R2[1] ≈ 1.0 atol=1e-10
+
+        # Exact-fit must_include (length(must_include) == k, r == 0)
+        res_r0 = search_invertible_observables(sys_g, 2; must_include=[:v7, :v8], max_combinations=1)
+        @test res_r0.n_evaluated == 1
+        @test res_r0.is_invertible[1] == true
+    end
+
+    # =========================================================================
+    # 4. Dispatches, Float32, display/report, RSER-01, and validation
+    # =========================================================================
+    @testset "Dispatches, Float32, display/report, RSER-01, and errors (#913)" begin
+        spec_nk = compute_steady_state(@dsge begin
+            parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+            endogenous: y, pi_v, i_rate, a
+            exogenous: eps_y
+            linear: true
+
+            y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+            pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+            i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+            a[t] = rho * a[t-1] + eps_y[t]
+        end)
+        sol_nk = solve(spec_nk; method=:gensys)
+        psol_nk = perturbation_solver(spec_nk; order=1)
+
+        r_dsge = search_invertible_observables(sol_nk, 1)
+        r_pert = search_invertible_observables(psol_nk, 1)
+        @test r_dsge.n_evaluated == r_pert.n_evaluated == 4
+        @test r_dsge.observables == r_pert.observables
+        @test r_dsge.min_R2 ≈ r_pert.min_R2 atol=1e-7
+
+        # StateSpaceModel dispatch (k defaults cleanly via _abcd_srch_default_nshocks)
+        ss = StateSpaceModel([1.0 0.2; 0.0 1.0], [0.05 0.0; 0.0 0.05],
+                             [0.7 0.1; 0.0 0.5], [0.4;;]; R=[1.0; 0.3;;])
+        r_ss = search_invertible_observables(ss, 2)
+        @test r_ss isa ObservableSearchResult{Float64}
+        @test r_ss.n_evaluated == 1
+
+        # HADSGESolution dispatch
+        ha_spec = load_ha_example(:krusell_smith)
+        ha_ss = compute_steady_state(ha_spec; max_iter=100, tol=1e-4)
+        ha_sol = solve(ha_spec; method=:ssj, ss=ha_ss, T_horizon=50, n_reduced=10)
+        r_ha = search_invertible_observables(ha_sol, 1)
+        @test r_ha isa ObservableSearchResult{Float64}
+        @test r_ha.observables == [[:K]]
+
+        # Float32 precision preservation
+        sys32 = ABCDSystem(Float32[0.7;;], Float32[1.0;;], Float32[1.1; 0.2;;], Float32[1.0; 0.0;;];
+                           obs_names=[:y1, :y2])
+        r32 = search_invertible_observables(sys32, 1)
+        @test r32 isa ObservableSearchResult{Float32}
+        @test eltype(r32.rho) === Float32
+        @test eltype(r32.min_R2) === Float32
+        @test eltype(r32.mean_R2) === Float32
+        @test eltype(r32.cond_D) === Float32
+        @test r32.observables[1] == [:y1]
+        @test r32.is_invertible[1] == true
+        @test r32.is_invertible[2] == false
+
+        # show and report across text and LaTeX backends
+        io = IOBuffer()
+        show(io, r32)
+        @test occursin("Observable-Set", String(take!(io)))
+        report(io, r32)
+        @test occursin("Ranked Observable Subsets", String(take!(io)))
+        with_display_backend(:latex) do
+            show(io, r32)
+            @test occursin("tabular", String(take!(io)))
+            report(io, r32)
+            @test occursin("tabular", String(take!(io)))
+        end
+
+        # RSER-01 positional constructor & plain-field round-trip (including NaN-free check)
+        sys_wide = ABCDSystem(Float32[0.5;;], Float32[1.0 0.5], Float32[1.0; 0.2;;], Float32[1.0 0.5; 0.0 0.0];
+                              obs_names=[:o1, :o2])
+        r_wide32 = search_invertible_observables(sys_wide, 1)
+        for obj in (r32, r_wide32)
+            payload = Dict{String,Any}(string(f) => MEM._ser_field(getfield(obj, f)) for f in fieldnames(typeof(obj)))
+            MEM._assert_plain_payload(payload)
+            reconstructed = MEM._from_serializable(ObservableSearchResult, payload, MEM.SERIALIZATION_FORMAT_VERSION)
+            @test typeof(reconstructed) === typeof(obj)
+            for f in fieldnames(typeof(obj))
+                @test isequal(getfield(reconstructed, f), getfield(obj, f))
+            end
+        end
+
+        # Validation errors
+        @test_throws ArgumentError search_invertible_observables(sys32, 0)
+        @test_throws ArgumentError search_invertible_observables(sys32, 3)
+        @test_throws ArgumentError search_invertible_observables(sys32, 1; must_include=[:missing])
+        @test_throws ArgumentError search_invertible_observables(sys32, 1; must_include=[:y1, :y2])
+        @test_throws ArgumentError search_invertible_observables(sys32, 1; max_combinations=0)
+        @test_throws ArgumentError search_invertible_observables(sys32, 1; target_shocks=[:bad_shock])
+        @test_throws BoundsError search_invertible_observables(sys32, 1; target_shocks=[99])
+    end
+end

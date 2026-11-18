@@ -632,6 +632,7 @@ include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_
 include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
 include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
 include("dsge/abcd_var.jl")                     # ABCD-04 (#912): shock recoverability, population VAR, 3-way IRF audit
+include("dsge/abcd_search.jl")                  # ABCD-05 (#913): observable-set invertibility search
 include("ri/types.jl")
 include("ri/steady_state.jl")
 include("ri/dynamic.jl")
@@ -848,6 +849,7 @@ export ABCDSystem, abcd_representation
 export InvertibilityResult, poor_mans_invertibility, is_invertible
 export InnovationsRepresentation, innovations_representation, to_abcd
 export ShockRecoverabilityResult, DSGEVARIRFAudit, shock_recoverability, population_var, compare_dsge_svar_irf
+export ObservableSearchResult, search_invertible_observables
 export nstates, nobservables
 export nshocks, is_determined, is_stable
 
