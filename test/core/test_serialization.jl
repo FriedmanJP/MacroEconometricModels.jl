@@ -1268,3 +1268,69 @@ end
     end
 end
 
+@testset "Wave-5 serialization coverage (#889,#890,#898,#899)" begin
+    # QFM-07 (#889): GrowthAtRiskResult & QFM FactorForecast
+    X_gar = randn(Xoshiro(889), 60, 8)
+    gar_r = growth_at_risk(X_gar, 1, 1; r=2, taus=[0.05, 0.25, 0.50, 0.75, 0.95],
+                           density=:skewed_t, oos_split=40, seed=1)
+    @test gar_r isa GrowthAtRiskResult
+    gar_r2 = _cover(gar_r)
+    @test gar_r2.gar == gar_r.gar && gar_r2.fitted_quantiles == gar_r.fitted_quantiles
+    @test gar_r2.target_name == gar_r.target_name
+
+    qfm_fc = forecast(estimate_qfm(X_gar, 2, 0.5; max_iter=20, seed=1), 3; p=1, ci_method=:none)
+    @test qfm_fc isa FactorForecast
+    qfm_fc2 = _cover(qfm_fc)
+    @test qfm_fc2.observables == qfm_fc.observables
+
+    # QFM-08 (#890): QuantileVARModel, QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR
+    Y_qv = randn(Xoshiro(890), 80, 2)
+    qv_r = estimate_qvar(Y_qv, 1, [0.10, 0.50, 0.90]; se=:none, seed=2)
+    @test qv_r isa QuantileVARModel
+    qv_r2 = _cover(qv_r)
+    @test qv_r2.taus == qv_r.taus && qv_r2.B_list == qv_r.B_list
+
+    qirf_r = qirf(qv_r, 6; tau_profile=0.10, baseline_tau=0.50)
+    @test qirf_r isa QuantileImpulseResponse
+    qirf_r2 = _cover(qirf_r)
+    @test qirf_r2.values == qirf_r.values && qirf_r2.tau_profile == qirf_r.tau_profile
+
+    X_qf = randn(Xoshiro(8901), 70, 10)
+    qf_2s = estimate_qfavar(X_qf, [10], 1, 1, [0.10, 0.50, 0.90]; method=:twostep, seed=3)
+    @test qf_2s isa QuantileFAVAR
+    qf_2s2 = _cover(qf_2s)
+    @test qf_2s2.taus == qf_2s.taus && qf_2s2.Y_key_indices == qf_2s.Y_key_indices
+
+    qf_vb = estimate_qfavar(X_qf, [10], 1, 1, [0.10, 0.50, 0.90];
+                            method=:vb, vb_maxiter=25, n_draws=30, seed=4)
+    @test qf_vb isa VBQuantileFAVAR
+    qf_vb2 = _cover(qf_vb)
+    @test qf_vb2.vb_iterations == qf_vb.vb_iterations && qf_vb2.A0_draws == qf_vb.A0_draws
+
+    # GDFM-06 (#898): TimeVaryingGDFM
+    X_tv = randn(Xoshiro(898), 80, 10)
+    tv_r = estimate_tv_gdfm(X_tv, 2; n_grid=8)
+    @test tv_r isa TimeVaryingGDFM
+    tv_r2 = _cover(tv_r)
+    @test tv_r2.common_component == tv_r.common_component && tv_r2.variance_share_path == tv_r.variance_share_path
+
+    # GDFM-07 (#899): GDFMNowcastResult
+    gdfm_c = estimate_gdfm(X_tv, 2; r=3, spectral=:lag_window, bandwidth=6)
+    X_rag = copy(X_tv)
+    X_rag[end, 1:3] .= NaN
+    nc_r = nowcast_gdfm(gdfm_c, X_rag, 0; n_lags=2)
+    @test nc_r isa GDFMNowcastResult
+    nc_r2 = _cover(nc_r)
+    @test nc_r2.nowcast == nc_r.nowcast && nc_r2.observed_mask == nc_r.observed_mask
+
+    mktempdir() do d
+        for (idx, obj) in enumerate((gar_r, qv_r, qirf_r, qf_2s, qf_vb, tv_r, nc_r))
+            p = joinpath(d, "w5_$(idx).jld2")
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
+    end
+end
+

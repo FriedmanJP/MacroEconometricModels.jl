@@ -207,6 +207,21 @@ ObservationTrends
 detect_trend
 ```
 
+### Bayesian DSGE-VAR (``\lambda``)
+
+```@docs
+DSGEVARPrior
+DSGEVARLambdaProfile
+DSGEVARPosterior
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/dsge_var.jl"]
+Order   = [:function]
+Private = false
+```
+
 ---
 
 ## Occasionally Binding Constraints

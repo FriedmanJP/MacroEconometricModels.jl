@@ -419,6 +419,41 @@ The two-step FAVAR extracts 2 factors from the 7-series panel, removes the compo
 
 ---
 
+## Quantile VAR and Quantile FAVAR
+
+Standard Gaussian FAVAR models trace conditional-mean transmission, holding slope and impact matrices constant between expansions and financial stress episodes. When systemic tail risk amplifies shock propagation across conditional quantiles ``\tau \in (0, 1)``, **Quantile VAR** (Chavleishvili & Manganelli 2024) and **Quantile FAVAR** (Korobilis & Schröder 2025; Chen, Dolado & Gonzalo 2021) allow both factor loadings and autoregressive dynamics to vary across ``\tau``:
+
+```math
+A_0(\tau)\, Y_t = c(\tau) + \sum_{\ell=1}^{p} A_{\ell}(\tau)\, Y_{t-\ell} + u_t(\tau), \qquad
+Q_{\tau}\!\left(X_{it} \mid \tilde{F}_t(\tau), Y_t^{\text{key}}\right) = \lambda_i(\tau)' \tilde{F}_t(\tau) + \lambda_{y,i}(\tau)' Y_t^{\text{key}}
+```
+
+where:
+- ``Y_t \in \mathbb{R}^n`` collects observed variables (ordered recursively under [`QuantileVARModel`](@ref)) or augmented state variables ``[\tilde{F}_t(\tau)', Y_t^{\text{key}{}'}]'`` under [`QuantileFAVAR`](@ref) and [`VBQuantileFAVAR`](@ref),
+- ``A_0(\tau)`` is the unit lower-triangular contemporaneous structural impact matrix estimated quantile-by-quantile via interior-point check-loss minimization,
+- ``A_{\ell}(\tau)`` are the structural lag matrices propagated horizon-by-horizon along `tau_profile` in [`qirf`](@ref) to form [`QuantileImpulseResponse`](@ref),
+- ``\tilde{F}_t(\tau) \in \mathbb{R}^r`` are quantile-specific latent factors (`method=:twostep` removes direct exposure to ``Y_t^{\text{key}}`` by quantile regression purging, while `method=:vb` estimates joint asymmetric-Laplace mean-field variational posteriors with anchor-series identification),
+- ``\lambda_i(\tau)`` and ``\lambda_{y,i}(\tau)`` map structural shocks and multi-step quantile forecasts across the entire ``N``-series panel in [`qfavar_panel_irf`](@ref) and [`qfavar_panel_forecast`](@ref) while preserving the exact unit-impact identity on `Y_key_indices`.
+
+[`estimate_qvar`](@ref) estimates the recursive structural QVAR across quantile levels `taus`, while [`estimate_qfavar`](@ref) wraps both `method=:twostep` and `method=:vb`. Panel quantile forecasts use Chernozhukov, Fernández-Val & Galichon (2010) monotone rearrangement when `rearrange=true`.
+
+```@example favar
+qvar_m = estimate_qvar(X[:, [1, 2, 5]], 1, [0.10, 0.50, 0.90];
+                       varnames=["INDPRO", "CPIAUCSL", "FEDFUNDS"], seed=42)
+qir_m = qirf(qvar_m, 8; shock=3, tau_profile=0.10, baseline_tau=0.50)
+qfavar_vb = estimate_qfavar(X, [5], 1, 1, [0.10, 0.50, 0.90];
+                            method=:vb, panel_varnames=panel_names,
+                            vb_maxiter=40, n_draws=40, seed=42)
+qpir = qfavar_panel_irf(qfavar_vb, 8; shock=2, tau_profile=0.10, ci_type=:credible)
+qpfc = qfavar_panel_forecast(qfavar_vb, 4; rearrange=true)
+report(qfavar_vb)
+(fedfunds_h0 = round(qpir.values[1, 5, 1]; digits=4),
+ indpro_tail_h2 = round(qpir.values[3, 1, 1]; digits=4),
+ fc_shape = size(qpfc.quantiles))
+```
+
+---
+
 ## Saving Results
 
 [`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
@@ -469,3 +504,12 @@ typeof(favar2)
 
 - Stock, J. H., & Watson, M. W. (2002). Forecasting Using Principal Components from a Large Number of Predictors.
   *Journal of the American Statistical Association*, 97(460), 1167-1179. [DOI](https://doi.org/10.1198/016214502388618960)
+
+- Chavleishvili, S., & Manganelli, S. (2024). Forecasting and Stress Testing with Quantile Vector Autoregression.
+  *Journal of Applied Econometrics*, 39(1), 66-85. [DOI](https://doi.org/10.1002/jae.3009)
+
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile Factor Models.
+  *Econometrica*, 89(2), 875-910. [DOI](https://doi.org/10.3982/ECTA15746)
+
+- Korobilis, D., & Schröder, M. (2025). Probabilistic Quantile Factor Analysis.
+  *Journal of Econometrics*, 249, 105730. [DOI](https://doi.org/10.1016/j.jeconom.2024.105730)

@@ -87,13 +87,16 @@ const TEST_GROUPS = [
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
         "factor/test_gdfm_i1.jl",          # GDFM-04 (#896): Cointegrated I(1) GDFM & BLL (2021) structural IRFs
+        "factor/test_tv_gdfm.jl",          # GDFM-06 (#898): Locally stationary time-varying spectral GDFM
         "factor/test_qfm.jl",
         "factor/test_qfm_panel.jl",        # QFM-06 (#888): Quantile factor panel regression (Ando-Bai 2020)
+        "factor/test_qfm_forecast.jl",     # QFM-07 (#889): QFM distributional forecasting & Growth-at-Risk
         "factor/test_fhlz.jl",
         "factor/test_factor_selection.jl",   # GDFM-03 (#895): Onatski (2009/2010) & Ahn-Horenstein (2013)
         "factor/test_factor_forecast.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
+        "favar/test_qfavar.jl",            # QFM-08 (#890): Quantile VAR & Quantile FAVAR
         "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
@@ -232,6 +235,7 @@ const TEST_GROUPS = [
     ]),
     ("DSGE Bayesian & HD" => [
         "dsge/test_bayesian_dsge.jl",
+        "dsge/test_dsge_var.jl",           # ABCD-06 (#914): Del Negro-Schorfheide Bayesian DSGE-VAR(λ)
         "dsge/test_dsge_hd.jl",
     ]),
     ("HA-DSGE" => [

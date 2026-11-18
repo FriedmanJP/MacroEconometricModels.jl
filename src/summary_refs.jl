@@ -2120,6 +2120,47 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Business Cycle Dynamics under Rational Inattention",
         journal="Review of Economic Studies", volume="82", issue="4", pages="1502--1532",
         doi="10.1093/restud/rdv027", isbn="", publisher="", entry_type=:article),
+    # --- Wave-5 v1.1.0 (#889, #890, #898, #899, #914) ---
+    :adrian_boyarchenko_giannone2019 => (key=:adrian_boyarchenko_giannone2019,
+        authors="Adrian, Tobias and Boyarchenko, Nina and Giannone, Domenico", year=2019,
+        title="Vulnerable Growth",
+        journal="American Economic Review", volume="109", issue="4", pages="1263--1289",
+        doi="10.1257/aer.20161923", isbn="", publisher="", entry_type=:article),
+    :chernozhukov_fernandez_val_galichon2010 => (key=:chernozhukov_fernandez_val_galichon2010,
+        authors="Chernozhukov, Victor and Fern{\\'a}ndez-Val, Iv{\\'a}n and Galichon, Alfred", year=2010,
+        title="Quantile and Probability Curves Without Crossing",
+        journal="Econometrica", volume="78", issue="3", pages="1093--1125",
+        doi="10.3982/ECTA7880", isbn="", publisher="", entry_type=:article),
+    :chavleishvili_manganelli2024 => (key=:chavleishvili_manganelli2024,
+        authors="Chavleishvili, Sulkhan and Manganelli, Simone", year=2024,
+        title="Forecasting and Stress Testing with Quantile Vector Autoregression",
+        journal="Journal of Applied Econometrics", volume="39", issue="1", pages="66--85",
+        doi="10.1002/jae.3009", isbn="", publisher="", entry_type=:article),
+    :korobilis_schroder2025 => (key=:korobilis_schroder2025,
+        authors="Korobilis, Dimitris and Schr{\\\"o}der, Maximilian", year=2025,
+        title="Monitoring Multi-Country Macroeconomic Risk: A Quantile Factor-Augmented Vector Autoregressive (QFAVAR) Approach",
+        journal="Journal of Econometrics", volume="249", issue="", pages="105730",
+        doi="10.1016/j.jeconom.2024.105730", isbn="", publisher="", entry_type=:article),
+    :barigozzi_hallin_soccorsi_vonsachs2021 => (key=:barigozzi_hallin_soccorsi_vonsachs2021,
+        authors="Barigozzi, Matteo and Hallin, Marc and Soccorsi, Stefano and von Sachs, Rainer", year=2021,
+        title="Time-Varying General Dynamic Factor Models and the Measurement of Financial Connectedness",
+        journal="Journal of Econometrics", volume="222", issue="1", pages="324--343",
+        doi="10.1016/j.jeconom.2020.07.004", isbn="", publisher="", entry_type=:article),
+    :eichler_motta_vonsachs2011 => (key=:eichler_motta_vonsachs2011,
+        authors="Eichler, Michael and Motta, Giovanni and von Sachs, Rainer", year=2011,
+        title="Fitting Dynamic Factor Models to Non-Stationary Time Series",
+        journal="Journal of Econometrics", volume="163", issue="1", pages="51--70",
+        doi="10.1016/j.jeconom.2010.11.007", isbn="", publisher="", entry_type=:article),
+    :del_negro_schorfheide2004 => (key=:del_negro_schorfheide2004,
+        authors="Del Negro, Marco and Schorfheide, Frank", year=2004,
+        title="Priors from General Equilibrium Models for VARs",
+        journal="International Economic Review", volume="45", issue="2", pages="643--673",
+        doi="10.1111/j.1468-2354.2004.00294.x", isbn="", publisher="", entry_type=:article),
+    :del_negro_etal2007 => (key=:del_negro_etal2007,
+        authors="Del Negro, Marco and Schorfheide, Frank and Smets, Frank and Wouters, Raf", year=2007,
+        title="On the Fit of New Keynesian Models",
+        journal="Journal of Business & Economic Statistics", volume="25", issue="2", pages="123--143",
+        doi="10.1198/073500107000000016", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2723,6 +2764,29 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :implied_cg_slope => [:coibion_gorodnichenko2015],
     :solve_mw_attention => [:mackowiak_wiederholt2009, :mackowiak_wiederholt2015, :sims2003],
     :rational_inattention_jacobian => [:sims2003, :auclert_rognlie_straub2020],
+    # --- Wave-5 v1.1.0 (#889, #890, #898, #899, #914) ---
+    :GrowthAtRiskResult => [:adrian_boyarchenko_giannone2019, :chernozhukov_fernandez_val_galichon2010, :chen_dolado_gonzalo2021],
+    :growth_at_risk => [:adrian_boyarchenko_giannone2019, :chernozhukov_fernandez_val_galichon2010, :chen_dolado_gonzalo2021],
+    :QuantileVARModel => [:chavleishvili_manganelli2024, :koenker_bassett1978],
+    :QuantileImpulseResponse => [:chavleishvili_manganelli2024],
+    :estimate_qvar => [:chavleishvili_manganelli2024],
+    :qirf => [:chavleishvili_manganelli2024],
+    :QuantileFAVAR => [:korobilis_schroder2025, :chavleishvili_manganelli2024, :chen_dolado_gonzalo2021, :bernanke_boivin_eliasz2005],
+    :VBQuantileFAVAR => [:korobilis_schroder2025, :bernanke_boivin_eliasz2005],
+    :estimate_qfavar => [:korobilis_schroder2025, :chavleishvili_manganelli2024, :bernanke_boivin_eliasz2005],
+    :qfavar_panel_irf => [:korobilis_schroder2025, :bernanke_boivin_eliasz2005],
+    :qfavar_panel_forecast => [:korobilis_schroder2025, :chernozhukov_fernandez_val_galichon2010],
+    :TimeVaryingGDFM => [:barigozzi_hallin_soccorsi_vonsachs2021, :eichler_motta_vonsachs2011],
+    :estimate_tv_gdfm => [:barigozzi_hallin_soccorsi_vonsachs2021, :eichler_motta_vonsachs2011],
+    :GDFMNowcastResult => [:altissimo2010, :forni_hallin_lippi_reichlin2005],
+    :nowcast_gdfm => [:altissimo2010, :forni_hallin_lippi_reichlin2005],
+    :DSGEVARPrior => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :DSGEVARLambdaProfile => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :DSGEVARPosterior => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :dsge_var_prior => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :dsge_var_logml => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :select_dsge_var_lambda => [:del_negro_schorfheide2004, :del_negro_etal2007],
+    :estimate_dsge_var => [:del_negro_schorfheide2004, :del_negro_etal2007],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -3343,6 +3407,18 @@ refs(io::IO, ::ObservableSearchResult; kw...) = refs(io, _TYPE_REFS[:ObservableS
 refs(io::IO, ::RIEstimationResult; kw...) = refs(io, _TYPE_REFS[:RIEstimationResult]; kw...)
 refs(io::IO, ::CGTestResult; kw...) = refs(io, _TYPE_REFS[:CGTestResult]; kw...)
 refs(io::IO, ::MWAttentionResult; kw...) = refs(io, _TYPE_REFS[:MWAttentionResult]; kw...)
+
+# --- Wave-5 v1.1.0 (#889, #890, #898, #899, #914) ---
+refs(io::IO, ::GrowthAtRiskResult; kw...) = refs(io, _TYPE_REFS[:GrowthAtRiskResult]; kw...)
+refs(io::IO, ::QuantileVARModel; kw...) = refs(io, _TYPE_REFS[:QuantileVARModel]; kw...)
+refs(io::IO, ::QuantileImpulseResponse; kw...) = refs(io, _TYPE_REFS[:QuantileImpulseResponse]; kw...)
+refs(io::IO, ::QuantileFAVAR; kw...) = refs(io, _TYPE_REFS[:QuantileFAVAR]; kw...)
+refs(io::IO, ::VBQuantileFAVAR; kw...) = refs(io, _TYPE_REFS[:VBQuantileFAVAR]; kw...)
+refs(io::IO, ::TimeVaryingGDFM; kw...) = refs(io, _TYPE_REFS[:TimeVaryingGDFM]; kw...)
+refs(io::IO, ::GDFMNowcastResult; kw...) = refs(io, _TYPE_REFS[:GDFMNowcastResult]; kw...)
+refs(io::IO, ::DSGEVARPrior; kw...) = refs(io, _TYPE_REFS[:DSGEVARPrior]; kw...)
+refs(io::IO, ::DSGEVARLambdaProfile; kw...) = refs(io, _TYPE_REFS[:DSGEVARLambdaProfile]; kw...)
+refs(io::IO, ::DSGEVARPosterior; kw...) = refs(io, _TYPE_REFS[:DSGEVARPosterior]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

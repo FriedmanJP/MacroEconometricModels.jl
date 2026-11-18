@@ -2203,3 +2203,74 @@ end
         end
     end
 end
+
+@testset "DSER-12 Wave-5 DSGE-VAR round-trip (#914)" begin
+    nk_w5 = @dsge begin
+        parameters: beta = 0.99, kappa = 0.15, psi1 = 1.5, psi2 = 0.125,
+                    rho_r = 0.75, rho_d = 0.80, rho_pi = 0.50,
+                    sigma_r = 0.01, sigma_d = 0.02, sigma_pi = 0.01
+        endogenous: y, pi, r, xd, xpi
+        exogenous: e_r, e_d, e_pi
+        y[t] = y[t+1] - (r[t] - pi[t+1]) + xd[t]
+            pi[t] = beta * pi[t+1] + kappa * y[t] + xpi[t]
+            r[t] = rho_r * r[t-1] + (1 - rho_r) * (psi1 * pi[t] + psi2 * y[t]) + sigma_r * e_r[t]
+            xd[t] = rho_d * xd[t-1] + sigma_d * e_d[t]
+            xpi[t] = rho_pi * xpi[t-1] + sigma_pi * e_pi[t]
+    end
+    sol_w5 = solve(nk_w5)
+    obs_w5 = [:y, :pi, :r]
+    Y_w5 = simulate(sol_w5, 120; seed=914)[:, 1:3]
+
+    dvar_prior = dsge_var_prior(sol_w5, 1, 1.5, 119; observables=obs_w5)
+    @test dvar_prior isa DSGEVARPrior
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEVARPrior")
+    @test _from_serializable_is_generic(DSGEVARPrior)
+    dvar_prior2 = _cover(dvar_prior)
+    @test dvar_prior2.Phi_star == dvar_prior.Phi_star
+    @test dvar_prior2.Sigma_u_star == dvar_prior.Sigma_u_star
+
+    dvar_prof = select_dsge_var_lambda(sol_w5, Y_w5, 1; observables=obs_w5,
+                                       lambda_grid=[0.5, 1.5, 5.0, Inf], refine=false)
+    @test dvar_prof isa DSGEVARLambdaProfile
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEVARLambdaProfile")
+    @test _from_serializable_is_generic(DSGEVARLambdaProfile)
+    dvar_prof2 = _cover(dvar_prof)
+    @test dvar_prof2.lambda_hat == dvar_prof.lambda_hat
+    @test dvar_prof2.log_marginal_likelihoods == dvar_prof.log_marginal_likelihoods
+
+    dvar_direct = estimate_dsge_var(sol_w5, Y_w5, 1; lambda=1.5, observables=obs_w5,
+                                    n_draws=30, seed=914)
+    @test dvar_direct isa DSGEVARPosterior
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEVARPosterior")
+    @test _from_serializable_is_generic(DSGEVARPosterior)
+    dvar_direct2 = _cover(dvar_direct)
+    @test dvar_direct2.B_draws == dvar_direct.B_draws
+    @test dvar_direct2.B0_draws == dvar_direct.B0_draws
+    @test dvar_direct2.log_marginal_likelihood == dvar_direct.log_marginal_likelihood
+
+    priors_w5 = Dict{Symbol,Distribution}(
+        :psi1 => Uniform(1.15, 2.50),
+        :rho_r => Beta(4.0, 4.0),
+    )
+    dvar_rwmh = estimate_dsge_var(nk_w5, Y_w5, 1; priors=priors_w5, lambda=1.5,
+                                  method=:rwmh, observables=obs_w5,
+                                  n_draws=30, burnin=15, step_scale=0.05, seed=915)
+    @test dvar_rwmh isa DSGEVARPosterior
+    dvar_rwmh2 = _cover(dvar_rwmh)
+    @test dvar_rwmh2.theta_draws == dvar_rwmh.theta_draws
+    @test dvar_rwmh2.B_draws == dvar_rwmh.B_draws
+    @test dvar_rwmh2.B0_draws == dvar_rwmh.B0_draws
+
+    mktempdir() do d
+        for (nm, obj) in (("dvar_prior.jld2", dvar_prior),
+                          ("dvar_prof.jld2", dvar_prof),
+                          ("dvar_direct.jld2", dvar_direct),
+                          ("dvar_rwmh.jld2", dvar_rwmh))
+            p = joinpath(d, nm)
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
+    end
+end

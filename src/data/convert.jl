@@ -160,6 +160,49 @@ test_sufficient_information(s::TimeSeriesData, d::TimeSeriesData; kwargs...) =
 estimate_ri(build_or_prob, d::TimeSeriesData; kwargs...) =
     estimate_ri(build_or_prob, to_matrix(d); kwargs...)
 
+# --- Wave-5 v1.1.0 (#889, #890, #898, #899, #914) ---
+growth_at_risk(d::TimeSeriesData,
+               target_col::Union{Int,AbstractString,Symbol,AbstractVector{<:Real}},
+               h::Int=1; kwargs...) =
+    growth_at_risk(to_matrix(d), target_col, h; varnames=d.varnames, kwargs...)
+
+estimate_qvar(d::TimeSeriesData, p::Int,
+              taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qvar(to_matrix(d), p, taus; varnames=d.varnames, kwargs...)
+
+estimate_qfavar(d::TimeSeriesData,
+                Y_key::Union{AbstractMatrix,AbstractVector{<:Integer}},
+                r::Int, p::Int,
+                taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qfavar(to_matrix(d), Y_key, r, p, taus; panel_varnames=d.varnames, kwargs...)
+
+estimate_qfavar(d::TimeSeriesData, y_key::TimeSeriesData,
+                r::Int, p::Int,
+                taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qfavar(to_matrix(d), to_matrix(y_key), r, p, taus;
+                    panel_varnames=d.varnames, key_names=y_key.varnames, kwargs...)
+
+estimate_tv_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_tv_gdfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+nowcast_gdfm(gdfm::GeneralizedDynamicFactorModel, d::TimeSeriesData, h::Int=0; kwargs...) =
+    nowcast_gdfm(gdfm, to_matrix(d), h; kwargs...)
+
+dsge_var_logml(prior::DSGEVARPrior, d::TimeSeriesData) =
+    dsge_var_logml(prior, to_matrix(d))
+
+dsge_var_logml(sys_or_sol::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+               d::TimeSeriesData, p::Int, lambda::Real; kwargs...) =
+    dsge_var_logml(sys_or_sol, to_matrix(d), p, lambda; kwargs...)
+
+select_dsge_var_lambda(sol_or_sys::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+                       d::TimeSeriesData, p::Int; kwargs...) =
+    select_dsge_var_lambda(sol_or_sys, to_matrix(d), p; kwargs...)
+
+estimate_dsge_var(sol_or_sys::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+                  d::TimeSeriesData, p::Int; kwargs...) =
+    estimate_dsge_var(sol_or_sys, to_matrix(d), p; kwargs...)
+
 hallin_liska(d::TimeSeriesData, q_max::Int; kwargs...) =
     hallin_liska(to_matrix(d), q_max; kwargs...)
 

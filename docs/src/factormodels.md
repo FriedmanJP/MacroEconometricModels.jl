@@ -1079,6 +1079,31 @@ report(span_res)
  constancy_pval = round(const_res.pvalue; digits=3))
 ```
 
+### Quantile Factor Forecasting and Growth-at-Risk
+
+Multi-step forecasting from an estimated [`QuantileFactorModel`](@ref) or [`QuantileFactorGrid`](@ref) fits a quantile autoregression QAR(`p`)/QVAR(`p`) on the extracted quantile factors and maps trajectories back to observables; across a multi-quantile grid, `forecast(grid, h; rearrange=true)` applies Chernozhukov, Fernández-Val & Galichon (2010) monotone rearrangement at every horizon–variable cell so conditional quantile curves never cross. For direct macroeconomic tail-risk surveillance, [`growth_at_risk`](@ref) implements Adrian, Boyarchenko & Giannone (2019) **Growth-at-Risk** by running direct ``h``-step quantile regressions on the quantile factors and lagged target values, fitting a predictive density across conditional quantiles (`density = :skewed_t`, `:normal`, or `:none`), and reporting [`GrowthAtRiskResult`](@ref) risk statistics:
+
+```math
+Q_{y_{t+h}}(\tau \mid I_t) = \alpha_h(\tau) + \beta_h(\tau)' \hat{F}_t(\tau) + \gamma_h(\tau)' y_{t:-1:t-p+1}, \qquad
+f(y; \mu, \sigma, \alpha_s, \nu) = \frac{2}{\sigma}\, t_{\nu}\!\left(\frac{y - \mu}{\sigma}\right) T_{\nu+1}\!\left(\alpha_s \frac{y - \mu}{\sigma} \sqrt{\frac{\nu + 1}{\nu + \left(\frac{y - \mu}{\sigma}\right)^2}}\right)
+```
+
+where:
+- ``y_{t+h}`` is the target series ``h`` steps ahead (selected by column index, name, symbol, or external vector),
+- ``\hat{F}_t(\tau)`` are the quantile-``\tau`` factors extracted from the panel at quantile level ``\tau``,
+- ``y_{t:-1:t-p+1}`` collects `lags` lagged realizations of the target series ``y``,
+- ``f(y; \mu, \sigma, \alpha_s, \nu)`` is the Azzalini–Capitanio (2003) skewed-``t`` predictive density calibrated to the conditional quantiles, delivering `gar` (``\mathrm{GaR}_\alpha``), `expected_shortfall` (``\mathrm{ES}_\alpha``), downside/upside relative entropies, continuous ranked probability scores (`crps`), and optional expanding-window `oos_split` probability integral transforms (`pit`).
+
+```@example factor
+fc_qgrid = forecast(qgrid, 4; p=1, rearrange=true)
+gar_res = growth_at_risk(X_sub, 1, 1; r=2, taus=[0.05, 0.25, 0.50, 0.75, 0.95],
+                         density=:skewed_t, oos_split=40, seed=42)
+report(gar_res)
+(gar_5pct = round(gar_res.oos_gar; digits=3),
+ es_5pct = round(gar_res.oos_expected_shortfall; digits=3),
+ n_pit = length(gar_res.pit))
+```
+
 ---
 
 ## One-Sided Infinite-Order GDFM (FHLZ)
@@ -1158,6 +1183,56 @@ report(sfevd_res)
 (mean_bp_share = round(mean(bp_res.variance_share); digits=3),
  eurocoin_r2 = round(ec_res.r2; digits=3),
  shock_shares_row1 = round.(sfevd_res.shares[1, :]; digits=3))
+```
+
+---
+
+## Locally Stationary Time-Varying GDFM
+
+When factor loadings or shock volatilities evolve smoothly over time across structural transitions, the static-spectrum GDFM attenuates time-varying comovement. [`estimate_tv_gdfm`](@ref) implements the locally stationary generalized dynamic factor model of Eichler, Motta & von Sachs (2011) and Barigozzi, Hallin, Soccorsi & von Sachs (2021), returning [`TimeVaryingGDFM`](@ref). At each rescaled time point ``u_r \in (0, 1)``, symmetric kernel-tapered lag autocovariances construct the local spectral density matrix, whose top-``q`` dynamic eigenvectors invert into local two-sided projection filters:
+
+```math
+\hat{\Gamma}(u_r, k) = \sum_{t=k+1}^{T} \sqrt{w_t(u_r)\, w_{t-k}(u_r)}\, X_t X_{t-k}^{\top}, \qquad
+\hat{\Sigma}_X(u_r, \theta) = \sum_{k=-M_T}^{M_T} \kappa\!\left(\frac{|k|}{M_T}\right) \hat{\Gamma}(u_r, k)\, e^{-i k \theta}
+```
+
+where:
+- ``u_r`` is the ``r``-th rescaled time point in `(0, 1)` on a grid of length `n_grid`,
+- ``w_t(u_r)`` are normalized local time-kernel weights controlled by `time_bandwidth` and `time_kernel` (`:epanechnikov`, `:gaussian`, or `:uniform`),
+- ``\kappa(|k| / M_T)`` is the spectral lag-window taper controlled by `lag_bandwidth` (``M_T``) and `lag_kernel` (`:bartlett`, `:parzen`, or `:tukey`),
+- ``X_t`` is the ``N \times 1`` panel vector at observation ``t``; [`common_variance_share`](@ref) extracts the resulting ``T \times q`` time path of explained spectral variance shares.
+
+```@example factor
+tv_res = estimate_tv_gdfm(X_sub, 2; n_grid=8, time_bandwidth=0.35)
+report(tv_res)
+(tv_r2 = round(mean(r2(tv_res)); digits=3),
+ share_t1 = round.(common_variance_share(tv_res)[1, :]; digits=3),
+ share_tend = round.(common_variance_share(tv_res)[end, :]; digits=3))
+```
+
+---
+
+## Ragged-Edge EM-Spectral GDFM and Nowcasting
+
+Real-time macroeconomic panels routinely contain interior gaps and asynchronous end-of-sample releases ("ragged edges"). Passing `allow_missing=true` to [`estimate_gdfm`](@ref) or [`estimate_gdfm_fhlz`](@ref) warm-starts missing `NaN` cells via cross-sectional EM-PCA and iterates spectral common-component reconstruction until convergence (`em_max_iter`, `em_tol`), with optional stacked multi-lag one-sided projection via `n_lags_proj`. Given a fitted [`GeneralizedDynamicFactorModel`](@ref), [`nowcast_gdfm`](@ref) computes exact minimum-MSE Wiener–Kolmogorov projections (returning [`GDFMNowcastResult`](@ref)) at horizon ``h`` (`h = 0` nowcast, `h < 0` backcast, `h > 0` short-horizon forecast):
+
+```math
+\hat{\chi}_{T_r + h \mid T_r} = C_{\chi, \text{obs}}\, \Sigma_{\text{obs}, \text{obs}}^{-1}\, X_{\text{obs}}
+```
+
+where:
+- ``X_{\text{obs}}`` stacks all non-missing standardized entries inside the trailing `(n_lags + 1)`-period release window ending at ``T_r``,
+- ``\Sigma_{\text{obs}, \text{obs}}`` is the spectral panel autocovariance block restricted to observed `(variable, time)` indices,
+- ``C_{\chi, \text{obs}}`` collects cross-covariances between target common components at ``T_r + h`` and the observed stacked release vector, yielding both point nowcasts and MSE standard errors incorporating idiosyncratic variance.
+
+```@example factor
+X_rag = copy(X_sub)
+X_rag[end, 1:4] .= NaN
+gdfm_em = estimate_gdfm(X_rag, 2; r=3, allow_missing=true, em_max_iter=15)
+nc_res = nowcast_gdfm(gdfm_em, X_rag, 0; n_lags=2)
+report(nc_res)
+(nowcast_1_4 = round.(nc_res.nowcast[1:4]; digits=3),
+ se_1_4 = round.(nc_res.se[1:4]; digits=3))
 ```
 
 ---
@@ -1279,3 +1354,15 @@ typeof(fm2)
 
 - Cristadoro, R., Forni, M., Reichlin, L., & Veronese, G. (2005). A Core Inflation Indicator for the Euro Area.
   *Journal of Money, Credit and Banking*, 37(3), 539-560. [DOI](https://doi.org/10.1353/mcb.2005.0028)
+
+- Adrian, T., Boyarchenko, N., & Giannone, D. (2019). Vulnerable Growth.
+  *American Economic Review*, 109(4), 1263-1289. [DOI](https://doi.org/10.1257/aer.20161923)
+
+- Barigozzi, M., Hallin, M., Soccorsi, S., & von Sachs, R. (2021). Time-Varying General Dynamic Factor Models and the Measurement of Financial Connectedness.
+  *Journal of Econometrics*, 222(1), 324-343. [DOI](https://doi.org/10.1016/j.jeconom.2020.07.004)
+
+- Chernozhukov, V., Fernández-Val, I., & Galichon, A. (2010). Quantile and Probability Curves Without Crossing.
+  *Econometrica*, 78(3), 1093-1125. [DOI](https://doi.org/10.3982/ECTA7880)
+
+- Eichler, M., Motta, G., & von Sachs, R. (2011). Fitting Dynamic Factor Models to Non-Stationary Time Series.
+  *Journal of Econometrics*, 163(1), 51-70. [DOI](https://doi.org/10.1016/j.jeconom.2010.11.007)

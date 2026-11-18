@@ -304,3 +304,20 @@ end
 function reproduce(::RIEstimationResult)
     _needs_source_report("RIEstimationResult", "estimate_ri(prob, Y; seed=N)")
 end
+
+# --- Wave-5 v1.1.0 (#889, #890) ---
+function reproduce(::GrowthAtRiskResult)
+    _needs_source_report("GrowthAtRiskResult", "growth_at_risk(X, target_col, h; seed=N)")
+end
+
+function reproduce(::QuantileVARModel)
+    _needs_source_report("QuantileVARModel", "estimate_qvar(Y, p, taus; seed=N)")
+end
+
+function reproduce(::QuantileFAVAR)
+    _needs_source_report("QuantileFAVAR", "estimate_qfavar(X_panel, Y_key, r, p; seed=N)")
+end
+
+function reproduce(::VBQuantileFAVAR)
+    _needs_source_report("VBQuantileFAVAR", "estimate_qfavar(X_panel, Y_key, r, p; method=:vb, seed=N)")
+end

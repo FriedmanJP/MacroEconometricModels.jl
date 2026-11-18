@@ -308,7 +308,8 @@ const M_QF = MacroEconometricModels
         X_clean[:, 1] .*= 400.0
 
         # Warmup JIT briefly on tiny slice, then time the full :fred_qd subset run
-        _ = growth_at_risk(X_clean[1:40, 1:6], 1, 1; r=2, seed=42)
+        _ = growth_at_risk(X_clean[1:40, 1:6], 1, 1; r=2, lags=1, alpha=0.05,
+                           density=:skewed_t, varnames=vars[1:6], seed=42)
         local gar_qd
         t_elapsed = @elapsed begin
             gar_qd = growth_at_risk(X_clean, 1, 1; r=2, lags=1, alpha=0.05,
