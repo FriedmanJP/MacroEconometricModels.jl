@@ -287,6 +287,7 @@ include("spectral/filtering.jl")
 include("spectral/show.jl")
 
 include("factor/fhlz.jl")
+include("factor/selection.jl")
 include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
@@ -1143,6 +1144,8 @@ export ic_criteria_gdfm
 export hallin_liska, HallinLiskaResult
 export bai_ng_q, BaiNgQResult
 export amengual_watson_q, AmengualWatsonResult
+export OnatskiQTestResult, AhnHorensteinResult, OnatskiEDResult
+export onatski_q_test, onatski_q_select, ahn_horenstein, onatski_ed
 export common_variance_share
 export spectral_eigenvalue_plot_data
 
