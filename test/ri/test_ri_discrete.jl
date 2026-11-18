@@ -444,4 +444,56 @@ using LinearAlgebra, Statistics, Random, Distributions, StatsAPI
         @test_throws ArgumentError estimate_ri_logit(choices, menu, env_id; varnames=["only_one"])
     end
 
+    @testset "Matejka-McKay (2015) Prop 1 MNL Equivalence & Red-Bus/Blue-Bus (#923)" begin
+        # 1. General Theorem 1 conditional logit formula on asymmetric U & non-uniform prior
+        U_asym = [2.2 0.4 1.1; 0.3 2.5 0.9; 1.0 1.2 1.6]
+        mu_asym = [0.25, 0.45, 0.30]
+        sol_asym = solve_ri_discrete(U_asym, mu_asym; omega=0.6, units=:nats)
+        @test sol_asym.converged
+        omega_nats = sol_asym.omega
+        for s in 1:size(U_asym, 2)
+            raw = [sol_asym.uncond_probs[j] * exp(U_asym[j, s] / omega_nats) for j in 1:size(U_asym, 1)]
+            denom = sum(raw)
+            if denom > 0
+                @test sol_asym.cond_probs[:, s] ≈ raw ./ denom atol=1e-7
+            end
+        end
+
+        # 2. Proposition 1 exact standard MNL equivalence when alternatives are symmetric under uniform prior
+        for J in (2, 3, 4)
+            # Circulant J x J payoff matrix: every alternative is symmetric under uniform prior mu = fill(1/J, J)
+            base_row = [cos(2pi * (k - 1) / J) + 0.5 * (k == 1 ? 1.0 : 0.0) for k in 1:J]
+            U_sym = [base_row[mod1(s - j + 1, J)] for j in 1:J, s in 1:J]
+            mu_unif = fill(1.0 / J, J)
+            for omega_val in (0.5, 1.0, 2.5)
+                sol_sym = solve_ri_discrete(U_sym, mu_unif; omega=omega_val, units=:nats)
+                @test sol_sym.converged
+                @test sol_sym.uncond_probs ≈ fill(1.0 / J, J) atol=1e-7
+                for s in 1:J
+                    logits = [exp(U_sym[j, s] / omega_val) for j in 1:J]
+                    mnl_p = logits ./ sum(logits)
+                    @test sol_sym.cond_probs[:, s] ≈ mnl_p atol=1e-7
+                end
+            end
+        end
+
+        # 3. Red-Bus / Blue-Bus duplicate-alternative test (Matejka & McKay 2015 Section II)
+        # Base: Car vs Red Bus under uniform 2-state prior
+        U_base = [1.0 0.0; 0.0 1.0]
+        mu_bb = [0.5, 0.5]
+        blue_bus = [0.0, 1.0]
+        diag = ri_iia_diagnostic(U_base, mu_bb, blue_bus; omega=0.25, units=:nats)
+        @test diag.base_solution.converged
+        @test diag.expanded_solution.converged
+        # Under RI, Car keeps P(Car) = 0.5 while Red Bus and Blue Bus split the bus share 0.25 / 0.25
+        @test diag.base_solution.uncond_probs ≈ [0.5, 0.5] atol=1e-6
+        @test diag.expanded_solution.uncond_probs[1] ≈ 0.5 atol=1e-6
+        @test diag.expanded_solution.uncond_probs[2] ≈ 0.25 atol=1e-6
+        @test diag.expanded_solution.uncond_probs[3] ≈ 0.25 atol=1e-6
+        # IIA violation: P(Car)/P(Red Bus) shifts from 1.0 to 2.0 (absolute odds ratio shift = 1.0)
+        @test diag.max_iia_violation > 0.5
+        @test diag.uncond_odds_ratio_shift[1, 2] ≈ 1.0 atol=1e-5
+        @test diag.uncond_odds_ratio_shift[2, 1] ≈ 0.5 atol=1e-5
+    end
+
 end

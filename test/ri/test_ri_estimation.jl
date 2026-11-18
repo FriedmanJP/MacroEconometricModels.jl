@@ -35,12 +35,16 @@ using MacroEconometricModels: dof_residual
         @test_throws ArgumentError estimate_ri(prob, data; measurement_error=-0.1)
 
         # CG test validation
+        rng = Xoshiro(9200)
+        y_cg_bad = randn(rng, 20)
+        fn_cg_bad = randn(rng, 20)
+        fl_cg_bad = randn(rng, 20)
         @test_throws DimensionMismatch coibion_gorodnichenko_test(ones(10), ones(9), ones(10))
         @test_throws ArgumentError coibion_gorodnichenko_test(ones(3), ones(3), ones(3))
         @test_throws ArgumentError coibion_gorodnichenko_test([1.0, 2.0, Inf, 4.0, 5.0], ones(5), zeros(5))
-        @test_throws ArgumentError coibion_gorodnichenko_test(randn(20), ones(20), ones(20)) # zero revisions
-        @test_throws ArgumentError coibion_gorodnichenko_test(randn(20), randn(20), randn(20); hac_lags=:bad)
-        @test_throws ArgumentError coibion_gorodnichenko_test(randn(20), randn(20), randn(20); hac_lags=-1)
+        @test_throws ArgumentError coibion_gorodnichenko_test(y_cg_bad, ones(20), ones(20)) # zero revisions
+        @test_throws ArgumentError coibion_gorodnichenko_test(y_cg_bad, fn_cg_bad, fl_cg_bad; hac_lags=:bad)
+        @test_throws ArgumentError coibion_gorodnichenko_test(y_cg_bad, fn_cg_bad, fl_cg_bad; hac_lags=-1)
 
         # implied_cg_slope validation
         @test_throws ArgumentError implied_cg_slope(sol; horizon=0)
@@ -77,7 +81,7 @@ using MacroEconometricModels: dof_residual
         @test isfinite(beta2_pop) && beta2_pop > 0.0
 
         # Simulate consensus forecasts for bivariate system
-        rng2 = Xoshiro(9201)
+        rng = Xoshiro(9201)
         T_mc = 8000
         KY2 = sol2.K_gain * sol2.Y_signal'
         Acl2 = A2 + prob2.B_u * sol2.F_policy
@@ -86,7 +90,7 @@ using MacroEconometricModels: dof_residual
         x_cur = zeros(2)
         xb_cur = zeros(2)
         for t in 1:T_mc
-            w_t = randn(rng2, 2)
+            w_t = randn(rng, 2)
             x_cur = A2 * x_cur + prob2.B_u * (sol2.F_policy * xb_cur) + B2 * w_t
             xb_prior = Acl2 * xb_cur
             xb_cur = xb_prior + KY2 * (x_cur - xb_prior)
@@ -111,12 +115,12 @@ using MacroEconometricModels: dof_residual
         beta_pop_s = implied_cg_slope(sol_s; horizon=1)
         G_s = sol_s.K_gain[1, 1]
 
-        rng_s = Xoshiro(9202)
+        rng = Xoshiro(9202)
         T_s = 600
         x_s = zeros(T_s)
         xb_s = zeros(T_s)
         for t in 2:T_s
-            x_s[t] = rho_s * x_s[t - 1] + randn(rng_s)
+            x_s[t] = rho_s * x_s[t - 1] + randn(rng)
             xb_s[t] = (1.0 - G_s) * rho_s * xb_s[t - 1] + G_s * x_s[t]
         end
         y_s = x_s[101:end]
@@ -182,9 +186,9 @@ using MacroEconometricModels: dof_residual
 
         # Missing survey observations (NaN in actions column)
         data_miss = copy(data_biv)
-        rng_miss = Xoshiro(9204)
+        rng = Xoshiro(9204)
         for t in 1:300
-            if rand(rng_miss) < 0.25
+            if rand(rng) < 0.25
                 data_miss[t, 2] = NaN
             end
         end

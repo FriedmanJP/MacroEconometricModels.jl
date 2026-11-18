@@ -328,7 +328,8 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         @test StateSpaceModel(Z, H, Tt, Q).init_mode === :kappa
         @test local_level(y).init_mode === :kappa
         @test local_linear_trend(y).init_mode === :kappa
-        @test estimate_tvp_reg(y, randn(Xoshiro(3), 80, 1)).init_mode === :kappa
+        X_tvp = randn(Xoshiro(3), 80, 1)
+        @test estimate_tvp_reg(y, X_tvp).init_mode === :kappa
         # :diffuse remains reachable and is a genuinely different initialization on a
         # model with a stationary direction (it warns about the nonstationary one).
         @test StateSpaceModel(Z, H, Tt, Q; init_mode=:diffuse).init_mode === :diffuse
@@ -392,17 +393,17 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         @test m_mle.loglik > estimate_statespace(ss_uncorr, y).loglik
 
         # Exact stacked-Gaussian GLS oracle for forecast(ss, h) with G !== nothing & R != I
-        rng_fc = Xoshiro(9162)
+        rng = Xoshiro(9162)
         ns_f, no_f, r_f, T_f, h_f = 3, 2, 2, 12, 4
         Z_f = [1.0 0.2 0.0; 0.0 1.0 -0.3]
         Tt_f = [0.65 0.1 0.0; 0.0 0.55 0.1; -0.05 0.0 0.45]
         R_f = [1.0 0.0; 0.4 1.0; 0.0 0.6]
-        B_f = randn(rng_fc, r_f + no_f, r_f + no_f)
+        B_f = randn(rng, r_f + no_f, r_f + no_f)
         Sig_f = B_f * B_f' / 4 + 0.1 * I
         Q_f = Sig_f[1:r_f, 1:r_f]; G_f = Sig_f[1:r_f, (r_f+1):end]; H_f = Sig_f[(r_f+1):end, (r_f+1):end]
         d_f = [0.05, -0.03]; c_f = [0.1, -0.05, 0.02]
         a1_f = [0.2, -0.1, 0.05]; P1_f = [0.8 0.1 0.0; 0.1 0.6 0.05; 0.0 0.05 0.5]
-        y_f = randn(rng_fc, T_f, no_f)
+        y_f = randn(rng, T_f, no_f)
         ss_f = StateSpaceModel(Z_f, H_f, Tt_f, Q_f; d=d_f, c=c_f, R=R_f, G=G_f, a1=a1_f, P1=P1_f)
         fit_f = estimate_statespace(ss_f, y_f)
         fc_f = forecast(fit_f, h_f)

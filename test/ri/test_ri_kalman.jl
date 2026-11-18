@@ -708,5 +708,63 @@ end
 
         @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
+
+    @testset "Luo (2008) / Sims (2003) & Afrouzi-Yang (2021) Analytical Benchmarks (#923)" begin
+        # Scalar AR(1) / RW tracking model: x_{t+1} = rho * x_t + sigma_w * w_{t+1}
+        # Analytical steady state (Sims 2003, Luo 2008):
+        #   Sigma_post = sigma_w^2 / (2^(2*kappa) - rho^2)
+        #   Sigma_prior = 2^(2*kappa) * Sigma_post
+        #   Effective scalar Kalman gain K = 1 - 2^(-2*kappa)
+        sigma_w = 1.4
+        for rho in (0.6, 0.9, 1.0)
+            A = reshape([rho], 1, 1)
+            B = reshape([sigma_w], 1, 1)
+            H = reshape([1.0], 1, 1)
+            for kappa in (0.25, 0.8, 1.5)
+                prob = RationalInattentionProblem(A, B, H; capacity=kappa, units=:bits)
+                sol = solve_ri_kalman(prob)
+                @test sol.converged
+
+                exp2k = 2.0^(2.0 * kappa)
+                sigma_post_exact = sigma_w^2 / (exp2k - rho^2)
+                sigma_prior_exact = exp2k * sigma_post_exact
+                K_exact = 1.0 - 2.0^(-2.0 * kappa)
+
+                @test sol.Sigma_post[1, 1] ≈ sigma_post_exact atol=1e-7
+                @test sol.Sigma_prior[1, 1] ≈ sigma_prior_exact atol=1e-7
+                K_eff = (sol.K_gain * sol.Y_signal')[1, 1]
+                @test K_eff ≈ K_exact atol=1e-7
+                @test sol.capacity_bits ≈ kappa atol=1e-7
+
+                # Verify analytical Luo (2008) slow adjustment IRF against to_statespace
+                # Under x_t state + belief xhat_{t|t}: response to unit fundamental shock w_1 = 1
+                H_irf = 10
+                ir = irf(sol, H_irf; observables=:actions)
+                @test size(ir.values) == (H_irf, 1, 2)
+                ir_vals = vec(ir.values[:, 1, 1])
+                # Action u_t = xhat_{t|t} lags full information (rho^(h-1)*sigma_w) monotonically with speed K_exact
+                expected_inertial = [((1.0 - (1.0 - K_exact)^h) * (rho^(h - 1)) * sigma_w) for h in 1:H_irf]
+                @test ir_vals ≈ expected_inertial atol=1e-5
+            end
+        end
+
+        # Afrouzi-Yang (2021) dynamic transition convergence to steady-state RI
+        A2 = [0.85 0.15; 0.0 0.70]
+        B2 = [1.0 0.0; 0.0 0.6]
+        H2 = [1.0 0.4]' |> Matrix
+        prob2 = RationalInattentionProblem(A2, B2, H2; omega=0.45)
+        sol_ss = solve_ri_kalman(prob2)
+
+        for scale_init in (0.1, 10.0)
+            Sigma_init = scale_init * sol_ss.Sigma_prior
+            dyn = solve_ri_transition(prob2, Sigma_init; T_path=120, tol=1e-10, max_iter=500)
+            @test dyn.converged
+            @test dyn.Sigma_prior_path[:, :, end] ≈ sol_ss.Sigma_prior rtol=1e-5 atol=1e-6
+            @test dyn.Sigma_post_path[:, :, end] ≈ sol_ss.Sigma_post rtol=1e-5 atol=1e-6
+            @test dyn.capacity_bits_path[end] ≈ sol_ss.capacity_bits rtol=1e-4 atol=1e-5
+            @test dyn.omega_path[end] ≈ sol_ss.omega rtol=1e-5 atol=1e-6
+            @test dyn.K_gain_path[:, :, end] ≈ sol_ss.K_gain * sol_ss.Y_signal' rtol=1e-4 atol=1e-5
+        end
+    end
 end
 
