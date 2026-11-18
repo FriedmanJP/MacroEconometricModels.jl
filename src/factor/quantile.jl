@@ -1338,3 +1338,301 @@ Pass `repro=true` to include the reproducibility manifest footer.
 report(m::QuantileFactorModel; repro::Bool=false) = report(stdout, m; repro=repro)
 report(io::IO, m::QuantileFactorModel; repro::Bool=false) =
     (show(IOContext(io, :repro => repro), m); nothing)
+
+# =============================================================================
+# Factor Count Selection: CDG (2021) Rank-Minimization & Check-Loss IC1–IC3
+# =============================================================================
+
+"""
+    QFMICResult{T<:AbstractFloat}
+
+Result of quantile-specific factor count selection via [`ic_criteria_qfm`](@ref)
+(Chen, Dolado & Gonzalo 2021, §3.2, Theorem 2).
+
+```math
+P_{NT} = c \\, \\hat{\\sigma}_1^2(\\tau) \\, L_{NT}^{-2/3} \\left(\\log L_{NT}^2\\right)^{1/3},
+\\qquad
+IC_p(k; \\tau) = \\log M_{NT}(\\hat{\\Lambda}^{(k)}, \\hat{F}^{(k)}; \\tau) + k \\, g_p(N, T)
+```
+
+where:
+- ``P_{NT}`` is the rank-minimization singular-value threshold
+- ``c`` is `threshold_scale` (default `1.0`)
+- ``\\hat{\\sigma}_1^2(\\tau)`` is the largest factor strength at `r_max`
+- ``L_{NT} = \\min(\\sqrt{N}, \\sqrt{T})`` is the effective panel rate
+- ``M_{NT}(\\cdot; \\tau)`` is the average check-function loss at `k` factors
+- ``g_p(N, T)`` for ``p \\in \\{1, 2, 3\\}`` are the three Bai–Ng (2002) penalty functions
+
+# Fields
+- `tau::T` — quantile level in `(0, 1)`
+- `r_max::Int` — maximum number of factors evaluated
+- `sigma_sq::Vector{T}` — descending factor strengths `diag(Λ'Λ / N)` from the `r_max` fit (`length r_max`)
+- `threshold_PNT::T` — CDG rank-minimization threshold `P_NT`
+- `r_rank::Int` — factor count selected by rank-minimization (`count(σ_j² ≥ P_NT)`)
+- `loss::Vector{T}` — average check-loss path across `k = 0:r_max` (`length r_max + 1`; index 1 is `k = 0`)
+- `IC1::Vector{T}` — Bai–Ng check-loss `IC1` values across `k = 0:r_max` (`length r_max + 1`)
+- `IC2::Vector{T}` — Bai–Ng check-loss `IC2` values across `k = 0:r_max` (`length r_max + 1`)
+- `IC3::Vector{T}` — Bai–Ng check-loss `IC3` values across `k = 0:r_max` (`length r_max + 1`)
+- `r_IC1::Int` — factor count minimizing `IC1` (`0 ≤ r_IC1 ≤ r_max`)
+- `r_IC2::Int` — factor count minimizing `IC2` (`0 ≤ r_IC2 ≤ r_max`)
+- `r_IC3::Int` — factor count minimizing `IC3` (`0 ≤ r_IC3 ≤ r_max`)
+"""
+struct QFMICResult{T<:AbstractFloat}
+    tau::T
+    r_max::Int
+    sigma_sq::Vector{T}
+    threshold_PNT::T
+    r_rank::Int
+    loss::Vector{T}
+    IC1::Vector{T}
+    IC2::Vector{T}
+    IC3::Vector{T}
+    r_IC1::Int
+    r_IC2::Int
+    r_IC3::Int
+end
+
+function Base.show(io::IO, res::QFMICResult{T}) where {T}
+    summary_data = Any[
+        "Quantile (τ)"        _fmt(res.tau; digits=3);
+        "Max factors (r_max)" res.r_max;
+        "Threshold (P_NT)"    _fmt(res.threshold_PNT; digits=4);
+        "Selected r (rank)"   res.r_rank;
+        "Selected r (IC1)"    res.r_IC1;
+        "Selected r (IC2)"    res.r_IC2;
+        "Selected r (IC3)"    res.r_IC3
+    ]
+    _pretty_table(io, summary_data;
+        title = "Quantile Factor Selection (τ=$(_fmt(res.tau; digits=3)), r_rank=$(res.r_rank))",
+        column_labels = ["Criterion", "Value"],
+        alignment = [:l, :r],
+    )
+
+    n_rows = res.r_max + 1
+    path_data = Matrix{Any}(undef, n_rows, 6)
+    for idx in 1:n_rows
+        k = idx - 1
+        path_data[idx, 1] = k
+        if k == 0
+            path_data[idx, 2] = "—"
+        else
+            s_mark = res.sigma_sq[k] > zero(T) && res.sigma_sq[k] >= res.threshold_PNT ? "*" : ""
+            path_data[idx, 2] = _fmt(res.sigma_sq[k]; digits=4) * s_mark
+        end
+        path_data[idx, 3] = _fmt(res.loss[idx]; digits=4)
+        path_data[idx, 4] = _fmt(res.IC1[idx]; digits=4) * (k == res.r_IC1 ? "*" : "")
+        path_data[idx, 5] = _fmt(res.IC2[idx]; digits=4) * (k == res.r_IC2 ? "*" : "")
+        path_data[idx, 6] = _fmt(res.IC3[idx]; digits=4) * (k == res.r_IC3 ? "*" : "")
+    end
+    _pretty_table(io, path_data;
+        title = "Rank-Minimization & Check-Loss IC Path (* indicates selected)",
+        column_labels = ["k", "σ²", "Check Loss", "IC1", "IC2", "IC3"],
+        alignment = [:r, :r, :r, :r, :r, :r],
+    )
+end
+
+"""
+    report(res::QFMICResult)
+
+Print a summary table of quantile factor selection via rank-minimization and check-loss IC1–IC3.
+"""
+report(res::QFMICResult) = report(stdout, res)
+report(io::IO, res::QFMICResult) = (show(io, res); nothing)
+
+"""Separate IC-selection kwargs from estimation kwargs so `estimate_qfm(X, :auto, ...)` forwards cleanly."""
+function _qfm_ic_split_kwargs(kwargs)
+    ic_only = Dict{Symbol,Any}()
+    est_only = Dict{Symbol,Any}()
+    shared = Dict{Symbol,Any}()
+    for (k, v) in kwargs
+        if k === :threshold_scale || k === :warn_boundary
+            ic_only[k] = v
+        elseif k === :se || k === :hac_bandwidth || k === :n_boot || k === :varnames
+            est_only[k] = v
+        else
+            shared[k] = v
+        end
+    end
+    return ic_only, est_only, shared
+end
+
+"""Average unconditional `tau`-quantile check loss `M_{NT}(0)` on `X_proc`."""
+function _qfm_ic_zero_loss(X_proc::Matrix{T}, tau::T) where {T<:AbstractFloat}
+    T_obs, N = size(X_proc)
+    total = zero(T)
+    @inbounds for i in 1:N
+        col = @view X_proc[:, i]
+        q_i = T(Statistics.quantile(col, tau))
+        for t in 1:T_obs
+            u = col[t] - q_i
+            total += u * (tau - (u < zero(T) ? one(T) : zero(T)))
+        end
+    end
+    return total / T(T_obs * N)
+end
+
+"""
+    ic_criteria_qfm(X, r_max, tau=0.5; method=:iqr, threshold_scale=1.0,
+                    warn_boundary=true, kwargs...) -> QFMICResult
+
+Select the quantile-specific factor count `r(τ)` using Chen, Dolado & Gonzalo (2021, §3.2,
+Theorem 2) rank-minimization (`r_rank`) and Bai–Ng check-loss information criteria (`r_IC1`–`r_IC3`).
+
+```math
+L_{NT} = \\min(\\sqrt{N}, \\sqrt{T}), \\qquad
+P_{NT} = c \\, \\hat{\\sigma}_1^2(\\tau) \\, L_{NT}^{-2/3} \\left(\\log L_{NT}^2\\right)^{1/3}
+```
+
+where:
+- ``N`` is the number of panel variables
+- ``T`` is the number of time-series observations
+- ``L_{NT}`` is the panel rate ``\\min(\\sqrt{N}, \\sqrt{T})``
+- ``c`` is `threshold_scale`
+- ``\\hat{\\sigma}_1^2(\\tau)`` is the leading normalized factor strength from the `r_max` fit
+- ``P_{NT}`` is the rank-minimization threshold
+
+# Arguments
+- `X::AbstractMatrix{<:Real}` — data panel (`T_obs × N`)
+- `r_max::Int` — maximum number of factors to consider (`1 ≤ r_max ≤ min(T_obs, N)`)
+- `tau::Real = 0.5` — quantile level strictly in `(0, 1)`
+
+# Keyword Arguments
+- `method::Symbol = :iqr` — QFM estimation method (`:iqr` or `:smoothed_iqr`)
+- `threshold_scale::Real = 1.0` — positive multiplier `c` on the CDG threshold `P_NT`
+- `warn_boundary::Bool = true` — emit `@warn` when `r_rank == r_max` or `r_IC1 == r_max`
+- `kwargs...` — additional keyword arguments forwarded to [`estimate_qfm`](@ref)
+  (e.g., `standardize`, `robust_scale`, `init`, `n_starts`, `max_iter`, `tol`, `threaded`,
+  `bandwidth`, `kernel`, `rng`, `seed`)
+
+# Returns
+A [`QFMICResult`](@ref) containing `r_rank`, `r_IC1`, `r_IC2`, `r_IC3`, `sigma_sq`,
+`threshold_PNT`, `loss`, `IC1`, `IC2`, and `IC3`.
+
+# Example
+```julia
+X = randn(200, 80)
+ic = ic_criteria_qfm(X, 5, 0.1; init=:quantile_svd, seed=42)
+report(ic)
+```
+
+# References
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile factor models.
+  *Econometrica*, 89(2), 875–910.
+- Bai, J., & Ng, S. (2002). Determining the number of factors in approximate factor models.
+  *Econometrica*, 70(1), 191–221.
+"""
+function ic_criteria_qfm(X::AbstractMatrix{T}, r_max::Int, tau::Real=0.5;
+                         method::Symbol=:iqr,
+                         threshold_scale::Real=1.0,
+                         warn_boundary::Bool=true,
+                         kwargs...) where {T<:AbstractFloat}
+    _validate_data(X, "X")
+    T_obs, N = size(X)
+    validate_factor_inputs(T_obs, N, r_max; context="max factors")
+    tau_T = T(tau)
+    (isfinite(tau) && zero(T) < tau_T < one(T)) ||
+        throw(ArgumentError("tau must lie strictly in (0, 1), got $tau"))
+    validate_option(method, "method", (:iqr, :smoothed_iqr))
+    (!(threshold_scale isa Bool) && isfinite(threshold_scale) && threshold_scale > 0) ||
+        throw(ArgumentError("threshold_scale must be > 0, got $threshold_scale"))
+
+    _, _, shared_kw = _qfm_ic_split_kwargs(kwargs)
+    fit_kw = (; shared_kw...)
+
+    X_orig = Matrix{T}(X)
+    std_flag = Bool(get(shared_kw, :standardize, false))
+    rob_flag = Bool(get(shared_kw, :robust_scale, true))
+    X_proc = std_flag ? _qfm_standardize(X_orig, rob_flag)[1] : X_orig
+
+    # Fit r_max model once for rank-minimization & k = r_max check loss
+    qfm_max = estimate_qfm(X_orig, r_max, tau_T; method=method, fit_kw..., se=:none)
+    sigma_sq = copy(qfm_max.sigma_sq)
+
+    L_NT = min(sqrt(T(N)), sqrt(T(T_obs)))
+    log_L2 = max(log(L_NT^2), eps(T))
+    threshold_PNT = T(threshold_scale) * sigma_sq[1] *
+                    L_NT^(-T(2) / T(3)) * log_L2^(one(T) / T(3))
+    r_rank = count(j -> sigma_sq[j] > zero(T) && sigma_sq[j] >= threshold_PNT, 1:r_max)
+
+    loss = Vector{T}(undef, r_max + 1)
+    loss[1] = _qfm_ic_zero_loss(X_proc, tau_T)
+    for k in 1:(r_max - 1)
+        qfm_k = estimate_qfm(X_orig, k, tau_T; method=method, fit_kw..., se=:none)
+        loss[k + 1] = qfm_k.objective
+    end
+    loss[r_max + 1] = qfm_max.objective
+
+    NT = T(N * T_obs)
+    N_plus_T = T(N + T_obs)
+    min_NT = T(min(N, T_obs))
+    g1 = (N_plus_T / NT) * log(NT / N_plus_T)
+    g2 = (N_plus_T / NT) * log(min_NT)
+    g3 = log(min_NT) / min_NT
+    floor_loss = max(T(1e-15), floatmin(T))
+
+    IC1 = Vector{T}(undef, r_max + 1)
+    IC2 = Vector{T}(undef, r_max + 1)
+    IC3 = Vector{T}(undef, r_max + 1)
+    @inbounds for idx in 1:(r_max + 1)
+        k = idx - 1
+        logL = log(max(loss[idx], floor_loss))
+        IC1[idx] = logL + T(k) * g1
+        IC2[idx] = logL + T(k) * g2
+        IC3[idx] = logL + T(k) * g3
+    end
+
+    r_IC1 = argmin(IC1) - 1
+    r_IC2 = argmin(IC2) - 1
+    r_IC3 = argmin(IC3) - 1
+
+    if warn_boundary && (r_rank == r_max || r_IC1 == r_max)
+        @warn "QFM factor selection hit upper boundary r_max=$r_max (r_rank=$r_rank, r_IC1=$r_IC1). Consider increasing r_max."
+    end
+
+    return QFMICResult{T}(
+        tau_T, r_max, sigma_sq, threshold_PNT, r_rank,
+        loss, IC1, IC2, IC3, r_IC1, r_IC2, r_IC3,
+    )
+end
+
+@float_fallback ic_criteria_qfm X
+
+"""
+    estimate_qfm(X, :auto, tau=0.5; r_max=min(10, max(1, min(size(X)...) - 1)),
+                 criterion=:rank, kwargs...) -> QuantileFactorModel
+
+Automatically select the quantile factor count `r(τ)` via [`ic_criteria_qfm`](@ref)
+and fit the [`QuantileFactorModel`](@ref) at the selected rank.
+
+# Keyword Arguments
+- `r_max::Int = min(10, max(1, min(size(X)...) - 1))` — maximum factor count considered
+- `criterion::Symbol = :rank` — selection rule (`:rank`, `:ic1`, `:ic2`, or `:ic3`)
+- `kwargs...` — forwarded to [`ic_criteria_qfm`](@ref) and [`estimate_qfm`](@ref)
+"""
+function estimate_qfm(X::AbstractMatrix{T}, r::Symbol, tau::Real=0.5;
+                      r_max::Int=min(10, max(1, min(size(X)...) - 1)),
+                      criterion::Symbol=:rank,
+                      kwargs...) where {T<:AbstractFloat}
+    r === :auto || throw(ArgumentError("r must be a positive integer or :auto, got :$r"))
+    validate_option(criterion, "criterion", (:rank, :ic1, :ic2, :ic3))
+
+    ic_only, est_only, shared = _qfm_ic_split_kwargs(kwargs)
+    ic_kw = merge(shared, ic_only)
+    est_kw = merge(shared, est_only)
+
+    ic = ic_criteria_qfm(X, r_max, tau; ic_kw...)
+    r_sel = if criterion === :rank
+        ic.r_rank
+    elseif criterion === :ic1
+        ic.r_IC1
+    elseif criterion === :ic2
+        ic.r_IC2
+    else
+        ic.r_IC3
+    end
+    if r_sel < 1
+        @warn "Selected factor count is $r_sel under criterion :$criterion; clamping to r=1 for QuantileFactorModel estimation."
+        r_sel = 1
+    end
+    return estimate_qfm(X, r_sel, tau; est_kw...)
+end

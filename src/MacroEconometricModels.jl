@@ -1155,7 +1155,7 @@ export estimate_favar
 export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 
 # Quantile Factor Model types and estimation
-export QuantileFactorModel, estimate_qfm
+export QuantileFactorModel, QFMICResult, estimate_qfm, ic_criteria_qfm
 
 # =============================================================================
 # Exports - Utility Functions

@@ -683,6 +683,195 @@ end
         end
     end
 
+    # =========================================================================
+    # QFM-04 (#886): Rank-minimization & check-loss IC factor selection
+    # =========================================================================
+    @testset "Quantile Factor Selection & IC (QFM-04)" begin
+        @testset "Location-scale DGP rank detection across quantiles" begin
+            rng = MersenneTwister(8861)
+            T_obs, N = 200, 80
+            z = randn(rng, T_obs)
+            f1 = 1.5 .* randn(rng, T_obs)
+            f2 = exp.(0.6 .* z) .+ 0.3
+            e = randn(rng, T_obs, N)
+
+            # Two-loading location-scale DGP: quantile-specific rank (r=1 at tau=0.5, r=2 at tails)
+            lam1 = 1.5 .* randn(rng, N)
+            lam2 = 0.6 .+ 0.8 .* rand(rng, N)
+            X_ls = f1 * lam1' .+ (f2 * lam2') .* e
+
+            ic_low = ic_criteria_qfm(X_ls, 5, 0.1)
+            ic_med = ic_criteria_qfm(X_ls, 5, 0.5)
+            ic_high = ic_criteria_qfm(X_ls, 5, 0.9)
+
+            @test ic_low isa QFMICResult{Float64}
+            @test ic_low.tau == 0.1
+            @test ic_low.r_max == 5
+            @test length(ic_low.sigma_sq) == 5
+            @test length(ic_low.loss) == 6
+            @test length(ic_low.IC1) == 6
+            @test length(ic_low.IC2) == 6
+            @test length(ic_low.IC3) == 6
+            @test issorted(ic_low.loss; rev=true)
+            @test ic_low.r_rank == 2
+            @test ic_med.r_rank == 1
+            @test ic_high.r_rank == 2
+            @test ic_med.r_IC1 == 1
+            @test ic_med.r_IC2 == 1
+            @test ic_low.r_IC1 >= 2
+            @test ic_high.r_IC1 >= 2
+
+            # Heavy-tailed t(3) location-scale DGP: rank=1 at median, rank=2 at tail quantiles
+            rng2 = MersenneTwister(8862)
+            T2, N2 = 200, 80
+            f1_t = 1.2 .* randn(rng2, T2)
+            f2_t = exp.(0.6 .* randn(rng2, T2)) .+ 0.3
+            lam1_t = randn(rng2, N2)
+            lam2_t = 0.7 .+ 1.1 .* rand(rng2, N2)
+            X_t3 = f1_t * lam1_t' .+ (f2_t * lam2_t') .* (0.5 .* rand(rng2, TDist(3), T2, N2))
+
+            ic_t_low = ic_criteria_qfm(X_t3, 5, 0.1)
+            ic_t_med = ic_criteria_qfm(X_t3, 5, 0.5)
+            ic_t_high = ic_criteria_qfm(X_t3, 5, 0.9)
+            @test ic_t_low.r_rank == 2
+            @test ic_t_med.r_rank == 1
+            @test ic_t_high.r_rank == 2
+        end
+
+        @testset "Pure location DGP and zero-factor noise panel" begin
+            rng = MersenneTwister(8863)
+            T_obs, N = 150, 60
+            F_true = randn(rng, T_obs, 2)
+            L_true = randn(rng, N, 2)
+            X_loc = F_true * L_true' .+ 0.35 .* randn(rng, T_obs, N)
+
+            ic_loc = ic_criteria_qfm(X_loc, 5, 0.5)
+            @test ic_loc.r_rank == 2
+            @test ic_loc.r_IC1 == 2
+            @test ic_loc.r_IC2 == 2
+            @test ic_loc.r_IC3 == 2
+
+            ic_sm = ic_criteria_qfm(X_loc, 4, 0.5; method=:smoothed_iqr)
+            @test ic_sm.r_rank == 2
+            @test ic_sm.r_IC2 == 2
+
+            # Pure Gaussian noise: Bai-Ng check-loss IC selects r=0
+            X_noise = randn(rng, T_obs, N)
+            ic_noise = ic_criteria_qfm(X_noise, 4, 0.5; warn_boundary=false)
+            @test ic_noise.r_IC1 == 0
+            @test ic_noise.r_IC2 == 0
+            @test ic_noise.r_IC3 == 0
+            @test ic_noise.loss[1] >= ic_noise.loss[end]
+        end
+
+        @testset "Threshold scale, boundary warnings, and :auto dispatch" begin
+            rng = MersenneTwister(8864)
+            T_obs, N = 120, 50
+            F3 = randn(rng, T_obs, 3)
+            L3 = randn(rng, N, 3)
+            X3 = F3 * L3' .+ 0.3 .* randn(rng, T_obs, N)
+
+            # Upper boundary r_max < r_true emits @warn unless warn_boundary=false
+            ic_bnd = @test_logs (:warn, r"boundary|r_max") ic_criteria_qfm(X3, 2, 0.5)
+            @test ic_bnd.r_rank == 2 || ic_bnd.r_IC1 == 2
+            ic_nowarn = @test_nowarn ic_criteria_qfm(X3, 2, 0.5; warn_boundary=false)
+            @test ic_nowarn.r_rank == ic_bnd.r_rank
+
+            # threshold_scale proportionality & monotonicity
+            ic_s1 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=1.0)
+            ic_s2 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=2.0)
+            ic_big = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=100.0)
+            @test ic_s2.threshold_PNT ≈ 2.0 * ic_s1.threshold_PNT rtol=1e-12
+            @test ic_s2.r_rank <= ic_s1.r_rank
+            @test ic_big.r_rank == 0
+
+            # estimate_qfm(X, :auto, tau; ...) across criteria and kwarg forwarding
+            qfm_auto_rank = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=:rank)
+            @test qfm_auto_rank isa QuantileFactorModel{Float64}
+            @test qfm_auto_rank.r == 3
+            @test qfm_auto_rank.tau == 0.5
+
+            qfm_auto_ic2 = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=:ic2,
+                                        method=:smoothed_iqr, se=:asymptotic)
+            @test qfm_auto_ic2.r == 3
+            @test qfm_auto_ic2.method == :smoothed_iqr
+            @test !isempty(qfm_auto_ic2.se_loadings)
+            @test !isempty(qfm_auto_ic2.se_factors)
+            @test size(qfm_auto_ic2.se_loadings) == (N, 3)
+            @test size(qfm_auto_ic2.se_factors) == (T_obs, 3)
+
+            for crit in (:ic1, :ic3)
+                q_c = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=crit)
+                @test q_c.r == 3
+            end
+
+            # Zero-factor clamp fallback warning on pure noise with criterion=:ic2
+            X_noise = randn(rng, 100, 40)
+            q_zero = @test_logs (:warn, r"clamping to r=1") estimate_qfm(
+                X_noise, :auto, 0.5; r_max=3, criterion=:ic2, warn_boundary=false,
+            )
+            @test q_zero.r == 1
+        end
+
+        @testset "RSER-01 constructor, display, Float32, fallback, and validation" begin
+            rng = MersenneTwister(8865)
+            T_obs, N = 100, 40
+            F2 = randn(rng, T_obs, 2)
+            L2 = randn(rng, N, 2)
+            X = F2 * L2' .+ 0.35 .* randn(rng, T_obs, N)
+
+            ic = ic_criteria_qfm(X, 4, 0.25)
+
+            # Default positional constructor QFMICResult{T}(fields...) matching fieldnames order
+            ic_copy = QFMICResult{Float64}(
+                ic.tau, ic.r_max, ic.sigma_sq, ic.threshold_PNT, ic.r_rank,
+                ic.loss, ic.IC1, ic.IC2, ic.IC3, ic.r_IC1, ic.r_IC2, ic.r_IC3,
+            )
+            @test ic_copy.tau == ic.tau
+            @test ic_copy.r_rank == ic.r_rank
+            @test ic_copy.IC2 == ic.IC2
+
+            # Display backends & report
+            for backend in (:text, :latex, :html)
+                MacroEconometricModels.with_display_backend(backend) do
+                    s = sprint(show, ic)
+                    @test !isempty(s)
+                    s_rep = sprint(report, ic)
+                    @test !isempty(s_rep)
+                end
+            end
+
+            # Float32 precision preservation
+            X32 = Float32.(X)
+            ic32 = ic_criteria_qfm(X32, 4, 0.25f0)
+            @test ic32 isa QFMICResult{Float32}
+            @test eltype(ic32.sigma_sq) === Float32
+            @test eltype(ic32.IC1) === Float32
+            @test typeof(ic32.threshold_PNT) === Float32
+            @test ic32.r_rank == 2
+
+            qfm32 = estimate_qfm(X32, :auto, 0.25f0; r_max=4)
+            @test qfm32 isa QuantileFactorModel{Float32}
+            @test qfm32.r == 2
+
+            # Integer input @float_fallback
+            X_int = round.(Int, 10 .* X)
+            ic_int = ic_criteria_qfm(X_int, 4, 0.5)
+            @test ic_int isa QFMICResult{Float64}
+
+            # Validation errors
+            @test_throws ArgumentError ic_criteria_qfm(X, 0, 0.5)
+            @test_throws ArgumentError ic_criteria_qfm(X, N + 1, 0.5)
+            @test_throws ArgumentError ic_criteria_qfm(X, 4, 0.0)
+            @test_throws ArgumentError ic_criteria_qfm(X, 4, 1.0)
+            @test_throws ArgumentError ic_criteria_qfm(X, 4, 0.5; threshold_scale=0.0)
+            @test_throws ArgumentError ic_criteria_qfm(X, 4, 0.5; threshold_scale=-1.0)
+            @test_throws ArgumentError ic_criteria_qfm(X, 4, 0.5; method=:invalid_method)
+            @test_throws ArgumentError estimate_qfm(X, :bogus, 0.5)
+            @test_throws ArgumentError estimate_qfm(X, :auto, 0.5; criterion=:invalid_crit)
+        end
+    end
+
     @testset "No method ambiguities in MacroEconometricModels" begin
         @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
