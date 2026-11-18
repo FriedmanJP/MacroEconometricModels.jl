@@ -831,6 +831,7 @@ export evaluate_policy, evaluate_value, physical_nodes, max_euler_error, vfi_sol
 
 # Accessors & ABCD representation
 export ABCDSystem, abcd_representation
+export InvertibilityResult, poor_mans_invertibility, is_invertible
 export nstates, nobservables
 export nshocks, is_determined, is_stable
 

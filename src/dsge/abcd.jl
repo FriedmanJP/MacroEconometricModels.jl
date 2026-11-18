@@ -770,3 +770,594 @@ function abcd_representation(ss::StateSpaceModel{T},
     return _finalize_abcd(A, B, C, D, c_state, d_obs, snames, obs_names, shock_names;
                           reduction=reduction, tol=tol)
 end
+
+# =============================================================================
+# FVRSW (2007) Poor Man's Invertibility & Komunjer-Ng (2011) Transmission Zeros
+# =============================================================================
+
+"""
+    InvertibilityResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+
+Result of the Fernández-Villaverde, Rubio-Ramírez, Sargent, and Watson (2007)
+Poor Man's Invertibility Condition and Komunjer–Ng (2011) Rosenbrock transmission-zero
+check for a canonical `ABCDSystem{T}`:
+
+```math
+x_{t+1} = A x_t + B w_{t+1}, \\qquad y_{t+1} = C x_t + D w_{t+1}, \\qquad
+M = A - B D^{-1} C
+```
+
+where:
+- ``x_t`` is the ``n \\times 1`` vector of state variables
+- ``y_{t+1}`` is the ``k \\times 1`` vector of observables
+- ``w_{t+1}`` is the ``m \\times 1`` vector of structural shocks
+- ``A``, ``B``, ``C``, ``D`` are the canonical state-space matrices
+- ``M`` is the square-system state-error transition matrix (``A - B D^{-1} C`` when ``k = m`` and ``D`` is nonsingular; reduced ``A_{\\text{red}}`` for tall full-column-rank systems)
+
+For tall or rank-deficient systems, finite invariant zeros of the Rosenbrock system
+matrix pencil ``P(z) = [A - z I_n \\;\\; B;\\; C \\;\\; D]`` are extracted via orthogonal
+staircase deflation. Real and imaginary parts of finite zeros are stored in `zero_re` and
+`zero_im`, with `.eigenvalues` and `.transmission_zeros` exposed as `Complex{T}` vectors
+via `getproperty`.
+
+# Fields
+- `invertible::Bool` — `true` when structural shocks are recoverable from current and past observables
+- `status::Symbol` — regime classification (`:invertible`, `:borderline_unit_circle`, `:non_invertible_zeros`, `:non_invertible_underdetermined`, `:non_invertible_singular_D`, `:invertible_tall`, `:non_invertible_tall_zeros`)
+- `max_modulus::T` — maximum modulus of eigenvalues of `M` or finite transmission zeros (`Inf` if only infinite zeros exist; `NaN` if underdetermined)
+- `zero_re::Vector{T}` — real parts of eigenvalues / finite transmission zeros
+- `zero_im::Vector{T}` — imaginary parts of eigenvalues / finite transmission zeros
+- `n_unstable::Int` — count of finite eigenvalues / zeros with modulus strictly exceeding `1 + tol`
+- `n_infinite_zeros::Int` — count of infinite transmission zeros (delayed shock impact)
+- `M::Matrix{T}` — `n × n` feedback matrix (`A - B D⁻¹ C` or QR-reduced `A_red`)
+- `Omega::Matrix{T}` — `m × k` shock recovery matrix (`D⁻¹` or minimum-norm left inverse `D⁺`)
+- `var_lag_matrices::Vector{Matrix{T}}` — convergent `VAR(∞)` lag coefficients `Π_j = C M^{j-1} B D⁻¹` (`j = 1..max_var_lags`) when square and invertible
+- `n_states::Int` — number of states `n`
+- `n_obs::Int` — number of observables `k`
+- `n_shocks::Int` — number of structural shocks `m`
+- `rank_D::Int` — numerical rank of `D`
+- `tol::T` — unit-circle classification tolerance
+- `obs_names::Vector{String}` — observable labels
+- `shock_names::Vector{String}` — shock labels
+"""
+struct InvertibilityResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
+    invertible::Bool
+    status::Symbol
+    max_modulus::T
+    zero_re::Vector{T}
+    zero_im::Vector{T}
+    n_unstable::Int
+    n_infinite_zeros::Int
+    M::Matrix{T}
+    Omega::Matrix{T}
+    var_lag_matrices::Vector{Matrix{T}}
+    n_states::Int
+    n_obs::Int
+    n_shocks::Int
+    rank_D::Int
+    tol::T
+    obs_names::Vector{String}
+    shock_names::Vector{String}
+
+    function InvertibilityResult{T}(
+        invertible::Bool,
+        status::Symbol,
+        max_modulus::Real,
+        zero_re::AbstractVector,
+        zero_im::AbstractVector,
+        n_unstable::Int,
+        n_infinite_zeros::Int,
+        M::AbstractMatrix,
+        Omega::AbstractMatrix,
+        var_lag_matrices::AbstractVector,
+        n_states::Int,
+        n_obs::Int,
+        n_shocks::Int,
+        rank_D::Int,
+        tol::Real,
+        obs_names::AbstractVector,
+        shock_names::AbstractVector,
+    ) where {T<:AbstractFloat}
+        zr = Vector{T}(zero_re)
+        zi = Vector{T}(zero_im)
+        length(zr) == length(zi) || throw(ArgumentError(
+            "zero_re and zero_im must have equal length, got $(length(zr)) and $(length(zi))"))
+        vlm = Matrix{T}[Matrix{T}(mat) for mat in var_lag_matrices]
+        new{T}(
+            invertible,
+            status,
+            T(max_modulus),
+            zr,
+            zi,
+            n_unstable,
+            n_infinite_zeros,
+            Matrix{T}(M),
+            Matrix{T}(Omega),
+            vlm,
+            n_states,
+            n_obs,
+            n_shocks,
+            rank_D,
+            T(tol),
+            String[string(s) for s in obs_names],
+            String[string(s) for s in shock_names],
+        )
+    end
+end
+
+function Base.getproperty(r::InvertibilityResult, s::Symbol)
+    if s === :eigenvalues || s === :transmission_zeros
+        return Complex.(getfield(r, :zero_re), getfield(r, :zero_im))
+    elseif s === :rho
+        return getfield(r, :max_modulus)
+    elseif s === :Pi
+        return getfield(r, :var_lag_matrices)
+    end
+    return getfield(r, s)
+end
+
+function Base.propertynames(r::InvertibilityResult, private::Bool=false)
+    return (fieldnames(typeof(r))..., :eigenvalues, :transmission_zeros, :rho, :Pi)
+end
+
+"""
+    StatsAPI.pvalue(r::InvertibilityResult{T}) -> T
+
+Deterministic algebraic invertibility test p-value under `H₀: invertible`
+(`1` if `r.invertible`, `0` otherwise).
+"""
+StatsAPI.pvalue(r::InvertibilityResult{T}) where {T<:AbstractFloat} =
+    r.invertible ? one(T) : zero(T)
+
+function _abcd_inv_status_label(status::Symbol)
+    status === :invertible && return "Invertible (square, |λ_max| < 1)"
+    status === :borderline_unit_circle && return "Borderline unit circle (|λ_max| ≈ 1)"
+    status === :non_invertible_zeros && return "Non-invertible (unstable zeros |λ| > 1)"
+    status === :non_invertible_underdetermined && return "Non-invertible (underdetermined: k < m)"
+    status === :non_invertible_singular_D && return "Non-invertible (singular D / delayed impact)"
+    status === :invertible_tall && return "Invertible tall system (Komunjer–Ng)"
+    status === :non_invertible_tall_zeros && return "Non-invertible tall system (unstable transmission zeros)"
+    return string(status)
+end
+
+function Base.show(io::IO, r::InvertibilityResult{T}) where {T}
+    spec_data = Any[
+        "H₀"                      "System is invertible (fundamental shocks)";
+        "Status"                  "$(_abcd_inv_status_label(r.status)) [$(r.status)]";
+        "Invertible"              _yesno(r.invertible);
+        "Dimensions (n, k, m)"    "($(r.n_states), $(r.n_obs), $(r.n_shocks))";
+        "rank(D)"                 "$(r.rank_D) / $(min(r.n_obs, r.n_shocks))";
+        "Max |eigenvalue / zero|" _fmt(r.max_modulus; digits=6);
+        "Unstable finite zeros"   r.n_unstable;
+        "Infinite zeros"          r.n_infinite_zeros;
+        "Tolerance"               _fmt(r.tol; digits=4);
+        "P-value (algebraic)"     _fmt(StatsAPI.pvalue(r); digits=4);
+    ]
+    _pretty_table(io, spec_data;
+        title = "FVRSW Poor Man's Invertibility Test",
+        column_labels = ["", ""],
+        alignment = [:l, :r],
+    )
+    return nothing
+end
+
+"""
+    report([io::IO], r::InvertibilityResult)
+
+Print a detailed summary table of an [`InvertibilityResult`](@ref), including finite
+eigenvalues / transmission zeros and the shock recovery matrix `Ω` when applicable.
+"""
+function report(io::IO, r::InvertibilityResult{T}) where {T}
+    show(io, r)
+    n_zeros = length(r.zero_re)
+    if n_zeros > 0
+        println(io)
+        zdata = Matrix{Any}(undef, n_zeros, 5)
+        for i in 1:n_zeros
+            re_i = r.zero_re[i]
+            im_i = r.zero_im[i]
+            mod_i = hypot(re_i, im_i)
+            zdata[i, 1] = i
+            zdata[i, 2] = _fmt(re_i; digits=6)
+            zdata[i, 3] = _fmt(im_i; digits=6)
+            zdata[i, 4] = _fmt(mod_i; digits=6)
+            zdata[i, 5] = mod_i > one(T) + r.tol ? "Unstable" : (abs(mod_i - one(T)) <= r.tol ? "Unit circle" : "Stable")
+        end
+        _pretty_table(io, zdata;
+            title = "Eigenvalues / Finite Transmission Zeros",
+            column_labels = ["#", "Re", "Im", "|λ|", "Regime"],
+            alignment = [:r, :r, :r, :r, :l],
+        )
+    end
+    if r.n_shocks > 0 && r.n_obs > 0 && r.n_shocks <= 12 && r.n_obs <= 12 &&
+       (r.status === :invertible || r.status === :invertible_tall)
+        println(io)
+        _matrix_table(io, r.Omega, "Shock Recovery Matrix Ω";
+            row_labels=r.shock_names, col_labels=r.obs_names)
+    end
+    return nothing
+end
+
+report(r::InvertibilityResult) = report(stdout, r)
+
+# -----------------------------------------------------------------------------
+# Internal helpers for Komunjer-Ng (2011) & Rosenbrock pencil zero extraction
+# -----------------------------------------------------------------------------
+
+"""Extract unobservable eigenvalues of `(A_red, C_2)` via orthogonal observability staircase."""
+function _abcd_inv_unobservable_modes(A_red::Matrix{WT}, C_2::Matrix{WT};
+                                        rank_tol::WT) where {WT<:AbstractFloat}
+    n = size(A_red, 1)
+    n == 0 && return Complex{WT}[]
+    size(C_2, 1) == 0 && return Complex{WT}.(eigvals(A_red))
+
+    U_o = _controllable_subspace(Matrix{WT}(A_red'), Matrix{WT}(C_2'); tol=rank_tol)
+    r_o = size(U_o, 2)
+    r_o == n && return Complex{WT}[]
+    if r_o == 0
+        return Complex{WT}.(eigvals(A_red))
+    end
+    qrU = qr(U_o)
+    Q_full = qrU.Q * Matrix{WT}(I, n, n)
+    U_unobs = Matrix{WT}(@view Q_full[:, (r_o + 1):n])
+    A_uu = Matrix{WT}(U_unobs' * A_red * U_unobs)
+    return Complex{WT}.(eigvals(A_uu))
+end
+
+"""
+Extract finite invariant transmission zeros and infinite-zero elimination count from a
+Rosenbrock system pencil `[A - λ I_n  B; C  D]` with `k >= m` via Emami-Naeini & Van Dooren
+(1982) orthogonal staircase deflation.
+"""
+function _abcd_inv_transmission_zeros(A::Matrix{WT}, B::Matrix{WT},
+                                        C::Matrix{WT}, D::Matrix{WT};
+                                        rank_tol::WT, scale_ref::WT) where {WT<:AbstractFloat}
+    Ac = copy(A)
+    Bc = copy(B)
+    Cc = copy(C)
+    Dc = copy(D)
+    n_inf_elim = 0
+
+    max_steps = size(A, 1) + 2
+    for _ in 1:max_steps
+        nc = size(Ac, 1)
+        kc, mc = size(Dc)
+        nc == 0 && return Complex{WT}[], n_inf_elim
+        mc == 0 && return _abcd_inv_unobservable_modes(Ac, Cc; rank_tol=rank_tol), n_inf_elim
+        kc == 0 && return Complex{WT}[], n_inf_elim
+
+        svD = svd(Dc; full=true)
+        smaxD = isempty(svD.S) ? zero(WT) : svD.S[1]
+        threshD = rank_tol * max(smaxD, scale_ref)
+        rD = smaxD <= threshD ? 0 : count(>(threshD), svD.S)
+
+        if rD == mc
+            if kc == mc
+                Dinv = Matrix{WT}(robust_inv(Dc; silent=true))
+                return Complex{WT}.(eigvals(Ac - Bc * Dinv * Cc)), n_inf_elim
+            else
+                qrD = qr(Dc)
+                QD = qrD.Q * Matrix{WT}(I, kc, kc)
+                Q1 = @view QD[:, 1:mc]
+                Q2 = @view QD[:, (mc + 1):kc]
+                R1 = Matrix{WT}(Q1' * Dc)
+                C1 = Matrix{WT}(Q1' * Cc)
+                C2 = Matrix{WT}(Q2' * Cc)
+                R1_inv = Matrix{WT}(robust_inv(R1; silent=true))
+                Ared = Matrix{WT}(Ac - Bc * R1_inv * C1)
+                return _abcd_inv_unobservable_modes(Ared, C2; rank_tol=rank_tol), n_inf_elim
+            end
+        end
+
+        if rD > 0
+            U1 = @view svD.U[:, 1:rD]
+            U2 = @view svD.U[:, (rD + 1):kc]
+            V1 = @view svD.V[:, 1:rD]
+            V2 = @view svD.V[:, (rD + 1):mc]
+            S1_inv = Diagonal(one(WT) ./ svD.S[1:rD])
+            C1 = U1' * Cc
+            C2 = Matrix{WT}(U2' * Cc)
+            B1 = Bc * V1
+            B2 = Matrix{WT}(Bc * V2)
+            A1 = Matrix{WT}(Ac - B1 * S1_inv * C1)
+        else
+            A1 = Ac
+            B2 = Bc
+            C2 = Cc
+        end
+
+        svB = svd(B2; full=true)
+        smaxB = isempty(svB.S) ? zero(WT) : svB.S[1]
+        threshB = rank_tol * max(smaxB, scale_ref)
+        rB = smaxB <= threshB ? 0 : count(>(threshB), svB.S)
+
+        if rB == 0
+            return _abcd_inv_unobservable_modes(A1, C2; rank_tol=rank_tol), n_inf_elim
+        end
+
+        n_inf_elim += rB
+        nc - rB == 0 && return Complex{WT}[], n_inf_elim
+
+        UB1 = @view svB.U[:, 1:rB]
+        UB2 = @view svB.U[:, (rB + 1):nc]
+        Ac = Matrix{WT}(UB2' * A1 * UB2)
+        Bc = Matrix{WT}(UB2' * A1 * UB1)
+        Cc = Matrix{WT}(C2 * UB2)
+        Dc = Matrix{WT}(C2 * UB1)
+    end
+
+    return Complex{WT}[], n_inf_elim
+end
+
+"""
+    poor_mans_invertibility(abcd::ABCDSystem{T}; tol=1e-8, max_var_lags=50) -> InvertibilityResult{T}
+    poor_mans_invertibility(sol, observables=Symbol[]; kwargs...) -> InvertibilityResult
+
+Evaluate the Fernández-Villaverde, Rubio-Ramírez, Sargent, and Watson (2007) Poor Man's
+Invertibility Condition and Komunjer–Ng (2011) transmission-zero criterion on an
+`ABCDSystem` (or solved DSGE / Perturbation / HA-DSGE / StateSpace model):
+
+```math
+M = A - B D^{-1} C, \\qquad P(z) = \\begin{bmatrix} A - z I_n & B \\\\ C & D \\end{bmatrix}
+```
+
+where:
+- ``A``, ``B``, ``C``, ``D`` are the canonical state-space matrices of dimension ``n \\times n``, ``n \\times m``, ``k \\times n``, ``k \\times m``
+- ``M`` is the square-system state-error feedback matrix
+- ``P(z)`` is the Rosenbrock system matrix pencil evaluated over ``z \\in \\mathbb{C}``
+
+# Dimensional and Rank Regimes
+1. `k < m` (`:non_invertible_underdetermined`): fewer observables than shocks; shocks cannot be spanned.
+2. `k == m`, `rank(D) == m`: eigenvalues of `M = A - B * robust_inv(D) * C` classify `:invertible` (`max_modulus < 1 - tol`), `:borderline_unit_circle` (`abs(max_modulus - 1) <= tol`), or `:non_invertible_zeros` (`max_modulus > 1 + tol`). When invertible, computes exact convergent `VAR(∞)` lag matrices `Π_j = C M^{j-1} B D^{-1}` for `j = 1..max_var_lags`.
+3. `k >= m`, `rank(D) < m` (`:non_invertible_singular_D`): rank-deficient `D` (delayed-impact / news shocks), extracting finite transmission zeros and infinite-zero count via Rosenbrock staircase deflation without `SingularException`.
+4. `k > m`, `rank(D) == m` (Komunjer & Ng 2011 tall system): QR-compresses `D = Q_D [R_1; 0]`, forms `(A_red, C_2)`, extracts invariant transmission zeros as unobservable modes of `(A_red, C_2)`, and classifies `:invertible_tall` (`isempty(zeros) || max_modulus < 1 - tol`) or `:non_invertible_tall_zeros`.
+
+# References
+- Fernández-Villaverde, J., Rubio-Ramírez, J. F., Sargent, T. J., & Watson, M. W. (2007).
+  ABCs (and Ds) of Understanding VARs. *American Economic Review*, 97(3), 1021–1026.
+- Komunjer, I., & Ng, S. (2011). Dynamic Identification of Dynamic Stochastic General
+  Equilibrium Models. *Econometrica*, 79(6), 1995–2032.
+"""
+function poor_mans_invertibility(abcd::ABCDSystem{T};
+                                 tol::Real=1e-8,
+                                 max_var_lags::Int=50) where {T<:AbstractFloat}
+    tol >= 0 || throw(ArgumentError("tol must be non-negative; got $tol"))
+    max_var_lags >= 0 || throw(ArgumentError("max_var_lags must be non-negative; got $max_var_lags"))
+
+    n = nstates(abcd)
+    k = nobservables(abcd)
+    m = nshocks(abcd)
+
+    WT = promote_type(T, Float64)
+    tol_w = WT(tol)
+    A_w = Matrix{WT}(abcd.A)
+    B_w = Matrix{WT}(abcd.B)
+    C_w = Matrix{WT}(abcd.C)
+    D_w = Matrix{WT}(abcd.D)
+
+    rank_tol = max(WT(max(n + k + m, 1)) * WT(eps(T)) * WT(5), WT(1e-11))
+    scale_ref = max(
+        isempty(A_w) ? zero(WT) : opnorm(A_w),
+        isempty(B_w) ? zero(WT) : opnorm(B_w),
+        isempty(C_w) ? zero(WT) : opnorm(C_w),
+        isempty(D_w) ? zero(WT) : opnorm(D_w),
+        one(WT),
+    )
+
+    if k == 0 || m == 0
+        rank_D = 0
+    else
+        svD = svd(D_w)
+        smaxD = isempty(svD.S) ? zero(WT) : svD.S[1]
+        dtol = max(WT(max(k, m)) * WT(eps(T)) * WT(10), WT(1e-12)) * smaxD
+        rank_D = smaxD == zero(WT) ? 0 : count(>(dtol), svD.S)
+    end
+
+    # Regime 1: k < m (underdetermined wide system)
+    if k < m
+        return InvertibilityResult{T}(
+            false,
+            :non_invertible_underdetermined,
+            T(NaN),
+            T[],
+            T[],
+            0,
+            0,
+            zeros(T, n, n),
+            zeros(T, m, k),
+            Matrix{T}[],
+            n,
+            k,
+            m,
+            rank_D,
+            T(tol),
+            abcd.obs_names,
+            abcd.shock_names,
+        )
+    end
+
+    # Regime 2: k == m and rank(D) == m (square full-rank FVRSW Condition 1)
+    if k == m && rank_D == m
+        D_inv_w = m == 0 ? zeros(WT, 0, 0) : Matrix{WT}(robust_inv(D_w; silent=true))
+        M_w = n == 0 ? zeros(WT, 0, 0) : Matrix{WT}(A_w - B_w * D_inv_w * C_w)
+        eigs = n == 0 ? Complex{WT}[] : Complex{WT}.(eigvals(M_w))
+        rho = isempty(eigs) ? zero(WT) : maximum(abs, eigs)
+
+        if rho < one(WT) - tol_w
+            status = :invertible
+            invertible = true
+        elseif abs(rho - one(WT)) <= tol_w
+            status = :borderline_unit_circle
+            invertible = false
+        else
+            status = :non_invertible_zeros
+            invertible = false
+        end
+
+        n_unstable = count(lam -> abs(lam) > one(WT) + tol_w, eigs)
+        vlm = Matrix{T}[]
+        if invertible && max_var_lags > 0
+            BDinv = B_w * D_inv_w
+            M_pow_BDinv = BDinv
+            for _ in 1:max_var_lags
+                push!(vlm, Matrix{T}(C_w * M_pow_BDinv))
+                M_pow_BDinv = M_w * M_pow_BDinv
+            end
+        end
+
+        return InvertibilityResult{T}(
+            invertible,
+            status,
+            T(rho),
+            T[real(z) for z in eigs],
+            T[imag(z) for z in eigs],
+            n_unstable,
+            0,
+            Matrix{T}(M_w),
+            Matrix{T}(D_inv_w),
+            vlm,
+            n,
+            k,
+            m,
+            rank_D,
+            T(tol),
+            abcd.obs_names,
+            abcd.shock_names,
+        )
+    end
+
+    # Regime 3: k >= m and rank(D) < m (singular D / delayed-impact news shocks)
+    if rank_D < m
+        finite_zeros, n_inf_elim = _abcd_inv_transmission_zeros(
+            A_w, B_w, C_w, D_w; rank_tol=rank_tol, scale_ref=scale_ref,
+        )
+        n_inf = max(m - rank_D, n_inf_elim)
+        if k == m && n > length(finite_zeros)
+            n_inf = max(n_inf, n - length(finite_zeros))
+        end
+        max_mod = isempty(finite_zeros) ? T(Inf) : T(maximum(abs, finite_zeros))
+        n_unstable = count(lam -> abs(lam) > one(WT) + tol_w, finite_zeros)
+
+        return InvertibilityResult{T}(
+            false,
+            :non_invertible_singular_D,
+            max_mod,
+            T[real(z) for z in finite_zeros],
+            T[imag(z) for z in finite_zeros],
+            n_unstable,
+            n_inf,
+            zeros(T, n, n),
+            zeros(T, m, k),
+            Matrix{T}[],
+            n,
+            k,
+            m,
+            rank_D,
+            T(tol),
+            abcd.obs_names,
+            abcd.shock_names,
+        )
+    end
+
+    # Regime 4: k > m and rank(D) == m (Komunjer & Ng 2011 tall full-column-rank system)
+    if m == 0
+        A_red = A_w
+        C_2 = C_w
+        Omega_w = zeros(WT, 0, k)
+    else
+        qrD = qr(D_w)
+        Q_D = qrD.Q * Matrix{WT}(I, k, k)
+        Q_1 = @view Q_D[:, 1:m]
+        Q_2 = @view Q_D[:, (m + 1):k]
+        R_1 = Matrix{WT}(Q_1' * D_w)
+        C_1 = Matrix{WT}(Q_1' * C_w)
+        C_2 = Matrix{WT}(Q_2' * C_w)
+        R_1_inv = Matrix{WT}(robust_inv(R_1; silent=true))
+        A_red = n == 0 ? zeros(WT, 0, 0) : Matrix{WT}(A_w - B_w * R_1_inv * C_1)
+        Omega_w = Matrix{WT}(R_1_inv * Q_1')
+    end
+
+    zeros_tall = _abcd_inv_unobservable_modes(A_red, C_2; rank_tol=rank_tol)
+    rho_tall = isempty(zeros_tall) ? zero(WT) : maximum(abs, zeros_tall)
+    invertible_tall = isempty(zeros_tall) || rho_tall < one(WT) - tol_w
+    status_tall = invertible_tall ? :invertible_tall : :non_invertible_tall_zeros
+    n_unstable_tall = count(lam -> abs(lam) > one(WT) + tol_w, zeros_tall)
+
+    return InvertibilityResult{T}(
+        invertible_tall,
+        status_tall,
+        T(rho_tall),
+        T[real(z) for z in zeros_tall],
+        T[imag(z) for z in zeros_tall],
+        n_unstable_tall,
+        0,
+        Matrix{T}(A_red),
+        Matrix{T}(Omega_w),
+        Matrix{T}[],
+        n,
+        k,
+        m,
+        rank_D,
+        T(tol),
+        abcd.obs_names,
+        abcd.shock_names,
+    )
+end
+
+function poor_mans_invertibility(
+    sol::Union{DSGESolution,PerturbationSolution,HADSGESolution},
+    observables::AbstractVector=Symbol[];
+    measurement_error=nothing,
+    reduction::Symbol=:predetermined,
+    abcd_tol::Real=1e-10,
+    tol::Real=1e-8,
+    max_var_lags::Int=50,
+)
+    sys = abcd_representation(sol, observables;
+                              measurement_error=measurement_error,
+                              reduction=reduction,
+                              tol=abcd_tol)
+    return poor_mans_invertibility(sys; tol=tol, max_var_lags=max_var_lags)
+end
+
+function poor_mans_invertibility(
+    ss::StateSpaceModel,
+    observables::AbstractVector=Symbol[];
+    reduction::Symbol=:none,
+    abcd_tol::Real=1e-10,
+    tol::Real=1e-8,
+    max_var_lags::Int=50,
+)
+    sys = abcd_representation(ss, observables; reduction=reduction, tol=abcd_tol)
+    return poor_mans_invertibility(sys; tol=tol, max_var_lags=max_var_lags)
+end
+
+"""
+    is_invertible(abcd::ABCDSystem; tol=1e-8) -> Bool
+    is_invertible(sol, observables=Symbol[]; tol=1e-8, kwargs...) -> Bool
+    is_invertible(r::InvertibilityResult) -> Bool
+
+Return `true` if structural shocks are recoverable from current and past observables
+under [`poor_mans_invertibility`](@ref).
+"""
+is_invertible(r::InvertibilityResult) = r.invertible
+
+is_invertible(abcd::ABCDSystem; tol::Real=1e-8) =
+    poor_mans_invertibility(abcd; tol=tol, max_var_lags=0).invertible
+
+function is_invertible(
+    sol::Union{DSGESolution,PerturbationSolution,HADSGESolution},
+    observables::AbstractVector=Symbol[];
+    tol::Real=1e-8,
+    kwargs...,
+)
+    return poor_mans_invertibility(sol, observables; tol=tol, max_var_lags=0, kwargs...).invertible
+end
+
+function is_invertible(
+    ss::StateSpaceModel,
+    observables::AbstractVector=Symbol[];
+    tol::Real=1e-8,
+    kwargs...,
+)
+    return poor_mans_invertibility(ss, observables; tol=tol, max_var_lags=0, kwargs...).invertible
+end

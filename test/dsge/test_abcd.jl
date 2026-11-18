@@ -675,3 +675,338 @@ const _suppress_warnings = MacroEconometricModels._suppress_warnings
         @test_throws ArgumentError analytical_moments(sys; format=:bad)
     end
 end
+
+@testset "FVRSW Poor Man's Invertibility & Komunjer-Ng Zeros (#910)" begin
+    MEM = MacroEconometricModels
+
+    # =========================================================================
+    # 1. FVRSW (2007, pp. 1023-1024) Permanent Income Model
+    # =========================================================================
+    @testset "FVRSW (2007) Permanent Income: square non-invertible, invertible, tall" begin
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, y_m_c
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            y_m_c[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            y_m_c[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+
+        # (a) Observable = y_m_c (saving): M = [1.2], non-invertible!
+        res_ymc = poor_mans_invertibility(sol_fv, [:y_m_c])
+        @test res_ymc isa InvertibilityResult{Float64}
+        @test res_ymc isa MEM.StatsAPI.HypothesisTest
+        @test res_ymc.status === :non_invertible_zeros
+        @test !res_ymc.invertible
+        @test !is_invertible(res_ymc)
+        @test !is_invertible(sol_fv, [:y_m_c])
+        @test res_ymc.M ≈ [1.2;;] atol=1e-10
+        @test res_ymc.max_modulus ≈ 1.2 atol=1e-10
+        @test res_ymc.rho ≈ 1.2 atol=1e-10
+        @test res_ymc.n_unstable == 1
+        @test res_ymc.n_infinite_zeros == 0
+        @test res_ymc.eigenvalues ≈ [1.2 + 0.0im] atol=1e-10
+        @test res_ymc.transmission_zeros ≈ [1.2 + 0.0im] atol=1e-10
+        @test isempty(res_ymc.var_lag_matrices)
+        @test MEM.StatsAPI.pvalue(res_ymc) == 0.0
+
+        # (b) Observable = c (consumption): M = [0.0], exact AR(1) random walk!
+        res_c = poor_mans_invertibility(sol_fv, [:c]; max_var_lags=10)
+        @test res_c.status === :invertible
+        @test res_c.invertible
+        @test is_invertible(res_c)
+        @test is_invertible(sol_fv, [:c])
+        @test res_c.M ≈ [0.0;;] atol=1e-12
+        @test res_c.max_modulus < 1e-12
+        @test res_c.n_unstable == 0
+        @test res_c.Omega ≈ [1.0 / (1.0 - 1.0 / 1.2);;] atol=1e-10
+        @test length(res_c.var_lag_matrices) == 10
+        @test res_c.Pi[1] ≈ [1.0;;] atol=1e-10
+        for j in 2:10
+            @test norm(res_c.Pi[j]) < 1e-12
+        end
+        @test MEM.StatsAPI.pvalue(res_c) == 1.0
+
+        # (c) Observable = y (white noise) with minimal reduction -> 0 states, invertible
+        res_y_min = poor_mans_invertibility(sol_fv, [:y]; reduction=:minimal)
+        @test res_y_min.status === :invertible
+        @test res_y_min.invertible
+        @test res_y_min.n_states == 0
+        @test res_y_min.max_modulus == 0.0
+
+        # (d) Tall pair [:c, :y_m_c] (k=2, m=1): observable c_t kills the zero -> invertible_tall!
+        res_tall = poor_mans_invertibility(sol_fv, [:c, :y_m_c])
+        @test res_tall.status === :invertible_tall
+        @test res_tall.invertible
+        @test is_invertible(sol_fv, [:c, :y_m_c])
+        @test isempty(res_tall.transmission_zeros)
+        @test res_tall.n_obs == 2
+        @test res_tall.n_shocks == 1
+        @test res_tall.rank_D == 1
+    end
+
+    # =========================================================================
+    # 2. Square invertible VAR(∞) lag matrices & borderline unit circle
+    # =========================================================================
+    @testset "Square ARMA(1,1) VAR(∞) parity and borderline unit circle" begin
+        # y_{t+1} = (1 + 0.4L)/(1 - 0.7L) w_{t+1} => x_{t+1} = 0.7 x_t + w_{t+1}, y_{t+1} = 1.1 x_t + w_{t+1}
+        sys_arma = ABCDSystem([0.7;;], [1.0;;], [1.1;;], [1.0;;])
+        res_arma = poor_mans_invertibility(sys_arma; max_var_lags=15)
+        @test res_arma.status === :invertible
+        @test res_arma.invertible
+        @test res_arma.M ≈ [-0.4;;] atol=1e-12
+        @test res_arma.max_modulus ≈ 0.4 atol=1e-12
+        for j in 1:15
+            @test res_arma.var_lag_matrices[j] ≈ [1.1 * (-0.4)^(j - 1);;] atol=1e-12
+        end
+
+        # Complex conjugate eigenvalues inside unit circle
+        A_cx = [0.5 0.3; -0.3 0.5]
+        B_cx = [1.0 0.0; 0.0 1.0]
+        C_cx = [0.2 0.1; -0.1 0.2]
+        D_cx = [1.0 0.0; 0.0 1.0]
+        sys_cx = ABCDSystem(A_cx, B_cx, C_cx, D_cx)
+        res_cx = poor_mans_invertibility(sys_cx; max_var_lags=5)
+        @test res_cx.status === :invertible
+        @test !all(iszero, res_cx.zero_im)
+        @test res_cx.eigenvalues ≈ eigvals(A_cx - B_cx * inv(D_cx) * C_cx) atol=1e-12
+
+        # Over-differenced MA(1): y_{t+1} = w_{t+1} - w_t => M = [1.0], unit circle
+        sys_uc = ABCDSystem([0.0;;], [1.0;;], [-1.0;;], [1.0;;])
+        res_uc = poor_mans_invertibility(sys_uc)
+        @test res_uc.status === :borderline_unit_circle
+        @test !res_uc.invertible
+        @test res_uc.max_modulus ≈ 1.0 atol=1e-12
+        @test res_uc.n_unstable == 0
+        @test isempty(res_uc.var_lag_matrices)
+    end
+
+    # =========================================================================
+    # 3. Underdetermined (k < m) and singular D / news-shock regimes
+    # =========================================================================
+    @testset "Underdetermined (k < m) and singular D / news shocks" begin
+        # Wide system k = 1 < m = 2
+        sys_wide = ABCDSystem([0.5;;], [1.0 0.5], [1.0;;], [1.0 0.5])
+        res_wide = poor_mans_invertibility(sys_wide)
+        @test res_wide.status === :non_invertible_underdetermined
+        @test !res_wide.invertible
+        @test isnan(res_wide.max_modulus)
+        @test isempty(res_wide.eigenvalues)
+        @test size(res_wide.Omega) == (2, 1)
+        @test isempty(res_wide.var_lag_matrices)
+
+        # Pure delayed news shock (GMR 2020 eq. 2.10 root at L = 0): y_{t+1} = w_t
+        sys_delay1 = ABCDSystem([0.0;;], [1.0;;], [1.0;;], [0.0;;])
+        res_d1 = poor_mans_invertibility(sys_delay1)
+        @test res_d1.status === :non_invertible_singular_D
+        @test !res_d1.invertible
+        @test res_d1.rank_D == 0
+        @test res_d1.n_infinite_zeros == 1
+        @test isempty(res_d1.transmission_zeros)
+        @test isinf(res_d1.max_modulus)
+
+        # Delayed news shock with finite zero: y_{t+1} = w_t - 0.5 w_{t-1}
+        A_d2 = [0.0 0.0; 1.0 0.0]
+        B_d2 = [1.0; 0.0;;]
+        C_d2 = [1.0 -0.5]
+        D_d2 = [0.0;;]
+        sys_d2 = ABCDSystem(A_d2, B_d2, C_d2, D_d2)
+        res_d2 = poor_mans_invertibility(sys_d2)
+        @test res_d2.status === :non_invertible_singular_D
+        @test !res_d2.invertible
+        @test res_d2.n_infinite_zeros == 1
+        @test res_d2.transmission_zeros ≈ [0.5 + 0.0im] atol=1e-12
+        @test res_d2.max_modulus ≈ 0.5 atol=1e-12
+        @test res_d2.n_unstable == 0
+
+        # Delayed news shock with unstable finite zero: y_{t+1} = w_t - 1.4 w_{t-1}
+        sys_d2u = ABCDSystem(A_d2, B_d2, [1.0 -1.4], D_d2)
+        res_d2u = poor_mans_invertibility(sys_d2u)
+        @test res_d2u.status === :non_invertible_singular_D
+        @test res_d2u.transmission_zeros ≈ [1.4 + 0.0im] atol=1e-12
+        @test res_d2u.n_unstable == 1
+
+        # Singular square pencil (collinear rows + unobserved mode at -0.6)
+        A_sp = [0.4 0.0; 0.0 0.7]
+        B_sp = [1.0 0.0; 0.0 1.0]
+        C_sp = [1.0 0.0; 2.0 0.0]
+        D_sp = [1.0 0.0; 2.0 0.0]
+        res_sp = poor_mans_invertibility(ABCDSystem(A_sp, B_sp, C_sp, D_sp))
+        @test res_sp.status === :non_invertible_singular_D
+        @test !res_sp.invertible
+        @test res_sp.rank_D == 1
+        @test res_sp.transmission_zeros ≈ [-0.6 + 0.0im] atol=1e-12
+
+        # Tall rank-deficient D (k = 3 > m = 2, rank(D) = 1)
+        A_tr = [0.5 0.0; 0.0 0.3]
+        B_tr = [1.0 0.0; 0.0 1.0]
+        C_tr = [1.0 0.0; 0.0 1.0; 1.0 2.0]
+        D_tr = [1.0 0.0; 0.0 0.0; 0.0 0.0]
+        res_tr = poor_mans_invertibility(ABCDSystem(A_tr, B_tr, C_tr, D_tr))
+        @test res_tr.status === :non_invertible_singular_D
+        @test !res_tr.invertible
+        @test res_tr.rank_D == 1
+        @test res_tr.n_infinite_zeros >= 1
+        @test isempty(res_tr.transmission_zeros)
+    end
+
+    # =========================================================================
+    # 4. Komunjer & Ng (2011) tall full-column-rank systems (k > m, rank(D) == m)
+    # =========================================================================
+    @testset "Komunjer-Ng (2011) tall full-column-rank systems" begin
+        # 4a. Unstable eigenvalue in A_red = [1.5] that IS observable via C_2 -> NO zeros -> invertible_tall!
+        sys_tall_obs = ABCDSystem([1.5;;], [1.0;;], [0.0; 1.0;;], [1.0; 0.0;;])
+        res_to = poor_mans_invertibility(sys_tall_obs)
+        @test res_to.status === :invertible_tall
+        @test res_to.invertible
+        @test isempty(res_to.transmission_zeros)
+        @test res_to.max_modulus == 0.0
+        @test res_to.Omega * sys_tall_obs.D ≈ [1.0;;] atol=1e-12
+
+        # 4b. Tall system with stable unobservable zero at 0.4 (under orthogonal rotation)
+        rng = MersenneTwister(910)
+        Q_st = Matrix(qr(randn(rng, 2, 2)).Q)
+        Q_ob = Matrix(qr(randn(rng, 3, 3)).Q)
+        A_red_st = [0.4 0.25; 0.0 0.6]
+        B_st = [1.0; 0.8;;]
+        C1_st = [0.5 0.3]
+        C2_st = [0.0 1.0; 0.0 0.4]
+        R1_st = [2.0;;]
+        A_raw_st = A_red_st + B_st * inv(R1_st) * C1_st
+        C_raw_st = vcat(C1_st, C2_st)
+        D_raw_st = vcat(R1_st, zeros(2, 1))
+        sys_tall_st = ABCDSystem(Q_st * A_raw_st * Q_st', Q_st * B_st, Q_ob * C_raw_st * Q_st', Q_ob * D_raw_st)
+        res_tall_st = poor_mans_invertibility(sys_tall_st)
+        @test res_tall_st.status === :invertible_tall
+        @test res_tall_st.invertible
+        @test res_tall_st.transmission_zeros ≈ [0.4 + 0.0im] atol=1e-10
+        @test res_tall_st.max_modulus ≈ 0.4 atol=1e-10
+        @test res_tall_st.n_unstable == 0
+        @test res_tall_st.Omega * sys_tall_st.D ≈ [1.0;;] atol=1e-12
+
+        # 4c. Tall system with unstable unobservable zero at 1.5 (under orthogonal rotation)
+        A_red_un = [1.5 0.3; 0.0 0.4]
+        A_raw_un = A_red_un + B_st * inv(R1_st) * C1_st
+        sys_tall_un = ABCDSystem(Q_st * A_raw_un * Q_st', Q_st * B_st, Q_ob * C_raw_st * Q_st', Q_ob * D_raw_st)
+        res_tall_un = poor_mans_invertibility(sys_tall_un)
+        @test res_tall_un.status === :non_invertible_tall_zeros
+        @test !res_tall_un.invertible
+        @test res_tall_un.transmission_zeros ≈ [1.5 + 0.0im] atol=1e-10
+        @test res_tall_un.max_modulus ≈ 1.5 atol=1e-10
+        @test res_tall_un.n_unstable == 1
+    end
+
+    # =========================================================================
+    # 5. Convenience dispatches, Float32, display/report, RSER-01, error paths
+    # =========================================================================
+    @testset "Convenience dispatches, Float32, display, RSER-01, and validation" begin
+        spec_nk = compute_steady_state(@dsge begin
+            parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+            endogenous: y, pi_v, i_rate, a
+            exogenous: eps_y
+            linear: true
+
+            y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+            pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+            i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+            a[t] = rho * a[t-1] + eps_y[t]
+        end)
+        sol_nk = solve(spec_nk; method=:gensys)
+        psol_nk = perturbation_solver(spec_nk; order=1)
+
+        r_dsge = poor_mans_invertibility(sol_nk, [:y])
+        r_pert = poor_mans_invertibility(psol_nk, [:y])
+        @test r_dsge.status === r_pert.status
+        @test r_dsge.max_modulus ≈ r_pert.max_modulus atol=1e-8
+        @test is_invertible(sol_nk, [:y]) == r_dsge.invertible
+
+        # Adding measurement error makes 1-obs / 2-shock underdetermined
+        r_me = poor_mans_invertibility(sol_nk, [:y]; measurement_error=[0.05])
+        @test r_me.status === :non_invertible_underdetermined
+        @test !is_invertible(sol_nk, [:y]; measurement_error=[0.05])
+
+        # StateSpaceModel dispatch
+        ss = StateSpaceModel([1.0 0.0], [0.2;;], [0.6 0.1; 0.0 0.4], [0.5;;]; R=[1.0; 0.2;;])
+        r_ss = poor_mans_invertibility(ss)
+        @test r_ss.status === :non_invertible_underdetermined  # 1 obs, 2 uncorrelated shocks (state + H)
+        @test !is_invertible(ss)
+
+        # HADSGESolution dispatch
+        ha_spec = load_ha_example(:krusell_smith)
+        ha_ss = compute_steady_state(ha_spec; max_iter=100, tol=1e-4)
+        ha_sol = solve(ha_spec; method=:ssj, ss=ha_ss, T_horizon=50, n_reduced=10)
+        r_ha = poor_mans_invertibility(ha_sol)
+        @test r_ha isa InvertibilityResult{Float64}
+        @test is_invertible(ha_sol) == r_ha.invertible
+
+        # Float32 precision preservation
+        sys32 = ABCDSystem(Float32[0.7;;], Float32[1.0;;], Float32[1.1;;], Float32[1.0;;])
+        res32 = poor_mans_invertibility(sys32; max_var_lags=5)
+        @test res32 isa InvertibilityResult{Float32}
+        @test res32.invertible
+        @test eltype(res32.zero_re) === Float32
+        @test eltype(res32.zero_im) === Float32
+        @test eltype(res32.eigenvalues) === ComplexF32
+        @test eltype(res32.M) === Float32
+        @test eltype(res32.Omega) === Float32
+        @test eltype(res32.var_lag_matrices[1]) === Float32
+        @test res32.max_modulus ≈ 0.4f0 atol=1e-5
+        @test MEM.StatsAPI.pvalue(res32) === 1.0f0
+
+        # show and report across text and LaTeX backends
+        res_d2_loc = poor_mans_invertibility(ABCDSystem([0.0 0.0; 1.0 0.0], [1.0; 0.0;;], [1.0 -0.5], [0.0;;]))
+        res_wide_loc = poor_mans_invertibility(ABCDSystem([0.5;;], [1.0 0.5], [1.0;;], [1.0 0.5]))
+
+        io = IOBuffer()
+        show(io, res32)
+        s_txt = String(take!(io))
+        @test occursin("Poor Man", s_txt)
+        @test occursin("invertible", s_txt)
+
+        report(io, res_d2_loc)
+        r_txt = String(take!(io))
+        @test occursin("Transmission Zeros", r_txt)
+
+        report(io, res32)
+        r32_txt = String(take!(io))
+        @test occursin("Shock Recovery Matrix", r32_txt)
+
+        with_display_backend(:latex) do
+            show(io, res_d2_loc)
+            l_txt = String(take!(io))
+            @test occursin("tabular", l_txt)
+            report(io, res32)
+            l_rep = String(take!(io))
+            @test occursin("tabular", l_rep)
+        end
+
+        # RSER-01 positional constructor & plain-field round-trip check
+        for obj in (res32, res_d2_loc, res_wide_loc)
+            payload = Dict{String,Any}(string(f) => MEM._ser_field(getfield(obj, f)) for f in fieldnames(typeof(obj)))
+            MEM._assert_plain_payload(payload)
+            reconstructed = MEM._from_serializable(InvertibilityResult, payload, MEM.SERIALIZATION_FORMAT_VERSION)
+            @test typeof(reconstructed) === typeof(obj)
+            @test reconstructed.invertible == obj.invertible
+            @test reconstructed.status === obj.status
+            @test reconstructed.zero_re == obj.zero_re
+            @test reconstructed.zero_im == obj.zero_im
+            @test reconstructed.var_lag_matrices == obj.var_lag_matrices
+            @test isequal(reconstructed.max_modulus, obj.max_modulus)
+        end
+
+        # Propertynames check
+        pnames = propertynames(res32)
+        @test :eigenvalues in pnames
+        @test :transmission_zeros in pnames
+        @test :rho in pnames
+        @test :Pi in pnames
+
+        # Validation errors
+        @test_throws ArgumentError poor_mans_invertibility(sys32; tol=-1e-5)
+        @test_throws ArgumentError poor_mans_invertibility(sys32; max_var_lags=-1)
+    end
+end
