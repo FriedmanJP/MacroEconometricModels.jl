@@ -574,6 +574,8 @@ include("vecm/granger.jl")
 # FAVAR analysis and forecast (after irf + fevd + hd)
 include("favar/analysis.jl")
 include("favar/forecast.jl")
+include("var/qvar.jl")
+include("favar/qfavar.jl")
 include("factor/gdfm_i1.jl")
 include("factor/bandpass.jl")
 
@@ -1193,6 +1195,8 @@ export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
 export FAVARModel, BayesianFAVAR
 export estimate_favar
 export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
+export QuantileVARModel, QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR
+export estimate_qvar, qirf, estimate_qfavar, qfavar_panel_irf, qfavar_panel_forecast
 
 # Quantile Factor Model types and estimation
 export QuantileFactorModel, QFMICResult, estimate_qfm, ic_criteria_qfm
