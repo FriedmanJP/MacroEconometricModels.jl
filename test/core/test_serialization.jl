@@ -1144,3 +1144,127 @@ end
     @test m_svarma2.regime === m_svarma.regime
 end
 
+@testset "Wave-4 serialization coverage (#887,#888,#896,#897,#904,#906,#907,#920,#921)" begin
+    # QFM-05: QuantileFactorGrid, QFMSpanningResult, QFMLoadingConstancyTest
+    X_qfm = randn(Xoshiro(887), 60, 12)
+    qgrid = estimate_qfm(X_qfm, 2, [0.25, 0.75]; max_iter=20, seed=1)
+    @test qgrid isa QuantileFactorGrid
+    qgrid2 = _cover(qgrid)
+    @test qgrid2.taus == qgrid.taus && qgrid2.r_by_tau == qgrid.r_by_tau
+
+    qsp = test_qfm_spanning(qgrid, X_qfm)
+    @test qsp isa QFMSpanningResult
+    qsp2 = _cover(qsp)
+    @test qsp2.ols_r2 == qsp.ols_r2 && qsp2.cancor == qsp.cancor
+
+    qct = test_qfm_loading_constancy(qgrid, 0.25, 0.75; n_boot=19, max_iter=20, seed=2)
+    @test qct isa QFMLoadingConstancyTest
+    qct2 = _cover(qct)
+    @test qct2.statistic == qct.statistic && qct2.pvalue == qct.pvalue
+
+    # QFM-06: QuantileFactorPanelModel
+    Y_qp = randn(Xoshiro(888), 15, 25)
+    W_qp = randn(Xoshiro(8881), 15, 25, 2)
+    m_qp = estimate_xtqreg_factors(Y_qp, W_qp, 1, 0.5; maxiter=20, seed=3)
+    @test m_qp isa QuantileFactorPanelModel
+    m_qp2 = _cover(m_qp)
+    @test m_qp2.beta == m_qp.beta && m_qp2.tau == m_qp.tau
+
+    # GDFM-04: CointegratedGDFM
+    X_i1 = cumsum(randn(Xoshiro(896), 80, 10); dims=1)
+    m_i1 = estimate_gdfm_i1(X_i1, 2; n_perm=5, max_draws=20, p_max=2, seed=4)
+    @test m_i1 isa CointegratedGDFM
+    m_i1_2 = _cover(m_i1)
+    @test m_i1_2.q == m_i1.q && m_i1_2.n_permanent == m_i1.n_permanent
+
+    # GDFM-05: BandPassGDFMResult, EurocoinResult, SpectralFEVDResult
+    X_bp = randn(Xoshiro(897), 80, 12)
+    gdfm_bp = estimate_gdfm(X_bp, 2; r=3, spectral=:lag_window, bandwidth=6)
+    bp_r = bandpass_gdfm(gdfm_bp, (0.0, Float64(pi / 4)))
+    @test bp_r isa BandPassGDFMResult
+    bp_r2 = _cover(bp_r)
+    @test bp_r2.variance_share == bp_r.variance_share
+
+    ec_r = eurocoin_indicator(X_bp, randn(Xoshiro(8971), 80), 2; r=3)
+    @test ec_r isa EurocoinResult
+    ec_r2 = _cover(ec_r)
+    @test ec_r2.indicator == ec_r.indicator && ec_r2.r2 == ec_r.r2
+
+    sdfm_bp = estimate_structural_dfm(gdfm_bp; method=:fglr, r=3, p=2, H=12)
+    sfevd_r = spectral_fevd(sdfm_bp)
+    @test sfevd_r isa SpectralFEVDResult
+    sfevd_r2 = _cover(sfevd_r)
+    @test sfevd_r2.shares == sfevd_r.shares
+
+    # NGID-04, NGID-06, NGID-07: Lanne-Luoto GMM, SSVARMA estimation, tests, CvM
+    sim_ng = dgp_ssvarma(Xoshiro(904); Phi=[0.4 0.1; -0.1 0.3], Theta=zeros(2, 2, 0),
+                         dist=:mixture_normal_asym, T=150)
+    m_ng = estimate_var(sim_ng.Y, 1)
+    ms_ng = select_gmm_moments(m_ng)
+    @test ms_ng isa GMMMomentSelectionResult
+    ms_ng2 = _cover(ms_ng)
+    @test ms_ng2.asym_pairs == ms_ng.asym_pairs && ms_ng2.sym_pairs == ms_ng.sym_pairs
+
+    ll_ng = estimate_lanne_luoto_gmm(m_ng; max_iter=30, n_starts=2, seed=5)
+    @test ll_ng isa LanneLuotoGMMResult
+    ll_ng2 = _cover(ll_ng)
+    @test ll_ng2.B0 == ll_ng.B0 && ll_ng2.J_stat == ll_ng.J_stat
+
+    sim_sv = dgp_ssvarma(Xoshiro(906); T=120)
+    m_sv = _MEM._suppress_warnings() do
+        estimate_ssvarma(sim_sv.Y, 0, 1; method=:pml, n_starts=1, max_iter=80, seed=6)
+    end
+    @test m_sv isa SVARMAModel
+    m_sv2 = _cover(m_sv)
+    @test m_sv2.Theta == m_sv.Theta && m_sv2.shocks == m_sv.shocks
+
+    cvm_r = identify_cvm(m_ng; max_iter=30, n_starts=2, seed=7)
+    @test cvm_r isa ICASVARResult
+    cvm_r2 = _cover(cvm_r)
+    @test cvm_r2.W == cvm_r.W && cvm_r2.method === :cvm
+
+    ft_r = test_fundamentalness(m_ng; max_lag=2, n_boot=19, seed=8)
+    @test ft_r isa FundamentalnessTestResult
+    ft_r2 = _cover(ft_r)
+    @test ft_r2.statistic == ft_r.statistic && ft_r2.pvalue == ft_r.pvalue
+
+    X_pan = randn(Xoshiro(907), size(sim_ng.Y, 1), 6)
+    si_r = test_sufficient_information(m_ng, X_pan; r_max=2, p_f=2)
+    @test si_r isa SufficientInformationTestResult
+    si_r2 = _cover(si_r)
+    @test si_r2.pvalue == si_r.pvalue
+
+    # RI-05 & RI-06: RIEstimationResult, CGTestResult, MWAttentionResult
+    prob_ri = RationalInattentionProblem(0.8, 1.0, 1.0; capacity=0.75)
+    sol_ri = solve_ri_kalman(prob_ri)
+    sim_ri = simulate(sol_ri, 50; burn=20, seed=920)
+    data_ri = hcat(sim_ri.states, sim_ri.actions)
+    ri_est = estimate_ri(prob_ri, data_ri; method=:mle)
+    @test ri_est isa RIEstimationResult
+    ri_est2 = _cover(ri_est)
+    @test ri_est2.params == ri_est.params
+
+    cg_r = coibion_gorodnichenko_test(randn(Xoshiro(9201), 40), randn(Xoshiro(9202), 40), randn(Xoshiro(9203), 40))
+    @test cg_r isa CGTestResult
+    cg_r2 = _cover(cg_r)
+    @test cg_r2.beta_cg == cg_r.beta_cg && cg_r2.se_cg == cg_r.se_cg
+
+    mw_r = solve_mw_attention((; rho=0.85, sigma=0.01, weight=1.0, beta=0.99),
+                              (; rho=0.80, sigma=0.10, weight=1.0, beta=0.99);
+                              capacity=2.0, horizon=15)
+    @test mw_r isa MWAttentionResult
+    mw_r2 = _cover(mw_r)
+    @test mw_r2.kappa_agg == mw_r.kappa_agg && mw_r2.omega == mw_r.omega
+
+    mktempdir() do d
+        for (idx, obj) in enumerate((qgrid, qsp, qct, m_qp, m_i1, bp_r, ec_r, sfevd_r,
+                                     ms_ng, ll_ng, m_sv, cvm_r, ft_r, si_r, ri_est, cg_r, mw_r))
+            p = joinpath(d, "w4_$(idx).jld2")
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
+    end
+end
+

@@ -347,6 +347,58 @@ m_shocks = size(prob_ri.B, 2)
  sim_T = size(sim_ri.actions, 1))
 ```
 
+### Empirical Estimation and Coibion–Gorodnichenko Diagnostics
+
+Given observed actions, states, or noisy survey aggregates, [`estimate_ri`](@ref) estimates Shannon channel capacity ``\kappa`` (or shadow cost ``\omega``) jointly with structural state-space parameters via state-space MLE (`method=:mle`, returning Hessian or sandwich standard errors and an exact FIRE likelihood-ratio test) or adaptive RWMH (`method=:bayes`), returning an [`RIEstimationResult`](@ref). To test rational-inattention information rigidity directly from forecast errors and revisions (Coibion & Gorodnichenko 2015), [`implied_cg_slope`](@ref) derives the population Kalman predictability slope and [`coibion_gorodnichenko_test`](@ref) runs the Newey–West HAC regression returning [`CGTestResult`](@ref):
+
+```math
+y_{t+h} - \bar{F}_t y_{t+h} = \alpha + \beta_{\text{CG}} \bigl(\bar{F}_t y_{t+h} - \bar{F}_{t-1} y_{t+h}\bigr) + \varepsilon_{t+h}, \qquad \beta_{\text{CG}}^{\text{AR(1)}} = \frac{1 - G}{G}
+```
+
+where:
+- ``y_{t+h} - \bar{F}_t y_{t+h}`` is the consensus forecast error at horizon ``h``,
+- ``\bar{F}_t y_{t+h} - \bar{F}_{t-1} y_{t+h}`` is the consensus forecast revision,
+- ``G = 1 - 2^{-2\kappa}`` is the scalar AR(1) steady-state Kalman gain implied by Shannon capacity ``\kappa`` bits.
+
+```@example ss
+using Random
+prob_1d = RationalInattentionProblem(0.8, 1.0, 1.0; capacity=0.75)
+sol_1d = solve_ri_kalman(prob_1d)
+sim_1d = simulate(sol_1d, 100; burn=40, seed=42)
+ri_est = estimate_ri(prob_1d, hcat(sim_1d.states, sim_1d.actions); method=:mle)
+cg_pop = implied_cg_slope(sol_1d)
+rng_cg = Random.Xoshiro(920)
+rev_cg = randn(rng_cg, 80)
+fe_cg = cg_pop .* rev_cg .+ 0.3 .* randn(rng_cg, 80)
+cg_res = coibion_gorodnichenko_test(fe_cg .+ rev_cg, rev_cg, zeros(80))
+report(ri_est)
+(kappa_hat = round(ri_est.capacity; digits=3),
+ cg_implied = round(cg_pop; digits=3),
+ cg_ols = round(cg_res.beta_cg; digits=3))
+```
+
+### Multi-Block Price-Setting Attention Allocation
+
+Maćkowiak & Wiederholt (2009, 2015) endogenize how a decision maker splits scarce total attention ``\kappa_{\text{total}} = \kappa_{\text{agg}} + \kappa_{\text{idio}}`` across independent aggregate and idiosyncratic fundamentals under strategic complementarity ``r \in [0, 1)``:
+
+```math
+\max_{\kappa_{\text{agg}},\, \kappa_{\text{idio}} \ge 0} \; -L_{\text{agg}}(\kappa_{\text{agg}}) - L_{\text{idio}}(\kappa_{\text{idio}}) \qquad \text{s.t.} \qquad \kappa_{\text{agg}} + \kappa_{\text{idio}} \le \kappa_{\text{total}}
+```
+
+where:
+- ``L_{\text{agg}}(\kappa_{\text{agg}})`` and ``L_{\text{idio}}(\kappa_{\text{idio}})`` are block LQG tracking losses solved to common marginal shadow cost ``\omega``,
+- ``r \in [0, 1)`` amplifies aggregate sluggishness via the fixed-point best-response pricing multiplier ``p_t = (1 - r) E_t[\Delta_t + \dots]``.
+
+[`solve_mw_attention`](@ref) computes exact water-filling capacity shares and equilibrium impulse responses in [`MWAttentionResult`](@ref).
+
+```@example ss
+agg_blk = (; rho=0.88, sigma=0.02, weight=1.0, beta=0.99)
+idio_blk = (; rho=0.75, sigma=0.10, weight=1.0, beta=0.99)
+mw_res = solve_mw_attention(agg_blk, idio_blk; capacity=2.0, strategic_complementarity=0.7, horizon=20)
+report(mw_res)
+(kappa_agg = round(mw_res.kappa_agg; digits=3), kappa_idio = round(mw_res.kappa_idio; digits=3))
+```
+
 ---
 
 ## Complete Example
@@ -404,3 +456,6 @@ refs(m)
 - Pappas, T., Laub, A. J., & Sandell, N. R. (1980). On the Numerical Solution of the Discrete-Time Algebraic Riccati Equation. *IEEE Transactions on Automatic Control*, 25(4), 631–641. [doi:10.1109/TAC.1980.1102434](https://doi.org/10.1109/TAC.1980.1102434)
 - Sims, C. A. (2003). Implications of Rational Inattention. *Journal of Monetary Economics*, 50(3), 665–690. [doi:10.1016/S0304-3932(03)00029-1](https://doi.org/10.1016/S0304-3932(03)00029-1)
 - Van Dooren, P. (1981). A Generalized Eigenvalue Approach for Solving Riccati Equations. *SIAM Journal on Scientific and Statistical Computing*, 2(2), 121–135. [doi:10.1137/0902010](https://doi.org/10.1137/0902010)
+- Coibion, O., & Gorodnichenko, Y. (2015). Information Rigidity and the Expectations Formation Process: A Simple Framework and New Facts. *American Economic Review*, 105(8), 2644–2678. [doi:10.1257/aer.20110306](https://doi.org/10.1257/aer.20110306)
+- Maćkowiak, B., & Wiederholt, M. (2009). Optimal Sticky Prices under Rational Inattention. *American Economic Review*, 99(3), 769–803. [doi:10.1257/aer.99.3.769](https://doi.org/10.1257/aer.99.3.769)
+- Maćkowiak, B., & Wiederholt, M. (2015). Business Cycle Dynamics under Rational Inattention. *Review of Economic Studies*, 82(4), 1502–1532. [doi:10.1093/restud/rdv027](https://doi.org/10.1093/restud/rdv027)

@@ -2044,6 +2044,82 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Consumption Dynamics under Information Processing Constraints",
         journal="Review of Economic Dynamics", volume="11", issue="2", pages="366--385",
         doi="10.1016/j.red.2007.07.003", isbn="", publisher="", entry_type=:article),
+    # --- Wave-4 v1.1.0 (#887, #888, #896, #897, #904, #906, #907, #912, #913, #920, #921) ---
+    :ando_bai2020 => (key=:ando_bai2020,
+        authors="Ando, Tomohiro and Bai, Jushan", year=2020,
+        title="Quantile Co-Movement in Financial Markets: A Panel Quantile Model With Unobserved Heterogeneity",
+        journal="Journal of the American Statistical Association", volume="115", issue="529", pages="266--279",
+        doi="10.1080/01621459.2018.1543598", isbn="", publisher="", entry_type=:article),
+    :barigozzi_lippi_luciani2021 => (key=:barigozzi_lippi_luciani2021,
+        authors="Barigozzi, Matteo and Lippi, Marco and Luciani, Matteo", year=2021,
+        title="Large-Dimensional Dynamic Factor Models: Estimation of Impulse-Response Functions with I(1) Cointegrated Factors",
+        journal="Journal of Econometrics", volume="221", issue="2", pages="455--482",
+        doi="10.1016/j.jeconom.2020.05.004", isbn="", publisher="", entry_type=:article),
+    :altissimo2010 => (key=:altissimo2010,
+        authors="Altissimo, Filippo and Cristadoro, Riccardo and Forni, Mario and Lippi, Marco and Veronese, Giovanni", year=2010,
+        title="New Eurocoin: Tracking Economic Growth in Real Time",
+        journal="Review of Economics and Statistics", volume="92", issue="4", pages="1024--1034",
+        doi="10.1162/REST_a_00045", isbn="", publisher="", entry_type=:article),
+    :cristadoro2005 => (key=:cristadoro2005,
+        authors="Cristadoro, Riccardo and Forni, Mario and Reichlin, Lucrezia and Veronese, Giovanni", year=2005,
+        title="A Core Inflation Indicator for the Euro Area",
+        journal="Journal of Money, Credit and Banking", volume="37", issue="3", pages="539--560",
+        doi="10.1353/mcb.2005.0028", isbn="", publisher="", entry_type=:article),
+    :andrews1999_msc => (key=:andrews1999_msc,
+        authors="Andrews, Donald W. K.", year=1999,
+        title="Consistent Moment Selection Procedures for Generalized Method of Moments Estimation",
+        journal="Econometrica", volume="67", issue="3", pages="543--564",
+        doi="10.1111/1468-0262.00036", isbn="", publisher="", entry_type=:article),
+    :hall_inoue_jana_shin2007 => (key=:hall_inoue_jana_shin2007,
+        authors="Hall, Alastair R. and Inoue, Atsushi and Jana, Kalidas and Shin, Chiho", year=2007,
+        title="Information in Generalized Method of Moments Estimation and Entropy-Based Moment Selection",
+        journal="Journal of Econometrics", volume="138", issue="2", pages="488--512",
+        doi="10.1016/j.jeconom.2006.05.006", isbn="", publisher="", entry_type=:article),
+    :chen_choi_escanciano2017 => (key=:chen_choi_escanciano2017,
+        authors="Chen, Bin and Choi, Jinho and Escanciano, Juan Carlos", year=2017,
+        title="Testing for Fundamental Vector Moving Average Representations",
+        journal="Quantitative Economics", volume="8", issue="1", pages="149--180",
+        doi="10.3982/QE393", isbn="", publisher="", entry_type=:article),
+    :forni_gambetti2014 => (key=:forni_gambetti2014,
+        authors="Forni, Mario and Gambetti, Luca", year=2014,
+        title="Sufficient Information in Structural VARs",
+        journal="Journal of Monetary Economics", volume="66", issue="", pages="124--136",
+        doi="10.1016/j.jmoneco.2014.04.005", isbn="", publisher="", entry_type=:article),
+    :herwartz_plodt2016 => (key=:herwartz_plodt2016,
+        authors="Herwartz, Helmut and Pl{\\\"o}dt, Martin", year=2016,
+        title="The Macroeconomic Effects of Oil Price Shocks: Evidence from a Statistical Identification Approach",
+        journal="Journal of International Money and Finance", volume="61", issue="", pages="30--44",
+        doi="10.1016/j.jimonfin.2015.11.001", isbn="", publisher="", entry_type=:article),
+    :ravenna2007 => (key=:ravenna2007,
+        authors="Ravenna, Federico", year=2007,
+        title="Vector Autoregressions and Reduced Form Representations of DSGE Models",
+        journal="Journal of Monetary Economics", volume="54", issue="7", pages="2048--2064",
+        doi="10.1016/j.jmoneco.2006.09.002", isbn="", publisher="", entry_type=:article),
+    :sims2012_news => (key=:sims2012_news,
+        authors="Sims, Eric R.", year=2012,
+        title="News, Non-Invertibility, and Structural VARs",
+        journal="Advances in Econometrics", volume="28", issue="", pages="81--135",
+        doi="10.1108/S0731-9053(2012)0000028006", isbn="", publisher="", entry_type=:article),
+    :giannone_reichlin2006 => (key=:giannone_reichlin2006,
+        authors="Giannone, Domenico and Reichlin, Lucrezia", year=2006,
+        title="Does Information Help Recovering Structural Shocks from Past Observations?",
+        journal="Journal of the European Economic Association", volume="4", issue="2--3", pages="455--465",
+        doi="10.1162/jeea.2006.4.2-3.455", isbn="", publisher="", entry_type=:article),
+    :coibion_gorodnichenko2015 => (key=:coibion_gorodnichenko2015,
+        authors="Coibion, Olivier and Gorodnichenko, Yuriy", year=2015,
+        title="Information Rigidity and the Expectations Formation Process: A Simple Framework and New Facts",
+        journal="American Economic Review", volume="105", issue="8", pages="2644--2678",
+        doi="10.1257/aer.20110306", isbn="", publisher="", entry_type=:article),
+    :mackowiak_wiederholt2009 => (key=:mackowiak_wiederholt2009,
+        authors="Ma{\\'c}kowiak, Bartosz and Wiederholt, Mirko", year=2009,
+        title="Optimal Sticky Prices under Rational Inattention",
+        journal="American Economic Review", volume="99", issue="3", pages="769--803",
+        doi="10.1257/aer.99.3.769", isbn="", publisher="", entry_type=:article),
+    :mackowiak_wiederholt2015 => (key=:mackowiak_wiederholt2015,
+        authors="Ma{\\'c}kowiak, Bartosz and Wiederholt, Mirko", year=2015,
+        title="Business Cycle Dynamics under Rational Inattention",
+        journal="Review of Economic Studies", volume="82", issue="4", pages="1502--1532",
+        doi="10.1093/restud/rdv027", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2606,6 +2682,47 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :solve_ri_transition => [:afrouzi_yang2021, :sims2003],
     :to_statespace => [:sims2003, :luo2008],
     :to_abcd => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007, :sims2003],
+    # --- Wave-4 v1.1.0 (#887, #888, #896, #897, #904, #906, #907, #912, #913, #920, #921) ---
+    :QuantileFactorGrid => [:chen_dolado_gonzalo2021],
+    :QFMSpanningResult => [:chen_dolado_gonzalo2021],
+    :QFMLoadingConstancyTest => [:chen_dolado_gonzalo2021],
+    :test_qfm_spanning => [:chen_dolado_gonzalo2021],
+    :test_qfm_loading_constancy => [:chen_dolado_gonzalo2021],
+    :QuantileFactorPanelModel => [:ando_bai2020, :chen_dolado_gonzalo2021],
+    :estimate_xtqreg_factors => [:ando_bai2020, :chen_dolado_gonzalo2021],
+    :CointegratedGDFM => [:barigozzi_lippi_luciani2021],
+    :estimate_gdfm_i1 => [:barigozzi_lippi_luciani2021],
+    :BandPassGDFMResult => [:cristadoro2005, :altissimo2010],
+    :EurocoinResult => [:altissimo2010, :cristadoro2005],
+    :SpectralFEVDResult => [:altissimo2010, :cristadoro2005],
+    :bandpass_gdfm => [:cristadoro2005, :altissimo2010],
+    :eurocoin_indicator => [:altissimo2010, :cristadoro2005],
+    :spectral_fevd => [:altissimo2010, :cristadoro2005],
+    :LanneLuotoGMMResult => [:lanne_luoto2021, :andrews1999_msc, :hall_inoue_jana_shin2007, :newey_west1987],
+    :GMMMomentSelectionResult => [:andrews1999_msc, :hall_inoue_jana_shin2007, :lanne_luoto2021],
+    :estimate_lanne_luoto_gmm => [:lanne_luoto2021, :andrews1999_msc, :hall_inoue_jana_shin2007, :newey_west1987],
+    :select_gmm_moments => [:andrews1999_msc, :hall_inoue_jana_shin2007, :lanne_luoto2021],
+    :estimate_ssvarma => [:gourieroux_monfort_renne2020, :gourieroux_monfort_renne2017, :lippi_reichlin1994],
+    :FundamentalnessTestResult => [:chen_choi_escanciano2017],
+    :SufficientInformationTestResult => [:forni_gambetti2014],
+    :test_fundamentalness => [:chen_choi_escanciano2017],
+    :test_sufficient_information => [:forni_gambetti2014],
+    :identify_cvm => [:herwartz_plodt2016],
+    :ShockRecoverabilityResult => [:forni_gambetti2014, :ravenna2007, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :DSGEVARIRFAudit => [:ravenna2007, :sims2012_news, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :ObservableSearchResult => [:giannone_reichlin2006, :forni_gambetti2014, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :shock_recoverability => [:forni_gambetti2014, :ravenna2007, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :population_var => [:ravenna2007, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :compare_dsge_svar_irf => [:ravenna2007, :sims2012_news, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :search_invertible_observables => [:giannone_reichlin2006, :forni_gambetti2014, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :RIEstimationResult => [:coibion_gorodnichenko2015, :sims2003],
+    :CGTestResult => [:coibion_gorodnichenko2015],
+    :MWAttentionResult => [:mackowiak_wiederholt2009, :mackowiak_wiederholt2015, :sims2003],
+    :estimate_ri => [:coibion_gorodnichenko2015, :sims2003],
+    :coibion_gorodnichenko_test => [:coibion_gorodnichenko2015],
+    :implied_cg_slope => [:coibion_gorodnichenko2015],
+    :solve_mw_attention => [:mackowiak_wiederholt2009, :mackowiak_wiederholt2015, :sims2003],
+    :rational_inattention_jacobian => [:sims2003, :auclert_rognlie_straub2020],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -2615,6 +2732,7 @@ const _ICA_METHOD_REFS = Dict{Symbol, Vector{Symbol}}(
     :sobi => [:belouchrani1997],
     :dcov => [:szekely_rizzo_bakirov2007, :matteson_tsay2017],
     :hsic => [:gretton2005],
+    :cvm => [:herwartz_plodt2016],
 )
 
 # ML distribution → additional ref keys
@@ -3205,6 +3323,26 @@ refs(io::IO, ::SVARMAModel; kw...) = refs(io, _TYPE_REFS[:SVARMAModel]; kw...)
 refs(io::IO, ::InvertibilityResult; kw...) = refs(io, _TYPE_REFS[:InvertibilityResult]; kw...)
 refs(io::IO, ::InnovationsRepresentation; kw...) = refs(io, _TYPE_REFS[:InnovationsRepresentation]; kw...)
 refs(io::IO, ::DynamicRISolution; kw...) = refs(io, _TYPE_REFS[:DynamicRISolution]; kw...)
+
+# --- Wave-4 v1.1.0 (#887, #888, #896, #897, #904, #907, #912, #913, #920, #921) ---
+refs(io::IO, ::QuantileFactorGrid; kw...) = refs(io, _TYPE_REFS[:QuantileFactorGrid]; kw...)
+refs(io::IO, ::QFMSpanningResult; kw...) = refs(io, _TYPE_REFS[:QFMSpanningResult]; kw...)
+refs(io::IO, ::QFMLoadingConstancyTest; kw...) = refs(io, _TYPE_REFS[:QFMLoadingConstancyTest]; kw...)
+refs(io::IO, ::QuantileFactorPanelModel; kw...) = refs(io, _TYPE_REFS[:QuantileFactorPanelModel]; kw...)
+refs(io::IO, ::CointegratedGDFM; kw...) = refs(io, _TYPE_REFS[:CointegratedGDFM]; kw...)
+refs(io::IO, ::BandPassGDFMResult; kw...) = refs(io, _TYPE_REFS[:BandPassGDFMResult]; kw...)
+refs(io::IO, ::EurocoinResult; kw...) = refs(io, _TYPE_REFS[:EurocoinResult]; kw...)
+refs(io::IO, ::SpectralFEVDResult; kw...) = refs(io, _TYPE_REFS[:SpectralFEVDResult]; kw...)
+refs(io::IO, ::LanneLuotoGMMResult; kw...) = refs(io, _TYPE_REFS[:LanneLuotoGMMResult]; kw...)
+refs(io::IO, ::GMMMomentSelectionResult; kw...) = refs(io, _TYPE_REFS[:GMMMomentSelectionResult]; kw...)
+refs(io::IO, ::FundamentalnessTestResult; kw...) = refs(io, _TYPE_REFS[:FundamentalnessTestResult]; kw...)
+refs(io::IO, ::SufficientInformationTestResult; kw...) = refs(io, _TYPE_REFS[:SufficientInformationTestResult]; kw...)
+refs(io::IO, ::ShockRecoverabilityResult; kw...) = refs(io, _TYPE_REFS[:ShockRecoverabilityResult]; kw...)
+refs(io::IO, ::DSGEVARIRFAudit; kw...) = refs(io, _TYPE_REFS[:DSGEVARIRFAudit]; kw...)
+refs(io::IO, ::ObservableSearchResult; kw...) = refs(io, _TYPE_REFS[:ObservableSearchResult]; kw...)
+refs(io::IO, ::RIEstimationResult; kw...) = refs(io, _TYPE_REFS[:RIEstimationResult]; kw...)
+refs(io::IO, ::CGTestResult; kw...) = refs(io, _TYPE_REFS[:CGTestResult]; kw...)
+refs(io::IO, ::MWAttentionResult; kw...) = refs(io, _TYPE_REFS[:MWAttentionResult]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

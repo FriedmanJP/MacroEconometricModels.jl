@@ -2161,3 +2161,45 @@ end
         _assert_report_equal(innov, innov3)
     end
 end
+
+@testset "DSER-12 Wave-4 ABCD diagnostics round-trip (#912, #913)" begin
+    sys_w4 = ABCDSystem([0.5;;], [1.0;;], [2.0;;], [1.0;;])
+    rec = shock_recoverability(sys_w4)
+    @test rec isa ShockRecoverabilityResult
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "ShockRecoverabilityResult")
+    @test _from_serializable_is_generic(ShockRecoverabilityResult)
+    rec2 = _cover(rec)
+    @test rec2.r2_contemp == rec.r2_contemp && rec2.is_invertible == rec.is_invertible
+
+    audit = compare_dsge_svar_irf(sys_w4, 2, 8)
+    @test audit isa DSGEVARIRFAudit
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "DSGEVARIRFAudit")
+    @test _from_serializable_is_generic(DSGEVARIRFAudit)
+    audit2 = _cover(audit)
+    @test audit2.p == audit.p && audit2.total_rmse == audit.total_rmse
+
+    sys_obs = ABCDSystem(
+        [0.5 0.0; 0.0 0.3],
+        [1.0 0.0; 0.0 1.0],
+        [1.0 0.0; 2.0 0.5; 0.0 1.0],
+        [1.0 0.0; 0.0 1.0; 0.5 0.5];
+        obs_names=["y1", "y2", "y3"],
+        shock_names=["e1", "e2"],
+    )
+    obs_sr = search_invertible_observables(sys_obs, 2)
+    @test obs_sr isa ObservableSearchResult
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "ObservableSearchResult")
+    @test _from_serializable_is_generic(ObservableSearchResult)
+    obs_sr2 = _cover(obs_sr)
+    @test obs_sr2.is_invertible == obs_sr.is_invertible && obs_sr2.observables == obs_sr.observables
+
+    mktempdir() do d
+        for (nm, obj) in (("rec.jld2", rec), ("audit.jld2", audit), ("obs_sr.jld2", obs_sr))
+            p = joinpath(d, nm)
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
+    end
+end

@@ -126,6 +126,40 @@ estimate_gdfm_fhlz(d::TimeSeriesData, q::Int; kwargs...) =
 estimate_lms_svar(d::TimeSeriesData, p::Int; kwargs...) =
     estimate_lms_svar(to_matrix(d), p; varnames=d.varnames, kwargs...)
 
+# --- Wave-4 v1.1.0 (#887, #896, #897, #904, #906, #907, #920) ---
+estimate_qfm(d::TimeSeriesData, r_or_auto::Union{Int,Symbol,AbstractVector{<:Integer}},
+             taus::AbstractVector{<:Real}; kwargs...) =
+    estimate_qfm(to_matrix(d), r_or_auto, taus; varnames=d.varnames, kwargs...)
+
+estimate_gdfm_i1(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_gdfm_i1(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+eurocoin_indicator(d::TimeSeriesData, target_obs::AbstractVector{<:Real}, q::Int; kwargs...) =
+    eurocoin_indicator(to_matrix(d), target_obs, q; kwargs...)
+
+select_gmm_moments(d::TimeSeriesData, p::Union{Int,Nothing}=nothing; kwargs...) =
+    select_gmm_moments(to_matrix(d), p; varnames=Vector{String}(d.varnames), kwargs...)
+
+estimate_lanne_luoto_gmm(d::TimeSeriesData, p::Union{Int,Nothing}=nothing; kwargs...) =
+    estimate_lanne_luoto_gmm(to_matrix(d), p; varnames=Vector{String}(d.varnames), kwargs...)
+
+estimate_ssvarma(d::TimeSeriesData, p::Int, q::Int=1; kwargs...) =
+    estimate_ssvarma(to_matrix(d), p, q; varnames=d.varnames, kwargs...)
+
+test_sufficient_information(
+    first_arg::Union{VARModel,AbstractMatrix,AbstractNonGaussianSVAR,SVARMAModel,AbstractVector},
+    d::TimeSeriesData; kwargs...,
+) = test_sufficient_information(first_arg, to_matrix(d); kwargs...)
+
+test_sufficient_information(s::TimeSeriesData, x::Union{AbstractMatrix,FactorModel}; kwargs...) =
+    test_sufficient_information(to_matrix(s), x; kwargs...)
+
+test_sufficient_information(s::TimeSeriesData, d::TimeSeriesData; kwargs...) =
+    test_sufficient_information(to_matrix(s), to_matrix(d); kwargs...)
+
+estimate_ri(build_or_prob, d::TimeSeriesData; kwargs...) =
+    estimate_ri(build_or_prob, to_matrix(d); kwargs...)
+
 hallin_liska(d::TimeSeriesData, q_max::Int; kwargs...) =
     hallin_liska(to_matrix(d), q_max; kwargs...)
 

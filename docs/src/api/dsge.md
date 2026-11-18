@@ -79,11 +79,14 @@ max_euler_error
 ABCDSystem
 InvertibilityResult
 InnovationsRepresentation
+ShockRecoverabilityResult
+DSGEVARIRFAudit
+ObservableSearchResult
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["dsge/abcd.jl", "dsge/abcd_riccati.jl"]
+Pages   = ["dsge/abcd.jl", "dsge/abcd_riccati.jl", "dsge/abcd_var.jl", "dsge/abcd_search.jl"]
 Order   = [:function]
 Private = false
 ```

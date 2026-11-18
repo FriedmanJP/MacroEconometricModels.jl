@@ -17,7 +17,7 @@ effective_nobs(::VARModel)
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["svarma/types.jl", "svarma/schur_filter.jl", "svarma/blaschke.jl"]
+Pages   = ["svarma/types.jl", "svarma/schur_filter.jl", "svarma/blaschke.jl", "svarma/gmm_2sls.jl", "svarma/ml.jl"]
 Order   = [:function]
 Private = false
 ```
@@ -80,6 +80,13 @@ DynamicFactorModel
 GeneralizedDynamicFactorModel
 QuantileFactorModel
 QFMICResult
+QuantileFactorGrid
+QFMSpanningResult
+QFMLoadingConstancyTest
+CointegratedGDFM
+BandPassGDFMResult
+EurocoinResult
+SpectralFEVDResult
 FHLZModel
 FactorForecast
 AbstractFactorModel
@@ -396,7 +403,7 @@ OnatskiEDResult
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["factor/generalized.jl", "factor/fhlz.jl", "factor/selection.jl"]
+Pages   = ["factor/generalized.jl", "factor/fhlz.jl", "factor/selection.jl", "factor/gdfm_i1.jl", "factor/bandpass.jl"]
 Order   = [:function]
 Private = false
 ```

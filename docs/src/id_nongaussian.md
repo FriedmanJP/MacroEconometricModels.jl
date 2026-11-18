@@ -603,6 +603,36 @@ report(ht_wald)
 
 ---
 
+## Full-System Non-Gaussian GMM and Cramér–von Mises ICA
+
+While plug-in two-step GMM conditions on OLS reduced-form VAR estimates, **Lanne & Luoto (2021)** jointly estimate reduced-form dynamics and the structural impact matrix ``\theta = (\nu', \operatorname{vec}(A_1)', \dots, \operatorname{vec}(A_p)', \operatorname{vec}(B)')'`` by GMM under selected asymmetric and symmetric fourth-order co-kurtosis orthogonality conditions:
+
+```math
+E\left[\varepsilon_{it}^3 \varepsilon_{jt}\right] = 0 \; (i \ne j), \qquad
+E\left[\varepsilon_{it}^2 \varepsilon_{jt}^2 - 1\right] = 0 \; (i < j), \qquad
+Q_{\text{CUE}}(\theta) = \bar{g}_T(\theta)' \hat{S}_T(\theta)^{-1} \bar{g}_T(\theta)
+```
+
+where:
+- ``\varepsilon_t = B^{-1} u_t`` are the unit-variance structural shocks implied by ``(\nu, A_1, \dots, A_p, B)``,
+- ``\bar{g}_T(\theta)`` stacks the VAR score, second-moment unit-variance/orthogonality conditions, and selected fourth-order co-kurtosis moments,
+- ``\hat{S}_T(\theta)`` is the HAC long-run covariance estimator (Newey–West/Bartlett/Andrews) updated continuously when `weighting=:cue`.
+
+[`select_gmm_moments`](@ref) implements two-stage Andrews (1999) MSC and Hall et al. (2007) RMSC moment selection in [`GMMMomentSelectionResult`](@ref); [`estimate_lanne_luoto_gmm`](@ref) fits `:two_step`, `:iterated`, or genuine `:cue` estimation returning [`LanneLuotoGMMResult`](@ref); and [`identify_cvm`](@ref) provides distribution-free Cramér–von Mises mutual-independence ICA (Herwartz & Plödt 2016) returning an [`ICASVARResult`](@ref).
+
+```@example id_ng
+sim_ll = dgp_ssvarma(MersenneTwister(904); Phi=[0.4 0.1; -0.1 0.3], Theta=zeros(2, 2, 0),
+                     dist=:mixture_normal_asym, T=160)
+m_ll = estimate_var(sim_ll.Y, 1)
+ms_ll = select_gmm_moments(m_ll)
+ll_gmm = estimate_lanne_luoto_gmm(m_ll; weighting=:cue, max_iter=50, n_starts=2, seed=42)
+cvm_res = identify_cvm(m_ll; max_iter=40, n_starts=2, seed=42)
+report(ll_gmm)
+(n_asym = length(ms_ll.asym_pairs), n_sym = length(ms_ll.sym_pairs), J_pval = round(ll_gmm.J_pvalue; digits=3), cvm_conv = cvm_res.converged)
+```
+
+---
+
 ## Non-Fundamental SSVARMA (Gouriéroux, Monfort & Renne 2020)
 
 When observables contain foresight, news, or measurement lags, the structural VARMA moving-average polynomial ``\Theta(L) = I + \Theta_1 L + \dots + \Theta_q L^q`` has companion eigenvalues inside and/or outside the unit circle:
@@ -628,6 +658,30 @@ twins = blaschke_representations(sim_sv.Theta, sim_sv.C)
  gmr_region = sv_mod.gmr_region,
  n_twins = length(twins),
  interior_shock_err = round(maximum(abs, sv_mod.shocks[10:end-10, :] .- sim_sv.shocks[(sim_sv.p + 10):end-10, :]); digits=8))
+```
+
+### SSVARMA Estimation and Fundamentalness Diagnostics
+
+[`estimate_ssvarma`](@ref) jointly estimates non-fundamental `SVARMA(p, q)` systems via exact Schur-filtered pseudo-maximum likelihood (`method=:pml` or `:ml`, handling interior unit-circle crossings) or instrument-based II-2SLS/GMM (`method=:gmm`). Before relying on finite-order VAR innovations, [`test_fundamentalness`](@ref) implements Chen, Choi & Escanciano's (2017) Theorem 2 bootstrap higher-moment orthogonality test between VAR/AR residuals and nonlinear transformations of past data ([`FundamentalnessTestResult`](@ref)), while [`test_sufficient_information`](@ref) implements Forni & Gambetti's (2014) orthogonal-projection test against principal components from an auxiliary macroeconomic information panel ([`SufficientInformationTestResult`](@ref)):
+
+```math
+H_0^{\text{fund}}\!: \operatorname{Cov}\!\bigl(\phi(\hat{u}_{i,t}),\, h(Y_{j,t-k})\bigr) = 0, \qquad
+H_0^{\text{suff}}\!: \hat{u}_t \perp \{F_{t-1}, \dots, F_{t-p_f}\}
+```
+
+where:
+- ``\hat{u}_t`` denotes the estimated reduced-form VAR/SVARMA innovations or candidate structural shocks,
+- ``\phi(\cdot)`` and ``h(\cdot)`` are higher-moment/bounded transformations across lags ``1 \le k \le m_{\max}``,
+- ``F_t`` extracts ``r \le r_{\max}`` principal components from the large external information panel ``X_t``.
+
+```@example id_ng
+est_sv = estimate_ssvarma(sim_sv.Y, 0, 1; method=:pml, n_starts=1, max_iter=80, seed=42)
+var_sv = estimate_var(sim_sv.Y, 4)
+ft_sv = test_fundamentalness(var_sv; max_lag=4, n_boot=99, seed=42)
+X_info = hcat(sim_sv.Y, randn(MersenneTwister(907), size(sim_sv.Y, 1), 6))
+si_sv = test_sufficient_information(var_sv, X_info; r_max=2, p_f=2)
+report(ft_sv)
+(fund_pval = round(ft_sv.pvalue; digits=3), suff_pval = round(si_sv.pvalue; digits=3))
 ```
 
 ---
@@ -702,3 +756,18 @@ twins = blaschke_representations(sim_sv.Theta, sim_sv.C)
 
 - Székely, Gábor J., Maria L. Rizzo, and Nail K. Bakirov. 2007. "Measuring and Testing Dependence by Correlation of Distances."
   *Annals of Statistics* 35 (6): 2769--2794. [DOI](https://doi.org/10.1214/009053607000000505)
+
+- Andrews, Donald W. K. 1999. "Consistent Moment Selection Procedures for Generalized Method of Moments Estimation."
+  *Econometrica* 67 (3): 543--564. [DOI](https://doi.org/10.1111/1468-0262.00036)
+
+- Chen, Bin, Jinho Choi, and Juan Carlos Escanciano. 2017. "Testing for Fundamental Vector Moving Average Representations."
+  *Quantitative Economics* 8 (1): 149--180. [DOI](https://doi.org/10.3982/QE393)
+
+- Forni, Mario, and Luca Gambetti. 2014. "Sufficient Information in Structural VARs."
+  *Journal of Monetary Economics* 66: 124--136. [DOI](https://doi.org/10.1016/j.jmoneco.2014.04.005)
+
+- Hall, Alastair R., Atsushi Inoue, Kalidas Jana, and Chiho Shin. 2007. "Information in Generalized Method of Moments Estimation and Entropy-Based Moment Selection."
+  *Journal of Econometrics* 138 (2): 488--512. [DOI](https://doi.org/10.1016/j.jeconom.2006.05.006)
+
+- Herwartz, Helmut, and Martin Plödt. 2016. "The Macroeconomic Effects of Oil Price Shocks: Evidence from a Statistical Identification Approach."
+  *Journal of International Money and Finance* 61: 30--44. [DOI](https://doi.org/10.1016/j.jimonfin.2015.11.001)

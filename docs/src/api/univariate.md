@@ -121,11 +121,14 @@ estimate_tvp_reg
 RationalInattentionProblem
 SimsKalmanSolution
 DynamicRISolution
+RIEstimationResult
+CGTestResult
+MWAttentionResult
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["ri/types.jl", "ri/steady_state.jl", "ri/dynamic.jl", "ri/state_space.jl", "ri/analysis.jl"]
+Pages   = ["ri/types.jl", "ri/steady_state.jl", "ri/dynamic.jl", "ri/state_space.jl", "ri/analysis.jl", "ri/estimation.jl", "ri/mackowiak_wiederholt.jl"]
 Order   = [:function]
 Private = false
 ```

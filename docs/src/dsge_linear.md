@@ -614,6 +614,31 @@ sys_wold = to_abcd(innov)
  wold_invertible = is_invertible(sys_wold))
 ```
 
+### Shock Recoverability, Finite-Order VAR Audit, and Observable Search
+
+Even when invertibility fails in a tall or non-fundamental ``(A, B, C, D)`` system, current and past observables may still linearly recover the structural shock vector **asymptotically** up to Forni & Gambetti's (2014) projection condition [`shock_recoverability`](@ref) ([`ShockRecoverabilityResult`](@ref)). Complementarily, [`population_var`](@ref) constructs the exact analytical population VAR(``p``) implied by the DSGE autocovariances via Yule–Walker, [`compare_dsge_svar_irf`](@ref) quantifies non-fundamentalness and finite-``p`` VAR(``p``) truncation error against the true DSGE impulse responses (Ravenna 2007; Sims 2012) returning a [`DSGEVARIRFAudit`](@ref), and [`search_invertible_observables`](@ref) searches candidate ``k``-observable subsets (Giannone & Reichlin 2006) returning [`ObservableSearchResult`](@ref):
+
+```math
+R_j^2 = \frac{\operatorname{Var}(\hat{w}_{j,t \mid y^{\infty}})}{\operatorname{Var}(w_{j,t})}, \qquad
+\text{RMSPE}_{\text{VAR}(p) \text{ vs DSGE}} = \sqrt{\frac{1}{H k m}\sum_{h=1}^{H} \left\|\hat{\Theta}_h^{\text{VAR}(p)} - \Theta_h^{\text{DSGE}}\right\|_F^2}
+```
+
+where:
+- ``R_j^2 \in [0, 1]`` is the theoretical recoverability ``R^2`` of shock ``j`` from the two-sided/infinite history of ``y_t`` computed via [`ShockRecoverabilityResult`](@ref),
+- ``\Theta_h^{\text{DSGE}}`` and ``\hat{\Theta}_h^{\text{VAR}(p)}`` are the population DSGE and rotated population VAR(``p``) impulse response matrices across horizon ``h = 1, \dots, H``.
+
+```@example dsge_linear
+sys_nf = ABCDSystem([0.5;;], [1.0;;], [2.0;;], [1.0;;])
+rec_res = shock_recoverability(sys_nf)
+audit = compare_dsge_svar_irf(sys_nf, 2, 8)
+obs_search = search_invertible_observables(sol, 1)
+report(rec_res)
+report(obs_search)
+(shock_r2 = round.(rec_res.r2_contemp; digits=4),
+ var_rmse = round(audit.total_rmse; digits=4),
+ n_invertible_subsets = sum(obs_search.is_invertible))
+```
+
 ---
 
 ## Complete Example
@@ -698,3 +723,15 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 
 - Smets, F., & Wouters, R. (2007). Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach.
   *American Economic Review*, 97(3), 586--606. [DOI](https://doi.org/10.1257/aer.97.3.586)
+
+- Forni, M., & Gambetti, L. (2014). Sufficient Information in Structural VARs.
+  *Journal of Monetary Economics*, 66, 124--136. [DOI](https://doi.org/10.1016/j.jmoneco.2014.04.005)
+
+- Giannone, D., & Reichlin, L. (2006). Does Information Help Recovering Structural Shocks from Past Observations?
+  *Journal of the European Economic Association*, 4(2--3), 455--465. [DOI](https://doi.org/10.1162/jeea.2006.4.2-3.455)
+
+- Ravenna, F. (2007). Vector Autoregressions and Reduced Form Representations of DSGE Models.
+  *Journal of Monetary Economics*, 54(7), 2048--2064. [DOI](https://doi.org/10.1016/j.jmoneco.2006.09.002)
+
+- Sims, E. R. (2012). News, Non-Invertibility, and Structural VARs.
+  *Advances in Econometrics*, 28, 81--135. [DOI](https://doi.org/10.1108/S0731-9053(2012)0000028006)

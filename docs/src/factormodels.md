@@ -1055,6 +1055,30 @@ ic_q = ic_criteria_qfm(X, 4, 0.5; standardize=true, warn_boundary=false)
 | `init` | `:pca` | Starting factor initializer (`:pca`, `:quantile_svd`, or `:random`) |
 | `n_starts` | `3` | Multi-start runs retained by lowest check loss |
 
+### Multi-Quantile Grid, Spanning, and Loading Constancy
+
+Estimating quantile factors over a grid of quantiles ``\tau_1 < \dots < \tau_M`` via `estimate_qfm(X, r_or_auto, taus)` returns a [`QuantileFactorGrid`](@ref) indexing container (`grid[j]` or `grid[tau=0.5]`). Given the quantile grid and a baseline mean [`FactorModel`](@ref), [`test_qfm_spanning`](@ref) evaluates Chen, Dolado & Gonzalo (2021) linear spanning regressions projecting quantile factors onto PCA factors (and vice versa), while [`test_qfm_loading_constancy`](@ref) tests whether loadings remain proportional across quantiles ``\tau_1 \ne \tau_2`` up to an orthogonal rotation ``Q``:
+
+```math
+H_0\!: \Lambda(\tau_2) = \Lambda(\tau_1)\, Q, \qquad \widehat{\mathcal{S}}(\tau_1, \tau_2) = \min_{Q \in \mathcal{O}_r} \|\hat{\Lambda}(\tau_2) - \hat{\Lambda}(\tau_1) Q\|_F^2
+```
+
+where:
+- ``\Lambda(\tau) \in \mathbb{R}^{N \times r}`` is the quantile-``\tau`` factor loading matrix,
+- ``Q \in \mathcal{O}_r`` solves the orthogonal Procrustes alignment between quantile levels ``\tau_1`` and ``\tau_2``,
+- ``\widehat{\mathcal{S}}(\tau_1, \tau_2)`` is the block-bootstrap discrepancy statistic summarized by [`QFMLoadingConstancyTest`](@ref) and [`QFMSpanningResult`](@ref).
+
+```@example factor
+X_sub = X[:, 1:20]
+qgrid = estimate_qfm(X_sub, 2, [0.25, 0.5, 0.75]; max_iter=30, standardize=true, seed=42)
+span_res = test_qfm_spanning(qgrid, X_sub)
+const_res = test_qfm_loading_constancy(qgrid, 0.25, 0.75; n_boot=39, max_iter=25, seed=42)
+report(span_res)
+(grid_taus = qgrid.taus,
+ ols_r2_median = round.(span_res.ols_r2[2]; digits=3),
+ constancy_pval = round(const_res.pvalue; digits=3))
+```
+
 ---
 
 ## One-Sided Infinite-Order GDFM (FHLZ)
@@ -1083,6 +1107,57 @@ report(fhlz)
 sdfm_fhlz = estimate_structural_dfm(X_sub, 2; method=:fhlz, identification=:cholesky,
                                     order=[1, 2], n_perm=10, bandwidth=6, H=12, seed=42)
 report(sdfm_fhlz)
+```
+
+---
+
+## Cointegrated I(1) Dynamic Factor Model
+
+When macro and financial panels share common stochastic trends across ``N`` series alongside stationary dynamic factors, Barigozzi, Lippi & Luciani (2021) estimate a **cointegrated I(1) generalized dynamic factor model** via dynamic PCA on first differences, error-correction filtering in levels, and a common VECM decomposition:
+
+```math
+X_{it} = d_{it} + \chi_{it} + \xi_{it}, \qquad A(L)\, \Delta f_t = -\alpha \beta' f_{t-1} + u_t
+```
+
+where:
+- ``X_{it}`` is the observed level series decomposed into deterministic trend ``d_{it}``, common I(1)/I(0) component ``\chi_{it}``, and idiosyncratic disturbance ``\xi_{it}``,
+- ``f_t \in \mathbb{R}^r`` stacks the ``r`` common static factors driven by ``q`` fundamental structural shocks ``u_t`` with cointegrating matrix ``\beta`` separating permanent trends from transitory cycles.
+
+[`estimate_gdfm_i1`](@ref) returns a [`CointegratedGDFM`](@ref) container supporting structural level impulse responses (`irf`) identified via `:permanent_transitory`, `:cholesky`, `:long_run`, `:sign`, or `:proxy`.
+
+```@example factor
+X_i1 = cumsum(X_sub; dims=1)
+m_i1 = estimate_gdfm_i1(X_i1, 2; n_perm=8, p_max=2, irf_horizon=16, seed=42)
+(q = m_i1.q,
+ n_perm_shocks = m_i1.n_permanent,
+ irf_size = size(irf(m_i1, 16).values))
+```
+
+---
+
+## Band-Pass GDFM, Eurocoin, and Spectral FEVD
+
+Frequency-band filtering isolates medium-run business-cycle fluctuations or trend components directly from the estimated dynamic spectral density (Cristadoro et al. 2005; Altissimo et al. 2010):
+
+```math
+\chi_{it}^{\mathcal{B}} = \sum_{|k| \le M} K_{i,\mathcal{B}}(k)\, X_{t-k}, \qquad \omega \in \mathcal{B} = [\omega_{\text{lo}}, \omega_{\text{hi}}] \subseteq [0, \pi]
+```
+
+where:
+- ``\chi_{it}^{\mathcal{B}}`` is the common component attributable to angular frequency band ``\mathcal{B}`` (e.g. periods between 6 and 32 quarters at ``[2\pi/32, 2\pi/6]``),
+- ``K_{i,\mathcal{B}}(k)`` is the band-pass filter weight vector derived from the dynamic common spectral loadings over half-width ``M``.
+
+[`bandpass_gdfm`](@ref) returns both two-sided and one-sided filtered components in [`BandPassGDFMResult`](@ref); [`eurocoin_indicator`](@ref) computes Altissimo et al.'s (2010) real-time contemporaneous linear projection indicator in [`EurocoinResult`](@ref); and [`spectral_fevd`](@ref) integrates structural spectral power over ``\mathcal{B}`` for any [`StructuralDFM`](@ref) (`:fglr`, `:gdfm_var`, or `:fhlz`), returning [`SpectralFEVDResult`](@ref).
+
+```@example factor
+gdfm_bp = estimate_gdfm(X_sub, 2; r=3, spectral=:lag_window, bandwidth=6)
+bp_res = bandpass_gdfm(gdfm_bp, (2π / 32, 2π / 6))
+ec_res = eurocoin_indicator(X_sub, X_sub[:, 1], 2; r=3, cutoff=π / 6)
+sfevd_res = spectral_fevd(sdfm_fhlz, (2π / 32, 2π / 6); include_idiosyncratic=true)
+report(sfevd_res)
+(mean_bp_share = round(mean(bp_res.variance_share); digits=3),
+ eurocoin_r2 = round(ec_res.r2; digits=3),
+ shock_shares_row1 = round.(sfevd_res.shares[1, :]; digits=3))
 ```
 
 ---
@@ -1195,3 +1270,12 @@ typeof(fm2)
 
 - Stock, J. H., & Watson, M. W. (2002b). Macroeconomic Forecasting Using Diffusion Indexes.
   *Journal of Business & Economic Statistics*, 20(2), 147-162. [DOI](https://doi.org/10.1198/073500102317351921)
+
+- Altissimo, F., Cristadoro, R., Forni, M., Lippi, M., & Veronese, G. (2010). New Eurocoin: Tracking Economic Growth in Real Time.
+  *Review of Economics and Statistics*, 92(4), 1024-1034. [DOI](https://doi.org/10.1162/REST_a_00045)
+
+- Barigozzi, M., Lippi, M., & Luciani, M. (2021). Large-Dimensional Dynamic Factor Models: Estimation of Impulse-Response Functions with I(1) Cointegrated Factors.
+  *Journal of Econometrics*, 221(2), 455-482. [DOI](https://doi.org/10.1016/j.jeconom.2020.05.004)
+
+- Cristadoro, R., Forni, M., Reichlin, L., & Veronese, G. (2005). A Core Inflation Indicator for the Euro Area.
+  *Journal of Money, Credit and Banking*, 37(3), 539-560. [DOI](https://doi.org/10.1353/mcb.2005.0028)

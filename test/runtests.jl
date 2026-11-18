@@ -86,7 +86,9 @@ const TEST_GROUPS = [
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
+        "factor/test_gdfm_i1.jl",          # GDFM-04 (#896): Cointegrated I(1) GDFM & BLL (2021) structural IRFs
         "factor/test_qfm.jl",
+        "factor/test_qfm_panel.jl",        # QFM-06 (#888): Quantile factor panel regression (Ando-Bai 2020)
         "factor/test_fhlz.jl",
         "factor/test_factor_selection.jl",   # GDFM-03 (#895): Onatski (2009/2010) & Ahn-Horenstein (2013)
         "factor/test_factor_forecast.jl",
@@ -116,6 +118,8 @@ const TEST_GROUPS = [
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
         "ri/test_ri_kalman.jl",           # RI-02 (#917), RI-04 (#919): Sims steady-state LQG rational inattention & joint state space
         "ri/test_ri_dynamic.jl",          # RI-03 (#918): Afrouzi-Yang dynamic RI transition path
+        "ri/test_ri_estimation.jl",       # RI-05 (#920): Empirical RI estimation & Coibion-Gorodnichenko tests
+        "ri/test_ri_mw.jl",               # RI-06 (#921): Maćkowiak-Wiederholt multivariate RI pricing
         "ri/test_ri_discrete.jl",         # RI-07 (#922): Matejka-McKay & CDL discrete-choice RI
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
@@ -172,7 +176,10 @@ const TEST_GROUPS = [
         "nongaussian/test_nongaussian_internals.jl",
         "nongaussian/test_lms_svar.jl",     # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML
         "nongaussian/test_lms_hypothesis.jl", # NGID-03 (#903): LMS structural hypothesis testing suite & diagnostics
+        "nongaussian/test_lanne_luoto_gmm.jl", # NGID-04 (#904): Lanne-Luoto (2021) full-system GMM + MSC/RMSC + CUE
         "svarma/test_ssvarma_core.jl",    # NGID-05 (#905): GMR (2020) non-fundamental SSVARMA core & Schur filter
+        "svarma/test_ssvarma_estimation.jl", # NGID-06 (#906): SSVARMA(p,q) PML/ML/GMM estimation & II-2SLS
+        "svarma/test_fundamentalness.jl", # NGID-07 (#907): Fundamentalness & sufficient information tests
         "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
         "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
         "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
