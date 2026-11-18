@@ -251,6 +251,7 @@ include("core/uhlig.jl")
 include("nongaussian/shared.jl")
 include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
+include("nongaussian/lms.jl")
 include("nongaussian/heteroskedastic.jl")
 include("nongaussian/gmm.jl")
 include("nongaussian/tvv_common.jl")
@@ -1323,6 +1324,7 @@ export identify_dcov, identify_hsic
 # Non-Gaussian ML SVAR
 export identify_student_t, identify_mixture_normal
 export identify_pml, identify_skew_normal, identify_nongaussian_ml
+export LMSSVARResult, estimate_lms_svar, lms_project_B
 
 # Moment-based GMM SVAR
 export identify_gmm_moments

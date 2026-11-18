@@ -927,6 +927,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:pml` — Pseudo-ML with Pearson Type IV (Gouriéroux, Monfort & Renne 2017)
 - `:skew_normal` — Skew-normal ML (Azzalini 1985 density)
 - `:nongaussian_ml` — Unified non-Gaussian ML dispatcher (default: Student-t)
+- `:lms` — Lanne–Meitz–Saikkonen (2017) complete ID + 1/3-step non-Gaussian ML
 - `:lewis_tvv` — Time-varying-volatility ID, GMM on lagged cross-moments (Lewis 2021)
 - `:sv_em` — Stochastic-volatility SVAR via EM (Bertsche & Braun 2022); Q/B given `model.Sigma`
 - `:markov_switching` — Markov-switching heteroskedasticity (Lanne, Lütkepohl & Maciejowska 2010)
@@ -1003,6 +1004,8 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_skew_normal(model; rng=rng).Q
     elseif method == :nongaussian_ml
         identify_nongaussian_ml(model; rng=rng).Q
+    elseif method == :lms
+        estimate_lms_svar(model; rng=rng, kwargs...).Q
     elseif method == :gmm_moments
         identify_gmm_moments(model; kwargs...).Q
     elseif method == :lewis_tvv
@@ -1073,6 +1076,7 @@ function _register_builtin_identification!()
         (:pml, true, false, false),
         (:skew_normal, true, false, false),
         (:nongaussian_ml, true, false, false),
+        (:lms, true, false, false),
         (:gmm_moments, true, false, false),
         (:lewis_tvv, true, false, false),
         (:sv_em, true, false, false),
