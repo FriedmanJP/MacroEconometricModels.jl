@@ -2161,6 +2161,32 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="On the Fit of New Keynesian Models",
         journal="Journal of Business & Economic Statistics", volume="25", issue="2", pages="123--143",
         doi="10.1198/073500107000000016", isbn="", publisher="", entry_type=:article),
+    # --- Wave-6 v1.1.0 (#891, #892, #900, #908, #915, #923) ---
+    :portnoy_koenker1997 => (key=:portnoy_koenker1997,
+        authors="Portnoy, Stephen and Koenker, Roger", year=1997,
+        title="The Gaussian Hare and the Laplacian Tortoise: Computability of Squared-Error versus Absolute-Error Estimators",
+        journal="Statistical Science", volume="12", issue="4", pages="279--300",
+        doi="10.1214/ss/1030037960", isbn="", publisher="", entry_type=:article),
+    :he_pan_tan_zhou2023 => (key=:he_pan_tan_zhou2023,
+        authors="He, Xuming and Pan, Xiaoou and Tan, Kean Ming and Zhou, Wen-Xin", year=2023,
+        title="Smoothed Quantile Regression with Large-Scale Inference",
+        journal="Journal of Econometrics", volume="232", issue="2", pages="367--388",
+        doi="10.1016/j.jeconom.2021.07.010", isbn="", publisher="", entry_type=:article),
+    :he_kong_yu_zhang2022 => (key=:he_kong_yu_zhang2022,
+        authors="He, Yong and Kong, Xinbing and Yu, Long and Zhang, Xinsheng", year=2022,
+        title="Large-Dimensional Factor Analysis Without Moment Constraints",
+        journal="Journal of Business & Economic Statistics", volume="40", issue="1", pages="302--312",
+        doi="10.1080/07350015.2020.1811101", isbn="", publisher="", entry_type=:article),
+    :sims2010 => (key=:sims2010,
+        authors="Sims, Christopher A.", year=2010,
+        title="Rational Inattention and Monetary Economics",
+        journal="Handbook of Monetary Economics", volume="3", issue="", pages="155--181",
+        doi="10.1016/B978-0-444-53238-1.00004-1", isbn="", publisher="Elsevier", entry_type=:incollection),
+    :miao_wu_young2022 => (key=:miao_wu_young2022,
+        authors="Miao, Jianjun and Wu, Jieran and Young, Eric R.", year=2022,
+        title="Multivariate Rational Inattention",
+        journal="Econometrica", volume="90", issue="2", pages="907--945",
+        doi="10.3982/ECTA17921", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2490,7 +2516,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     # DSGE solution types
     :PerturbationSolution => [:schmitt_grohe_uribe2004, :kim_kim_schaumburg_sims2008],
     :ProjectionSolution => [:judd1998, :judd_maliar_maliar_valero2014],
-    :QuantileRegModel => [:koenker_bassett1978],
+    :QuantileRegModel => [:koenker_bassett1978, :portnoy_koenker1997, :he_pan_tan_zhou2023],
+    :estimate_qreg => [:koenker_bassett1978, :portnoy_koenker1997, :he_pan_tan_zhou2023],
     :LinearDSGE => [:sims2002],
     # Bayesian DSGE
     :BayesianDSGE => [:herbst_schorfheide2015, :herbst_schorfheide2014, :an_schorfheide2007],
@@ -2677,8 +2704,8 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :LowessFit => [:cleveland1979],
     :lowess => [:cleveland1979],
     # Wave-2 v1.1.0 (#884, #894, #902, #909, #917, #922)
-    :QuantileFactorModel => [:chen_dolado_gonzalo2021, :koenker_bassett1978],
-    :estimate_qfm => [:chen_dolado_gonzalo2021],
+    :QuantileFactorModel => [:chen_dolado_gonzalo2021, :he_kong_yu_zhang2022, :koenker_bassett1978],
+    :estimate_qfm => [:chen_dolado_gonzalo2021, :he_kong_yu_zhang2022],
     :FHLZModel => [:forni_hallin_lippi_zaffaroni2015, :forni_hallin_lippi_zaffaroni2017],
     :estimate_gdfm_fhlz => [:forni_hallin_lippi_zaffaroni2015, :forni_hallin_lippi_zaffaroni2017],
     :LMSSVARResult => [:lanne_meitz_saikkonen2017, :lewis2025],
@@ -2687,9 +2714,11 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :lms => [:lanne_meitz_saikkonen2017, :lewis2025],
     :ABCDSystem => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
     :abcd_representation => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
-    :RationalInattentionProblem => [:sims2003, :afrouzi_yang2021],
-    :SimsKalmanSolution => [:sims2003, :afrouzi_yang2021],
-    :solve_ri_kalman => [:sims2003, :afrouzi_yang2021],
+    :RationalInattentionProblem => [:sims2003, :sims2010, :afrouzi_yang2021],
+    :SimsKalmanSolution => [:sims2003, :sims2010, :afrouzi_yang2021, :miao_wu_young2022],
+    :solve_ri_kalman => [:sims2003, :sims2010, :afrouzi_yang2021, :miao_wu_young2022],
+    :SteadyStateKalman => [:sims2003, :hamilton1994],
+    :steady_state_kalman => [:sims2003, :hamilton1994],
     :RIDiscreteChoiceSolution => [:matejka_mckay2015, :caplin_dean_leahy2019],
     :RIIIADiagnostic => [:matejka_mckay2015],
     :RILogitModel => [:matejka_mckay2015, :caplin_dean_leahy2019],
@@ -2758,7 +2787,7 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :search_invertible_observables => [:giannone_reichlin2006, :forni_gambetti2014, :fernandez_villaverde_rubio_ramirez_sargent_watson2007],
     :RIEstimationResult => [:coibion_gorodnichenko2015, :sims2003],
     :CGTestResult => [:coibion_gorodnichenko2015],
-    :MWAttentionResult => [:mackowiak_wiederholt2009, :mackowiak_wiederholt2015, :sims2003],
+    :MWAttentionResult => [:mackowiak_wiederholt2009, :mackowiak_wiederholt2015, :sims2003, :sims2010],
     :estimate_ri => [:coibion_gorodnichenko2015, :sims2003],
     :coibion_gorodnichenko_test => [:coibion_gorodnichenko2015],
     :implied_cg_slope => [:coibion_gorodnichenko2015],
@@ -3419,6 +3448,9 @@ refs(io::IO, ::GDFMNowcastResult; kw...) = refs(io, _TYPE_REFS[:GDFMNowcastResul
 refs(io::IO, ::DSGEVARPrior; kw...) = refs(io, _TYPE_REFS[:DSGEVARPrior]; kw...)
 refs(io::IO, ::DSGEVARLambdaProfile; kw...) = refs(io, _TYPE_REFS[:DSGEVARLambdaProfile]; kw...)
 refs(io::IO, ::DSGEVARPosterior; kw...) = refs(io, _TYPE_REFS[:DSGEVARPosterior]; kw...)
+
+# --- Wave-6 v1.1.0 (#923) ---
+refs(io::IO, ::SteadyStateKalman; kw...) = refs(io, _TYPE_REFS[:SteadyStateKalman]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

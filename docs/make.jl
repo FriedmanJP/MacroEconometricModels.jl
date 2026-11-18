@@ -107,6 +107,7 @@ makedocs(;
             "Rule Counterfactuals (McKay-Wolf)" => "counterfactual_rules.md",
             "Optimal Policy Perturbations (Barnichon-Mesters)" => "counterfactual_opp.md",
             "Model Bank & Diagnostics (CMW)" => "counterfactual_bank.md",
+            "Rational Inattention" => "rational_inattention.md",
         ],
         "Structural Analysis" => [
             "Structural Identification" => "structural_identification.md",

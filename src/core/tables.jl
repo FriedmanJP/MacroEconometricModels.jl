@@ -1542,6 +1542,662 @@ for MT in _DSGE_TABLE_TYPES
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
+# v1.1.0 Series Models, Tests, State-Space, DSGE-VAR, and Rational Inattention
+# ─────────────────────────────────────────────────────────────────────────────
+
+_safe_labels(names::AbstractVector{<:AbstractString}, n::Int, prefix::String) =
+    length(names) == n ? String[string(s) for s in names] : String["$(prefix)_$i" for i in 1:n]
+
+# -- QFM & QFAVAR series --
+
+function _coef_nt(m::QuantileFactorModel)
+    N, r = size(m.loadings)
+    vn = _safe_labels(m.varnames, N, "var")
+    r == 0 && return (
+        variable=vn, factor=fill(0, N), tau=fill(Float64(m.tau), N),
+        loading=fill(NaN, N), std_error=Vector{Union{Missing,Float64}}(fill(missing, N)),
+        pseudo_r2=Float64.(collect(m.pseudo_r2)),
+    )
+    variable = String[]; factor = Int[]; tau = Float64[]
+    loading = Float64[]; std_error = Union{Missing,Float64}[]; pseudo_r2 = Float64[]
+    has_se = m.se_loadings !== nothing && size(m.se_loadings) == (N, r)
+    pr2 = length(m.pseudo_r2) == N ? m.pseudo_r2 : fill(NaN, N)
+    for k in 1:r, j in 1:N
+        push!(variable, vn[j]); push!(factor, k); push!(tau, Float64(m.tau))
+        push!(loading, Float64(m.loadings[j, k]))
+        push!(std_error, has_se ? Float64(m.se_loadings[j, k]) : missing)
+        push!(pseudo_r2, Float64(pr2[j]))
+    end
+    return (; variable, factor, tau, loading, std_error, pseudo_r2)
+end
+
+function _coef_nt(ic::QFMICResult)
+    rmax = ic.r_max
+    return (
+        r=collect(1:rmax),
+        tau=fill(Float64(ic.tau), rmax),
+        sigma_sq=Float64.(collect(ic.sigma_sq[1:rmax])),
+        loss=Float64.(collect(ic.loss[1:rmax])),
+        IC1=Float64.(collect(ic.IC1[1:rmax])),
+        IC2=Float64.(collect(ic.IC2[1:rmax])),
+        IC3=Float64.(collect(ic.IC3[1:rmax])),
+        r_IC1=fill(ic.r_IC1, rmax),
+        r_IC2=fill(ic.r_IC2, rmax),
+        r_IC3=fill(ic.r_IC3, rmax),
+        r_rank=fill(ic.r_rank, rmax),
+    )
+end
+
+function _coef_nt(g::QuantileFactorGrid)
+    nt = length(g.taus)
+    return (
+        tau=Float64.(collect(g.taus)),
+        r=Int.(collect(g.r_by_tau)),
+        mean_pseudo_r2=Float64[mean(m.pseudo_r2) for m in g.models],
+        converged=Bool[m.converged for m in g.models],
+    )
+end
+
+function _coef_nt(s::QFMSpanningResult)
+    tau = Float64[]; ols_r2 = Float64[]; quantile_r1 = Float64[]
+    cancor = Float64[]; unspanned = Bool[]
+    for (ti, t) in enumerate(s.taus)
+        m = length(s.ols_r2[ti])
+        for k in 1:m
+            push!(tau, Float64(t))
+            push!(ols_r2, Float64(s.ols_r2[ti][k]))
+            push!(quantile_r1, Float64(s.quantile_r1[ti][min(k, end)]))
+            push!(cancor, Float64(s.cancor[ti][min(k, end)]))
+            push!(unspanned, Bool(s.unspanned[ti][min(k, end)]))
+        end
+    end
+    return (tau=tau, factor=reduce(vcat, (collect(1:length(s.ols_r2[ti])) for ti in eachindex(s.taus)); init=Int[]),
+            ols_r2=ols_r2, quantile_r1=quantile_r1, cancor=cancor, unspanned=unspanned)
+end
+
+function _coef_nt(t::QFMLoadingConstancyTest)
+    return (
+        test=["QFM loading constancy"],
+        tau1=[Float64(t.tau1)],
+        tau2=[Float64(t.tau2)],
+        statistic=[Float64(t.statistic)],
+        p_value=[Float64(t.pvalue)],
+        n_boot=[t.n_boot],
+        dof=[t.dof],
+    )
+end
+
+function _coef_nt(g::GrowthAtRiskResult)
+    T_eff = length(g.gar)
+    act = length(g.actual_target) == T_eff ? Float64.(collect(g.actual_target)) : fill(NaN, T_eff)
+    return (
+        period=collect(1:T_eff),
+        target=fill(g.target_name, T_eff),
+        gar=Float64.(collect(g.gar)),
+        expected_shortfall=Float64.(collect(g.expected_shortfall)),
+        upside_entropy=Float64.(collect(g.upside_entropy)),
+        downside_entropy=Float64.(collect(g.downside_entropy)),
+        actual_target=act,
+    )
+end
+
+function _coef_nt(m::QuantileVARModel)
+    n = size(m.Y, 2)
+    vn = _safe_labels(m.varnames, n, "y")
+    k_lag = isempty(m.B_list) ? 0 : size(m.B_list[1], 1)
+    tnames = vcat(["const"], ["L$(lag)_$v" for lag in 1:m.p for v in vn])
+    length(tnames) == k_lag || (tnames = ["coef_$i" for i in 1:k_lag])
+    tau = Float64[]; equation = String[]; term = String[]
+    estimate = Float64[]; std_error = Float64[]
+    for (ti, t) in enumerate(m.taus)
+        B = m.B_list[ti]; SE = m.se_list[ti]
+        for eq in 1:n, c in 1:size(B, 1)
+            push!(tau, Float64(t)); push!(equation, vn[eq]); push!(term, tnames[c])
+            push!(estimate, Float64(B[c, eq])); push!(std_error, Float64(SE[c, eq]))
+        end
+    end
+    return (; tau, equation, term, estimate, std_error)
+end
+
+function _coef_nt(q::QuantileImpulseResponse)
+    df = long_table(q)
+    return NamedTuple{Tuple(Symbol.(names(df)))}(Tuple(df[!, col] for col in names(df)))
+end
+
+function _coef_nt(m::QuantileFAVAR)
+    df = long_table(m)
+    return NamedTuple{Tuple(Symbol.(names(df)))}(Tuple(df[!, col] for col in names(df)))
+end
+
+function _coef_nt(m::VBQuantileFAVAR)
+    df = long_table(m)
+    return NamedTuple{Tuple(Symbol.(names(df)))}(Tuple(df[!, col] for col in names(df)))
+end
+
+# -- GDFM & Factor Test series --
+
+function _coef_nt(m::FHLZModel)
+    nv, nq = size(m.impulse_filters, 2), size(m.impulse_filters, 3)
+    vn = _safe_labels(m.varnames, nv, "var")
+    ve = length(m.variance_explained)
+    horizon = Int[]; variable = String[]; shock = String[]; value = Float64[]; var_explained = Float64[]
+    H = size(m.impulse_filters, 1)
+    for s in 1:nq, v in 1:nv, h in 1:H
+        push!(horizon, h - 1); push!(variable, vn[v]); push!(shock, "u_$s")
+        push!(value, Float64(m.impulse_filters[h, v, s]))
+        push!(var_explained, s <= ve ? Float64(m.variance_explained[s]) : NaN)
+    end
+    return (; horizon, variable, shock, value, var_explained)
+end
+
+function _coef_nt(r::OnatskiQTestResult)
+    return (
+        test=["Onatski (2009) dynamic rank q-test"],
+        k0=[r.k0], k1=[r.k1],
+        statistic=[Float64(r.statistic)],
+        p_value=[Float64(r.pvalue)],
+        crit_05=[isempty(r.crit_vals) ? NaN : Float64(r.crit_vals[min(2, end)])],
+        rejected_05=[r.rejected_05],
+    )
+end
+
+function _coef_nt(r::AhnHorensteinResult)
+    kmax = min(r.k_max, length(r.eigenvalues), length(r.er), length(r.gr))
+    return (
+        k=collect(1:kmax),
+        eigenvalue=Float64.(collect(r.eigenvalues[1:kmax])),
+        er=Float64.(collect(r.er[1:kmax])),
+        gr=Float64.(collect(r.gr[1:kmax])),
+        r_er=fill(r.r_er, kmax),
+        r_gr=fill(r.r_gr, kmax),
+    )
+end
+
+function _coef_nt(r::OnatskiEDResult)
+    n = length(r.eigenvalues)
+    return (
+        k=collect(1:n),
+        eigenvalue=Float64.(collect(r.eigenvalues)),
+        delta=fill(Float64(r.delta), n),
+        r_ed=fill(r.r_ed, n),
+        converged=fill(r.converged, n),
+    )
+end
+
+function _coef_nt(m::CointegratedGDFM)
+    H, nv, nq = size(m.irf_matrices)
+    vn = _safe_labels(m.varnames, nv, "var")
+    sn = _safe_labels(m.shock_names, nq, "shock")
+    horizon = Int[]; variable = String[]; shock = String[]; value = Float64[]
+    for h in 1:H, v in 1:nv, s in 1:nq
+        push!(horizon, h - 1); push!(variable, vn[v]); push!(shock, sn[s])
+        push!(value, Float64(m.irf_matrices[h, v, s]))
+    end
+    return (; horizon, variable, shock, value)
+end
+
+function _coef_nt(r::BandPassGDFMResult)
+    N = length(r.variance_share)
+    return (
+        variable=_safe_labels(r.varnames, N, "var"),
+        variance_share=Float64.(collect(r.variance_share)),
+        r=fill(r.r, N),
+        band_low=fill(Float64(r.band[1]), N),
+        band_high=fill(Float64(r.band[2]), N),
+    )
+end
+
+function _coef_nt(r::EurocoinResult)
+    T_eff = length(r.indicator)
+    tlp = length(r.target_lowpass) == T_eff ? Float64.(collect(r.target_lowpass)) : fill(NaN, T_eff)
+    return (
+        period=collect(1:T_eff),
+        indicator=Float64.(collect(r.indicator)),
+        target_lowpass=tlp,
+        r2=fill(Float64(r.r2), T_eff),
+        cutoff=fill(Float64(r.cutoff), T_eff),
+    )
+end
+
+function _coef_nt(r::SpectralFEVDResult)
+    nv, ns = size(r.shares)
+    vn = _safe_labels(r.varnames, nv, "var")
+    sn = _safe_labels(r.shock_names, ns, "shock")
+    variable = String[]; shock = String[]; share = Float64[]; power_band = Float64[]
+    for v in 1:nv, s in 1:ns
+        push!(variable, vn[v]); push!(shock, sn[s])
+        push!(share, Float64(r.shares[v, s]))
+        push!(power_band, Float64(r.power_band[v, s]))
+    end
+    return (; variable, shock, share, power_band)
+end
+
+function _coef_nt(m::TimeVaryingGDFM)
+    T_obs, q = size(m.variance_share_path)
+    time = Int[]; factor = Int[]; variance_share = Float64[]
+    for k in 1:q, t in 1:T_obs
+        push!(time, t); push!(factor, k); push!(variance_share, Float64(m.variance_share_path[t, k]))
+    end
+    return (; time, factor, variance_share)
+end
+
+function _coef_nt(r::GDFMNowcastResult)
+    n = length(r.nowcast)
+    return (
+        variable=_safe_labels(r.varnames, n, "var"),
+        nowcast=Float64.(collect(r.nowcast)),
+        std_error=Float64.(collect(r.se)),
+        horizon=fill(r.horizon, n),
+        observed=Bool.(collect(r.observed_mask[1:min(n, end)])),
+    )
+end
+
+# -- NGID & SSVARMA series --
+
+function _coef_nt(m::LMSSVARResult)
+    n = size(m.B0, 1)
+    sn = _safe_labels(m.shock_names, n, "shock")
+    param = String[]; estimate = Float64[]; std_error = Float64[]
+    for j in 1:n, i in 1:n
+        push!(param, "B0[$i,$(sn[j])]")
+        push!(estimate, Float64(m.B0[i, j]))
+        push!(std_error, Float64(m.se_B0[i, j]))
+    end
+    for j in 1:length(m.sigma)
+        push!(param, "sigma[$(sn[j])]")
+        push!(estimate, Float64(m.sigma[j]))
+        push!(std_error, j <= length(m.se_sigma) ? Float64(m.se_sigma[j]) : NaN)
+    end
+    return (parameter=param, estimate=estimate, std_error=std_error)
+end
+
+function _coef_nt(t::SVARHypothesisTest)
+    return (
+        test=[string(t.hypothesis_kind, " (", t.test_type, ")")],
+        statistic=[Float64(t.statistic)],
+        p_value=[Float64(t.pvalue)],
+        bootstrap_pvalue=[t.bootstrap_pvalue === nothing ? missing : Float64(t.bootstrap_pvalue)],
+        df=[t.df],
+        nobs=[t.nobs],
+        converged=[t.converged],
+    )
+end
+
+function _coef_nt(d::NonGaussianDiagnostics)
+    n = length(d.jb_stats)
+    return (
+        shock=_safe_labels(d.shock_names, n, "shock"),
+        jb_stat=Float64.(collect(d.jb_stats)),
+        jb_pval=Float64.(collect(d.jb_pvals)),
+        jb_pval_holm=Float64.(collect(d.jb_pvals_holm)),
+        skewness=Float64.(collect(d.skewness)),
+        excess_kurtosis=Float64.(collect(d.excess_kurtosis)),
+        lb_levels_pval=Float64.(collect(d.lb_levels_pvals)),
+        lb_squares_pval=Float64.(collect(d.lb_squares_pvals)),
+        bds_pval=Float64.(collect(d.bds_pvals)),
+    )
+end
+
+function _coef_nt(m::LanneLuotoGMMResult)
+    n = size(m.B0, 1)
+    sn = _safe_labels(m.shock_names, n, "shock")
+    param = String[]; estimate = Float64[]; std_error = Float64[]
+    for j in 1:n, i in 1:n
+        push!(param, "B0[$i,$(sn[j])]")
+        push!(estimate, Float64(m.B0[i, j]))
+        push!(std_error, Float64(m.se_B0[i, j]))
+    end
+    return (parameter=param, estimate=estimate, std_error=std_error,
+            J_stat=fill(Float64(m.J_stat), length(param)),
+            J_pvalue=fill(Float64(m.J_pvalue), length(param)))
+end
+
+function _coef_nt(r::GMMMomentSelectionResult)
+    isempty(r.candidates) && return (
+        n_asym=[length(r.msc_asym_pairs)], n_sym=[length(r.msc_sym_pairs)],
+        n_moments=[r.n_moments], df=[r.df],
+        J_stat=[Float64(r.J_stat)], J_pvalue=[Float64(r.J_pvalue)],
+        msc=[Float64(r.msc_score)], rmsc=[Float64(r.rmsc_score)],
+    )
+    return (
+        n_asym=[length(c.asym_pairs) for c in r.candidates],
+        n_sym=[length(c.sym_pairs) for c in r.candidates],
+        n_moments=[c.n_moments for c in r.candidates],
+        df=[c.df for c in r.candidates],
+        J_stat=[Float64(c.J_stat) for c in r.candidates],
+        J_pvalue=[Float64(c.J_pvalue) for c in r.candidates],
+        msc=[Float64(c.msc) for c in r.candidates],
+        rmsc=[Float64(c.rmsc) for c in r.candidates],
+        rank_ok=[c.rank_ok for c in r.candidates],
+    )
+end
+
+function _coef_nt(m::SVARMAModel)
+    n = length(m.mu)
+    vn = _safe_labels(m.varnames, n, "y")
+    sn = _safe_labels(m.shock_names, n, "shock")
+    param = String[]; estimate = Float64[]
+    for i in 1:n
+        push!(param, "mu[$(vn[i])]")
+        push!(estimate, Float64(m.mu[i]))
+    end
+    for l in 1:size(m.Phi, 3), j in 1:n, i in 1:n
+        push!(param, "Phi$(l)[$(vn[i]),$(vn[j])]")
+        push!(estimate, Float64(m.Phi[i, j, l]))
+    end
+    for l in 1:size(m.Theta, 3), j in 1:n, i in 1:n
+        push!(param, "Theta$(l)[$(vn[i]),$(sn[j])]")
+        push!(estimate, Float64(m.Theta[i, j, l]))
+    end
+    for j in 1:n, i in 1:n
+        push!(param, "C[$(vn[i]),$(sn[j])]")
+        push!(estimate, Float64(m.C[i, j]))
+    end
+    return (parameter=param, estimate=estimate,
+            regime=fill(string(m.regime), length(param)),
+            loglik=fill(Float64(m.loglik), length(param)))
+end
+
+function _coef_nt(r::FundamentalnessTestResult)
+    k = length(r.lag_statistics)
+    k == 0 && return (
+        lag=[0], statistic=[Float64(r.statistic)], p_value=[Float64(r.pvalue)],
+        overall_statistic=[Float64(r.statistic)], overall_pvalue=[Float64(r.pvalue)],
+    )
+    return (
+        lag=collect(1:k),
+        statistic=Float64.(collect(r.lag_statistics)),
+        p_value=Float64.(collect(r.lag_pvalues)),
+        overall_statistic=fill(Float64(r.statistic), k),
+        overall_pvalue=fill(Float64(r.pvalue), k),
+    )
+end
+
+function _coef_nt(r::SufficientInformationTestResult)
+    k = length(r.r_grid)
+    k == 0 && return (
+        r=[0], f_statistic=[Float64(r.statistic)], f_pvalue=[Float64(r.pvalue)],
+        wald_statistic=[Float64(r.wald_statistic)], wald_pvalue=[Float64(r.wald_pvalue)],
+    )
+    return (
+        r=Int.(collect(r.r_grid)),
+        f_statistic=Float64.(collect(r.f_statistics)),
+        f_pvalue=Float64.(collect(r.f_pvalues)),
+        wald_statistic=Float64.(collect(r.wald_statistics)),
+        wald_pvalue=Float64.(collect(r.wald_pvalues)),
+    )
+end
+
+# -- ABCD & DSGE-VAR series --
+
+function _coef_nt(sys::ABCDSystem)
+    eigs = size(sys.A, 1) > 0 ? Complex{Float64}.(eigvals(sys.A)) : Complex{Float64}[]
+    n = length(eigs)
+    n == 0 && return (eigen_index=[0], re=[NaN], im=[NaN], modulus=[NaN],
+                      n_states=[size(sys.A, 1)], n_obs=[size(sys.C, 1)], n_shocks=[size(sys.B, 2)])
+    return (
+        eigen_index=collect(1:n),
+        re=real.(eigs),
+        im=imag.(eigs),
+        modulus=abs.(eigs),
+        n_states=fill(size(sys.A, 1), n),
+        n_obs=fill(size(sys.C, 1), n),
+        n_shocks=fill(size(sys.B, 2), n),
+    )
+end
+
+function _coef_nt(r::InvertibilityResult)
+    n = length(r.zero_re)
+    n == 0 && return (
+        zero_index=[0], re=[NaN], im=[NaN], modulus=[NaN],
+        invertible=[r.invertible], status=[string(r.status)], max_modulus=[Float64(r.max_modulus)],
+    )
+    re = Float64.(collect(r.zero_re))
+    im_v = Float64.(collect(r.zero_im))
+    return (
+        zero_index=collect(1:n),
+        re=re,
+        im=im_v,
+        modulus=hypot.(re, im_v),
+        invertible=fill(r.invertible, n),
+        status=fill(string(r.status), n),
+        max_modulus=fill(Float64(r.max_modulus), n),
+    )
+end
+
+function _coef_nt(innov::InnovationsRepresentation)
+    n_s, k = size(innov.K)
+    sn = _safe_labels(innov.state_names, n_s, "state")
+    on = _safe_labels(innov.obs_names, k, "obs")
+    n_s == 0 && return (state=["none"], obs=["none"], K_gain=[0.0],
+                        invertible=[innov.invertible], dare_residual=[Float64(innov.dare_residual)])
+    state = String[]; obs = String[]; K_gain = Float64[]
+    for j in 1:k, i in 1:n_s
+        push!(state, sn[i]); push!(obs, on[j]); push!(K_gain, Float64(innov.K[i, j]))
+    end
+    m = length(K_gain)
+    return (state=state, obs=obs, K_gain=K_gain,
+            invertible=fill(innov.invertible, m),
+            dare_residual=fill(Float64(innov.dare_residual), m))
+end
+
+function _coef_nt(r::ShockRecoverabilityResult)
+    df = long_table(r)
+    return NamedTuple{Tuple(Symbol.(names(df)))}(Tuple(df[!, col] for col in names(df)))
+end
+
+function _coef_nt(a::DSGEVARIRFAudit)
+    H = a.horizon
+    return (
+        horizon=collect(0:(H - 1)),
+        total_rmse=Float64.(collect(a.rmse_by_horizon)),
+        noninv_wedge=Float64.(collect(a.noninv_by_horizon)),
+        trunc_wedge=Float64.(collect(a.trunc_by_horizon)),
+        id_wedge=Float64.(collect(a.id_by_horizon)),
+        is_invertible=fill(a.is_invertible, H),
+    )
+end
+
+function _coef_nt(p::DSGEVARPrior)
+    k, n = size(p.Phi_star)
+    on = _safe_labels(p.obs_names, n, "obs")
+    eq = String[]; row = Int[]; phi_star = Float64[]
+    for j in 1:n, i in 1:k
+        push!(eq, on[j]); push!(row, i); push!(phi_star, Float64(p.Phi_star[i, j]))
+    end
+    m = length(phi_star)
+    return (equation=eq, regressor=row, phi_star=phi_star,
+            lambda=fill(Float64(p.lambda), m), lambda_min=fill(Float64(p.lambda_min), m))
+end
+
+function _coef_nt(pr::DSGEVARLambdaProfile)
+    m = length(pr.lambdas)
+    return (
+        lambda=Float64.(collect(pr.lambdas)),
+        log_marginal_likelihood=Float64.(collect(pr.log_marginal_likelihoods)),
+        lambda_hat=fill(Float64(pr.lambda_hat), m),
+        logml_hat=fill(Float64(pr.logml_hat), m),
+        logml_inf=fill(Float64(pr.logml_inf), m),
+    )
+end
+
+function _coef_nt(post::DSGEVARPosterior)
+    if post.theta_draws !== nothing && !isempty(post.param_names) && size(post.theta_draws, 2) == length(post.param_names)
+        pnames = String[string(s) for s in post.param_names]
+        vals = [Float64.(vec(post.theta_draws[:, j])) for j in 1:length(pnames)]
+        return (
+            parameter=pnames,
+            mean=Float64[mean(v) for v in vals],
+            std=Float64[std(v) for v in vals],
+            q05=Float64[quantile(v, 0.05) for v in vals],
+            median=Float64[quantile(v, 0.5) for v in vals],
+            q95=Float64[quantile(v, 0.95) for v in vals],
+        )
+    end
+    k, n, nd = size(post.B_draws)
+    on = _safe_labels(post.varnames, n, "y")
+    param = String[]; mn = Float64[]; sd = Float64[]; q05 = Float64[]; med = Float64[]; q95 = Float64[]
+    for j in 1:n, i in 1:k
+        v = Float64.(vec(post.B_draws[i, j, :]))
+        push!(param, "B[$i,$(on[j])]")
+        push!(mn, mean(v)); push!(sd, std(v))
+        push!(q05, quantile(v, 0.05)); push!(med, quantile(v, 0.5)); push!(q95, quantile(v, 0.95))
+    end
+    return (parameter=param, mean=mn, std=sd, q05=q05, median=med, q95=q95)
+end
+
+# -- Rational Inattention & SteadyStateKalman series --
+
+function _coef_nt(ssk::SteadyStateKalman)
+    n = length(ssk.closed_loop_eigs)
+    eigs = Complex{Float64}.(ssk.closed_loop_eigs)
+    return (
+        eigen_index=collect(1:n),
+        re=real.(eigs),
+        im=imag.(eigs),
+        modulus=abs.(eigs),
+        mean_K_diag=[i <= size(ssk.K_gain, 1) && i <= size(ssk.K_gain, 2) ? Float64(ssk.K_gain[i, i]) : NaN for i in 1:n],
+    )
+end
+
+function _coef_nt(prob::RationalInattentionProblem)
+    m = size(prob.A, 1)
+    sn = _safe_labels(prob.state_names, m, "state")
+    return (
+        state=sn,
+        A_diag=Float64[prob.A[i, i] for i in 1:m],
+        beta=fill(Float64(prob.beta), m),
+        capacity=Vector{Union{Missing,Float64}}(fill(prob.capacity === nothing ? missing : Float64(prob.capacity), m)),
+        omega=Vector{Union{Missing,Float64}}(fill(prob.omega === nothing ? missing : Float64(prob.omega), m)),
+        units=fill(string(prob.units), m),
+    )
+end
+
+function _coef_nt(sol::SimsKalmanSolution)
+    m, k = size(sol.K_gain)
+    sn = _safe_labels(sol.problem.state_names, m, "state")
+    state = String[]; signal = Int[]; K_gain = Float64[]
+    for j in 1:k, i in 1:m
+        push!(state, sn[i]); push!(signal, j); push!(K_gain, Float64(sol.K_gain[i, j]))
+    end
+    if isempty(K_gain)
+        return (state=["none"], signal=[0], K_gain=[0.0], omega=[Float64(sol.omega)],
+                capacity_bits=[Float64(sol.capacity_bits)], signal_rank=[sol.signal_rank],
+                expected_loss=[Float64(sol.expected_loss)])
+    end
+    len = length(K_gain)
+    return (state=state, signal=signal, K_gain=K_gain,
+            omega=fill(Float64(sol.omega), len),
+            capacity_bits=fill(Float64(sol.capacity_bits), len),
+            signal_rank=fill(sol.signal_rank, len),
+            expected_loss=fill(Float64(sol.expected_loss), len))
+end
+
+function _coef_nt(sol::DynamicRISolution)
+    return (
+        period=collect(1:sol.T_path),
+        omega=Float64.(collect(sol.omega_path)),
+        capacity_bits=Float64.(collect(sol.capacity_bits_path)),
+        capacity_nats=Float64.(collect(sol.capacity_nats_path)),
+        signal_rank=Int.(collect(sol.signal_rank_path)),
+        converged=fill(sol.converged, sol.T_path),
+    )
+end
+
+function _coef_nt(r::RIEstimationResult)
+    isempty(r.params) && return (
+        term=["omega"], estimate=[Float64(r.omega)], std_error=[NaN],
+        stat=[NaN], p_value=[NaN], ci_lower=[NaN], ci_upper=[NaN],
+    )
+    return _coef_nt_simple(r.param_names, r.params, r.stderr, :z, 0)
+end
+
+function _coef_nt(r::CGTestResult)
+    return (
+        parameter=["alpha", "beta_cg"],
+        estimate=[Float64(r.alpha), Float64(r.beta_cg)],
+        std_error=[Float64(r.se_alpha), Float64(r.se_cg)],
+        t_stat=[Float64(r.alpha / r.se_alpha), Float64(r.t_stat)],
+        p_value=[2 * (1 - cdf(Normal(), abs(Float64(r.alpha / r.se_alpha)))), Float64(r.pvalue)],
+        implied_gain=[Float64(r.implied_gain), Float64(r.implied_gain)],
+        implied_capacity=[Float64(r.implied_capacity), Float64(r.implied_capacity)],
+    )
+end
+
+function _coef_nt(r::MWAttentionResult)
+    H = length(r.agg_price_irf)
+    return (
+        horizon=collect(0:(H - 1)),
+        agg_price_irf=Float64.(collect(r.agg_price_irf)),
+        idio_price_irf=Float64.(collect(r.idio_price_irf)),
+        real_output_irf=Float64.(collect(r.real_output_irf)),
+        kappa_agg=fill(Float64(r.kappa_agg), H),
+        kappa_idio=fill(Float64(r.kappa_idio), H),
+        omega=fill(Float64(r.omega), H),
+    )
+end
+
+function _coef_nt(sol::RIDiscreteChoiceSolution)
+    S, J = size(sol.cond_probs)
+    state = Int[]; action = Int[]; payoff = Float64[]; cond_prob = Float64[]; uncond_prob = Float64[]
+    for j in 1:J, s in 1:S
+        push!(state, s); push!(action, j)
+        push!(payoff, Float64(sol.payoffs[s, j]))
+        push!(cond_prob, Float64(sol.cond_probs[s, j]))
+        push!(uncond_prob, Float64(sol.uncond_probs[j]))
+    end
+    return (; state, action, payoff, cond_prob, uncond_prob)
+end
+
+function _coef_nt(d::RIIIADiagnostic)
+    return (
+        diagnostic=["IIA Violation"],
+        max_iia_violation=[Float64(d.max_iia_violation)],
+        cond_odds_ratio_max_diff=[Float64(d.cond_odds_ratio_max_diff)],
+        base_info_bits=[Float64(d.base_solution.mutual_info_bits)],
+        expanded_info_bits=[Float64(d.expanded_solution.mutual_info_bits)],
+    )
+end
+
+function _coef_nt(m::RILogitModel)
+    K = length(m.beta)
+    if K == 0
+        return (
+            term=["omega"], estimate=[Float64(m.omega)], std_error=[NaN],
+            stat=[NaN], p_value=[NaN], ci_lower=[NaN], ci_upper=[NaN],
+        )
+    end
+    se = size(m.vcov_mat) == (K, K) ? Float64[sqrt(max(Float64(m.vcov_mat[i, i]), 0.0)) for i in 1:K] : fill(NaN, K)
+    vn = _safe_labels(m.varnames, K, "x")
+    return _coef_nt_simple(vn, m.beta, se, :z, 0)
+end
+
+const _V110_TABLE_TYPES = (
+    QuantileFactorModel, QFMICResult, QuantileFactorGrid, QFMSpanningResult,
+    QFMLoadingConstancyTest, GrowthAtRiskResult, QuantileVARModel,
+    QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR,
+    FHLZModel, OnatskiQTestResult, AhnHorensteinResult, OnatskiEDResult,
+    CointegratedGDFM, BandPassGDFMResult, EurocoinResult, SpectralFEVDResult,
+    TimeVaryingGDFM, GDFMNowcastResult,
+    LMSSVARResult, SVARHypothesisTest, NonGaussianDiagnostics,
+    LanneLuotoGMMResult, GMMMomentSelectionResult, SVARMAModel,
+    FundamentalnessTestResult, SufficientInformationTestResult,
+    ABCDSystem, InvertibilityResult, InnovationsRepresentation,
+    ShockRecoverabilityResult, DSGEVARIRFAudit, DSGEVARPrior,
+    DSGEVARLambdaProfile, DSGEVARPosterior,
+    SteadyStateKalman, RationalInattentionProblem, SimsKalmanSolution,
+    DynamicRISolution, RIEstimationResult, CGTestResult, MWAttentionResult,
+    RIDiscreteChoiceSolution, RIIIADiagnostic, RILogitModel,
+)
+
+for MT in _V110_TABLE_TYPES
+    @eval Tables.istable(::Type{<:$MT}) = true
+    @eval Tables.columnaccess(::Type{<:$MT}) = true
+    @eval Tables.columns(m::$MT) = _coef_nt(m)
+    @eval Tables.schema(m::$MT) = Tables.schema(_coef_nt(m))
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
 # long_table — tidy/long views of array-valued results
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1565,6 +2221,15 @@ carries explicit index columns so downstream scripts are uniform across result t
 | `AbstractForecastResult` (VAR/BVAR/VECM/LP) | `horizon, variable, value, lower, upper` |
 | `MidasForecast` | `horizon, variable, value, se, lower, upper` (direct `h`) |
 | ordered `marginal_effects` NamedTuple | `variable, category, estimate, std_error, ...` |
+| `QuantileImpulseResponse` | `horizon, variable, shock, tau, value, lower, upper` |
+| `QuantileFactorModel` / `QuantileFactorGrid` | `(tau), variable, factor, loading, std_error, pseudo_r2` |
+| `GrowthAtRiskResult` | `period, tau, fitted_quantile, gar, expected_shortfall, actual` |
+| `QuantileFAVAR` / `VBQuantileFAVAR` | `tau, variable, component, estimate` |
+| `FHLZModel` / `CointegratedGDFM` | `horizon, variable, shock, value` |
+| `BandPassGDFMResult` / `TimeVaryingGDFM` | `time, variable/factor, ...` |
+| `SpectralFEVDResult` | `variable, shock, share, power_band` |
+| `DSGEVARIRFAudit` / `ShockRecoverabilityResult` | `horizon/lead, variable/shock, ...` |
+| `DynamicRISolution` / `RIDiscreteChoiceSolution` | `period/state, ..., value` |
 
 Horizons are 1-based (matching [`table`](@ref)). `lower`/`upper` are `missing` when the
 result carries no uncertainty bands (`ci_type == :none` / `ci_method == :none`). The
@@ -1794,6 +2459,137 @@ function long_table(nt::NamedTuple{(:effects, :se, :varnames, :categories)})
     return DataFrame(; cols...)
 end
 
+function long_table(irf::QuantileImpulseResponse)
+    H, nv, ns = size(irf.values)
+    vn = _safe_labels(irf.variables, nv, "var")
+    sn = _safe_labels(irf.shocks, ns, "shock")
+    has_ci = irf.ci_type != :none
+    horizon = Int[]; variable = String[]; shock = String[]; tau = Float64[]
+    value = Float64[]; lower = Union{Missing,Float64}[]; upper = Union{Missing,Float64}[]
+    for h in 1:H, v in 1:nv, s in 1:ns
+        push!(horizon, h); push!(variable, vn[v]); push!(shock, sn[s])
+        push!(tau, Float64(irf.tau_profile[min(h, end)]))
+        push!(value, Float64(irf.values[h, v, s]))
+        push!(lower, has_ci ? Float64(irf.ci_lower[h, v, s]) : missing)
+        push!(upper, has_ci ? Float64(irf.ci_upper[h, v, s]) : missing)
+    end
+    return DataFrame(; horizon, variable, shock, tau, value, lower, upper)
+end
+
+long_table(m::QuantileFactorModel) = DataFrame(_coef_nt(m))
+
+function long_table(g::QuantileFactorGrid)
+    tau = Float64[]; variable = String[]; factor = Int[]; loading = Float64[]; r_at_tau = Int[]
+    for (ti, m) in enumerate(g.models)
+        N, r = size(m.loadings)
+        vn = _safe_labels(m.varnames, N, "var")
+        t = Float64(g.taus[ti]); rk = g.r_by_tau[ti]
+        for k in 1:r, j in 1:N
+            push!(tau, t); push!(variable, vn[j]); push!(factor, k)
+            push!(loading, Float64(m.loadings[j, k])); push!(r_at_tau, rk)
+        end
+    end
+    return DataFrame(; tau, variable, factor, loading, r_at_tau)
+end
+
+function long_table(g::GrowthAtRiskResult)
+    Teff, nq = size(g.fitted_quantiles)
+    act = length(g.actual_target) == Teff ? g.actual_target : fill(NaN, Teff)
+    period = Int[]; tau = Float64[]; fitted_quantile = Float64[]
+    gar = Float64[]; expected_shortfall = Float64[]; actual = Float64[]
+    for q in 1:nq, t in 1:Teff
+        push!(period, t); push!(tau, Float64(g.taus[min(q, end)]))
+        push!(fitted_quantile, Float64(g.fitted_quantiles[t, q]))
+        push!(gar, Float64(g.gar[t]))
+        push!(expected_shortfall, Float64(g.expected_shortfall[t]))
+        push!(actual, Float64(act[t]))
+    end
+    return DataFrame(; period, tau, fitted_quantile, gar, expected_shortfall, actual)
+end
+
+function long_table(m::QuantileFAVAR)
+    tau = Float64[]; variable = String[]; component = String[]; estimate = Float64[]
+    N = size(m.X_panel, 2)
+    pvn = _safe_labels(m.panel_varnames, N, "panel")
+    for (ti, t) in enumerate(m.taus)
+        L = m.loadings_list[ti]; Ly = m.lambda_y_list[ti]
+        for k in 1:size(L, 2), i in 1:size(L, 1)
+            push!(tau, Float64(t)); push!(variable, pvn[min(i, end)])
+            push!(component, "factor_$k"); push!(estimate, Float64(L[i, k]))
+        end
+        for k in 1:size(Ly, 2), i in 1:size(Ly, 1)
+            push!(tau, Float64(t)); push!(variable, pvn[min(i, end)])
+            push!(component, "key_$k"); push!(estimate, Float64(Ly[i, k]))
+        end
+    end
+    return DataFrame(; tau, variable, component, estimate)
+end
+
+function long_table(m::VBQuantileFAVAR)
+    tau = Float64[]; variable = String[]; component = String[]; estimate = Float64[]
+    N = size(m.X_panel, 2)
+    pvn = _safe_labels(m.panel_varnames, N, "panel")
+    for (ti, t) in enumerate(m.taus)
+        L = m.loadings_mean[ti]; Ly = m.lambda_y_mean[ti]
+        for k in 1:size(L, 2), i in 1:size(L, 1)
+            push!(tau, Float64(t)); push!(variable, pvn[min(i, end)])
+            push!(component, "factor_$k"); push!(estimate, Float64(L[i, k]))
+        end
+        for k in 1:size(Ly, 2), i in 1:size(Ly, 1)
+            push!(tau, Float64(t)); push!(variable, pvn[min(i, end)])
+            push!(component, "key_$k"); push!(estimate, Float64(Ly[i, k]))
+        end
+    end
+    return DataFrame(; tau, variable, component, estimate)
+end
+
+long_table(m::FHLZModel) = DataFrame(_coef_nt(m))
+long_table(m::CointegratedGDFM) = DataFrame(_coef_nt(m))
+
+function long_table(r::BandPassGDFMResult)
+    Teff, N = size(r.common_twosided)
+    vn = _safe_labels(r.varnames, N, "var")
+    time = Int[]; variable = String[]; twosided = Float64[]; onesided = Float64[]
+    for j in 1:N, t in 1:Teff
+        push!(time, t); push!(variable, vn[j])
+        push!(twosided, Float64(r.common_twosided[t, j]))
+        push!(onesided, Float64(r.common_onesided[t, j]))
+    end
+    return DataFrame(; time, variable, twosided, onesided)
+end
+
+long_table(r::SpectralFEVDResult) = DataFrame(_coef_nt(r))
+long_table(m::TimeVaryingGDFM) = DataFrame(_coef_nt(m))
+
+function long_table(a::DSGEVARIRFAudit)
+    H, nv, ns = size(a.irf_dsge)
+    vn = _safe_labels(a.obs_names, nv, "obs")
+    sn = _safe_labels(a.shock_names, ns, "shock")
+    horizon = Int[]; variable = String[]; shock = String[]
+    dsge_irf = Float64[]; wold_best_irf = Float64[]; wold_id_irf = Float64[]; svar_irf = Float64[]
+    for h in 1:H, v in 1:nv, s in 1:ns
+        push!(horizon, h - 1); push!(variable, vn[v]); push!(shock, sn[s])
+        push!(dsge_irf, Float64(a.irf_dsge[h, v, s]))
+        push!(wold_best_irf, Float64(a.irf_wold_best[h, v, s]))
+        push!(wold_id_irf, Float64(a.irf_wold_id[h, v, s]))
+        push!(svar_irf, Float64(a.irf_svar[h, v, s]))
+    end
+    return DataFrame(; horizon, variable, shock, dsge_irf, wold_best_irf, wold_id_irf, svar_irf)
+end
+
+function long_table(r::ShockRecoverabilityResult)
+    L, m = size(r.r2_matrix)
+    sn = _safe_labels(r.shock_names, m, "shock")
+    lead = Int[]; shock = String[]; r2 = Float64[]
+    for l in 1:L, s in 1:m
+        push!(lead, l - 1); push!(shock, sn[s]); push!(r2, Float64(r.r2_matrix[l, s]))
+    end
+    return DataFrame(; lead, shock, r2)
+end
+
+long_table(sol::DynamicRISolution) = DataFrame(_coef_nt(sol))
+long_table(sol::RIDiscreteChoiceSolution) = DataFrame(_coef_nt(sol))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # write_csv — export any Tables-compatible result or long_table to CSV
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1810,6 +2606,18 @@ _tabular(x::LPFEVD) = long_table(x)
 _tabular(x::HistoricalDecomposition) = long_table(x)
 _tabular(x::BayesianHistoricalDecomposition) = long_table(x)
 _tabular(x::AbstractForecastResult) = long_table(x)
+_tabular(x::QuantileImpulseResponse) = long_table(x)
+_tabular(x::QuantileFactorGrid) = long_table(x)
+_tabular(x::GrowthAtRiskResult) = long_table(x)
+_tabular(x::FHLZModel) = long_table(x)
+_tabular(x::CointegratedGDFM) = long_table(x)
+_tabular(x::BandPassGDFMResult) = long_table(x)
+_tabular(x::SpectralFEVDResult) = long_table(x)
+_tabular(x::TimeVaryingGDFM) = long_table(x)
+_tabular(x::DSGEVARIRFAudit) = long_table(x)
+_tabular(x::ShockRecoverabilityResult) = long_table(x)
+_tabular(x::DynamicRISolution) = long_table(x)
+_tabular(x::RIDiscreteChoiceSolution) = long_table(x)
 
 _csv_cell(::Missing) = ""
 _csv_cell(x::Real) = string(x)

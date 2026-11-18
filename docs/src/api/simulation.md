@@ -68,6 +68,9 @@ dgp_midas
 ```@docs
 dgp_dynamic_factors
 dgp_mixed_frequency_panel
+dgp_quantile_factors
+dgp_qfavar
+dgp_infinite_gdfm
 ```
 
 ---

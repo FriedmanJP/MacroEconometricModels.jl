@@ -1027,4 +1027,141 @@ end
         @test vec(ihdr) == ["horizon", "variable", "shock", "value", "lower", "upper"]
         @test size(iraw, 1) == 5 * 2 * 2
     end
+
+    @testset "v1.1.0 Tables.istable, long_table & write_csv across all 48 structs" begin
+        rng = Xoshiro(9910)
+        v110_types = (
+            QuantileFactorModel, QFMICResult, QuantileFactorGrid, QFMSpanningResult,
+            QFMLoadingConstancyTest, QuantileFactorPanelModel, GrowthAtRiskResult,
+            QuantileVARModel, QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR,
+            FHLZModel, OnatskiQTestResult, AhnHorensteinResult, OnatskiEDResult,
+            CointegratedGDFM, BandPassGDFMResult, EurocoinResult, SpectralFEVDResult,
+            TimeVaryingGDFM, GDFMNowcastResult,
+            LMSSVARResult, SVARHypothesisTest, NonGaussianDiagnostics,
+            LanneLuotoGMMResult, GMMMomentSelectionResult, SVARMAModel,
+            FundamentalnessTestResult, SufficientInformationTestResult,
+            ABCDSystem, InvertibilityResult, InnovationsRepresentation,
+            ShockRecoverabilityResult, ObservableSearchResult, DSGEVARIRFAudit,
+            DSGEVARPrior, DSGEVARLambdaProfile, DSGEVARPosterior,
+            SteadyStateKalman, RationalInattentionProblem, SimsKalmanSolution,
+            DynamicRISolution, RIEstimationResult, CGTestResult, MWAttentionResult,
+            RIDiscreteChoiceSolution, RIIIADiagnostic, RILogitModel,
+        )
+        for T in v110_types
+            @test Tables.istable(T)
+        end
+
+        # Live fixtures from every series (all RNG separated onto its own line)
+        sim_q = dgp_quantile_factors(rng; T_obs=80, N=15)
+        qfm = estimate_qfm(sim_q.X, 2, 0.25; se=:none, seed=11)
+        qfm_ic = ic_criteria_qfm(sim_q.X, 4, 0.25)
+        qfm_grid = estimate_qfm(sim_q.X, 2, [0.25, 0.5, 0.75]; seed=11)
+        qfm_span = test_qfm_spanning(qfm_grid, sim_q.X)
+        qfm_const = test_qfm_loading_constancy(sim_q.X, 0.25, 0.75; n_boot=5, seed=11)
+        Y_qp = randn(rng, 12, 15)
+        W_qp = randn(rng, 12, 15, 1)
+        qpan = estimate_xtqreg_factors(Y_qp, W_qp, 1, 0.5; maxiter=15, seed=11)
+        gar = growth_at_risk(sim_q.X, 1, 1; r=2, taus=[0.1, 0.5, 0.9], density=:normal, seed=11)
+
+        Y_qv = randn(rng, 80, 2)
+        qvar = estimate_qvar(Y_qv, 1, [0.25, 0.75]; se=:asymptotic)
+        qr = qirf(qvar, 4; ci_type=:none)
+        dq_fv = dgp_qfavar(rng; T_obs=80, N=10, r=1, p=1)
+        qfavar = estimate_qfavar(dq_fv.X_panel, 1:dq_fv.n_key, dq_fv.r, dq_fv.p, [0.5];
+                                 method=:twostep, seed=11)
+        vb_qfavar = estimate_qfavar(dq_fv.X_panel, 1:dq_fv.n_key, dq_fv.r, dq_fv.p, [0.5];
+                                    method=:vb, vb_maxiter=15, n_draws=10, seed=11)
+
+        sim_g = dgp_infinite_gdfm(rng; T_obs=100, N=12, q=2)
+        fhlz = estimate_gdfm_fhlz(sim_g.X, 2; p_max=2, n_perm=4, bandwidth=3, seed=11)
+        on_q = onatski_q_test(sim_g.X, 1, 3)
+        ah = ahn_horenstein(sim_g.X, 4)
+        ed = onatski_ed(sim_g.X, 4)
+        sim_i1 = dgp_infinite_gdfm(rng; T_obs=100, N=12, q=2, n_permanent=1)
+        cgdfm = estimate_gdfm_i1(sim_i1.X, 2; n_permanent=1, n_perm=4, p_max=2, irf_horizon=6, seed=11)
+        gdfm_base = estimate_gdfm(sim_g.X, 2; r=3)
+        bp = bandpass_gdfm(gdfm_base, (0.0, π / 4))
+        eur = eurocoin_indicator(sim_g.X, vec(sim_g.X[:, 1]), 2; cutoff=π / 4, r=3)
+        sdfm_g = estimate_structural_dfm(gdfm_base; method=:fglr, r=3, p=1, H=8)
+        sf = spectral_fevd(sdfm_g; include_idiosyncratic=true)
+        tvg = estimate_tv_gdfm(sim_g.X, 2; n_grid=4)
+        X_nan = copy(sim_g.X); X_nan[end, 1] = NaN
+        nc = nowcast_gdfm(gdfm_base, X_nan, 0)
+
+        sim_svarma = dgp_ssvarma(rng; T=120, Phi=[0.35 0.0; 0.0 0.3], Theta=zeros(2, 2, 0),
+                                 C=[1.0 0.2; -0.15 0.9], dist=:student_t, nu=5.0)
+        var_ng = estimate_var(sim_svarma.Y, 1)
+        lms = estimate_lms_svar(var_ng; distributions=[:student_t, :student_t],
+                                method=:three_step, n_starts=1, max_iter=60, seed=11)
+        ht = test_svar_hypothesis(lms, recursiveness_hypothesis(2); method=:wald)
+        nd = diagnose_nongaussian_svar(lms; lags=2)
+        gmm_res = estimate_lanne_luoto_gmm(sim_svarma.Y, 1; moment_selection=:msc_rmsc,
+                                           n_starts=1, max_iter=60, seed=11)
+        sel_res = gmm_res.selection
+        sim_svarma2 = dgp_ssvarma(rng; T=120, Phi=[0.35 0.0; 0.0 0.3],
+                                  Theta=[-0.4 0.0; 0.0 0.3], C=[1.0 0.2; -0.15 0.9],
+                                  dist=:student_t, nu=5.0)
+        ssv = estimate_ssvarma(sim_svarma2.Y, 1, 1; method=:ml, n_starts=1, max_iter=60, seed=11)
+        fund = test_fundamentalness(var_ng; max_lag=3, n_boot=19, seed=11)
+        X_si = randn(rng, 120, 6)
+        si_res = test_sufficient_information(var_ng, X_si; r_max=2, p_f=2)
+
+        A_ab = [0.7 0.0; 0.0 0.5]; B_ab = [1.0 0.0; 0.0 1.0]
+        C_ab = [1.0 0.3; 0.0 0.8]; D_ab = [1.0 0.1; 0.0 1.0]
+        sys_ab = ABCDSystem(A_ab, B_ab, C_ab, D_ab)
+        inv_res = poor_mans_invertibility(sys_ab)
+        inn_res = innovations_representation(sys_ab)
+        rec_res = shock_recoverability(sys_ab; max_lead=3)
+        srch_res = search_invertible_observables(sys_ab, 2)
+        aud_res = compare_dsge_svar_irf(sys_ab, 2, 6)
+        Y_dv = randn(rng, 60, 2)
+        dv_prior = dsge_var_prior(sys_ab, 1, 1.0, 59)
+        dv_prof = select_dsge_var_lambda(sys_ab, Y_dv, 1; lambda_grid=[0.5, 2.0, Inf])
+        dv_post = estimate_dsge_var(sys_ab, Y_dv, 1; lambda=1.0, n_draws=20, seed=11)
+
+        A_ri = [0.85;;]; B_ri = [1.0;;]; H_ri = [1.0;;]
+        prob_ri = RationalInattentionProblem(A_ri, B_ri, H_ri; capacity=1.0)
+        sol_ri = solve_ri_kalman(prob_ri)
+        ssk_ri = SteadyStateKalman(sol_ri.Sigma_prior, sol_ri.Sigma_post, sol_ri.K_gain,
+                                   A_ri - sol_ri.K_gain * [1.0;;], ComplexF64[0.3 + 0.0im])
+        d_ri = solve_ri_transition(prob_ri, [2.0;;]; T_path=4)
+        U_ri = randn(rng, 3, 2)
+        dc_ri = solve_ri_discrete(U_ri, [0.4, 0.6]; omega=1.0)
+        iia_ri = ri_iia_diagnostic([1.0 0.0; 0.0 1.0], [0.5, 0.5], [1.0, 0.0]; omega=0.8)
+        bp_ri = randn(rng, 2, 2, 2)
+        m_ri = estimate_ri_logit([1, 2, 1, 2], bp_ri, [1, 1, 2, 2])
+        f_now = randn(rng, 50)
+        f_lag = vcat(0.0, f_now[1:end-1])
+        noise_cg = randn(rng, 50)
+        real_cg = f_now .+ 0.5 .* noise_cg
+        cg_ri = coibion_gorodnichenko_test(real_cg, f_now, f_lag)
+        agg_mw = RationalInattentionProblem(reshape([0.9], 1, 1), reshape([1.0], 1, 1), reshape([1.0], 1, 1); omega=0.2)
+        idio_mw = RationalInattentionProblem(reshape([0.7], 1, 1), reshape([1.5], 1, 1), reshape([1.0], 1, 1); omega=0.2)
+        mw_ri = solve_mw_attention(agg_mw, idio_mw; capacity=1.5, horizon=6)
+        sim_rie = simulate(sol_ri, 50; rng=rng)
+        rie_ri = estimate_ri(prob_ri, sim_rie.actions; method=:mle, estimate_param=:capacity)
+
+        samples = (
+            qfm, qfm_ic, qfm_grid, qfm_span, qfm_const, qpan, gar, qvar, qr, qfavar, vb_qfavar,
+            fhlz, on_q, ah, ed, cgdfm, bp, eur, sf, tvg, nc,
+            lms, ht, nd, gmm_res, sel_res, ssv, fund, si_res,
+            sys_ab, inv_res, inn_res, rec_res, srch_res, aud_res, dv_prior, dv_prof, dv_post,
+            ssk_ri, prob_ri, sol_ri, d_ri, rie_ri, cg_ri, mw_ri, dc_ri, iia_ri, m_ri,
+        )
+        for obj in samples
+            @test Tables.istable(typeof(obj))
+            df = DataFrame(obj)
+            @test df isa DataFrame
+            @test ncol(df) >= 2
+            p = tempname() * ".csv"
+            @test write_csv(obj, p) == p
+            @test isfile(p) && filesize(p) > 0
+        end
+
+        for lobj in (qr, qfm, qfm_grid, gar, qfavar, vb_qfavar, fhlz, cgdfm, bp, sf, tvg, aud_res, rec_res, d_ri, dc_ri)
+            ldf = long_table(lobj)
+            @test ldf isa DataFrame
+            @test nrow(ldf) >= 1
+        end
+    end
 end

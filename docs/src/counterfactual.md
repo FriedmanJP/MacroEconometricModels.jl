@@ -67,6 +67,7 @@ Each additional capability costs one additional assumption. Climb only as far as
 - [Rule Counterfactuals (McKay–Wolf)](@ref counterfactual_rules_page) — rule templates, `policy_counterfactual`, `optimal_policy`, second moments
 - [Optimal Policy Perturbations (Barnichon–Mesters)](@ref counterfactual_opp_page) — the OPP statistic, inference, ZLB constraints, decision-date sequences
 - [Model Bank & Diagnostics (Caravello–McKay–Wolf)](@ref counterfactual_bank_page) — model menus, IRF matching, model averaging, historical counterfactuals, spanning and invertibility diagnostics
+- [Rational Inattention](@ref rational_inattention_page) — Sims LQG Kalman filtering, Afrouzi–Yang dynamic attention transitions, Coibion–Gorodnichenko regressions, Maćkowiak–Wiederholt pricing, and Matějka–McKay discrete choice
 
 ---
 

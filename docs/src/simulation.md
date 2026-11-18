@@ -248,6 +248,15 @@ agg = mm_aggregate(mf.F, mf.Lambda_Q)
 
 `dgp_dynamic_factors` returns `(X, F, Lambda, A, Sigma_F, idio_var, eps, r, p)` with the true factors, loadings, and standardised factor innovations. `dgp_mixed_frequency_panel` builds monthly series plus quarterly Mariano–Murasawa aggregates observed every third month (`NaN` elsewhere, with an optional ragged edge) and returns `(Y, is_quarterly, F, Lambda_M, Lambda_Q, A, agg_weights, withheld)`. The example cross-checks the quarterly signal against the analytic `mm_aggregate` helper.
 
+For quantile and infinite-dimensional factor extensions, [`dgp_quantile_factors`](@ref) generates heavy-tailed Student-t factor panels with separate location, scale, and asymmetry factors (yielding quantile-varying active rank ``r(\tau)``), [`dgp_qfavar`](@ref) generates tail-amplifying structural FAVAR systems matching the `Y_key` key-variable block, and [`dgp_infinite_gdfm`](@ref) generates rational MA(``\infty``) common components with optional I(1) cointegrated trends, analytical `irf_true`, and spectral density tensors.
+
+```@example simulation
+qf = dgp_quantile_factors(MersenneTwister(63); T_obs=120, N=30)
+qfv = dgp_qfavar(MersenneTwister(64); T_obs=120, N=20)
+ig = dgp_infinite_gdfm(MersenneTwister(65); T_obs=120, N=20, q=2)
+(qfm_ranks=(qf.true_r(0.5), qf.true_r(0.1)), qfavar_dims=size(qfv.X_panel), gdfm_irf=size(ig.irf_true))
+```
+
 See [Factor Models](@ref factor_page), [Factor-Augmented VAR](@ref favar_page), and [Nowcasting](@ref nowcast_page) for the matching estimators.
 
 ---
@@ -418,6 +427,9 @@ See [Spectral Analysis](@ref spectral_page) for spectrum estimation, [Nowcasting
 | `dgp_midas` | Volatility | `y, x_hf, w_true, beta` |
 | `dgp_dynamic_factors` | Factors (`dgp_factors.jl`) | `X, F, Lambda, A, Sigma_F, idio_var, eps, r, p` |
 | `dgp_mixed_frequency_panel` | Factors | `Y, is_quarterly, F, Lambda_M, Lambda_Q, A, agg_weights, withheld` |
+| `dgp_quantile_factors` | Factors | `X, F_loc, F_scale, F_asym, true_factors, true_loadings, true_r` |
+| `dgp_qfavar` | Factors | `X_panel, Y_key, F, Lambda, Lambda_y, A0, B_by_tau, true_qirf` |
+| `dgp_infinite_gdfm` | GDFM (`dgp_gdfm.jl`) | `X, common, idiosyncratic, innovations, irf_true, spectral_density` |
 | `dgp_lp_iv` | LP (`dgp_lp.jl`) | `Y, Z, pi1, theta` |
 | `dgp_state_dependent_var` | LP | `Y, G, z, A_exp, A_rec, B0, irf_exp, irf_rec` |
 | `dgp_propensity` | LP | `Y, D, X, tau, beta_ps, att, ps` |
@@ -468,9 +480,14 @@ Each replication draws a fresh 200-observation sample from the same population d
 
 - Bai, J., & Ng, S. (2002). Determining the Number of Factors in Approximate Factor Models. *Econometrica*, 70(1), 191--221. [DOI](https://doi.org/10.1111/1468-0262.00273)
 - Bollerslev, T. (1986). Generalized Autoregressive Conditional Heteroskedasticity. *Journal of Econometrics*, 31(3), 307--327. [DOI](https://doi.org/10.1016/0304-4076(86)90063-1)
+- Chavleishvili, S., & Manganelli, S. (2024). Forecasting and Stress Testing with Quantile Vector Autoregression. *Journal of Applied Econometrics*, 39(1), 66--85. [DOI](https://doi.org/10.1002/jae.3009)
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile Factor Models. *Econometrica*, 89(2), 875--910. [DOI](https://doi.org/10.3982/ECTA15746)
 - Dube, A., Girardi, D., Jorda, O., & Taylor, A. M. (2025). A Local Projections Approach to Difference-in-Differences. *Journal of Applied Econometrics*, 40(7), 741--758. [DOI](https://doi.org/10.1002/jae.70000)
 - Engle, R. F. (1982). Autoregressive Conditional Heteroscedasticity with Estimates of the Variance of United Kingdom Inflation. *Econometrica*, 50(4), 987--1007. [DOI](https://doi.org/10.2307/1912773)
 - Engle, R. F. (2002). Dynamic Conditional Correlation: A Simple Class of Multivariate GARCH Models. *Journal of Business & Economic Statistics*, 20(3), 339--350. [DOI](https://doi.org/10.1198/073500102288618487)
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2015). Dynamic Factor Models with Infinite-Dimensional Factor Spaces: One-Sided Representations. *Journal of Econometrics*, 185(2), 359--371. [DOI](https://doi.org/10.1016/j.jeconom.2014.08.008)
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2017). Dynamic Factor Models with Infinite-Dimensional Factor Space: Asymptotic Analysis. *Journal of Econometrics*, 199(1), 74--92. [DOI](https://doi.org/10.1016/j.jeconom.2017.04.002)
+- Korobilis, D., & Schroder, M. (2025). Monitoring Multi-Country Macroeconomic Risk: A Quantile Factor-Augmented Vector Autoregressive (QFAVAR) Approach. *Journal of Econometrics*, 249, 105730. [DOI](https://doi.org/10.1016/j.jeconom.2024.105730)
 - Engle, R. F., & Granger, C. W. J. (1987). Co-Integration and Error Correction: Representation, Estimation, and Testing. *Econometrica*, 55(2), 251--276. [DOI](https://doi.org/10.2307/1913236)
 - Ghysels, E., Sinko, A., & Valkanov, R. (2007). MIDAS Regressions: Further Results and New Directions. *Econometric Reviews*, 26(1), 53--90. [DOI](https://doi.org/10.1080/07474930600972467)
 - Hamilton, J. D. (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. *Econometrica*, 57(2), 357--384. [DOI](https://doi.org/10.2307/1912559)

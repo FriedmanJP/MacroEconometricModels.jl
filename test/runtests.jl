@@ -210,6 +210,11 @@ const TEST_GROUPS = [
         "plotting/test_plot_wave2_laneE.jl",
         "plotting/test_plot_wave2_laneF.jl",
         "plotting/test_plotting_grid.jl",   # v1.0.3 (#880, #881): grid layout & CSS scoping
+        "plotting/test_plot_qfm.jl",        # v1.1.0 (#891, #892): QFM, QVAR, QFAVAR & GaR
+        "plotting/test_plot_gdfm.jl",       # v1.1.0 (#900): GDFM, FHLZ, BandPass, TV & Rank Tests
+        "plotting/test_plot_ngid.jl",       # v1.1.0 (#908): NGID, LL-GMM, Hypothesis & SSVARMA
+        "plotting/test_plot_abcd.jl",       # v1.1.0 (#915): ABCD, Invertibility & DSGE-VAR
+        "plotting/test_plot_ri.jl",         # v1.1.0 (#923): Rational Inattention & Discrete Choice
         "dsge/test_dcegm_plot.jl",
     ]),
     # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov

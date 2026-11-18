@@ -130,6 +130,35 @@ using DataFrames  # nrow (no-op when fixtures.jl already loaded it)
         @test f.F[2:end, :] ≈ f.F[1:end-1, :] * f.A[1]' + f.eps[2:end, :] * L'
     end
 
+    @testset "dgp_quantile_factors, dgp_qfavar & dgp_infinite_gdfm (#892, #900)" begin
+        qf1 = dgp_quantile_factors(Xoshiro(301); T_obs=120, N=30,
+                                   location_factors=1, scale_factors=1, asym_factors=1)
+        qf2 = dgp_quantile_factors(Xoshiro(301); T_obs=120, N=30,
+                                   location_factors=1, scale_factors=1, asym_factors=1)
+        @test qf1.X == qf2.X
+        @test size(qf1.X) == (120, 30)
+        @test qf1.true_r(0.5) == 1
+        @test qf1.true_r(0.1) == 3
+        @test size(qf1.true_factors(0.1)) == (120, 3)
+        @test size(qf1.true_loadings(0.1)) == (30, 3)
+
+        qfv1 = dgp_qfavar(Xoshiro(302); T_obs=100, N=20, r=2, p=1, n_key=1)
+        qfv2 = dgp_qfavar(Xoshiro(302); T_obs=100, N=20, r=2, p=1, n_key=1)
+        @test qfv1.X_panel == qfv2.X_panel
+        @test size(qfv1.X_panel) == (100, 20)
+        @test size(qfv1.Y_key) == (100, 1)
+        @test qfv1.X_panel[:, 1:1] == qfv1.Y_key
+
+        ig1 = dgp_infinite_gdfm(Xoshiro(303); T_obs=100, N=20, q=2)
+        ig2 = dgp_infinite_gdfm(Xoshiro(303); T_obs=100, N=20, q=2)
+        @test ig1.X == ig2.X
+        @test size(ig1.X) == (100, 20)
+        @test size(ig1.irf_true) == (41, 20, 2)
+        @test size(ig1.spectral_density) == (20, 20, 33)
+        ig_i1 = dgp_infinite_gdfm(Xoshiro(304); T_obs=100, N=20, q=2, n_permanent=1)
+        @test ig_i1.n_permanent == 1 && size(ig_i1.X) == (100, 20)
+    end
+
     @testset "dgp_mixed_frequency_panel: MM identity + NaN pattern" begin
         rng = Xoshiro(32)
         mp = dgp_mixed_frequency_panel(rng; T=120, ragged=3)
