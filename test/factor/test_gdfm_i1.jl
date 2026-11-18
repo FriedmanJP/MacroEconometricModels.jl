@@ -144,8 +144,9 @@ using MacroEconometricModels
     @testset "Validation and error handling" begin
         rng = Random.Xoshiro(202)
         X_small = cumsum(randn(rng, 40, 10); dims=1)
+        X_tiny = randn(rng, 4, 10)
 
-        @test_throws ArgumentError estimate_gdfm_i1(randn(rng, 4, 10), 2)
+        @test_throws ArgumentError estimate_gdfm_i1(X_tiny, 2)
         @test_throws ArgumentError estimate_gdfm_i1(X_small, 0)
         @test_throws ArgumentError estimate_gdfm_i1(X_small, 11)
         @test_throws ArgumentError estimate_gdfm_i1(X_small, 2; kernel=:bad_kernel)
@@ -272,8 +273,8 @@ using MacroEconometricModels
         @test m_sign.irf_matrices[1, 2, 2] > 0
 
         # Proxy identification (correlate with true permanent shock padded to T_obs)
-        rng_px = Random.Xoshiro(308)
-        z_inst = sim_none.shocks[:, 1] .+ 0.2 .* randn(rng_px, 140)
+        rng = Random.Xoshiro(308)
+        z_inst = sim_none.shocks[:, 1] .+ 0.2 .* randn(rng, 140)
         m_proxy = estimate_gdfm_i1(sim_none.X, 2; identification=:proxy,
                                    instrument=z_inst, normalize=(1, 1.0),
                                    n_perm=6, p_max=2, n_permanent=1, seed=308)
@@ -351,5 +352,41 @@ using MacroEconometricModels
         @test irf(m32, 10) isa ImpulseResponse{Float32}
         @test fevd(m32, 10) isa FEVD{Float32}
         @test forecast(m32, 4) isa FactorForecast{Float32}
+    end
+
+    # =========================================================================
+    # 6. dgp_infinite_gdfm I(1) Cointegrated Recovery (n_permanent > 0, #900)
+    # =========================================================================
+    @testset "dgp_infinite_gdfm I(1) cointegrated recovery (n_permanent > 0)" begin
+        rng = Random.Xoshiro(9002)
+        d_i1 = dgp_infinite_gdfm(rng; T_obs=250, N=45, q=2, n_permanent=1,
+                                 a_coef=0.4, b_coef=0.4, signal_share=0.8)
+        @test d_i1.q == 2
+        @test d_i1.n_permanent == 1
+        @test d_i1.X ≈ d_i1.common + d_i1.idiosyncratic atol=1e-12
+
+        # Permanent shock IRF stabilizes at nonzero long-run level; transitory decays to 0
+        @test norm(@view(d_i1.irf_true[41, :, 1])) > 0.5 * norm(@view(d_i1.irf_true[1, :, 1]))
+        @test norm(@view(d_i1.irf_true[41, :, 2])) < 1e-6 * norm(@view(d_i1.irf_true[1, :, 2]))
+
+        m_i1 = estimate_gdfm_i1(d_i1.X, 2; n_permanent=1, p_max=3, n_perm=15,
+                                irf_horizon=25, det_trend=:constant, seed=9002)
+        @test m_i1.n_permanent == 1
+        @test cor(vec(m_i1.common_levels), vec(d_i1.common)) > 0.90
+        @test norm(@view(m_i1.long_run_impact[:, 1])) > 0.1
+        @test norm(@view(m_i1.long_run_impact[:, 2])) < 1e-8 * max(norm(@view(m_i1.long_run_impact[:, 1])), 1.0)
+
+        # Sign-aligned level IRF recovery for permanent and transitory shocks
+        C_est = m_i1.irf_matrices
+        C_true = d_i1.irf_true[1:26, :, :]
+        s1 = dot(@view(C_est[1, :, 1]), @view(C_true[1, :, 1])) >= 0 ? 1.0 : -1.0
+        s2 = dot(@view(C_est[1, :, 2]), @view(C_true[1, :, 2])) >= 0 ? 1.0 : -1.0
+        @test cor(vec(s1 .* @view(C_est[:, :, 1])), vec(@view(C_true[:, :, 1]))) > 0.80
+        @test cor(vec(s2 .* @view(C_est[:, :, 2])), vec(@view(C_true[:, :, 2]))) > 0.75
+
+        # Automatic Johansen detection identifies n_permanent == 1
+        m_auto = estimate_gdfm_i1(d_i1.X, 2; p_max=3, n_perm=10, det_trend=:constant,
+                                  irf_horizon=15, seed=9002)
+        @test m_auto.n_permanent == 1
     end
 end

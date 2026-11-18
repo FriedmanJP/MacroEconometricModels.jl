@@ -97,24 +97,26 @@ using StatsAPI
         @test rmse < 0.08
 
         # Also check q = 2 smoothly doubling loadings with standardize=false
-        rng2 = Random.Xoshiro(89803)
         q2, N2, T2 = 2, 30, 400
-        F2 = zeros(T2 + burn, q2)
-        for t in 2:(T2 + burn), j in 1:q2
-            F2[t, j] = 0.4 * F2[t - 1, j] + sqrt(1.0 - 0.16) * randn(rng2)
-        end
-        F2_sub = F2[(burn + 1):end, :]
-        L0 = randn(rng2, N2, q2)
-        L0 ./= sqrt.(sum(abs2, L0; dims=2))
-        X2 = Matrix{Float64}(undef, T2, N2)
-        true_share2 = Vector{Float64}(undef, T2)
-        for t in 1:T2
-            u = (t - 0.5) / T2
-            mag = 0.9 * (1.0 + u)
-            true_share2[t] = mag^2 / (mag^2 + 1.0)
-            for i in 1:N2
-                X2[t, i] = mag * (L0[i, 1] * F2_sub[t, 1] + L0[i, 2] * F2_sub[t, 2]) + randn(rng2)
+        X2, true_share2 = let rng = Random.Xoshiro(89803)
+            F2 = zeros(T2 + burn, q2)
+            for t in 2:(T2 + burn), j in 1:q2
+                F2[t, j] = 0.4 * F2[t - 1, j] + sqrt(1.0 - 0.16) * randn(rng)
             end
+            F2_sub = F2[(burn + 1):end, :]
+            L0 = randn(rng, N2, q2)
+            L0 ./= sqrt.(sum(abs2, L0; dims=2))
+            X2_loc = Matrix{Float64}(undef, T2, N2)
+            ts2 = Vector{Float64}(undef, T2)
+            for t in 1:T2
+                u = (t - 0.5) / T2
+                mag = 0.9 * (1.0 + u)
+                ts2[t] = mag^2 / (mag^2 + 1.0)
+                for i in 1:N2
+                    X2_loc[t, i] = mag * (L0[i, 1] * F2_sub[t, 1] + L0[i, 2] * F2_sub[t, 2]) + randn(rng)
+                end
+            end
+            X2_loc, ts2
         end
         tv2 = estimate_tv_gdfm(X2, q2; standardize=false)
         share_est2 = vec(sum(tv2.variance_share_path; dims=2))
@@ -123,24 +125,26 @@ using StatsAPI
 
         # Rotating factor loading space: TV-GDFM (q=1) tracks orthogonal loading rotation
         # much better than time-invariant GDFM (q=1)
-        rng3 = Random.Xoshiro(89806)
         T3, N3 = 300, 24
-        f3 = zeros(T3 + burn)
-        for t in 2:(T3 + burn)
-            f3[t] = 0.6 * f3[t - 1] + sqrt(1.0 - 0.36) * randn(rng3)
-        end
-        f3_sub = f3[(burn + 1):end]
-        a_vec = [i <= div(N3, 2) ? 1.5 : 0.0 for i in 1:N3]
-        b_vec = [i > div(N3, 2) ? 1.5 : 0.0 for i in 1:N3]
-        chi3_true = Matrix{Float64}(undef, T3, N3)
-        X3 = Matrix{Float64}(undef, T3, N3)
-        for t in 1:T3
-            angle = (π / 2) * ((t - 0.5) / T3)
-            lam_t = cos(angle) .* a_vec .+ sin(angle) .* b_vec
-            for i in 1:N3
-                chi3_true[t, i] = lam_t[i] * f3_sub[t]
-                X3[t, i] = chi3_true[t, i] + 0.3 * randn(rng3)
+        X3, chi3_true = let rng = Random.Xoshiro(89806)
+            f3 = zeros(T3 + burn)
+            for t in 2:(T3 + burn)
+                f3[t] = 0.6 * f3[t - 1] + sqrt(1.0 - 0.36) * randn(rng)
             end
+            f3_sub = f3[(burn + 1):end]
+            a_vec = [i <= div(N3, 2) ? 1.5 : 0.0 for i in 1:N3]
+            b_vec = [i > div(N3, 2) ? 1.5 : 0.0 for i in 1:N3]
+            c3 = Matrix{Float64}(undef, T3, N3)
+            X3_loc = Matrix{Float64}(undef, T3, N3)
+            for t in 1:T3
+                angle = (π / 2) * ((t - 0.5) / T3)
+                lam_t = cos(angle) .* a_vec .+ sin(angle) .* b_vec
+                for i in 1:N3
+                    c3[t, i] = lam_t[i] * f3_sub[t]
+                    X3_loc[t, i] = c3[t, i] + 0.3 * randn(rng)
+                end
+            end
+            X3_loc, c3
         end
         tv_rot = estimate_tv_gdfm(X3, 1; standardize=false)
         g_rot = estimate_gdfm(X3, 1; standardize=false)
@@ -271,7 +275,8 @@ using StatsAPI
         # ArgumentError validation checks
         @test_throws ArgumentError estimate_tv_gdfm(X64, 0)
         @test_throws ArgumentError estimate_tv_gdfm(X64, 11)
-        @test_throws ArgumentError estimate_tv_gdfm(randn(rng, 3, 10), 2)
+        X_short_tv = randn(rng, 3, 10)
+        @test_throws ArgumentError estimate_tv_gdfm(X_short_tv, 2)
         @test_throws ArgumentError estimate_tv_gdfm(X64, 2; time_bandwidth=-0.1)
         @test_throws ArgumentError estimate_tv_gdfm(X64, 2; time_bandwidth=Inf)
         @test_throws ArgumentError estimate_tv_gdfm(X64, 2; lag_bandwidth=-1)

@@ -482,3 +482,147 @@ function _plot_news_individual(nn::NowcastNews{T}; title::String="") where {T}
     _make_plot([_PanelSpec(id, "Individual Impacts (sorted)", js)];
                title=_news_title(nn, title))
 end
+
+# =============================================================================
+# GDFMNowcastResult (GDFM-08 #900)
+# =============================================================================
+
+# Resolve a `vars` selector (nothing, single Int/String, or vector/range of Int/String)
+# to 1-based column indices through `_resolve_var` (bounds-checked, plotrule C3).
+function _gdfm_resolve_vars(vars, names::Vector{String})
+    vars === nothing && return collect(1:length(names))
+    if vars isa Integer
+        return Int[_resolve_var(Int(vars), names)]
+    elseif vars isa AbstractString
+        return Int[_resolve_var(String(vars), names)]
+    elseif vars isa AbstractVector
+        isempty(vars) && throw(ArgumentError("vars must not be empty"))
+        out = Int[]
+        for v in vars
+            vv = v isa Integer ? Int(v) : v isa AbstractString ? String(v) :
+                throw(ArgumentError("vars entries must be Int or String, got $(typeof(v))"))
+            push!(out, _resolve_var(vv, names))
+        end
+        return out
+    else
+        throw(ArgumentError("vars must be nothing, Int, String, or a vector/range of Int/String, got $(typeof(vars))"))
+    end
+end
+
+"""
+    plot_result(r::GDFMNowcastResult; vars=1:min(6, length(r.nowcast)), ncols=0,
+                title="", save_path=nothing) -> PlotOutput
+
+Plot Wiener–Kolmogorov GDFM ragged-edge nowcast/forecast/backcast paths alongside
+the imputed panel series and 95% predictive uncertainty bands (`nowcast ± 1.96 * se`)
+for selected series.
+
+# Keyword Arguments
+- `vars=1:min(6, length(r.nowcast))`: Indices or names of panel variables to display
+- `ncols::Int=0`: Grid column count (`0` = auto)
+- `title::String=""`: Custom figure title (`""` = auto-generated)
+- `save_path::Union{Nothing,String}=nothing`: Optional HTML output file path
+"""
+function plot_result(r::GDFMNowcastResult{T};
+                     vars=1:min(6, length(r.nowcast)),
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{Nothing,String}=nothing) where {T}
+    T_r, N = size(r.panel_imputed)
+    var_idxs = _gdfm_resolve_vars(vars, r.varnames)
+    z_val = T(1.96)
+    x_nc = T_r + r.horizon
+
+    panels = _PanelSpec[]
+    for vi in var_idxs
+        id = _next_plot_id("gdfm_nc")
+        nc = r.nowcast[vi]
+        se = r.se[vi]
+        lo = nc - z_val * se
+        hi = nc + z_val * se
+
+        local xs::Vector{Float64}
+        local hist_vals::Vector{T}
+        local nc_vals::Vector{T}
+        local lo_vals::Vector{T}
+        local hi_vals::Vector{T}
+
+        if r.horizon > 0
+            xs = vcat(Float64.(1:T_r), Float64(x_nc))
+            hist_vals = vcat(r.panel_imputed[:, vi], T[T(NaN)])
+            nc_vals = fill(T(NaN), T_r + 1)
+            lo_vals = fill(T(NaN), T_r + 1)
+            hi_vals = fill(T(NaN), T_r + 1)
+            nc_vals[T_r] = r.panel_imputed[T_r, vi]
+            lo_vals[T_r] = r.panel_imputed[T_r, vi]
+            hi_vals[T_r] = r.panel_imputed[T_r, vi]
+            nc_vals[end] = nc
+            lo_vals[end] = lo
+            hi_vals[end] = hi
+        elseif T_r == 1 && x_nc == 1
+            xs = Float64[0.5, 1.0, 1.5]
+            hist_vals = T[T(NaN), r.panel_imputed[1, vi], T(NaN)]
+            nc_vals = T[nc, nc, nc]
+            lo_vals = T[lo, lo, lo]
+            hi_vals = T[hi, hi, hi]
+        elseif x_nc < 1
+            xs = vcat(Float64(x_nc), Float64.(1:T_r))
+            hist_vals = vcat(T[T(NaN)], r.panel_imputed[:, vi])
+            nc_vals = fill(T(NaN), T_r + 1)
+            lo_vals = fill(T(NaN), T_r + 1)
+            hi_vals = fill(T(NaN), T_r + 1)
+            nc_vals[1] = nc
+            lo_vals[1] = lo
+            hi_vals[1] = hi
+            nc_vals[2] = r.panel_imputed[1, vi]
+            lo_vals[2] = r.panel_imputed[1, vi]
+            hi_vals[2] = r.panel_imputed[1, vi]
+        else
+            xs = Float64.(1:T_r)
+            hist_vals = copy(r.panel_imputed[:, vi])
+            nc_vals = fill(T(NaN), T_r)
+            lo_vals = fill(T(NaN), T_r)
+            hi_vals = fill(T(NaN), T_r)
+            t_idx = Int(x_nc)
+            t_nbr = t_idx > 1 ? t_idx - 1 : t_idx + 1
+            nc_vals[t_idx] = nc
+            lo_vals[t_idx] = lo
+            hi_vals[t_idx] = hi
+            nc_vals[t_nbr] = r.panel_imputed[t_nbr, vi]
+            lo_vals[t_nbr] = r.panel_imputed[t_nbr, vi]
+            hi_vals[t_nbr] = r.panel_imputed[t_nbr, vi]
+        end
+
+        data_json = _keyed_rows_json(xs, [
+            "hist" => hist_vals,
+            "nc" => nc_vals,
+            "ci_lo" => lo_vals,
+            "ci_hi" => hi_vals,
+        ])
+        s_json = _series_json(["Imputed panel", "Nowcast"],
+                              [_PLOT_SERIES[1], _PLOT_SERIES[2]];
+                              keys=["hist", "nc"], dash=["", "6,3"])
+        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"name\":\"95% CI\"," *
+                "\"color\":$(_json(_PLOT_SERIES[2])),\"alpha\":$(_PLOT_CI_ALPHA)}]"
+        refs = "[{\"value\":$(_json(x_nc)),\"axis\":\"x\"," *
+               "\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]"
+        js = _render_line_js(id, data_json, s_json;
+                             bands_json=bands, ref_lines_json=refs,
+                             integer_x=(T_r > 1 || r.horizon != 0),
+                             xlabel="Period", ylabel=r.varnames[vi])
+        status = r.observed_mask[end, vi] ? "" : " [missing at T]"
+        ptitle = "$(r.varnames[vi])$(status): $(_fmt(nc; digits=3)) (±$(_fmt(z_val * se; digits=3)))"
+        push!(panels, _PanelSpec(id, ptitle, js))
+    end
+
+    if isempty(title)
+        kind_str = r.horizon == 0 ? "Nowcast (h=0)" :
+                   r.horizon > 0 ? "Forecast (h=$(r.horizon))" :
+                   "Backcast (h=$(r.horizon))"
+        title = "GDFM Ragged-Edge $(kind_str), n_lags=$(r.n_lags)"
+    end
+    p = _make_plot(panels; title=title, ncols=ncols,
+                   note=_cap_note("variables", length(var_idxs), N, "vars"))
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

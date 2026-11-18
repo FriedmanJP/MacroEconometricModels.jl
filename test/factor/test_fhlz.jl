@@ -404,4 +404,77 @@ using MacroEconometricModels
         @test all(isfinite, m32.X)
         @test all(isfinite, m32.common_component)
     end
+
+    # =========================================================================
+    # 7. dgp_infinite_gdfm Recovery & Dynamic Commonality (#900)
+    # =========================================================================
+
+    @testset "dgp_infinite_gdfm recovery & dynamic commonality (#900)" begin
+        rng = Random.Xoshiro(9001)
+        d1 = dgp_infinite_gdfm(rng; T_obs=300, N=50, q=2, a_coef=0.6, b_coef=0.5,
+                               signal_share=0.8)
+        d2 = dgp_infinite_gdfm(Random.Xoshiro(9001); T_obs=300, N=50, q=2, a_coef=0.6,
+                               b_coef=0.5, signal_share=0.8)
+        d3 = dgp_infinite_gdfm(; T_obs=300, N=50, q=2, a_coef=0.6, b_coef=0.5,
+                               signal_share=0.8, seed=9001)
+
+        @test d1.X == d2.X
+        @test d1.X == d3.X
+        @test d1.common == d2.common
+        @test d1.irf_true == d2.irf_true
+        @test size(d1.X) == (300, 50)
+        @test size(d1.common) == (300, 50)
+        @test size(d1.idiosyncratic) == (300, 50)
+        @test size(d1.innovations) == (300, 2)
+        @test d1.q == 2
+        @test d1.n_permanent == 0
+        @test size(d1.irf_true) == (41, 50, 2)
+        @test size(d1.spectral_density) == (50, 50, 33)
+        @test d1.X ≈ d1.common + d1.idiosyncratic atol=1e-12
+
+        # Signal share matches target 0.8 (finite-sample tolerance across T=300, N=50)
+        emp_share = 1.0 - sum(var(d1.idiosyncratic; dims=1)) / sum(var(d1.X; dims=1))
+        @test emp_share ≈ 0.8 atol=0.1
+
+        # Exact rational IRF identity and spectral dynamic commonality (q-vs-(q+1) gap)
+        @test d1.irf_true[1, :, :] ≈ d1.b
+        @test d1.irf_true[2, :, :] ≈ d1.b .* d1.alpha
+        for h in 1:size(d1.spectral_density, 3)
+            ev = sort(real.(eigvals(Hermitian(d1.spectral_density[:, :, h]))); rev=true)
+            @test ev[2] > 2.5 * ev[3]
+        end
+
+        # FHLZ recovers infinite-dimensional common component & dynamic IRFs up to rotation
+        m_fhlz = estimate_gdfm_fhlz(d1.X, 2; p_max=4, n_perm=15, irf_horizon=20, seed=42)
+        offset = size(d1.X, 1) - size(m_fhlz.common_component, 1)
+        chi_true_eff = d1.common[(offset + 1):end, :]
+        cor_mean = mean([abs(cor(m_fhlz.common_component[:, i], chi_true_eff[:, i])) for i in 1:50])
+        @test cor_mean > 0.80
+
+        # Procrustes-aligned IRF recovery across horizons h = 0..10
+        H_eval = 10
+        B_est = m_fhlz.impulse_filters[1:H_eval, :, :]
+        B_true = d1.irf_true[1:H_eval, :, :]
+        M_cross = reshape(B_est, H_eval * 50, 2)' * reshape(B_true, H_eval * 50, 2)
+        sv = svd(M_cross)
+        O_rot = sv.U * sv.Vt
+        B_aligned = similar(B_est)
+        for h in 1:H_eval
+            B_aligned[h, :, :] = B_est[h, :, :] * O_rot
+        end
+        @test cor(vec(B_aligned), vec(B_true)) > 0.85
+
+        # AR(1) idiosyncratic noise option
+        d_ar = dgp_infinite_gdfm(Random.Xoshiro(9003); T_obs=300, N=10, q=1, idio_ar=0.6)
+        mean_ar1 = mean([cor(d_ar.idiosyncratic[1:end-1, j], d_ar.idiosyncratic[2:end, j]) for j in 1:10])
+        @test mean_ar1 ≈ 0.6 atol=0.15
+
+        # Validation errors
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); T_obs=1)
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); q=0)
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); q=2, n_permanent=3)
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); a_coef=1.0)
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); signal_share=0.0)
+        @test_throws ArgumentError dgp_infinite_gdfm(Random.Xoshiro(1); idio_ar=1.0)
+    end
 end

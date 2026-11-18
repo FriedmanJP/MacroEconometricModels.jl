@@ -115,6 +115,7 @@ include("dgp/dgp_univariate.jl")
 include("dgp/dgp_cointegration.jl")
 include("dgp/dgp_volatility.jl")
 include("dgp/dgp_factors.jl")
+include("dgp/dgp_gdfm.jl")
 include("dgp/dgp_lp.jl")
 include("dgp/dgp_micro.jl")
 include("dgp/dgp_regime.jl")
@@ -1566,6 +1567,7 @@ export dgp_arima, dgp_trend_cycle, dgp_ar2_peak, dgp_lagged_pair, dgp_state_spac
 export dgp_vecm, dgp_cointreg, dgp_panel_var, dgp_ardl, dgp_nardl, dgp_pmg
 export dgp_garch_family, dgp_sv, dgp_mgarch, dgp_midas
 export dgp_dynamic_factors, dgp_mixed_frequency_panel
+export dgp_infinite_gdfm
 export dgp_lp_iv, dgp_state_dependent_var, dgp_propensity, dgp_hac
 export dgp_cross_section, dgp_panel, dgp_staggered_did
 export dgp_regime_switching

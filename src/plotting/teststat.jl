@@ -938,3 +938,174 @@ function plot_result(r::VARStationarityResult{T,E}; title::String="",
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# Factor-Number Selection & Hypothesis Tests (GDFM-08 #900)
+# =============================================================================
+
+"""
+    plot_result(r::OnatskiQTestResult; ncols=0, title="", save_path=nothing) -> PlotOutput
+
+Plot Onatski (2009) dynamic factor test [`OnatskiQTestResult`](@ref) as a horizontal
+bar chart comparing the test statistic ``\\hat{R}`` against its complex Tracy–Widom
+critical values at `r.alpha_levels`, marking rejection at the 5% level in the subtitle.
+
+# Keyword Arguments
+- `ncols::Int=0`: Grid column count (`0` = auto)
+- `title::String=""`: Custom figure title (`""` = auto-generated)
+- `save_path::Union{Nothing,String}=nothing`: Optional HTML output file path
+"""
+function plot_result(r::OnatskiQTestResult{T};
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{Nothing,String}=nothing) where {T}
+    id = _next_plot_id("onatski_q")
+    n_cv = min(length(r.crit_vals), length(r.alpha_levels))
+    labels = String["R̂ statistic"]
+    vals = T[r.statistic]
+    for i in 1:n_cv
+        pct = round(Int, 100 * r.alpha_levels[i])
+        push!(labels, "$(pct)% CV")
+        push!(vals, r.crit_vals[i])
+    end
+    data_json = _keyed_rows_json(labels, Pair{String,AbstractVector}["v" => vals])
+    bar_col = r.rejected_05 ? _PLOT_ALERT : _PLOT_SERIES[1]
+    s_json = _series_json(["Value"], [bar_col]; keys=["v"])
+    js = _render_bar_js(id, data_json, s_json;
+                        mode="grouped", orientation="h",
+                        xlabel="Statistic / critical value", ylabel="")
+    rej = r.rejected_05 ? "reject H₀ (5%)" : "fail to reject H₀ (5%)"
+    ptitle = "H₀: q=$(r.k0) vs H₁: $(r.k0)<q≤$(r.k1) — p=$(_fmt(r.pvalue; digits=4)), $(rej)"
+    ft = isempty(title) ?
+        "Onatski (2009) Dynamic Factor Test (T=$(r.n_obs), N=$(r.n_vars), M=$(r.bandwidth))" : title
+    p = _make_plot([_PanelSpec(id, ptitle, js)]; title=ft, ncols=ncols)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::AhnHorensteinResult; view=:ratios, ncols=0, title="",
+                save_path=nothing) -> PlotOutput
+
+Plot Ahn & Horenstein (2013) static factor selection [`AhnHorensteinResult`](@ref).
+
+# Views
+- `:ratios` (default) — two panels plotting `r.er` (`ER(k)`) and `r.gr` (`GR(k)`) over
+  `k = 0:r.k_max` with vertical dashed alert lines marking `r.r_er` and `r.r_gr`
+- `:eigenvalues` — scree bar plot of leading sample covariance eigenvalues `r.eigenvalues`
+  with a horizontal dashed alert line at `r.mock_eigenvalue`
+
+# Keyword Arguments
+- `view::Symbol=:ratios`: View to render (`:ratios` or `:eigenvalues`)
+- `ncols::Int=0`: Grid column count (`0` = auto; defaults to `2` for `:ratios`)
+- `title::String=""`: Custom figure title (`""` = auto-generated)
+- `save_path::Union{Nothing,String}=nothing`: Optional HTML output file path
+"""
+function plot_result(r::AhnHorensteinResult{T};
+                     view::Symbol=:ratios,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{Nothing,String}=nothing) where {T}
+    if view === :ratios
+        n_er = length(r.er)
+        n_gr = length(r.gr)
+        ks_er = collect(0:(n_er - 1))
+        ks_gr = collect(0:(n_gr - 1))
+
+        id_er = _next_plot_id("ah_er")
+        data_er = _keyed_rows_json(ks_er, Pair{String,AbstractVector}["er" => r.er])
+        s_er = _series_json(["ER(k)"], [_PLOT_SERIES[1]]; keys=["er"])
+        ref_er = "[{\"value\":$(_json(r.r_er)),\"axis\":\"x\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]"
+        js_er = _render_line_js(id_er, data_er, s_er;
+                                ref_lines_json=ref_er, integer_x=true,
+                                xlabel="Number of factors k", ylabel="ER(k)")
+        p_er = _PanelSpec(id_er, "Eigenvalue Ratio — selected r_er = $(r.r_er)", js_er)
+
+        id_gr = _next_plot_id("ah_gr")
+        data_gr = _keyed_rows_json(ks_gr, Pair{String,AbstractVector}["gr" => r.gr])
+        s_gr = _series_json(["GR(k)"], [_PLOT_SERIES[2]]; keys=["gr"])
+        ref_gr = "[{\"value\":$(_json(r.r_gr)),\"axis\":\"x\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]"
+        js_gr = _render_line_js(id_gr, data_gr, s_gr;
+                                ref_lines_json=ref_gr, integer_x=true,
+                                xlabel="Number of factors k", ylabel="GR(k)")
+        p_gr = _PanelSpec(id_gr, "Growth Ratio — selected r_gr = $(r.r_gr)", js_gr)
+
+        ft = isempty(title) ?
+            "Ahn & Horenstein (2013) Factor Selection (r_er=$(r.r_er), r_gr=$(r.r_gr))" : title
+        ncols_use = ncols <= 0 ? 2 : ncols
+        p = _make_plot([p_er, p_gr]; title=ft, ncols=ncols_use)
+    elseif view === :eigenvalues
+        n_ev = length(r.eigenvalues)
+        n_show = min(n_ev, max(r.k_max + 5, 20))
+        ks = collect(1:n_show)
+        id = _next_plot_id("ah_ev")
+        data_json = _keyed_rows_json(ks, Pair{String,AbstractVector}["y" => @view(r.eigenvalues[1:n_show])])
+        refs = isfinite(r.mock_eigenvalue) ?
+            "[{\"value\":$(_json(r.mock_eigenvalue)),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,4\"}]" : "[]"
+        js = _render_vbar_js(id, data_json; bar_color=_PLOT_SERIES[1],
+                             ref_lines_json=refs, integer_x=true,
+                             xlabel="Factor index k", ylabel="Eigenvalue μ_k")
+        ptitle = _cap_title("Leading Eigenvalues (μ₀=$(_fmt(r.mock_eigenvalue; digits=3)), r_er=$(r.r_er), r_gr=$(r.r_gr))", n_show, n_ev)
+        ft = isempty(title) ? "Ahn & Horenstein (2013) Eigenvalue Scree" : title
+        note = n_show < n_ev ? "Showing $(n_show) of $(n_ev) eigenvalues." : ""
+        p = _make_plot([_PanelSpec(id, ptitle, js)]; title=ft, ncols=ncols, note=note)
+    else
+        throw(ArgumentError("Unknown view: :$view. Expected :ratios or :eigenvalues"))
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(r::OnatskiEDResult; ncols=0, title="", save_path=nothing) -> PlotOutput
+
+Plot Onatski (2010) Edge Distribution static factor selection [`OnatskiEDResult`](@ref):
+a scree line plot of leading eigenvalues `r.eigenvalues` with a vertical marker at `r.r_ed`
+alongside a vertical bar chart of adjacent eigenvalue gaps ``\\hat{\\mu}_k - \\hat{\\mu}_{k+1}``
+against the calibrated edge threshold ``\\hat{\\delta} =`` `r.delta`.
+
+# Keyword Arguments
+- `ncols::Int=0`: Grid column count (`0` = auto; defaults to `2` when gap panel is shown)
+- `title::String=""`: Custom figure title (`""` = auto-generated)
+- `save_path::Union{Nothing,String}=nothing`: Optional HTML output file path
+"""
+function plot_result(r::OnatskiEDResult{T};
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{Nothing,String}=nothing) where {T}
+    n_ev = length(r.eigenvalues)
+    n_show = min(n_ev, max(r.k_max + 5, 20))
+    ks = collect(1:n_show)
+
+    id1 = _next_plot_id("ed_scree")
+    data1 = _keyed_rows_json(ks, Pair{String,AbstractVector}["ev" => @view(r.eigenvalues[1:n_show])])
+    s1 = _series_json(["Eigenvalue μ_k"], [_PLOT_SERIES[1]]; keys=["ev"])
+    ref1 = r.r_ed >= 1 ?
+        "[{\"value\":$(_json(r.r_ed)),\"axis\":\"x\",\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]" : "[]"
+    js1 = _render_line_js(id1, data1, s1;
+                          ref_lines_json=ref1, integer_x=true,
+                          xlabel="Factor index k", ylabel="Eigenvalue μ_k")
+    panels = [_PanelSpec(id1, _cap_title("Scree Eigenvalues (r_ed = $(r.r_ed))", n_show, n_ev), js1)]
+
+    n_diffs = min(r.k_max + 2, n_ev - 1)
+    if n_diffs >= 1
+        ks_d = collect(1:n_diffs)
+        diffs = T[r.eigenvalues[k] - r.eigenvalues[k + 1] for k in ks_d]
+        id2 = _next_plot_id("ed_gaps")
+        data2 = _keyed_rows_json(ks_d, Pair{String,AbstractVector}["y" => diffs])
+        ref2 = isfinite(r.delta) ?
+            "[{\"value\":$(_json(r.delta)),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,4\"}]" : "[]"
+        js2 = _render_vbar_js(id2, data2; bar_color=_PLOT_SERIES[2],
+                              ref_lines_json=ref2, integer_x=true,
+                              xlabel="Gap index k", ylabel="μ_k − μ_{k+1}")
+        push!(panels, _PanelSpec(id2, "Eigenvalue Gaps vs Threshold δ̂ = $(_fmt(r.delta; digits=4))", js2))
+    end
+
+    ft = isempty(title) ?
+        "Onatski (2010) Edge Distribution (r_ed=$(r.r_ed), δ̂=$(_fmt(r.delta; digits=3)), $(r.converged ? "converged" : "not converged"))" : title
+    ncols_use = (ncols <= 0 && length(panels) == 2) ? 2 : ncols
+    note = n_show < n_ev ? "Showing $(n_show) of $(n_ev) eigenvalues." : ""
+    p = _make_plot(panels; title=ft, ncols=ncols_use, note=note)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

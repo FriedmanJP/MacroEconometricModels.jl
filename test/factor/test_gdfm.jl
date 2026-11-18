@@ -58,7 +58,8 @@ using Random
         T_obs, N = 120, 6
         # O(1) loadings keep the strong-signal regime the 0.9 bound was
         # written for (the simulator default targets a 0.7 common share).
-        d = dgp_dynamic_factors(rng; Lambda=randn(rng, N, 2), N=N, T=T_obs,
+        Lambda = randn(rng, N, 2)
+        d = dgp_dynamic_factors(rng; Lambda=Lambda, N=N, T=T_obs,
                                 idio_sd=0.1)
         common_true = d.F * d.Lambda'
         X = d.X
@@ -931,7 +932,8 @@ using Random
         # the strong-signal regime the 0.9 one-sided/two-sided bound needs.
         rng = Random.Xoshiro(721)
         T_obs, N, q = 500, 30, 2
-        X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], Lambda=randn(rng, N, q),
+        Lambda = randn(rng, N, q)
+        X = dgp_dynamic_factors(rng; A=[0.7 0.0; 0.0 0.7], Lambda=Lambda,
                                 N=N, T=T_obs, idio_sd=0.3).X
         m = estimate_gdfm(X, q; standardize=false)
         @test size(m.Z) == (N, q)
@@ -1130,13 +1132,15 @@ using Random
         # Frequency selectivity on synthetic low + high frequency factor panel
         T_sel, N_sel = 240, 20
         t_grid = collect(1.0:T_sel)
-        rng_sel = Random.Xoshiro(89702)
-        f_slow = sin.(2π .* t_grid ./ 24.0) .+ 0.4 .* cos.(2π .* t_grid ./ 36.0)
-        f_fast = sin.(2π .* t_grid ./ 3.0) .+ 0.3 .* cos.(2π .* t_grid ./ 2.5)
-        L_slow = 0.8 .+ 0.4 .* rand(rng_sel, N_sel)
-        L_fast = (-0.5) .+ rand(rng_sel, N_sel)
-        L_fast[1] = 1.2
-        X_freq = f_slow * L_slow' .+ f_fast * L_fast' .+ 0.1 .* randn(rng_sel, T_sel, N_sel)
+        X_freq, f_slow = let rng = Random.Xoshiro(89702)
+            fs = sin.(2π .* t_grid ./ 24.0) .+ 0.4 .* cos.(2π .* t_grid ./ 36.0)
+            ff = sin.(2π .* t_grid ./ 3.0) .+ 0.3 .* cos.(2π .* t_grid ./ 2.5)
+            L_slow = 0.8 .+ 0.4 .* rand(rng, N_sel)
+            L_fast = (-0.5) .+ rand(rng, N_sel)
+            L_fast[1] = 1.2
+            Xf = fs * L_slow' .+ ff * L_fast' .+ 0.1 .* randn(rng, T_sel, N_sel)
+            Xf, fs
+        end
         gdfm_freq = estimate_gdfm(X_freq, 2; spectral=:lag_window, bandwidth=16)
         bp_low = bandpass_gdfm(gdfm_freq, (0.0, π / 6); r=3)
         bp_high = bandpass_gdfm(gdfm_freq, (π / 2, π); r=3)
