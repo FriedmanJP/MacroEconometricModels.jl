@@ -9,7 +9,12 @@ using LinearAlgebra
 using Statistics
 using Distributions
 using Random
+using ForwardDiff
 using MacroEconometricModels
+
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
 
 const M = MacroEconometricModels
 const qfm_predict = MacroEconometricModels.predict
@@ -25,6 +30,15 @@ function _qfm_trace_r2(A::AbstractMatrix, B::AbstractMatrix)
     size(QA, 2) == size(QB, 2) ||
         throw(DimensionMismatch("_qfm_trace_r2 requires equal column counts"))
     return tr((QA' * QB) * (QB' * QA)) / size(B, 2)
+end
+
+function _qfm_chordal_dist(A::AbstractMatrix, B::AbstractMatrix)
+    QA = Matrix(qr(A).Q)
+    QB = Matrix(qr(B).Q)
+    r = size(QA, 2)
+    r == size(QB, 2) || throw(DimensionMismatch("_qfm_chordal_dist requires equal column counts"))
+    svals = svdvals(QA' * QB)
+    return sqrt(max(0.0, r - sum(abs2, svals))), minimum(svals)
 end
 
 _qfm_vec_r2(a::AbstractVector, b::AbstractVector) = cor(a, b)^2
@@ -432,6 +446,241 @@ end
         @test all(iszero, m_zero.loadings)
         @test all(iszero, m_zero.pseudo_r2)
         @test norm(m_zero.factors' * m_zero.factors / 30 - I(2)) < 1e-12
+    end
+
+    @testset "Convolution-Smoothed QFA & Standard Errors (QFM-03)" begin
+
+        @testset "Analytical gradient vs ForwardDiff.gradient (< 1e-10) for all kernels" begin
+            rng = Random.Xoshiro(88501)
+            T_obs, N, r = 35, 14, 2
+            X = randn(rng, T_obs, N)
+            # Include large-magnitude entries to exercise overflow safety of :logistic and tails of :epanechnikov
+            X[1, 1] = 250.0
+            X[2, 2] = -250.0
+            X[3, 3] = 0.0
+            F0 = randn(rng, T_obs, r)
+            L0 = randn(rng, N, r)
+            nF = T_obs * r
+
+            for kern in (:gaussian, :logistic, :epanechnikov), tau in (0.1, 0.5, 0.9), h in (0.1, 0.4)
+                gf, gl = M._qfm_smooth_grad(X, F0, L0, tau, h, kern)
+                g_anal = vcat(vec(gf), vec(gl))
+                theta0 = vcat(vec(F0), vec(L0))
+                g_fd = ForwardDiff.gradient(theta -> begin
+                    Fm = reshape(@view(theta[1:nF]), T_obs, r)
+                    Lm = reshape(@view(theta[(nF + 1):end]), N, r)
+                    M._qfm_smooth_objective(X, Fm, Lm, tau, h, kern)
+                end, theta0)
+                @test all(isfinite, g_anal)
+                @test maximum(abs.(g_anal .- g_fd)) < 1e-10
+            end
+        end
+
+        @testset "Smoothed QFA vs IQR subspace agreement & h -> 0+ convergence" begin
+            rng = Random.Xoshiro(88502)
+            T_obs, N, r = 200, 80, 2
+            F_true = sqrt(T_obs) .* Matrix(qr(randn(rng, T_obs, r)).Q)
+            L_true = randn(rng, N, r)
+            e_base = randn(rng, T_obs, N)
+
+            # Median with bandwidth=:auto and tail quantiles with small h
+            for tau in (0.2, 0.5, 0.8)
+                e_shifted = 0.5 .* (e_base .- quantile(Normal(), tau))
+                X = F_true * L_true' .+ e_shifted
+                m_iqr = estimate_qfm(X, r, tau; method=:iqr, seed=11)
+
+                for kern in (:gaussian, :logistic, :epanechnikov)
+                    bw = tau == 0.5 ? :auto : 0.05
+                    m_sm = estimate_qfm(X, r, tau; method=:smoothed_iqr, kernel=kern,
+                                        bandwidth=bw, seed=11)
+                    @test m_sm.method === :smoothed_iqr
+                    @test m_sm.converged
+                    _qfm_check_norm_invariants(m_sm; tol=1e-9)
+                    @test m_sm.objective ≈ M._qfm_objective(X, m_sm.factors, m_sm.loadings, tau) atol=1e-12
+                    d_chord, min_sval = _qfm_chordal_dist(m_iqr.factors, m_sm.factors)
+                    @test d_chord < 0.05
+                    @test min_sval > 0.995
+                    @test _qfm_trace_r2(m_sm.factors, F_true) > 0.95
+                end
+            end
+
+            # Convergence as h -> 0+
+            X_h = F_true * L_true' .+ 0.5 .* (e_base .- quantile(Normal(), 0.25))
+            m_iqr_h = estimate_qfm(X_h, r, 0.25; method=:iqr, seed=12)
+            m_coarse = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.5, seed=12)
+            m_fine = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.05, seed=12)
+            d_coarse, _ = _qfm_chordal_dist(m_iqr_h.factors, m_coarse.factors)
+            d_fine, _ = _qfm_chordal_dist(m_iqr_h.factors, m_fine.factors)
+            @test d_fine < d_coarse
+            @test d_fine < 0.05
+        end
+
+        @testset "Monte Carlo 95% coverage of CDG asymptotic SEs (N=80, T=200)" begin
+            T_mc, N_mc, r_mc = 200, 80, 2
+            tau = 0.25
+            q_shift = quantile(Normal(), tau)
+            n_rep = FAST ? 10 : 20
+            cov_iqr_L = Float64[]
+            cov_iqr_F = Float64[]
+            cov_sm_L = Float64[]
+
+            for rep in 1:n_rep
+                r_rng = Random.Xoshiro(88510 + rep)
+                F0 = sqrt(T_mc) .* Matrix(qr(randn(r_rng, T_mc, r_mc)).Q)
+                L0 = randn(r_rng, N_mc, r_mc)
+                e = randn(r_rng, T_mc, N_mc) .- q_shift
+                X = F0 * L0' .+ 0.5 .* e
+
+                m_iqr = estimate_qfm(X, r_mc, tau; method=:iqr, se=:asymptotic,
+                                     hac_bandwidth=:auto, n_starts=1, seed=rep)
+                m_sm = estimate_qfm(X, r_mc, tau; method=:smoothed_iqr, se=:asymptotic,
+                                    hac_bandwidth=0, n_starts=1, seed=rep)
+
+                @test size(m_iqr.se_loadings) == (N_mc, r_mc)
+                @test size(m_iqr.se_factors) == (T_mc, r_mc)
+                @test all(x -> isfinite(x) && x > 0, m_iqr.se_loadings)
+                @test all(x -> isfinite(x) && x > 0, m_iqr.se_factors)
+
+                H_i = (F0' * m_iqr.factors) / T_mc
+                L_rot_i = L0 * inv(H_i)'
+                F_rot_i = F0 * H_i
+                push!(cov_iqr_L, mean(abs.(m_iqr.loadings .- L_rot_i) .<= 1.96 .* m_iqr.se_loadings))
+                push!(cov_iqr_F, mean(abs.(m_iqr.factors .- F_rot_i) .<= 1.96 .* m_iqr.se_factors))
+
+                H_s = (F0' * m_sm.factors) / T_mc
+                L_rot_s = L0 * inv(H_s)'
+                push!(cov_sm_L, mean(abs.(m_sm.loadings .- L_rot_s) .<= 1.96 .* m_sm.se_loadings))
+            end
+
+            @test 0.88 <= mean(cov_iqr_L) <= 0.99
+            @test 0.88 <= mean(cov_iqr_F) <= 0.99
+            @test 0.88 <= mean(cov_sm_L) <= 0.99
+        end
+
+        @testset "HAC adjustment for serially correlated idiosyncratic errors" begin
+            rng = Random.Xoshiro(88530)
+            T_obs, N, r = 240, 50, 2
+            # Both factors and idiosyncratic errors follow AR(1) so score s_{it} = ψ_τ(e_{it}) f_t is serially correlated
+            F_raw = zeros(T_obs, r)
+            rho_f = 0.75
+            f_sd = sqrt(1 - rho_f^2)
+            F_raw[1, :] = randn(rng, r)
+            for t in 2:T_obs
+                F_raw[t, :] = rho_f .* F_raw[t - 1, :] .+ f_sd .* randn(rng, r)
+            end
+            F0 = sqrt(T_obs) .* Matrix(qr(F_raw).Q)
+            L0 = randn(rng, N, r)
+            e = zeros(T_obs, N)
+            rho_e = 0.75
+            e_sd = sqrt(1 - rho_e^2)
+            e[1, :] = randn(rng, N)
+            for t in 2:T_obs
+                e[t, :] = rho_e .* e[t - 1, :] .+ e_sd .* randn(rng, N)
+            end
+            X = F0 * L0' .+ 0.5 .* e
+
+            m_white = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=0, seed=1)
+            m_hac_auto = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=:auto, seed=1)
+            m_hac_fixed = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=6, seed=1)
+
+            @test m_white.se_factors == m_hac_auto.se_factors
+            @test median(m_hac_fixed.se_loadings) > median(m_white.se_loadings)
+            @test median(m_hac_auto.se_loadings) > median(m_white.se_loadings)
+        end
+
+        @testset "Bootstrap SEs, Procrustes alignment, and seed/threading parity" begin
+            rng = Random.Xoshiro(88540)
+            T_obs, N, r = 140, 45, 2
+            F0 = sqrt(T_obs) .* Matrix(qr(randn(rng, T_obs, r)).Q)
+            L0 = randn(rng, N, r)
+            X = F0 * L0' .+ 0.4 .* (randn(rng, T_obs, N) .- quantile(Normal(), 0.3))
+
+            m_asy = estimate_qfm(X, r, 0.3; method=:iqr, se=:asymptotic, hac_bandwidth=0, seed=42)
+            m_boot1 = estimate_qfm(X, r, 0.3; method=:iqr, se=:bootstrap, n_boot=60,
+                                   threaded=true, seed=42)
+            m_boot2 = estimate_qfm(X, r, 0.3; method=:iqr, se=:bootstrap, n_boot=60,
+                                   threaded=false, seed=42)
+            m_boot_sm = estimate_qfm(X, r, 0.3; method=:smoothed_iqr, se=:bootstrap, n_boot=40,
+                                     seed=42)
+
+            @test m_boot1.factors == m_asy.factors
+            @test m_boot1.loadings == m_asy.loadings
+            @test m_boot1.se_loadings == m_boot2.se_loadings
+            @test m_boot1.se_factors == m_boot2.se_factors
+            @test size(m_boot1.se_loadings) == (N, r)
+            @test size(m_boot1.se_factors) == (T_obs, r)
+            @test all(x -> isfinite(x) && x > 0, m_boot1.se_loadings)
+            @test all(x -> isfinite(x) && x > 0, m_boot1.se_factors)
+
+            ratio_L = median(m_boot1.se_loadings ./ m_asy.se_loadings)
+            ratio_F = median(m_boot1.se_factors ./ m_asy.se_factors)
+            @test 0.6 <= ratio_L <= 1.6
+            @test 0.6 <= ratio_F <= 1.6
+
+            @test size(m_boot_sm.se_loadings) == (N, r)
+            @test all(x -> isfinite(x) && x > 0, m_boot_sm.se_loadings)
+        end
+
+        @testset "Standardization SE invariance, Float32 support, and display with SEs" begin
+            rng = Random.Xoshiro(88550)
+            T_obs, N, r = 120, 35, 2
+            F0 = sqrt(T_obs) .* Matrix(qr(randn(rng, T_obs, r)).Q)
+            L0 = randn(rng, N, r)
+            X_base = F0 * L0' .+ 0.3 .* randn(rng, T_obs, N)
+            scales = exp.(range(-2.0, 4.0; length=N))
+            shifts = collect(range(-100.0, 100.0; length=N))
+            X_scaled = X_base .* scales' .+ shifts'
+
+            m_std_1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, seed=5)
+            m_std_2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, seed=5)
+            @test isapprox(m_std_1.se_loadings, m_std_2.se_loadings; rtol=1e-10)
+            @test isapprox(m_std_1.se_factors, m_std_2.se_factors; rtol=1e-10)
+            m_std_a1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, seed=5)
+            m_std_a2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, seed=5)
+            @test isapprox(m_std_a1.se_loadings, m_std_a2.se_loadings; rtol=0.05)
+
+            # Display with SEs across backends
+            s_se = sprint(show, m_std_1)
+            @test occursin("Standard Errors Summary", s_se)
+            @test occursin("Std.Err.", s_se)
+            for be in (:latex, :html)
+                out_be = with_display_backend(be) do
+                    sprint(show, m_std_1)
+                end
+                @test !isempty(out_be)
+            end
+
+            # Float32 support across smoothed kernels & SE modes
+            X32 = Float32.(X_base)
+            for kern in (:gaussian, :logistic, :epanechnikov)
+                m32_sm = estimate_qfm(X32, r, 0.5f0; method=:smoothed_iqr, kernel=kern,
+                                      se=:asymptotic, seed=8)
+                @test m32_sm isa QuantileFactorModel{Float32}
+                @test eltype(m32_sm.se_loadings) === Float32
+                @test eltype(m32_sm.se_factors) === Float32
+                @test all(isfinite, m32_sm.se_loadings)
+                @test all(isfinite, m32_sm.se_factors)
+                _qfm_check_norm_invariants(m32_sm; tol=1f-4)
+            end
+            m32_boot = estimate_qfm(X32, r, 0.5f0; method=:smoothed_iqr, se=:bootstrap,
+                                    n_boot=20, seed=8)
+            @test m32_boot isa QuantileFactorModel{Float32}
+            @test eltype(m32_boot.se_loadings) === Float32
+            @test eltype(m32_boot.se_factors) === Float32
+
+            # Validation errors
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; method=:bogus)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; kernel=:bogus)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; se=:bogus)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; bandwidth=:bogus)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; bandwidth=0.0)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; bandwidth=-0.5)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; bandwidth=true)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; hac_bandwidth=:bogus)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; hac_bandwidth=-1)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; n_boot=0)
+            @test_throws ArgumentError estimate_qfm(X_base, r, 0.5; se=:bootstrap, n_boot=1)
+        end
     end
 
     @testset "No method ambiguities in MacroEconometricModels" begin
