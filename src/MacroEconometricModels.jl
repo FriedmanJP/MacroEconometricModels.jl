@@ -272,6 +272,7 @@ include("factor/kalman.jl")
 include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
+include("factor/quantile.jl")
 
 # Spectral analysis and ACF/PACF
 include("spectral/types.jl")
@@ -1140,6 +1141,9 @@ export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
 export FAVARModel, BayesianFAVAR
 export estimate_favar
 export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
+
+# Quantile Factor Model types and estimation
+export QuantileFactorModel, estimate_qfm
 
 # =============================================================================
 # Exports - Utility Functions
