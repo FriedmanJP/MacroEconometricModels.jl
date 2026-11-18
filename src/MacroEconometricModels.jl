@@ -289,6 +289,7 @@ include("spectral/show.jl")
 
 include("factor/fhlz.jl")
 include("factor/selection.jl")
+include("factor/tv_gdfm.jl")
 include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
@@ -1187,6 +1188,7 @@ export OnatskiQTestResult, AhnHorensteinResult, OnatskiEDResult
 export onatski_q_test, onatski_q_select, ahn_horenstein, onatski_ed
 export common_variance_share
 export spectral_eigenvalue_plot_data
+export TimeVaryingGDFM, estimate_tv_gdfm
 
 # Structural DFM types and estimation
 export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
