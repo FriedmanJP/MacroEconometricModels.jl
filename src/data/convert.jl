@@ -97,6 +97,29 @@ estimate_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
 estimate_qfm(d::TimeSeriesData, r::Int, tau::Real=0.5; kwargs...) =
     estimate_qfm(to_matrix(d), r, tau; varnames=d.varnames, kwargs...)
 
+estimate_qfm(d::TimeSeriesData, r::Symbol, tau::Real=0.5; kwargs...) =
+    estimate_qfm(to_matrix(d), r, tau; varnames=d.varnames, kwargs...)
+
+ic_criteria_qfm(d::TimeSeriesData, r_max::Int, tau::Real=0.5; kwargs...) =
+    ic_criteria_qfm(to_matrix(d), r_max, tau; kwargs...)
+
+onatski_q_test(d::TimeSeriesData, k0::Int, k1::Int; kwargs...) =
+    onatski_q_test(to_matrix(d), k0, k1; kwargs...)
+
+onatski_q_select(d::TimeSeriesData; kwargs...) =
+    onatski_q_select(to_matrix(d); kwargs...)
+
+onatski_q_select(d::TimeSeriesData, k_max::Int; kwargs...) =
+    onatski_q_select(to_matrix(d), k_max; kwargs...)
+
+ahn_horenstein(d::TimeSeriesData,
+               k_max::Int=min(10, min(d.T_obs, d.n_vars) - 2); kwargs...) =
+    ahn_horenstein(to_matrix(d), k_max; kwargs...)
+
+onatski_ed(d::TimeSeriesData,
+           k_max::Int=min(10, min(d.T_obs, d.n_vars) - 2); kwargs...) =
+    onatski_ed(to_matrix(d), k_max; kwargs...)
+
 estimate_gdfm_fhlz(d::TimeSeriesData, q::Int; kwargs...) =
     estimate_gdfm_fhlz(to_matrix(d), q; varnames=d.varnames, kwargs...)
 

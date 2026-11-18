@@ -120,11 +120,12 @@ local_linear_trend
 estimate_tvp_reg
 RationalInattentionProblem
 SimsKalmanSolution
+DynamicRISolution
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["ri/types.jl", "ri/steady_state.jl"]
+Pages   = ["ri/types.jl", "ri/steady_state.jl", "ri/dynamic.jl", "ri/state_space.jl", "ri/analysis.jl"]
 Order   = [:function]
 Private = false
 ```

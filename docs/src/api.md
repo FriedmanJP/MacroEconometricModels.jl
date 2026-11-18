@@ -125,6 +125,8 @@ Linear Gaussian state-space models estimated by the Kalman filter and smoother. 
 | `estimate_tvp_reg(y, X; intercept=true)` | Time-varying-parameter regression |
 | `steady_state_kalman(ss)` / `steady_state_kalman(Z, H, Tt, RQR; G=nothing)` | Steady-state Kalman filter via discrete algebraic Riccati equation |
 | `solve_ri_kalman(prob; method=:water_filling)` | Steady-state LQG rational inattention filter (Sims 2003; Afrouzi–Yang 2021) |
+| `solve_ri_transition(prob, Sigma_init; ...)` | Dynamic RI transition path (Afrouzi & Yang 2021) |
+| `to_statespace(sol)` / `to_abcd(sol)` | Joint `(x_t, x̂_{t\|t})` state-space and ABCD bridges for `SimsKalmanSolution` |
 
 Threshold, smooth-transition, and Markov-switching regression for univariate series. See [Nonlinear Time Series](@ref nonlinear_page).
 
@@ -258,6 +260,8 @@ Impulse response functions, forecast error variance decomposition, historical de
 | `identify_skew_normal(model; ...)` | Skew-normal ML SVAR identification |
 | `identify_nongaussian_ml(model; ...)` | Unified non-Gaussian ML dispatcher |
 | `estimate_lms_svar(model; ...)` / `lms_project_B(B)` | LMS (2017) complete identification, analytical 16-block Hessian, and 1/3-step ML |
+| `test_svar_hypothesis(res, hyp; method=:wald)` / `diagnose_nongaussian_svar(res)` | LMS (2017) Wald/LR/LM structural hypothesis tests (`recursiveness_hypothesis`, `long_run_hypothesis`, …) and shock diagnostics |
+| `SVARMAModel(Y, Phi, Theta, C)` / `ssvarma_filter_shocks(...)` | Non-fundamental SSVARMA(p,q) representation, Schur shock filter, `fundamentalness_regime`, `blaschke_representations` |
 | `identify_gmm_moments(model; ...)` | Coskewness / cokurtosis GMM SVAR identification |
 | `identify_lewis_tvv(model; ...)` | Time-varying-volatility GMM SVAR identification (Lewis 2021) |
 | `identify_sv_svar(Y, p; ...)` | Stochastic-volatility SVAR via EM (Bertsche–Braun 2022) |
@@ -355,6 +359,9 @@ Static PCA, Dynamic Factor, and Generalized Dynamic Factor model estimation, for
 | `hallin_liska(X, q_max)` | Hallin–Liška (2007) IC with second stability plateau |
 | `bai_ng_q(X, r)` | Bai–Ng (2007) residual-covariance rank statistics |
 | `amengual_watson_q(X, r, p)` | Amengual–Watson (2007) Bai–Ng IC on lagged-factor residuals |
+| `onatski_q_test(X, k0, k1)` / `onatski_q_select(X)` | Onatski (2009) dynamic factor test & sequential selector |
+| `ahn_horenstein(X, k_max)` / `onatski_ed(X, k_max)` | Ahn–Horenstein (2013) ER/GR and Onatski (2010) ED static factor selectors |
+| `ic_criteria_qfm(X, r_max, tau)` | Quantile factor model rank-minimization and check-loss IC1–IC3 |
 | `scree_plot_data(model)` | Data for scree plot |
 | `is_stationary(dfm)` | Check DFM factor VAR stationarity |
 | `common_variance_share(gdfm)` | GDFM common variance share per variable |
@@ -571,18 +578,20 @@ const _SER_GROUPS = [
         "APARCHModel", "CGARCHModel", "FIGARCHModel", "FIEGARCHModel", "IGARCHModel",
         "GarchMidasModel", "SVModel", "MGARCHModel"],
     "Factor / FAVAR" => ["FactorModel", "DynamicFactorModel",
-        "GeneralizedDynamicFactorModel", "QuantileFactorModel", "FHLZModel",
-        "FAVARModel", "BayesianFAVAR",
-        "StructuralDFM", "HallinLiskaResult", "BaiNgQResult", "AmengualWatsonResult"],
+        "GeneralizedDynamicFactorModel", "QuantileFactorModel", "QFMICResult",
+        "FHLZModel", "FAVARModel", "BayesianFAVAR",
+        "StructuralDFM", "HallinLiskaResult", "BaiNgQResult", "AmengualWatsonResult",
+        "OnatskiQTestResult", "AhnHorensteinResult", "OnatskiEDResult"],
     "ARIMA / ARDL / nonlinear / MIDAS / state space" => ["ARModel", "MAModel",
         "ARMAModel", "ARIMAModel", "SARIMAModel", "ARFIMAModel", "ARIMAOrderSelection",
         "GPHResult", "LocalWhittleResult", "ARDLModel", "ARDLLongRun", "ARDLBoundsTest",
         "NARDLModel", "NARDLMultipliers", "NARDLSymmetryTest", "PMGModel",
         "ThresholdModel", "STARModel", "MSRegModel", "HansenLinearityTest",
         "MidasModel", "StateSpaceModel", "SteadyStateKalman",
-        "RationalInattentionProblem", "SimsKalmanSolution"],
-    "SVAR identification" => ["ProxySVARResult", "SVARModel", "MaxShareResult",
+        "RationalInattentionProblem", "SimsKalmanSolution", "DynamicRISolution"],
+    "SVAR identification" => ["ProxySVARResult", "SVARModel", "SVARMAModel", "MaxShareResult",
         "SVECResult", "ICASVARResult", "NonGaussianMLResult", "LMSSVARResult",
+        "SVARHypothesisTest", "NonGaussianDiagnostics",
         "NonGaussianGMMResult",
         "MarkovSwitchingSVARResult", "GARCHSVARResult", "SmoothTransitionSVARResult",
         "ExternalVolatilitySVARResult", "LewisTVVResult", "SVSVARResult",
@@ -637,7 +646,8 @@ const _SER_GROUPS = [
         "ForecastSufficiency", "PathFloorConstraint", "FunctionConstraint"],
     "DSGE / HA / OLG / continuous time" => ["ModelSpec", "NamedEquation", "ModelIR",
         "IREquation", "IRDecl", "TimingInfo", "LinearDSGE", "DSGESolution",
-        "ABCDSystem", "PerturbationSolution", "ProjectionSolution", "PerfectForesightPath",
+        "ABCDSystem", "InvertibilityResult", "InnovationsRepresentation",
+        "PerturbationSolution", "ProjectionSolution", "PerfectForesightPath",
         "PrunedStateSpace", "DeterminacyMap", "KalmanSmootherResult",
         "DSGEEstimation", "OccBinConstraint", "OccBinRegime", "OccBinSolution",
         "OccBinIRF", "DSGEPrior", "DSGEStateSpace", "NonlinearStateSpace",
@@ -752,6 +762,8 @@ Specify, solve, simulate, and estimate Dynamic Stochastic General Equilibrium mo
 | `analytical_moments(sol; lags)` | Analytical variance and autocovariances |
 | `pruned_state_space(sol)` | Pruned state-space object (shared recursion + control map) |
 | `abcd_representation(sol; ...)` | Canonical `(A, B, C, D)` representation (`nstates`, `nobservables`) |
+| `poor_mans_invertibility(abcd)` / `is_invertible(abcd)` | FVRSW (2007) Poor Man's Invertibility & Komunjer–Ng (2011) transmission zeros |
+| `innovations_representation(abcd)` / `to_abcd(innov)` | Hansen–Sargent DARE Wold fundamental innovations representation |
 | `perfect_foresight(spec; T_periods, shock_path)` | Deterministic transition path |
 
 ### DSGE Estimation

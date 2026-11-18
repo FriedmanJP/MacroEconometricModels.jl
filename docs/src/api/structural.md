@@ -50,6 +50,8 @@ NormalityTestSuite
 ICASVARResult
 NonGaussianMLResult
 LMSSVARResult
+SVARHypothesisTest
+NonGaussianDiagnostics
 NonGaussianGMMResult
 LewisTVVResult
 MarkovSwitchingSVARResult
@@ -201,7 +203,7 @@ identify_nongaussian_ml
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["nongaussian/lms.jl"]
+Pages   = ["nongaussian/lms.jl", "nongaussian/hypothesis.jl"]
 Order   = [:function]
 Private = false
 ```

@@ -536,8 +536,16 @@ Bai–Ng (2007) fits a VAR on ``r`` static PCA factors and reads rank statistics
 ```@example factor
 bn = bai_ng_q(X, 4; p=1)
 aw = amengual_watson_q(X, 4, 1)
-(q_D1=bn.q_D1, q_D2=bn.q_D2, q_AW=aw.q)
+oq = onatski_q_test(X, 0, 3)
+q_on, _ = onatski_q_select(X; k_max=5, alpha=0.05)
+ah = ahn_horenstein(X, 6)
+oed = onatski_ed(X, 6)
+(q_D1=bn.q_D1, q_D2=bn.q_D2, q_AW=aw.q,
+ onatski_stat=round(oq.statistic; digits=3), onatski_p=round(oq.pvalue; digits=4),
+ q_onatski=q_on, r_ER=ah.r_er, r_GR=ah.r_gr, r_ED=oed.r_ed)
 ```
+
+For spectral dynamic rank testing, [`onatski_q_test`](@ref) implements Onatski (2009) using the maximum eigenvalue spacing ratio over disjoint Fourier-frequency blocks calibrated against exact complex Tracy–Widom ``TW_2`` quantiles, and [`onatski_q_select`](@ref) steps sequentially upward from ``k_0 = 0``. For static panels, [`ahn_horenstein`](@ref) computes the Ahn & Horenstein (2013) `ER` and `GR` criteria (including the mock zero-factor eigenvalue ``\hat\mu_0`` so factorless panels are identified as ``r = 0``), while [`onatski_ed`](@ref) implements Onatski's (2010) Edge Distribution (`ED`) iterative bulk-slope threshold estimator.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -1024,11 +1032,24 @@ report(qfm_med)
  upper_tail_r2 = round(mean(r2(qfm_tail)), digits=3))
 ```
 
+Passing `method=:smoothed_iqr` replaces the piecewise-linear check loss with a ``C^1`` convolution-smoothed surrogate (`kernel = :gaussian | :logistic | :epanechnikov`) minimized via `Optim.LBFGS()` with exact analytical gradients. Setting `se=:asymptotic` computes Chen, Dolado & Gonzalo (2021, Theorem 1) Powell/Hall–Sheather sandwich standard errors (with optional Newey–West HAC via `hac_bandwidth`), while `se=:bootstrap` draws wild multipliers and Procrustes-aligns each replicate. [`ic_criteria_qfm`](@ref) evaluates the rank-minimization estimator `r_rank` alongside Bai–Ng check-loss criteria `IC1`–`IC3`, and `estimate_qfm(X, :auto, tau)` automates rank selection.
+
+```@example factor
+qfm_smooth = estimate_qfm(X, 2, 0.5; method=:smoothed_iqr, kernel=:gaussian,
+                          se=:asymptotic, standardize=true, seed=42)
+ic_q = ic_criteria_qfm(X, 4, 0.5; standardize=true, warn_boundary=false)
+(se_loading_11 = round(qfm_smooth.se_loadings[1, 1]; digits=4),
+ r_rank = ic_q.r_rank, r_IC1 = ic_q.r_IC1)
+```
+
 ### Options (`estimate_qfm`)
 
 | Option | Default | Description |
 |---|---|---|
 | `tau` | `0.5` | Quantile level in ``(0, 1)`` |
+| `method` | `:iqr` | `:iqr` (exact interior-point alternating QR) or `:smoothed_iqr` (L-BFGS on kernel-smoothed check loss) |
+| `kernel` | `:gaussian` | Smoothing kernel (`:gaussian`, `:logistic`, or `:epanechnikov`) |
+| `se` | `:none` | Standard error estimator (`:none`, `:asymptotic`, or `:bootstrap`) |
 | `standardize` | `false` | Center and scale columns prior to estimation |
 | `robust_scale` | `true` | Use median and IQR (`false` uses mean and SD) when `standardize=true` |
 | `init` | `:pca` | Starting factor initializer (`:pca`, `:quantile_svd`, or `:random`) |
@@ -1156,6 +1177,15 @@ typeof(fm2)
 
 - Amengual, D., & Watson, M. W. (2007). Consistent Estimation of the Number of Dynamic Factors in a Large N and T Panel.
   *Journal of Business & Economic Statistics*, 25(1), 91-96. [DOI](https://doi.org/10.1198/073500106000000613)
+
+- Ahn, S. C., & Horenstein, A. R. (2013). Eigenvalue Ratio Test for the Number of Factors.
+  *Econometrica*, 81(3), 1203-1227. [DOI](https://doi.org/10.3982/ECTA8968)
+
+- Onatski, A. (2009). Testing Hypotheses About the Number of Factors in Large Factor Models.
+  *Econometrica*, 77(5), 1447-1479. [DOI](https://doi.org/10.3982/ECTA6964)
+
+- Onatski, A. (2010). Determining the Number of Factors from Empirical Distribution of Eigenvalues.
+  *Review of Economics and Statistics*, 92(4), 1004-1016. [DOI](https://doi.org/10.1162/REST_a_00043)
 
 - McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
   *Journal of Business & Economic Statistics*, 34(4), 574-589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)

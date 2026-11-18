@@ -8,8 +8,18 @@ Multi-equation models: VAR, VECM, BVAR (including time-varying-parameter and mix
 
 ```@docs
 VARModel
+SVARMAModel
 AbstractVARModel
 effective_nobs(::VARModel)
+```
+
+### Non-Fundamental SSVARMA
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["svarma/types.jl", "svarma/schur_filter.jl", "svarma/blaschke.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---
@@ -69,6 +79,7 @@ FactorModel
 DynamicFactorModel
 GeneralizedDynamicFactorModel
 QuantileFactorModel
+QFMICResult
 FHLZModel
 FactorForecast
 AbstractFactorModel
@@ -378,11 +389,14 @@ Private = false
 HallinLiskaResult
 BaiNgQResult
 AmengualWatsonResult
+OnatskiQTestResult
+AhnHorensteinResult
+OnatskiEDResult
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["factor/generalized.jl", "factor/fhlz.jl"]
+Pages   = ["factor/generalized.jl", "factor/fhlz.jl", "factor/selection.jl"]
 Order   = [:function]
 Private = false
 ```

@@ -600,6 +600,20 @@ report(sys)
  irf_agree = maximum(abs, irf(sys, 10).values[:, :, :] .- irf(sol, 10).values[:, 1:2, :]))
 ```
 
+To test whether a VAR in ``y_t`` recovers the underlying structural shocks ``w_t``, [`poor_mans_invertibility`](@ref) evaluates the Fernández-Villaverde, Rubio-Ramírez, Sargent & Watson (2007) condition ``\max_i |\lambda_i(A - B D^{-1} C)| < 1`` for square systems (and Komunjer & Ng 2011 Rosenbrock transmission zeros when ``k > m`` or ``D`` is rank-deficient). When invertibility fails, [`innovations_representation`](@ref) solves the discrete algebraic Riccati equation (`_solve_dare`) for the Wold fundamental innovations system ``(\hat A = A, K, C, \Sigma_u)``, which converts directly back to a fundamental [`ABCDSystem`](@ref) via [`to_abcd`](@ref).
+
+```@example dsge_linear
+inv_res = poor_mans_invertibility(sys)
+report(inv_res)
+innov = innovations_representation(sys)
+report(innov)
+sys_wold = to_abcd(innov)
+(invertible = is_invertible(sys),
+ max_modulus = round(inv_res.max_modulus; digits=4),
+ dare_resid = round(innov.dare_residual; digits=12),
+ wold_invertible = is_invertible(sys_wold))
+```
+
 ---
 
 ## Complete Example
@@ -672,6 +686,9 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
+
+- Komunjer, I., & Ng, S. (2011). Dynamic Identification of Dynamic Stochastic General Equilibrium Models.
+  *Econometrica*, 79(6), 1995--2032. [DOI](https://doi.org/10.3982/ECTA8916)
 
 - Lubik, T. A., & Schorfheide, F. (2004). Testing for Indeterminacy: An Application to U.S. Monetary Policy.
   *American Economic Review*, 94(1), 190--217. [DOI](https://doi.org/10.1257/000282804322970760)

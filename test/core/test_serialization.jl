@@ -214,6 +214,19 @@ end
         fhlz = estimate_gdfm_fhlz(randn(Xoshiro(902), 80, 12), 2; n_perm=5, p_max=2, seed=1)
         @test fhlz isa FHLZModel
         _cover(fhlz)
+        qfm_ic = ic_criteria_qfm(X, 2, 0.5; max_iter=5, n_starts=1, seed=1)
+        @test qfm_ic isa QFMICResult
+        _cover(qfm_ic)
+        X_sel = randn(Xoshiro(895), 80, 10)
+        oq = onatski_q_test(X_sel, 0, 2)
+        @test oq isa OnatskiQTestResult
+        _cover(oq)
+        ah = ahn_horenstein(X_sel, 3)
+        @test ah isa AhnHorensteinResult
+        _cover(ah)
+        oed = onatski_ed(X_sel, 3)
+        @test oed isa OnatskiEDResult
+        _cover(oed)
     end
 
     @testset "ARIMA / ARDL / nonlinear / MIDAS / state space" begin
@@ -286,6 +299,11 @@ end
         @test sol_ri isa SimsKalmanSolution
         sol_ri2 = _assert_roundtrip(sol_ri)
         _assert_report_equal(sol_ri, sol_ri2)
+        dyn_ri = solve_ri_transition(prob_ri, [0.4;;]; T_path=12)
+        @test dyn_ri isa DynamicRISolution
+        dyn_ri2 = _cover(dyn_ri)
+        @test dyn_ri2.T_path == dyn_ri.T_path
+        @test dyn_ri2.Sigma_post_path == dyn_ri.Sigma_post_path
     end
 
     @testset "SteadyStateKalman" begin
@@ -1103,5 +1121,26 @@ end
         @test loaded isa LMSSVARResult
         @test loaded.loglik == res_lms.loglik
     end
+
+    hyp_lms = recursiveness_hypothesis(2)
+    ht_lms = test_svar_hypothesis(res_lms, hyp_lms; method=:wald)
+    @test ht_lms isa SVARHypothesisTest
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "SVARHypothesisTest")
+    ht_lms2 = _cover(ht_lms)
+    @test ht_lms2.statistic == ht_lms.statistic
+
+    diag_lms = diagnose_nongaussian_svar(res_lms; lags=2)
+    @test diag_lms isa NonGaussianDiagnostics
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "NonGaussianDiagnostics")
+    diag_lms2 = _cover(diag_lms)
+    @test diag_lms2.jb_stats == diag_lms.jb_stats
+
+    sim_ma = dgp_ssvarma(Xoshiro(905); T=80)
+    m_svarma = SVARMAModel(sim_ma.Y, sim_ma.Phi, sim_ma.Theta, sim_ma.C)
+    @test m_svarma isa SVARMAModel
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "SVARMAModel")
+    m_svarma2 = _cover(m_svarma)
+    @test m_svarma2.shocks == m_svarma.shocks
+    @test m_svarma2.regime === m_svarma.regime
 end
 

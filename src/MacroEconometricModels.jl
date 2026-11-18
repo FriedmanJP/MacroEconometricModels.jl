@@ -937,7 +937,7 @@ export spanning_diagnostic, forecast_sufficiency
 # Rational Inattention (Sims 2003 steady-state & Afrouzi-Yang 2021 dynamic LQG Kalman filter)
 export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
 export DynamicRISolution, solve_ri_transition
-export to_statespace, to_abcd
+export to_statespace
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

@@ -330,6 +330,23 @@ report(ri_sol)
  loss = round(ri_sol.expected_loss, digits=4))
 ```
 
+### Dynamic Transition Path and Joint State-Space Dynamics
+
+When initial uncertainty ``\Sigma_{1|0} = \Sigma_{\text{init}}`` sits away from the steady state (for instance after a regime shift or uncertainty shock), [`solve_ri_transition`](@ref) solves Afrouzi & Yang's (2021) dynamic forward–backward Information Euler system anchored at the terminal steady state, returning [`DynamicRISolution`](@ref). From the steady-state [`SimsKalmanSolution`](@ref), [`to_statespace`](@ref) and [`to_abcd`](@ref) build the joint ``2n``-dimensional state-space law of motion over true states ``x_t`` and rational expectations ``\hat{x}_{t|t}`` driven by orthogonal fundamental shocks ``w_t`` and endogenous processing noise ``\tilde{\psi}_t``, while [`irf`](@ref), [`fevd`](@ref), and [`simulate`](@ref) compute sluggish inertial action responses and the processing-noise variance share (Luo 2008).
+
+```@example ss
+dyn_ri = solve_ri_transition(prob_ri, [0.8 0.0; 0.0 0.5]; T_path=40)
+report(dyn_ri)
+irf_ri = irf(ri_sol, 16; observables=:actions)
+fevd_ri = fevd(ri_sol, 16; observables=:actions)
+sim_ri = simulate(ri_sol, 120; seed=42)
+m_shocks = size(prob_ri.B, 2)
+(init_bits = round(dyn_ri.capacity_bits_path[1]; digits=4),
+ term_bits = round(dyn_ri.capacity_bits_path[end]; digits=4),
+ ri_noise_share_h1 = round(sum(fevd_ri.proportions[1, (m_shocks + 1):end, 1]); digits=4),
+ sim_T = size(sim_ri.actions, 1))
+```
+
 ---
 
 ## Complete Example
@@ -383,6 +400,7 @@ refs(m)
 - Anderson, B. D. O., & Moore, J. B. (1979). *Optimal Filtering*. Prentice-Hall. ISBN 978-0136381224.
 - Durbin, J. and Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*, 2nd ed. Oxford University Press. [doi:10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
 - Harvey, A. C. (1989). *Forecasting, Structural Time Series Models and the Kalman Filter*. Cambridge University Press. [doi:10.1017/CBO9781107049994](https://doi.org/10.1017/CBO9781107049994)
+- Luo, Y. (2008). Consumption Dynamics under Information Processing Constraints. *Review of Economic Dynamics*, 11(2), 366--385. [doi:10.1016/j.red.2007.07.003](https://doi.org/10.1016/j.red.2007.07.003)
 - Pappas, T., Laub, A. J., & Sandell, N. R. (1980). On the Numerical Solution of the Discrete-Time Algebraic Riccati Equation. *IEEE Transactions on Automatic Control*, 25(4), 631–641. [doi:10.1109/TAC.1980.1102434](https://doi.org/10.1109/TAC.1980.1102434)
 - Sims, C. A. (2003). Implications of Rational Inattention. *Journal of Monetary Economics*, 50(3), 665–690. [doi:10.1016/S0304-3932(03)00029-1](https://doi.org/10.1016/S0304-3932(03)00029-1)
 - Van Dooren, P. (1981). A Generalized Eigenvalue Approach for Solving Riccati Equations. *SIAM Journal on Scientific and Statistical Computing*, 2(2), 121–135. [doi:10.1137/0902010](https://doi.org/10.1137/0902010)

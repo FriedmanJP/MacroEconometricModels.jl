@@ -275,3 +275,7 @@ end
 function reproduce(::RILogitModel)
     _needs_source_report("RILogitModel", "estimate_ri_logit(choices, menu_attributes, env_id; seed=N)")
 end
+
+function reproduce(::SVARHypothesisTest)
+    _needs_source_report("SVARHypothesisTest", "test_svar_hypothesis(res, hyp; seed=N)")
+end

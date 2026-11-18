@@ -21,6 +21,7 @@ var_hd
 ```@docs
 dgp_nongaussian_var
 dgp_heteroskedastic_var
+dgp_ssvarma
 ```
 
 ---

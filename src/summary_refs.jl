@@ -2013,6 +2013,37 @@ const _REFERENCES = Dict{Symbol, _RefEntry}(
         title="Rational Inattention, Optimal Consideration Sets, and Stochastic Choice",
         journal="The Review of Economic Studies", volume="86", issue="3", pages="1061--1094",
         doi="10.1093/restud/rdy037", isbn="", publisher="", entry_type=:article),
+    # --- Wave-3 v1.1.0 (#885, #886, #895, #903, #905, #910, #911, #918, #919) ---
+    :onatski2009 => (key=:onatski2009,
+        authors="Onatski, Alexei", year=2009,
+        title="Testing Hypotheses About the Number of Factors in Large Factor Models",
+        journal="Econometrica", volume="77", issue="5", pages="1447--1479",
+        doi="10.3982/ECTA6964", isbn="", publisher="", entry_type=:article),
+    :onatski2010 => (key=:onatski2010,
+        authors="Onatski, Alexei", year=2010,
+        title="Determining the Number of Factors from Empirical Distribution of Eigenvalues",
+        journal="Review of Economics and Statistics", volume="92", issue="4", pages="1004--1016",
+        doi="10.1162/REST_a_00043", isbn="", publisher="", entry_type=:article),
+    :ahn_horenstein2013 => (key=:ahn_horenstein2013,
+        authors="Ahn, Seung C. and Horenstein, Alex R.", year=2013,
+        title="Eigenvalue Ratio Test for the Number of Factors",
+        journal="Econometrica", volume="81", issue="3", pages="1203--1227",
+        doi="10.3982/ECTA8968", isbn="", publisher="", entry_type=:article),
+    :lippi_reichlin1994 => (key=:lippi_reichlin1994,
+        authors="Lippi, Marco and Reichlin, Lucrezia", year=1994,
+        title="VAR Analysis, Nonfundamental Representations, Blaschke Matrices",
+        journal="Journal of Econometrics", volume="63", issue="1", pages="307--325",
+        doi="10.1016/0304-4076(93)01570-C", isbn="", publisher="", entry_type=:article),
+    :komunjer_ng2011 => (key=:komunjer_ng2011,
+        authors="Komunjer, Ivana and Ng, Serena", year=2011,
+        title="Dynamic Identification of Dynamic Stochastic General Equilibrium Models",
+        journal="Econometrica", volume="79", issue="6", pages="1995--2032",
+        doi="10.3982/ECTA8916", isbn="", publisher="", entry_type=:article),
+    :luo2008 => (key=:luo2008,
+        authors="Luo, Yulei", year=2008,
+        title="Consumption Dynamics under Information Processing Constraints",
+        journal="Review of Economic Dynamics", volume="11", issue="2", pages="366--385",
+        doi="10.1016/j.red.2007.07.003", isbn="", publisher="", entry_type=:article),
 )
 
 # --- Type/method → reference keys mapping ---
@@ -2548,6 +2579,33 @@ const _TYPE_REFS = Dict{Symbol, Vector{Symbol}}(
     :solve_ri_discrete => [:matejka_mckay2015, :caplin_dean_leahy2019],
     :ri_iia_diagnostic => [:matejka_mckay2015],
     :estimate_ri_logit => [:matejka_mckay2015, :caplin_dean_leahy2019],
+    # Wave-3 v1.1.0 (#885, #886, #895, #903, #905, #910, #911, #918, #919)
+    :QFMICResult => [:chen_dolado_gonzalo2021, :bai_ng2002],
+    :ic_criteria_qfm => [:chen_dolado_gonzalo2021, :bai_ng2002],
+    :OnatskiQTestResult => [:onatski2009],
+    :onatski_q_test => [:onatski2009],
+    :onatski_q_select => [:onatski2009],
+    :AhnHorensteinResult => [:ahn_horenstein2013],
+    :ahn_horenstein => [:ahn_horenstein2013],
+    :OnatskiEDResult => [:onatski2010],
+    :onatski_ed => [:onatski2010],
+    :SVARHypothesisTest => [:lanne_meitz_saikkonen2017],
+    :NonGaussianDiagnostics => [:lanne_meitz_saikkonen2017, :jarque_bera1980],
+    :test_svar_hypothesis => [:lanne_meitz_saikkonen2017],
+    :diagnose_nongaussian_svar => [:lanne_meitz_saikkonen2017, :jarque_bera1980],
+    :SVARMAModel => [:gourieroux_monfort_renne2020, :lippi_reichlin1994],
+    :ssvarma_filter_shocks => [:gourieroux_monfort_renne2020],
+    :fundamentalness_regime => [:gourieroux_monfort_renne2020, :lippi_reichlin1994],
+    :blaschke_representations => [:lippi_reichlin1994, :gourieroux_monfort_renne2020],
+    :InvertibilityResult => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007, :komunjer_ng2011],
+    :poor_mans_invertibility => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007, :komunjer_ng2011],
+    :is_invertible => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007, :komunjer_ng2011],
+    :InnovationsRepresentation => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :innovations_representation => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007],
+    :DynamicRISolution => [:afrouzi_yang2021, :sims2003],
+    :solve_ri_transition => [:afrouzi_yang2021, :sims2003],
+    :to_statespace => [:sims2003, :luo2008],
+    :to_abcd => [:fernandez_villaverde_rubio_ramirez_sargent_watson2007, :sims2003],
 )
 
 # ICA method → additional ref keys (appended to ICASVARResult base refs)
@@ -3135,6 +3193,18 @@ refs(io::IO, ::SimsKalmanSolution; kw...) = refs(io, _TYPE_REFS[:SimsKalmanSolut
 refs(io::IO, ::RIDiscreteChoiceSolution; kw...) = refs(io, _TYPE_REFS[:RIDiscreteChoiceSolution]; kw...)
 refs(io::IO, ::RIIIADiagnostic; kw...) = refs(io, _TYPE_REFS[:RIIIADiagnostic]; kw...)
 refs(io::IO, ::RILogitModel; kw...) = refs(io, _TYPE_REFS[:RILogitModel]; kw...)
+
+# --- Wave-3 v1.1.0 (#886, #895, #903, #905, #910, #911, #918) ---
+refs(io::IO, ::QFMICResult; kw...) = refs(io, _TYPE_REFS[:QFMICResult]; kw...)
+refs(io::IO, ::OnatskiQTestResult; kw...) = refs(io, _TYPE_REFS[:OnatskiQTestResult]; kw...)
+refs(io::IO, ::AhnHorensteinResult; kw...) = refs(io, _TYPE_REFS[:AhnHorensteinResult]; kw...)
+refs(io::IO, ::OnatskiEDResult; kw...) = refs(io, _TYPE_REFS[:OnatskiEDResult]; kw...)
+refs(io::IO, ::SVARHypothesisTest; kw...) = refs(io, _TYPE_REFS[:SVARHypothesisTest]; kw...)
+refs(io::IO, ::NonGaussianDiagnostics; kw...) = refs(io, _TYPE_REFS[:NonGaussianDiagnostics]; kw...)
+refs(io::IO, ::SVARMAModel; kw...) = refs(io, _TYPE_REFS[:SVARMAModel]; kw...)
+refs(io::IO, ::InvertibilityResult; kw...) = refs(io, _TYPE_REFS[:InvertibilityResult]; kw...)
+refs(io::IO, ::InnovationsRepresentation; kw...) = refs(io, _TYPE_REFS[:InnovationsRepresentation]; kw...)
+refs(io::IO, ::DynamicRISolution; kw...) = refs(io, _TYPE_REFS[:DynamicRISolution]; kw...)
 
 # --- Convenience: stdout fallback ---
 # One-arg form prints to stdout (matching report()), so bare `refs(m)` in the

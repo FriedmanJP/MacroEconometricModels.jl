@@ -229,7 +229,7 @@ where:
 - ``K`` is the ``n \\times k`` steady-state Kalman gain ensuring ``\\rho(A - K C) \\le 1``
 - ``\\Sigma_u`` is the ``k \\times k`` Wold one-step-ahead innovation covariance
 
-Solves the DARE via [`_solve_dare`](@ref) using a `2n × 2n` generalized real Schur
+Solves the DARE via `_solve_dare` using a `2n × 2n` generalized real Schur
 symplectic pencil or Van Dooren QR-compressed `(2n+k)` extended pencil when `D * D'`
 is singular or ill-conditioned.
 

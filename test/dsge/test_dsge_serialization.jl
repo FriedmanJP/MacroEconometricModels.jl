@@ -2124,3 +2124,40 @@ end
         _assert_report_equal(sys, sys3)
     end
 end
+
+@testset "DSER-12 InvertibilityResult & InnovationsRepresentation round-trip (#910, #911)" begin
+    sys_sq = ABCDSystem([0.5;;], [1.0;;], [0.2;;], [1.0;;])
+    inv_sq = poor_mans_invertibility(sys_sq)
+    @test inv_sq isa InvertibilityResult
+    @test !isempty(inv_sq.var_lag_matrices)
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "InvertibilityResult")
+    @test _from_serializable_is_generic(InvertibilityResult)
+    inv_sq2 = _assert_roundtrip(inv_sq)
+    _assert_report_equal(inv_sq, inv_sq2)
+    @test inv_sq2.invertible == inv_sq.invertible
+    @test inv_sq2.var_lag_matrices == inv_sq.var_lag_matrices
+
+    sys_tall = ABCDSystem([0.5;;], [1.0;;], [1.0; 0.3;;], [1.0; 0.0;;])
+    inv_tall = poor_mans_invertibility(sys_tall)
+    @test inv_tall isa InvertibilityResult
+    @test isempty(inv_tall.var_lag_matrices)
+    inv_tall2 = _assert_roundtrip(inv_tall)
+    _assert_report_equal(inv_tall, inv_tall2)
+
+    sys_nf = ABCDSystem([0.5;;], [1.0;;], [2.0;;], [1.0;;])
+    innov = innovations_representation(sys_nf)
+    @test innov isa InnovationsRepresentation
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "InnovationsRepresentation")
+    @test _from_serializable_is_generic(InnovationsRepresentation)
+    innov2 = _assert_roundtrip(innov)
+    _assert_report_equal(innov, innov2)
+    @test innov2.K == innov.K && innov2.Sigma_u == innov.Sigma_u
+    mktempdir() do d
+        p = joinpath(d, "innov.jld2")
+        save_model(innov, p)
+        innov3 = load_model(p)
+        @test innov3 isa InnovationsRepresentation
+        @test innov3.K == innov.K
+        _assert_report_equal(innov, innov3)
+    end
+end

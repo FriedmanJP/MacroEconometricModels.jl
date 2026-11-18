@@ -77,11 +77,13 @@ max_euler_error
 
 ```@docs
 ABCDSystem
+InvertibilityResult
+InnovationsRepresentation
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["dsge/abcd.jl"]
+Pages   = ["dsge/abcd.jl", "dsge/abcd_riccati.jl"]
 Order   = [:function]
 Private = false
 ```

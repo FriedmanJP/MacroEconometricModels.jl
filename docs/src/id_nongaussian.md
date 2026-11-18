@@ -589,6 +589,47 @@ lms_full = estimate_lms_svar(model; distributions=:student_t, method=:full_ml,
  loglik_full = round(lms_full.loglik, digits=2))
 ```
 
+### Structural Hypothesis Testing & Shock Diagnostics (LMS §4.6, §5.2)
+
+[`diagnose_nongaussian_svar`](@ref) evaluates per-shock Jarque–Bera normality, serial correlation, ARCH clustering, and pairwise independence diagnostics (issuing a `weak_id_warning` when two or more shocks appear Gaussian). Given an `LMSSVARResult`, hypothesis builders (`recursiveness_hypothesis`, `impact_zero_hypothesis`, `impact_linear_hypothesis`, `long_run_hypothesis`, `horizon_irf_hypothesis`, `mixed_svar_hypothesis`, `nonlinear_svar_hypothesis`) enforce diagonal interiority (`B \in \mathcal{B}`, rejecting ``B_{ii} = 0``) while [`test_svar_hypothesis`](@ref) evaluates Wald (propagating joint ``(\Pi, B)`` covariance), Likelihood Ratio (`:lr`), or Lagrange Multiplier (`:lm`) tests with optional residual bootstrap (`bootstrap = :iid | :wild`).
+
+```@example id_ng
+diag_lms = diagnose_nongaussian_svar(lms; lags=4)
+report(diag_lms)
+hyp_rec = recursiveness_hypothesis(3)
+ht_wald = test_svar_hypothesis(lms, hyp_rec; method=:wald)
+report(ht_wald)
+```
+
+---
+
+## Non-Fundamental SSVARMA (Gouriéroux, Monfort & Renne 2020)
+
+When observables contain foresight, news, or measurement lags, the structural VARMA moving-average polynomial ``\Theta(L) = I + \Theta_1 L + \dots + \Theta_q L^q`` has companion eigenvalues inside and/or outside the unit circle:
+
+```math
+y_t = \mu + \sum_{k=1}^{p} \Phi_k y_{t-k} + \varepsilon_t + \sum_{j=1}^{q} \Theta_j \varepsilon_{t-j}, \qquad \varepsilon_t = C \eta_t
+```
+
+where:
+- ``y_t \in \mathbb{R}^n`` is the observed endogenous vector at date ``t``,
+- ``\Phi_k`` are ``n \times n`` autoregressive coefficient matrices,
+- ``\Theta_j`` are ``n \times n`` moving-average matrices whose companion matrix ``F_{\text{MA}}`` separates causal (`|\lambda_i| < 1`) from anti-causal (`|\lambda_i| > 1`) roots,
+- ``C`` is the nonsingular impact matrix mapping mutually independent unit-variance non-Gaussian shocks ``\eta_t`` to reduced-form innovations ``\varepsilon_t``.
+
+[`SVARMAModel`](@ref) stores non-fundamental VARMA systems alongside [`fundamentalness_regime`](@ref) (classifying Gouriéroux, Monfort & Renne 2020 Fig. 6 regions `I–V` for bivariate MA(1)), [`ssvarma_filter_shocks`](@ref) recovers ``\hat{\eta}_t`` via ordered real Schur (`ordschur`) forward/backward recursions with the exact log-Jacobian, [`blaschke_representations`](@ref) enumerates second-moment-equivalent Blaschke twins (Lippi & Reichlin 1994), and [`dgp_ssvarma`](@ref) simulates benchmark panels.
+
+```@example id_ng
+sim_sv = dgp_ssvarma(MersenneTwister(42); T=200)
+sv_mod = SVARMAModel(sim_sv.Y, sim_sv.Phi, sim_sv.Theta, sim_sv.C)
+report(sv_mod)
+twins = blaschke_representations(sim_sv.Theta, sim_sv.C)
+(regime = sv_mod.regime,
+ gmr_region = sv_mod.gmr_region,
+ n_twins = length(twins),
+ interior_shock_err = round(maximum(abs, sv_mod.shocks[10:end-10, :] .- sim_sv.shocks[(sim_sv.p + 10):end-10, :]); digits=8))
+```
+
 ---
 
 ## Common Pitfalls
@@ -652,6 +693,9 @@ lms_full = estimate_lms_svar(model; distributions=:student_t, method=:full_ml,
 
 - Lewis, Daniel J. 2025. "Identification Based on Higher Moments in Macroeconometrics."
   *Annual Review of Economics* 17: 665--693. [DOI](https://doi.org/10.1146/annurev-economics-070124-051419)
+
+- Lippi, Marco, and Lucrezia Reichlin. 1994. "VAR Analysis, Nonfundamental Representations, Blaschke Matrices."
+  *Journal of Econometrics* 63 (1): 307--325. [DOI](https://doi.org/10.1016/0304-4076(93)01570-C)
 
 - Matteson, David S., and Ruey S. Tsay. 2017. "Independent Component Analysis via Distance Covariance."
   *Journal of the American Statistical Association* 112 (518): 623--637. [DOI](https://doi.org/10.1080/01621459.2016.1150851)
