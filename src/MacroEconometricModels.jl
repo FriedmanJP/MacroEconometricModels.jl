@@ -496,6 +496,9 @@ include("reg/anderson_rubin.jl")   # T244 (#343): weak-IV-robust AR test + confi
 # _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
 include("ardl/pmg.jl")
 
+# Panel Quantile Regression with Interactive Quantile Factor Effects (QFM-06, #888)
+include("factor/quantile_panel.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -1175,6 +1178,7 @@ export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
 export QuantileFactorModel, QFMICResult, estimate_qfm, ic_criteria_qfm
 export QuantileFactorGrid, QFMSpanningResult, QFMLoadingConstancyTest
 export test_qfm_spanning, test_qfm_loading_constancy
+export QuantileFactorPanelModel, estimate_xtqreg_factors
 
 # =============================================================================
 # Exports - Utility Functions
