@@ -1077,6 +1077,243 @@ using Random
         end
     end
 
+    # =========================================================================
+    # Band-Pass GDFM, Eurocoin Real-Time Indicator & Spectral FEVD (#897)
+    # =========================================================================
+
+    @testset "_gdfmbp_gamma_band & bandpass_gdfm partition additivity (#897)" begin
+        rng = Random.Xoshiro(89701)
+        X_even = dgp_dynamic_factors(rng; N=14, T=160, idio_sd=0.25).X .+ 2.5
+        X_odd = X_even[1:159, :]
+
+        for (X_case, label) in ((X_even, "even"), (X_odd, "odd"))
+            for spec in (:lag_window, :smoothed_periodogram), std_flag in (true, false)
+                gdfm = estimate_gdfm(X_case, 2; spectral=spec, standardize=std_flag)
+                ω0 = π / 4
+                bp_lo = bandpass_gdfm(gdfm, (0.0, ω0))
+                bp_hi = bandpass_gdfm(gdfm, (ω0, π))
+
+                @test bp_lo isa BandPassGDFMResult{Float64}
+                @test size(bp_lo.common_twosided) == size(gdfm.X)
+                @test size(bp_lo.common_onesided) == size(gdfm.X)
+                @test length(bp_lo.variance_share) == size(gdfm.X, 2)
+                @test bp_lo.band == (0.0, ω0)
+                @test bp_lo.r == gdfm.r
+                @test bp_lo.varnames == gdfm.varnames
+                @test all(s -> 0.0 <= s <= 1.0, bp_lo.variance_share)
+                @test all(s -> 0.0 <= s <= 1.0, bp_hi.variance_share)
+
+                # Exact partition additivity: (0, ω₀) + (ω₀, π) == common_component
+                @test maximum(abs, (bp_lo.common_twosided .+ bp_hi.common_twosided) .- gdfm.common_component) < 1e-11
+                @test maximum(abs, (bp_lo.variance_share .+ bp_hi.variance_share) .- 1.0) < 1e-11
+                if spec === :lag_window || label == "even"
+                    @test maximum(abs, (bp_lo.common_onesided .+ bp_hi.common_onesided) .- gdfm.common_component_onesided) < 1e-11
+                end
+            end
+        end
+
+        # Direct _gdfmbp_gamma_band partition additivity & match with _gamma_from_spectrum
+        gdfm_lw = estimate_gdfm(X_even, 2; spectral=:lag_window, standardize=true)
+        for k in 0:2
+            G_full = MacroEconometricModels._gdfmbp_gamma_band(
+                gdfm_lw.spectral_density_chi, gdfm_lw.frequencies, k, 0.0, π)
+            G_ref = MacroEconometricModels._gamma_from_spectrum(
+                gdfm_lw.spectral_density_chi, gdfm_lw.frequencies, k)
+            @test maximum(abs, G_full - G_ref) < 1e-11
+            G_1 = MacroEconometricModels._gdfmbp_gamma_band(
+                gdfm_lw.spectral_density_chi, gdfm_lw.frequencies, k, 0.0, π / 3)
+            G_2 = MacroEconometricModels._gdfmbp_gamma_band(
+                gdfm_lw.spectral_density_chi, gdfm_lw.frequencies, k, π / 3, π)
+            @test maximum(abs, (G_1 + G_2) - G_full) < 1e-12
+        end
+
+        # Frequency selectivity on synthetic low + high frequency factor panel
+        T_sel, N_sel = 240, 20
+        t_grid = collect(1.0:T_sel)
+        rng_sel = Random.Xoshiro(89702)
+        f_slow = sin.(2π .* t_grid ./ 24.0) .+ 0.4 .* cos.(2π .* t_grid ./ 36.0)
+        f_fast = sin.(2π .* t_grid ./ 3.0) .+ 0.3 .* cos.(2π .* t_grid ./ 2.5)
+        L_slow = 0.8 .+ 0.4 .* rand(rng_sel, N_sel)
+        L_fast = (-0.5) .+ rand(rng_sel, N_sel)
+        L_fast[1] = 1.2
+        X_freq = f_slow * L_slow' .+ f_fast * L_fast' .+ 0.1 .* randn(rng_sel, T_sel, N_sel)
+        gdfm_freq = estimate_gdfm(X_freq, 2; spectral=:lag_window, bandwidth=16)
+        bp_low = bandpass_gdfm(gdfm_freq, (0.0, π / 6); r=3)
+        bp_high = bandpass_gdfm(gdfm_freq, (π / 2, π); r=3)
+        @test bp_low.r == 3
+        @test cor(bp_low.common_twosided[25:end-25, 1], f_slow[25:end-25]) > 0.90
+        @test mean(abs2, bp_low.common_twosided[:, 1]) > 0.1
+        @test mean(bp_high.variance_share) > 0.1
+
+        # Display, report, RSER-01 field constructor, Float32 & validation errors
+        buf = IOBuffer()
+        show(buf, bp_low)
+        @test occursin("Band-Pass GDFM Decomposition", String(take!(buf)))
+        report(bp_low)
+        vals = ntuple(i -> getfield(bp_low, fieldnames(BandPassGDFMResult)[i]), fieldcount(BandPassGDFMResult))
+        @test BandPassGDFMResult{Float64}(vals...).variance_share == bp_low.variance_share
+
+        gdfm32 = estimate_gdfm(Float32.(X_even), 2)
+        bp32 = bandpass_gdfm(gdfm32, (0.0f0, Float32(π / 4)))
+        @test bp32 isa BandPassGDFMResult{Float32}
+
+        @test_throws ArgumentError bandpass_gdfm(gdfm_lw, (-0.1, 1.0))
+        @test_throws ArgumentError bandpass_gdfm(gdfm_lw, (1.0, 0.5))
+        @test_throws ArgumentError bandpass_gdfm(gdfm_lw, (0.0, π + 0.1))
+        @test_throws ArgumentError bandpass_gdfm(gdfm_lw, (0.0, 1.0); r=1)
+        @test_throws ArgumentError bandpass_gdfm(gdfm_lw, (0.0, 1.0); r=100)
+    end
+
+    @testset "Eurocoin real-time indicator (Altissimo et al. 2010) (#897)" begin
+        rng = Random.Xoshiro(89703)
+        T_obs, N = 240, 25
+        t_grid = collect(1.0:T_obs)
+
+        # Factor 1: smooth medium/long-run cycle (ω ≈ 2π/20 < π/6)
+        # Factor 2: high-frequency noise oscillation (ω ≈ 2π/3 > π/6)
+        phi_low = 0.85
+        u_low = randn(rng, T_obs)
+        f_smooth = sin.(2π .* t_grid ./ 22.0) .+ 0.6 .* cos.(2π .* t_grid ./ 35.0)
+        for t in 2:T_obs
+            f_smooth[t] += 0.25 * (phi_low * (f_smooth[t - 1] - sin(2π * (t - 1) / 22.0)) + 0.3 * u_low[t])
+        end
+        f_hf = 1.4 .* sin.(2π .* t_grid ./ 3.0) .+ 0.7 .* cos.(2π .* t_grid ./ 2.5)
+
+        lam_smooth = 0.7 .+ 0.6 .* rand(rng, N)
+        lam_hf = randn(rng, N)
+        lam_hf[1:2] .= [1.2, -1.0]
+        idio = 0.2 .* randn(rng, T_obs, N)
+
+        X_ec = f_smooth * lam_smooth' .+ f_hf * lam_hf' .+ idio .+ 1.5
+        target_smooth_true = 1.0 .+ 1.2 .* f_smooth
+        target_hf_true = 1.1 .* f_hf
+        target_obs = target_smooth_true .+ target_hf_true .+ 0.15 .* randn(rng, T_obs)
+
+        ec = eurocoin_indicator(X_ec, target_obs, 2; cutoff=π / 6)
+        @test ec isa EurocoinResult{Float64}
+        @test length(ec.indicator) == T_obs
+        @test length(ec.target_lowpass) == T_obs
+        @test length(ec.weights) == N
+        @test ec.cutoff ≈ π / 6
+        @test ec.q == 2
+        @test ec.r == 2
+        @test 0.0 <= ec.r2 <= 1.0
+        @test length(ec) == T_obs
+        @test ec[end] == ec.indicator[end]
+        @test ec[1:5] == ec.indicator[1:5]
+
+        # Exact linear contemporaneous representation from raw demeaned panel
+        X_c = X_ec .- mean(X_ec; dims=1)
+        @test maximum(abs, (X_c * ec.weights .+ mean(target_obs)) .- ec.indicator) < 1e-11
+
+        # High tracking correlation (> 0.90) with both target_lowpass and true smooth component
+        @test cor(ec.indicator, ec.target_lowpass) > 0.90
+        @test cor(ec.indicator, target_smooth_true) > 0.90
+
+        # End-of-sample high-frequency variance suppression > 85%
+        end_idx = (T_obs - 35):T_obs
+        hf_resid_ec = ec.indicator[end_idx] .- target_smooth_true[end_idx]
+        hf_resid_raw = target_obs[end_idx] .- target_smooth_true[end_idx]
+        suppression = 1.0 - var(hf_resid_ec) / var(hf_resid_raw)
+        @test suppression > 0.85
+
+        # Unstandardized option, custom static rank r, Float32, show/report, constructor
+        ec_unstd = eurocoin_indicator(X_ec, target_obs, 2; cutoff=π / 6, r=4, standardize=false, kernel=:parzen)
+        @test ec_unstd.r == 4
+        @test cor(ec_unstd.indicator, ec_unstd.target_lowpass) > 0.90
+
+        ec32 = eurocoin_indicator(Float32.(X_ec), Float32.(target_obs), 2; cutoff=Float32(π / 6))
+        @test ec32 isa EurocoinResult{Float32}
+
+        buf = IOBuffer()
+        show(buf, ec)
+        @test occursin("Eurocoin Real-Time Low-Frequency Indicator", String(take!(buf)))
+        report(ec)
+        vals = ntuple(i -> getfield(ec, fieldnames(EurocoinResult)[i]), fieldcount(EurocoinResult))
+        @test EurocoinResult{Float64}(vals...).r2 == ec.r2
+
+        # Validation checks
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs[1:end-1], 2)
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs, 0)
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs, 2; cutoff=0.0)
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs, 2; cutoff=π)
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs, 2; r=1)
+        @test_throws ArgumentError eurocoin_indicator(X_ec, target_obs, 2; kernel=:bad)
+    end
+
+    @testset "spectral_fevd across StructuralDFM methods & unit-sum invariants (#897)" begin
+        rng = Random.Xoshiro(89704)
+        A = [0.75 0.0; 0.0 0.2]
+        sim = dgp_dynamic_factors(rng; A=A, N=18, T=180, idio_sd=0.35)
+        gdfm = estimate_gdfm(sim.X, 2; r=3, spectral=:lag_window, bandwidth=8)
+
+        sdfm_fglr = estimate_structural_dfm(gdfm; method=:fglr, r=3, p=2, H=24)
+        sdfm_var = estimate_structural_dfm(gdfm; method=:gdfm_var, p=2, H=24)
+        sdfm_fhlz = estimate_structural_dfm(gdfm; method=:fhlz, p=2, n_perm=6, H=24, seed=123)
+
+        for (m, label) in ((sdfm_fglr, "fglr"), (sdfm_var, "gdfm_var"), (sdfm_fhlz, "fhlz"))
+            s_no = spectral_fevd(m)
+            @test s_no isa SpectralFEVDResult{Float64}
+            @test s_no isa AbstractFEVD
+            @test size(s_no.shares) == (18, 2)
+            @test s_no.include_idiosyncratic == false
+            @test length(s_no.shock_names) == 2
+            @test all(>=(0.0), s_no.shares)
+            @test all(abs.(sum(s_no.shares; dims=2) .- 1.0) .< 1e-11)
+            @test point_estimate(s_no) == s_no.shares
+            @test has_uncertainty(s_no) == false
+            @test uncertainty_bounds(s_no) === nothing
+
+            s_id = spectral_fevd(m, (2π / 32, 2π / 6); include_idiosyncratic=true)
+            @test size(s_id.shares) == (18, 3)
+            @test s_id.include_idiosyncratic == true
+            @test s_id.shock_names[end] == "Idiosyncratic"
+            @test all(>=(0.0), s_id.shares)
+            @test all(>=(0.0), s_id.power_band)
+            @test all(abs.(sum(s_id.shares; dims=2) .- 1.0) .< 1e-11)
+        end
+
+        # Standardized units match and band differences (low-freq vs high-freq)
+        sdfm_std = estimate_structural_dfm(gdfm; method=:fglr, r=3, p=2, units=:standardized)
+        s_lr = spectral_fevd(sdfm_std, (0.0, 2π / 24); include_idiosyncratic=true)
+        s_hf = spectral_fevd(sdfm_std, (2π / 4, π); include_idiosyncratic=true)
+        @test all(abs.(sum(s_lr.shares; dims=2) .- 1.0) .< 1e-11)
+        @test all(abs.(sum(s_hf.shares; dims=2) .- 1.0) .< 1e-11)
+        @test any(abs.(s_lr.shares .- s_hf.shares) .> 1e-3)
+
+        # Display, report, RSER-01 positional constructor, Float32 & validation errors
+        s_show = spectral_fevd(sdfm_fglr; include_idiosyncratic=true)
+        buf = IOBuffer()
+        show(buf, s_show)
+        @test occursin("Spectral FEVD", String(take!(buf)))
+        report(s_show)
+        vals = ntuple(i -> getfield(s_show, fieldnames(SpectralFEVDResult)[i]), fieldcount(SpectralFEVDResult))
+        @test SpectralFEVDResult{Float64}(vals...).shares == s_show.shares
+
+        gdfm32 = estimate_gdfm(Float32.(sim.X), 2; r=3, bandwidth=8)
+        fv64 = sdfm_fglr.factor_var
+        fv32 = VARModel(Float32.(fv64.Y), fv64.p, Float32.(fv64.B), Float32.(fv64.U),
+                        Float32.(fv64.Sigma), Float32(fv64.aic), Float32(fv64.bic),
+                        Float32(fv64.hqic), fv64.varnames)
+        sdfm32 = StructuralDFM{Float32}(
+            gdfm32, fv32, Float32.(sdfm_fglr.B0), Float32.(sdfm_fglr.Q),
+            sdfm_fglr.identification, Float32.(sdfm_fglr.structural_irf),
+            Float32.(sdfm_fglr.loadings_td), sdfm_fglr.p_var, sdfm_fglr.shock_names,
+            sdfm_fglr.varnames, Float32.(sdfm_fglr.K), sdfm_fglr.r, sdfm_fglr.method,
+            Float32.(sdfm_fglr.static_factors), Float32.(sdfm_fglr.loadings_static),
+            Float32(sdfm_fglr.shock_variance_share), sdfm_fglr.units, nothing,
+            Float32(sdfm_fglr.acceptance_rate), sdfm_fglr.id_order,
+            sdfm_fglr.lag_criterion, Float32(sdfm_fglr.max_eigenvalue_modulus),
+            nothing, Float32(sdfm_fglr.first_stage_F), nothing)
+        s32 = spectral_fevd(sdfm32; include_idiosyncratic=true)
+        @test s32 isa SpectralFEVDResult{Float32}
+        @test all(abs.(sum(s32.shares; dims=2) .- 1.0f0) .< 1.0f-5)
+
+        @test_throws ArgumentError spectral_fevd(sdfm_fglr, (-0.1, 1.0))
+        @test_throws ArgumentError spectral_fevd(sdfm_fglr, (1.0, 1.0))
+        @test_throws ArgumentError spectral_fevd(sdfm_fglr, (0.5, π + 0.1))
+    end
+
 end
 
 # Run all tests

@@ -568,6 +568,7 @@ include("vecm/granger.jl")
 include("favar/analysis.jl")
 include("favar/forecast.jl")
 include("factor/gdfm_i1.jl")
+include("factor/bandpass.jl")
 
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
@@ -1159,6 +1160,8 @@ export is_stationary
 export estimate_gdfm
 export FHLZModel, estimate_gdfm_fhlz
 export CointegratedGDFM, estimate_gdfm_i1
+export BandPassGDFMResult, EurocoinResult, SpectralFEVDResult
+export bandpass_gdfm, eurocoin_indicator, spectral_fevd
 export ic_criteria_gdfm
 export hallin_liska, HallinLiskaResult
 export bai_ng_q, BaiNgQResult
