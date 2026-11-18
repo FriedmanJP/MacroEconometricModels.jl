@@ -561,6 +561,7 @@ include("svarma/schur_filter.jl")
 include("svarma/blaschke.jl")
 include("svarma/gmm_2sls.jl")
 include("svarma/ml.jl")
+include("svarma/tests.jl")
 
 # VECM analysis and forecasting (after irf + fevd + hd)
 include("vecm/forecast.jl")
@@ -1359,7 +1360,7 @@ export henze_zirkler_test, normality_test_suite
 
 # ICA-based SVAR identification
 export identify_fastica, identify_jade, identify_sobi
-export identify_dcov, identify_hsic
+export identify_dcov, identify_hsic, identify_cvm
 
 # Non-Gaussian ML SVAR
 export identify_student_t, identify_mixture_normal
@@ -1392,9 +1393,11 @@ export test_overidentification, test_label_stability
 export test_lambda_distinct, test_restrictions
 export test_gaussian_shock_count
 
-# Non-fundamental Strong SVARMA core & estimation (NGID-05 #905, NGID-06 #906)
+# Non-fundamental Strong SVARMA core & estimation (NGID-05 #905, NGID-06 #906, NGID-07 #907)
 export SVARMAModel, ssvarma_filter_shocks, fundamentalness_regime, blaschke_representations
 export estimate_ssvarma
+export FundamentalnessTestResult, SufficientInformationTestResult
+export test_fundamentalness, test_sufficient_information
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)

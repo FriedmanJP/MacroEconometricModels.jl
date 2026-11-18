@@ -921,6 +921,7 @@ Compute identification matrix Q for structural VAR analysis.
 - `:sobi` — SOBI (Belouchrani et al. 1997)
 - `:dcov` — Distance covariance ICA (Matteson & Tsay 2017)
 - `:hsic` — HSIC independence ICA (Gretton et al. 2005)
+- `:cvm` — Cramér–von Mises empirical-copula ICA (Herwartz & Plödt 2016)
 - `:student_t` — Student-t ML (Lanne, Meitz & Saikkonen 2017)
 - `:mixture_normal` — Mixture of normals ML (Lanne & Lütkepohl 2010)
 - `:mixture_normal_asym` — Asymmetric mixture of normals ML (Gouriéroux, Monfort & Renne 2020)
@@ -991,6 +992,8 @@ function compute_Q(model::VARModel{T}, method::Symbol;
         identify_dcov(model).Q
     elseif method == :hsic
         identify_hsic(model).Q
+    elseif method == :cvm
+        identify_cvm(model).Q
     # Non-Gaussian ML methods (defined in nongaussian_ml.jl)
     elseif method == :student_t
         identify_student_t(model; rng=rng).Q
@@ -1070,6 +1073,7 @@ function _register_builtin_identification!()
         (:sobi, true, false, false),
         (:dcov, true, false, false),
         (:hsic, true, false, false),
+        (:cvm, true, false, false),
         (:student_t, true, false, false),
         (:mixture_normal, true, false, false),
         (:mixture_normal_asym, true, false, false),

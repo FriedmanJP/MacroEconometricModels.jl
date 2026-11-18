@@ -469,7 +469,7 @@ end
     @testset "compute_Q Integration" begin
         _suppress_warnings() do
             # Test that ICA methods work through compute_Q → irf pipeline
-            for method in [:fastica, :jade, :sobi, :dcov, :hsic]
+            for method in [:fastica, :jade, :sobi, :dcov, :hsic, :cvm]
                 Q = MacroEconometricModels.compute_Q(model, method, 10, nothing, nothing)
                 @test size(Q) == (n, n)
                 @test norm(Q' * Q - I) < 1e-4
@@ -1345,6 +1345,88 @@ end
                 @test n_ok_pow >= 50
                 @test n_rej_pow / n_ok_pow > 0.80
             end
+        end
+    end
+
+    @testset "Cramér-von Mises ICA (identify_cvm) & ICA Asymptotic SEs" begin
+        _suppress_warnings() do
+            @test !(:manifest in fieldnames(ICASVARResult{Float64}))
+
+            # Backward-compatible 8-arg and 9-arg ICASVARResult constructors
+            B_bc = [1.0 0.2; 0.0 1.0]
+            W_bc = inv(B_bc)
+            Q_bc = Matrix{Float64}(I, 2, 2)
+            S_bc = randn(Xoshiro(907801), 20, 2)
+            r8 = ICASVARResult(B_bc, W_bc, Q_bc, S_bc, :fastica, true, 5, 0.1)
+            r9 = ICASVARResult{Float64}(B_bc, W_bc, Q_bc, S_bc, :jade, true, 4, 0.2, ["S1", "S2"])
+            @test r8 isa ICASVARResult{Float64} && size(r8.vcov) == (0, 0) && all(isnan, r8.se)
+            @test r9 isa ICASVARResult{Float64} && size(r9.vcov) == (0, 0) && all(isnan, r9.se)
+
+            # Recover B0 via identify_cvm on Student-t(5) and skewed-normal DGPs (Procrustes < 0.12 at T=500)
+            B_true2 = [1.0 0.35; -0.45 1.1]
+            A_true2 = [[0.45 0.08; -0.05 0.40]]
+            Yt, _ = simulate_svar(B_true2, A_true2; Tobs=500, shocks=:t, rng=Xoshiro(907802))
+            mt = estimate_var(Yt, 1)
+            rt = identify_cvm(mt; seed=907803)
+            @test rt isa ICASVARResult{Float64}
+            @test rt.method === :cvm
+            @test size(rt.B0) == (2, 2)
+            @test norm(rt.Q' * rt.Q - I) < 1e-6
+            @test MacroEconometricModels._procrustes_distance(rt.B0, B_true2) < 0.12
+
+            # Seed reproducibility
+            rt2 = identify_cvm(mt; seed=907803)
+            @test rt.B0 == rt2.B0 && rt.vcov == rt2.vcov
+
+            # Skewed-normal 2-variable and 3-variable recovery
+            Ysk, _ = simulate_svar(B_true2, A_true2; Tobs=500, shocks=:skewnormal, rng=Xoshiro(907804))
+            msk = estimate_var(Ysk, 1)
+            rsk = identify_cvm(msk; seed=907805)
+            @test MacroEconometricModels._procrustes_distance(rsk.B0, B_true2) < 0.12
+
+            B_true3 = [1.0 0.2 -0.15; 0.3 0.9 0.25; -0.2 0.15 1.1]
+            A_true3 = [0.4 * Matrix{Float64}(I, 3, 3)]
+            Y3, _ = simulate_svar(B_true3, A_true3; Tobs=500, shocks=:t, rng=Xoshiro(907806))
+            m3 = estimate_var(Y3, 1)
+            r3_cvm = identify_cvm(m3; max_iter=200, n_starts=3, seed=907807)
+            @test size(r3_cvm.vcov) == (9, 9) && size(r3_cvm.se) == (3, 3)
+            @test MacroEconometricModels._procrustes_distance(r3_cvm.B0, B_true3) < 0.35
+
+            Y3_sk, _ = simulate_svar(B_true3, A_true3; Tobs=800, shocks=:skewnormal, rng=Xoshiro(907810))
+            r3_sk = identify_cvm(estimate_var(Y3_sk, 1); max_iter=200, n_starts=3, seed=907811)
+            @test MacroEconometricModels._procrustes_distance(r3_sk.B0, B_true3) < 0.12
+
+            # Finite plug-in asymptotic vcov & se across ALL ICA estimators + StatsAPI + show
+            for fn in (identify_fastica, identify_jade, identify_sobi,
+                       identify_dcov, identify_hsic, identify_cvm)
+                ri = fn === identify_cvm ? fn(mt; seed=907808) : fn(mt)
+                @test size(ri.vcov) == (4, 4)
+                @test size(ri.se) == (2, 2)
+                @test all(isfinite, ri.vcov)
+                @test isposdef(Symmetric(ri.vcov))
+                @test all(isfinite, ri.se) && all(>=(0.0), ri.se)
+                @test StatsAPI.vcov(ri) === ri.vcov
+                @test isapprox(StatsAPI.stderror(ri), vec(ri.se); atol=1e-12)
+
+                buf_s = IOBuffer()
+                show(buf_s, ri)
+                txt_s = String(take!(buf_s))
+                @test occursin("Structural Impact Matrix", txt_s) || occursin("B0", txt_s) || occursin("ICA-SVAR", txt_s)
+                @test !occursin("NaN", txt_s)
+
+                # Signed permutation via label_shocks transforms vcov & se consistently
+                rl = label_shocks(ri; by=:reference, B_ref=[0.0 1.0; -1.0 0.0], shock_names=["A", "B"])
+                @test size(rl.vcov) == (4, 4) && size(rl.se) == (2, 2)
+                @test isapprox(sqrt.(diag(rl.vcov)), vec(rl.se); atol=1e-10)
+            end
+
+            # Float32 support
+            m_f32 = VARModel(Float32.(mt.Y), mt.p, Float32.(mt.B), Float32.(mt.U),
+                             Float32.(mt.Sigma), Float32(mt.aic), Float32(mt.bic),
+                             Float32(mt.hqic), mt.varnames)
+            r_f32 = identify_cvm(m_f32; seed=907809)
+            @test r_f32 isa ICASVARResult{Float32}
+            @test all(isfinite, r_f32.se)
         end
     end
 end
