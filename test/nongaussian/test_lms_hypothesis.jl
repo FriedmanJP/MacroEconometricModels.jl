@@ -479,7 +479,7 @@ end
             @test dg.weak_id_warning == true
 
             # (c) Common ARCH / stochastic volatility shocks: detects squared correlation & dependence
-            rng_arch = Xoshiro(90970)
+            rng = Xoshiro(90970)
             N_a = 600
             A1_a = [0.3 0.0 0.0; 0.0 0.3 0.0; 0.0 0.0 0.3]
             B_a = [1.0 0.0 0.0; -0.3 1.0 0.0; 0.2 -0.25 1.0]
@@ -487,7 +487,7 @@ end
             Z_a = zeros(N_a, 3)
             for t in 2:N_a
                 h_comm[t] = 0.15 + 0.55 * (Z_a[t - 1, 1]^2) + 0.30 * h_comm[t - 1]
-                Z_a[t, :] .= sqrt(h_comm[t]) .* randn(rng_arch, 3)
+                Z_a[t, :] .= sqrt(h_comm[t]) .* randn(rng, 3)
             end
             Y_a = zeros(N_a, 3)
             for t in 2:N_a
@@ -559,6 +559,50 @@ end
             @test_throws ArgumentError test_svar_hypothesis(fit, h_rec; vcov_type=:bad)
             @test_throws ArgumentError test_svar_hypothesis(fit, recursiveness_hypothesis(2))
             @test_throws ArgumentError diagnose_nongaussian_svar(fit; lags=0)
+        end
+    end
+
+    @testset "8. Canonical Macro :fred_qd Trivariate LMS Test & Plots" begin
+        _suppress_warnings() do
+            qd = load_example(:fred_qd)
+            vars = ["GDPC1", "CPIAUCSL", "FEDFUNDS"]
+            qd_sub = apply_tcode(qd[:, vars])
+            X_raw = to_matrix(qd_sub)
+            keep = [all(isfinite, @view(X_raw[t, :])) for t in 1:size(X_raw, 1)]
+            Y_all = Matrix{Float64}(X_raw[keep, :])
+            T_sub = FAST ? min(size(Y_all, 1), 120) : min(size(Y_all, 1), 180)
+            Y_qd = Y_all[(end - T_sub + 1):end, :]
+
+            m_qd = estimate_var(Y_qd, 2; varnames=vars)
+            fit_qd = estimate_lms_svar(m_qd; distributions=:student_t,
+                                       method=:three_step, n_starts=2,
+                                       max_iter=200, seed=90991)
+            @test fit_qd isa LMSSVARResult{Float64}
+            @test size(fit_qd.B0) == (3, 3)
+            @test all(isfinite, fit_qd.B0)
+
+            h_rec = recursiveness_hypothesis(3)
+            ht_qd = test_svar_hypothesis(fit_qd, h_rec; method=:wald)
+            @test ht_qd isa SVARHypothesisTest{Float64}
+            @test ht_qd.df == 3
+            @test isfinite(ht_qd.statistic) && ht_qd.statistic >= 0.0
+            @test 0.0 <= ht_qd.pvalue <= 1.0
+
+            diag_qd = diagnose_nongaussian_svar(fit_qd; lags=4)
+            @test diag_qd isa NonGaussianDiagnostics{Float64}
+            @test diag_qd.nvars == 3
+            @test all(isfinite, diag_qd.jb_stats)
+
+            for p_out in (
+                plot_result(fit_qd; view=:qq),
+                plot_result(fit_qd; view=:densities),
+                plot_result(ht_qd),
+                plot_result(diag_qd),
+            )
+                @test p_out isa PlotOutput
+                @test occursin("<!DOCTYPE html>", p_out.html)
+                @test occursin("append('svg')", p_out.html)
+            end
         end
     end
 

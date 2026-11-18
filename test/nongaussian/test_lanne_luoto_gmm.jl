@@ -154,7 +154,7 @@ end
         B_gauss = [1.1 -0.3; 0.25 0.9]
         A_gauss = [[0.4 0.05; -0.05 0.35]]
         Y_g, _ = _sim_ll_var(rng, 400, B_gauss, A_gauss;
-                             shock_fn=(r, Ttot, nn) -> randn(r, Ttot, nn))
+                             shock_fn=(rng, Ttot, nn) -> randn(rng, Ttot, nn))
         @test_throws ArgumentError estimate_lanne_luoto_gmm(Y_g, 1;
                                                             moment_selection=:none,
                                                             asym_pairs=Tuple{Int,Int}[],
@@ -383,7 +383,7 @@ end
         A_rec = [[0.45 0.0; 0.15 0.40]]
         t5_sc = sqrt(5.0 / 3.0)
         Y_rec, _ = _sim_ll_var(rng, 800, B_rec, A_rec;
-                               shock_fn=(r, tot, nn) -> rand(r, TDist(5), tot, nn) ./ t5_sc)
+                               shock_fn=(rng, tot, nn) -> rand(rng, TDist(5), tot, nn) ./ t5_sc)
         res_rec = estimate_lanne_luoto_gmm(Y_rec, 1; moment_selection=:none, seed=810)
 
         # Short-run recursiveness H0: B_{12} = 0 (true)

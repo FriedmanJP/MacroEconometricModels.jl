@@ -214,8 +214,11 @@ end
         @test maximum(abs, res_q0.shocks .- sim_q0.eta[2:end, :]) < 1e-12
 
         # (g) Unit-root and singular-C guards
-        @test_throws IdentificationError ssvarma_filter_shocks(randn(30, 2), [-1.0 0.0; 0.0 -0.5], C_true)
-        @test_throws SingularSystemError ssvarma_filter_shocks(randn(30, 2), Theta_mix, [1.0 2.0; 2.0 4.0])
+        rng = Xoshiro(90581)
+        U_bad1 = randn(rng, 30, 2)
+        U_bad2 = randn(rng, 30, 2)
+        @test_throws IdentificationError ssvarma_filter_shocks(U_bad1, [-1.0 0.0; 0.0 -0.5], C_true)
+        @test_throws SingularSystemError ssvarma_filter_shocks(U_bad2, Theta_mix, [1.0 2.0; 2.0 4.0])
     end
 
     @testset "4. Exact Finite-Sample Log-Jacobian vs ForwardDiff (< 1e-12)" begin

@@ -146,9 +146,9 @@ end
             T_eff = size(m_gmm.shocks, 1)
             boot_th = Vector{Float64}[]
             boot_coef = Vector{Float64}[]
-            rng_b = Xoshiro(906403)
+            rng = Xoshiro(906403)
             for b in 1:n_boot
-                idx = rand(rng_b, 1:T_eff, T_sim + 120)
+                idx = rand(rng, 1:T_eff, T_sim + 120)
                 eta_b = m_gmm.shocks[idx, :]
                 eps_b = eta_b * transpose(m_gmm.C)
                 Y_b = zeros(T_sim + 120, 2)
@@ -248,6 +248,43 @@ end
                 sprint(report, m_ml)
             end
             @test occursin("SVARMA(1, 1)", ltx)
+        end
+    end
+
+    @testset "7. Canonical Empirical SSVARMA Workflows (:gnp_hamilton & Bivariate Macro)" begin
+        _suppress_warnings() do
+            # (a) Hamilton (1989) US real GNP growth SVARMA(2, 1) & fundamentalness check
+            ts_gnp = load_example(:gnp_hamilton)
+            Y_gnp = to_matrix(ts_gnp)
+            est_gnp = estimate_ssvarma(Y_gnp, 2, 1; method=:pml, distribution=:student_t,
+                                       n_starts=2, max_iter=150, varnames=["gnp_growth"],
+                                       shock_names=["GNP shock"], seed=906701)
+            @test est_gnp isa SVARMAModel{Float64}
+            @test est_gnp.p == 2 && est_gnp.q == 1
+            @test all(isfinite, est_gnp.C) && all(isfinite, est_gnp.Theta)
+            f_gnp = test_fundamentalness(est_gnp; max_lag=4, n_boot=99, seed=906702)
+            @test f_gnp isa FundamentalnessTestResult{Float64}
+            @test 0.0 <= f_gnp.pvalue <= 1.0
+            @test irf(est_gnp, 8) isa ImpulseResponse{Float64}
+
+            # (b) Bivariate Blanchard-Quah / GMR real GDP & unemployment SVARMA(2, 1) workflow
+            qd = load_example(:fred_qd)
+            vars_bq = ["GDPC1", "UNRATE"]
+            X_raw = to_matrix(apply_tcode(qd[:, vars_bq]))
+            keep = [all(isfinite, @view(X_raw[t, :])) for t in 1:size(X_raw, 1)]
+            Y_all = Matrix{Float64}(X_raw[keep, :])
+            T_sub = FAST ? min(size(Y_all, 1), 110) : min(size(Y_all, 1), 150)
+            Y_bq = Y_all[(end - T_sub + 1):end, :]
+            est_bq = estimate_ssvarma(Y_bq, 2, 1; method=:pml, distribution=:student_t,
+                                      n_starts=2, max_iter=120, varnames=vars_bq,
+                                      shock_names=["Supply", "Demand"], seed=906703)
+            @test est_bq isa SVARMAModel{Float64}
+            @test size(est_bq.C) == (2, 2)
+            @test all(isfinite, est_bq.Theta)
+            f_bq = test_fundamentalness(est_bq; max_lag=4, n_boot=99, seed=906704)
+            @test f_bq isa FundamentalnessTestResult{Float64}
+            @test 0.0 <= f_bq.pvalue <= 1.0
+            @test irf(est_bq, 8) isa ImpulseResponse{Float64}
         end
     end
 

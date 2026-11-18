@@ -478,8 +478,8 @@ const MEM = MacroEconometricModels
         @test isapprox(w_got.pvalue, w_true.pvalue; atol=1e-12)
 
         # 2. Asymmetric distributions (:pml and :mixture_normal_asym) with det(Q) < 0 and Cov(θ, dp[n]) sign alignment
-        rng_p = Xoshiro(9001)
-        ep_p = rand(rng_p, TDist(4.0), 300, 3) .* sqrt(2.0 / 4.0)
+        rng = Xoshiro(9001)
+        ep_p = rand(rng, TDist(4.0), 300, 3) .* sqrt(2.0 / 4.0)
         u_p = ep_p * B_d'
         Y_p = zeros(300, 3)
         for t in 2:300
@@ -488,8 +488,8 @@ const MEM = MacroEconometricModels
         md_p = estimate_var(Y_p, 1)
 
         d_mix = MixtureModel([Normal(1.2, 0.6), Normal(-0.4, 0.8)], [0.25, 0.75])
-        rng_m = Xoshiro(9019)
-        ep_m = (rand(rng_m, d_mix, 400, 3) .- mean(d_mix)) ./ std(d_mix)
+        rng = Xoshiro(9021)  # seed yields det(Q) < 0 for asymmetric mixture alignment check
+        ep_m = (rand(rng, d_mix, 400, 3) .- mean(d_mix)) ./ std(d_mix)
         u_m = ep_m * B_d'
         Y_m = zeros(400, 3)
         for t in 2:400
