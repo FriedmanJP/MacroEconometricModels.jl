@@ -6,6 +6,100 @@ output, not just documentation.
 
 ---
 
+## v1.1.0
+
+Major econometric expansion introducing five new method families across 46 issues
+(closes `#883`–`#928`): Quantile Factor Models and Quantile FAVAR (`#883`–`#892`,
+`#924`), One-Sided, Cointegrated ``I(1)``, and Time-Varying Generalized Dynamic
+Factor Models (`#893`–`#900`, `#925`), Non-Gaussian SVAR Inference and Structural
+SVARMA (`#901`–`#908`, `#926`), ABCD Invertibility and DSGE-VAR (`#909`–`#915`,
+`#927`), and Rational Inattention (`#916`–`#923`, `#928`). Adds full ecosystem
+integration across all 48 new result types (1-arg `plot_result`, `Tables.jl` /
+`long_table`, versioned `save_model` / `load_model`, `report`, `refs`, and synthetic
+DGPs). No breaking changes; existing APIs and struct constructors remain backward
+compatible. Numerical output changes for FHLR GDFM forecast standard errors and
+one-sided causal filtering (`#893`), and for non-Gaussian ML / PML SVAR asymptotic
+standard errors (`#901`).
+
+**New**
+
+- **Quantile Factor Models & Quantile FAVAR (`#883`–`#892`, `#924`)**: Portnoy–Koenker
+  Frisch–Newton interior-point quantile solver and batched panel kernel (`#883`),
+  Chen–Dolado–Gonzalo (2021) Iterative Quantile Regression (`estimate_qfm`) with
+  convolution-smoothed asymptotic/bootstrap standard errors (`#884`, `#885`), rank and
+  factor-number selection (`ic_criteria_qfm`, `#886`), multi-quantile factor grids with
+  spanning and loading-constancy diagnostics (`QuantileFactorGrid`, `test_qfm_spanning`,
+  `test_qfm_loading_constancy`, `#887`), interactive quantile panel fixed-effects models
+  (`estimate_xtqreg_factors`, `#888`), distributional QFM forecasting and Growth-at-Risk
+  (`forecast`, `growth_at_risk`, `#889`), Quantile VAR and Ando–Tsay (2011) Quantile
+  FAVAR with `vcov`/`confint`, quantile IRFs, and panel QIRFs/forecasts (`estimate_qvar`,
+  `estimate_qfavar`, `qirf`, `qfavar_panel_irf`, `qfavar_panel_forecast`, `#890`), plus
+  synthetic DGPs (`dgp_quantile_factors`, `dgp_qfavar`, `#891`–`#892`).
+- **One-Sided, Cointegrated ``I(1)``, and Time-Varying GDFM (`#893`–`#900`, `#925`)**:
+  Forni–Hallin–Lippi–Zaffaroni (2015, 2017) one-sided infinite-rank GDFM and singular
+  dynamic factor VAR inversion (`estimate_gdfm_fhlz`, `FHLZModel`, `#894`), dynamic factor
+  rank tests and selection (`hallin_liska`, `bai_ng_q`, `amengual_watson_q`,
+  `onatski_q_test`, `onatski_q_select`, `ahn_horenstein`, `onatski_ed`, `#895`),
+  Barigozzi–Lippi–Luciani (2020, 2021) non-stationary cointegrated ``I(1)`` GDFM
+  (`estimate_gdfm_i1`, `CointegratedGDFM`, `#896`), spectral FEVD, band-pass filtering,
+  and real-time Eurocoin indicator (`spectral_fevd`, `bandpass_gdfm`,
+  `eurocoin_indicator`, `#897`), Eichler–Motta–von Sachs (2011) locally stationary
+  time-varying spectral GDFM (`estimate_tv_gdfm`, `TimeVaryingGDFM`, `#898`), ragged-edge
+  EM-spectral GDFM nowcasting (`nowcast_gdfm`, `GDFMNowcastResult`, `#899`), and
+  infinite-order dynamic factor DGP (`dgp_infinite_gdfm`, `#900`).
+- **Non-Gaussian SVAR Inference & Structural SVARMA (`#901`–`#908`, `#926`)**: Multi-start
+  L-BFGS and asymmetric mixture extensions (`#901`), Lanne–Meitz–Saikkonen (2017) complete
+  identification, 16-block Hessian, and 1/3-step ML estimation (`estimate_lms_svar`,
+  `lms_project_B`, `LMSSVARResult`, `#902`), structural hypothesis battery and non-Gaussian
+  diagnostics (`test_svar_hypothesis`, `diagnose_nongaussian_svar`, `recursiveness_hypothesis`,
+  `impact_zero_hypothesis`, `impact_linear_hypothesis`, `long_run_hypothesis`,
+  `horizon_irf_hypothesis`, `mixed_svar_hypothesis`, `nonlinear_svar_hypothesis`, `#903`),
+  Lanne–Luoto (2021) co-kurtosis GMM and MSC/RMSC moment selection (`estimate_lanne_luoto_gmm`,
+  `select_gmm_moments`, `LanneLuotoGMMResult`, `#904`), Gouriéroux–Monfort–Renne (2020)
+  non-fundamental Strong SVARMA (`src/svarma/`: `SVARMAModel`, `estimate_ssvarma`,
+  `ssvarma_filter_shocks`, `fundamentalness_regime`, `blaschke_representations`,
+  `dgp_ssvarma`, `#905`–`#906`), and Chen–Choi–Escanciano / Forni–Gambetti fundamentalness
+  tests plus CvM ICA (`test_fundamentalness`, `test_sufficient_information`,
+  `identify_cvm`, `#907`).
+- **ABCD Invertibility & DSGE-VAR (`#909`–`#915`, `#927`)**: Canonical state-space
+  `ABCDSystem` and minimal state extraction (`abcd_representation`, `to_abcd`, `#909`),
+  Fernández-Villaverde–Rubio-Ramírez–Sargent–Watson (2007) Poor Man's Invertibility
+  Condition and Komunjer–Ng zeros (`poor_mans_invertibility`, `is_invertible`, `#910`),
+  Hansen–Sargent DARE Wold innovations representation and forecast-sufficiency diagnostics
+  (`innovations_representation`, `forecast_sufficiency`, `#911`), shock recoverability
+  ``R^2_j``, population VAR(``p``), and 3-way DSGE-vs-SVAR IRF auditing
+  (`shock_recoverability`, `population_var`, `compare_dsge_svar_irf`, `#912`),
+  observable-set invertibility search (`search_invertible_observables`, `#913`), and
+  Del Negro–Schorfheide (2004, 2007) Bayesian DSGE-VAR(``\lambda``) prior, marginal
+  likelihood profiling, and posterior estimation (`dsge_var_prior`, `dsge_var_logml`,
+  `select_dsge_var_lambda`, `estimate_dsge_var`, `#914`).
+- **Rational Inattention (`#916`–`#923`, `#928`)**: Generalized Schur DARE solver and
+  correlated observation-state noise `G` in `SteadyStateKalman` (`steady_state_kalman`,
+  `#916`), dedicated `src/ri/` module implementing Sims (2003, 2010) steady-state LQG
+  Kalman filter (`solve_ri_kalman`, `RationalInattentionProblem`, `#917`), Afrouzi–Yang
+  (2021) dynamic LQG RI transition path solver (`solve_ri_transition`, `#918`), joint
+  state-space mapping, inertial IRFs, and RI noise FEVD (`to_statespace`, `#919`), Kalman
+  MLE/Bayesian estimation of information cost and Coibion–Gorodnichenko rigidity diagnostics
+  (`estimate_ri`, `coibion_gorodnichenko_test`, `implied_cg_slope`, `#920`), Maćkowiak–Wiederholt
+  multi-block attention allocation and sequence-space RI Jacobian (`solve_mw_attention`,
+  `rational_inattention_jacobian`, `#921`), Matějka–McKay (2015) and Caplin–Dean–Leahy
+  (2019) discrete-choice RI (`solve_ri_discrete`, `ri_iia_diagnostic`, `estimate_ri_logit`,
+  `#922`), and the dedicated [Rational Inattention](@ref rational_inattention_page) documentation guide (`#923`).
+- **Ecosystem Integration (`#891`, `#892`, `#900`, `#908`, `#915`, `#923`)**: 45 new
+  1-arg `plot_result` interactive D3.js dispatches across all five series (277 total),
+  complete `Tables.jl` / `long_table` support across all 48 new result structs, versioned
+  JLD2 serialization, `report()` summaries, and verified DOI entries in `refs()`.
+
+**Fixes**
+
+- `forecast(::GeneralizedDynamicFactorModel)` propagates common-component projection error
+  variance alongside idiosyncratic variance across horizons ``h \ge 1``, and `estimate_gdfm`
+  replaces circular FFT wrap-around with non-circular finite-lag causal/two-sided filtering
+  (`#893`).
+- `NonGaussianMLResult` computes the full joint Givens-angle delta-method covariance matrix
+  across all likelihood parameters, and `:pml` SVAR identification computes the
+  Gouriéroux–Monfort–Renne (2017) sandwich covariance (`#901`).
+
 ## v1.0.3
 
 Robustness, interface alignment, and numerical precision release: DSGE analytical GMM

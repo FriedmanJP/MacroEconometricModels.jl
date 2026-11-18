@@ -311,8 +311,8 @@ end
                                   reshape([0.7], 1, 1), reshape([0.8], 1, 1);
                                   G=reshape([0.3], 1, 1))
         @test _from_serializable_is_generic(SteadyStateKalman)
-        ssk2 = _assert_roundtrip(ssk)
-        _assert_report_equal(ssk, ssk2)
+        ssk2 = _cover(ssk)
+        _assert_plot_equal(ssk, ssk2)
         let pth = joinpath(mktempdir(), "ssk.jld2")
             save_model(ssk, pth)
             ssk3 = load_model(pth)

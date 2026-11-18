@@ -648,9 +648,9 @@ function _qfm_pan_vcov_boot(Y_mat::Matrix{T}, W_arr::Array{T,3}, r::Int, tau::T,
     tol_sub = max(tol, T(1e-4))
 
     function _run_unit_boot!(b::Int, Y_b::Matrix{T}, W_b::Array{T,3}, idx::Vector{Int})
-        lrng = Random.Xoshiro(boot_seeds[b])
+        local_rng = Random.Xoshiro(boot_seeds[b])
         @inbounds for i in 1:N
-            idx[i] = rand(lrng, 1:N)
+            idx[i] = rand(local_rng, 1:N)
             for t in 1:T_obs
                 Y_b[i, t] = Y_mat[idx[i], t]
                 for j in 1:p

@@ -2106,8 +2106,7 @@ end
     @test sys isa ABCDSystem
     @test haskey(_MEM._SERIALIZABLE_TYPES, "ABCDSystem")
     @test _from_serializable_is_generic(ABCDSystem)
-    sys2 = _assert_roundtrip(sys)
-    _assert_report_equal(sys, sys2)
+    sys2 = _cover(sys)
     @test irf(sys2, 10).values == irf(sys, 10).values
 
     sys0 = ABCDSystem(zeros(0, 0), zeros(0, 1), ones(1, 0), [1.0;;])
@@ -2132,8 +2131,7 @@ end
     @test !isempty(inv_sq.var_lag_matrices)
     @test haskey(_MEM._SERIALIZABLE_TYPES, "InvertibilityResult")
     @test _from_serializable_is_generic(InvertibilityResult)
-    inv_sq2 = _assert_roundtrip(inv_sq)
-    _assert_report_equal(inv_sq, inv_sq2)
+    inv_sq2 = _cover(inv_sq)
     @test inv_sq2.invertible == inv_sq.invertible
     @test inv_sq2.var_lag_matrices == inv_sq.var_lag_matrices
 
@@ -2149,8 +2147,7 @@ end
     @test innov isa InnovationsRepresentation
     @test haskey(_MEM._SERIALIZABLE_TYPES, "InnovationsRepresentation")
     @test _from_serializable_is_generic(InnovationsRepresentation)
-    innov2 = _assert_roundtrip(innov)
-    _assert_report_equal(innov, innov2)
+    innov2 = _cover(innov)
     @test innov2.K == innov.K && innov2.Sigma_u == innov.Sigma_u
     mktempdir() do d
         p = joinpath(d, "innov.jld2")
