@@ -571,8 +571,6 @@ include("lp/fevd.jl")
 # DSGE simulation, IRF/FEVD bridge (after var/irf.jl, var/fevd.jl, lp/fevd.jl)
 include("dsge/simulation.jl")
 include("dsge/analytical.jl")
-include("ri/types.jl")
-include("ri/steady_state.jl")
 include("dsge/pruning.jl")
 
 # DSGE estimation (after estimate_var, irf, estimate_gmm)
@@ -624,6 +622,9 @@ include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
 include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
 include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
+include("ri/types.jl")
+include("ri/steady_state.jl")
+include("ri/dynamic.jl")
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -931,8 +932,9 @@ export CounterfactualHistory, counterfactual_forecast, counterfactual_history
 export SpanningDiagnostic, ForecastSufficiency
 export spanning_diagnostic, forecast_sufficiency
 
-# Rational Inattention (Sims 2003 steady-state LQG Kalman filter)
+# Rational Inattention (Sims 2003 steady-state & Afrouzi-Yang 2021 dynamic LQG Kalman filter)
 export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
+export DynamicRISolution, solve_ri_transition
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
