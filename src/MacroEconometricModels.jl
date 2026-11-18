@@ -623,6 +623,7 @@ include("ct/two_asset.jl")
 include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
 include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
+include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -832,6 +833,7 @@ export evaluate_policy, evaluate_value, physical_nodes, max_euler_error, vfi_sol
 # Accessors & ABCD representation
 export ABCDSystem, abcd_representation
 export InvertibilityResult, poor_mans_invertibility, is_invertible
+export InnovationsRepresentation, innovations_representation, to_abcd
 export nstates, nobservables
 export nshocks, is_determined, is_stable
 

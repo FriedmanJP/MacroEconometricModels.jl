@@ -132,8 +132,8 @@ Population forecast-sufficiency check (CMW §2.3, Fig. 1): given a linear
 solution `y_t = G1·y_{t−1} + impact·ε_t`, compare the `h`-step forecast-error
 variances of the chosen `observables` under (i) full information (all states
 observed) and (ii) their own innovations (Wold) representation, obtained from
-the steady-state Kalman filter of the observables-only measurement (Riccati
-fixed point by filter iteration).
+the steady-state Kalman filter of the observables-only measurement via the
+generalized Schur / Van Dooren DARE solver (`_solve_dare`).
 
 - `fev_ratio[h, j] = FEV_wold(h)_j / FEV_full(h)_j ≥ 1` — near 1 means the
   observables forecast (almost) as well as the full state, which is what
@@ -180,25 +180,14 @@ function forecast_sufficiency(sol::DSGESolution{T},
         Al = A * Al
     end
 
-    # steady-state Kalman filter of the observables-only measurement:
-    # P ← A P A' − A P C'(C P C')⁻¹ C P A' + Q, iterated to a fixed point
-    P = copy(Q)
-    converged = false
-    for _ in 1:20_000
-        CPC = C * P * C'
-        Kg = (A * P * C') * robust_inv(Hermitian(Matrix{T}(CPC)))
-        Pn = A * P * A' - Kg * (C * P * A') + Q
-        Pn = (Pn + Pn') / 2
-        if maximum(abs.(Pn - P)) < T(1e-12)
-            P = Pn
-            converged = true
-            break
-        end
-        P = Pn
-    end
-    converged || @warn "forecast_sufficiency: Riccati iteration did not fully converge (tol 1e-12) — results carry that tolerance"
-    Sigma_i = Matrix{T}((C * P * C' + (C * P * C')') / 2)   # innovations covariance
-    Kg = (A * P * C') * robust_inv(Hermitian(Sigma_i))
+    # steady-state Kalman filter of the observables-only measurement via DARE:
+    # P = A P A' − (A P C')(C P C')⁻¹ (A P C')' + Q
+    WT = promote_type(T, Float64)
+    _, K_w, F_innov_w, _ = _solve_dare(
+        Matrix{WT}(A), Matrix{WT}(Q), Matrix{WT}(C), zeros(WT, n_obs, n_obs),
+    )
+    Sigma_i = Matrix{T}((F_innov_w + F_innov_w') / 2)   # innovations covariance
+    Kg = Matrix{T}(K_w)
 
     # innovations representation: y_t = C x̂ + e, x̂' = A x̂ + K e;
     # Wold h-step FEV = Σ_{ℓ<h} Ψ_ℓ Σ_i Ψ_ℓ' with Ψ_0 = I, Ψ_ℓ = C A^{ℓ−1} K

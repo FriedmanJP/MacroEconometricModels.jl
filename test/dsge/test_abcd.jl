@@ -1010,3 +1010,233 @@ end
         @test_throws ArgumentError poor_mans_invertibility(sys32; max_var_lags=-1)
     end
 end
+
+@testset "Hansen-Sargent DARE Innovations Representation (#911)" begin
+    MEM = MacroEconometricModels
+
+    # =========================================================================
+    # 1. FVRSW (2007, §II eqs. 15-16) Permanent Income analytical benchmark
+    # =========================================================================
+    @testset "FVRSW (2007) Permanent Income closed-form DARE & forecast_sufficiency" begin
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, y_m_c
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            y_m_c[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            y_m_c[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+        abcd_fv = abcd_representation(sol_fv, [:y_m_c])
+        innov = innovations_representation(abcd_fv)
+
+        @test innov isa InnovationsRepresentation{Float64}
+        @test !innov.invertible
+        @test innov.dare_residual < 1e-12
+        @test innov.P ≈ [11.0 / 36.0;;] atol=1e-11
+        @test innov.K ≈ [-1.0 / 6.0;;] atol=1e-11
+        @test innov.Sigma_u ≈ [1.0;;] atol=1e-11
+        @test innov.Sigma_u_chol ≈ [1.0;;] atol=1e-11
+        @test innov.information_loss ≈ [11.0 / 36.0] atol=1e-11
+
+        # Derived getproperty aliases matching FVRSW eqs. (9)-(12)
+        @test innov.Sigma_state ≈ [11.0 / 36.0;;] atol=1e-11
+        @test innov.Omega_innov ≈ [1.0;;] atol=1e-11
+        @test innov.D_hat ≈ [1.0;;] atol=1e-11
+        @test innov.B_hat ≈ [-1.0 / 6.0;;] atol=1e-11
+        @test innov.M_innov ≈ [1.0 / 1.2;;] atol=1e-11
+        @test maximum(abs, eigvals(innov.A - innov.K * innov.C)) ≈ 1.0 / 1.2 atol=1e-11
+
+        # Wold-fundamental ABCD conversion & IRF
+        wold_fv = to_abcd(innov)
+        @test wold_fv isa ABCDSystem{Float64}
+        @test is_invertible(wold_fv)
+        @test poor_mans_invertibility(wold_fv).M ≈ [1.0 / 1.2;;] atol=1e-11
+        ir_wold = irf(innov, 8)
+        @test ir_wold isa ImpulseResponse{Float64}
+        @test ir_wold.values ≈ irf(wold_fv, 8).values atol=1e-12
+        @test ir_wold.values[1, 1, 1] ≈ 1.0 atol=1e-11
+        @test !(ir_wold.values ≈ irf(abcd_fv, 8).values)
+
+        # Upgraded forecast_sufficiency on unit-root FVRSW runs with zero warnings
+        fs_fv = @test_nowarn forecast_sufficiency(sol_fv, [:y_m_c]; H=20)
+        @test fs_fv isa ForecastSufficiency{Float64}
+        @test !fs_fv.invertible
+        @test fs_fv.one_step_ratio[1] ≈ 1.44 atol=1e-11  # 1.0 / (25/36) = 36/25
+
+        # Invertible observable (:c) -> zero state error, zero info loss, exact Sigma_u = D*D'
+        abcd_c = abcd_representation(sol_fv, [:c])
+        innov_c = innovations_representation(sol_fv, [:c])
+        @test innov_c.invertible
+        @test norm(innov_c.P) < 1e-12
+        @test innov_c.Sigma_u ≈ abcd_c.D * abcd_c.D' atol=1e-11
+        @test maximum(innov_c.information_loss) < 1e-12
+        @test irf(innov_c, 8).values ≈ irf(abcd_c, 8).values atol=1e-11
+    end
+
+    # =========================================================================
+    # 2. Invertible benchmark & Leeper-Walker-Yang (2013) fiscal foresight
+    # =========================================================================
+    @testset "Leeper-Walker-Yang (2013) fiscal foresight & autocovariance parity" begin
+        # Stationary invertible ARMA(1,1)
+        sys_arma = ABCDSystem([0.7;;], [1.0;;], [1.1;;], [1.0;;])
+        innov_arma = innovations_representation(sys_arma)
+        @test innov_arma.invertible
+        @test norm(innov_arma.P) < 1e-12
+        @test innov_arma.Sigma_u ≈ [1.0;;] atol=1e-12
+        @test maximum(innov_arma.information_loss) < 1e-12
+        @test irf(innov_arma, 12).values ≈ irf(sys_arma, 12).values atol=1e-12
+
+        # Leeper-Walker-Yang (2013) 2-period fiscal foresight news shock:
+        # k_t responds to announced tax news before tax rate tau_t moves -> rank(D) = 1 < 2
+        alpha = 0.5
+        kappa = 0.4
+        theta = 0.8
+        A_lwy = [alpha -kappa * theta -kappa; 0.0 0.0 0.0; 0.0 1.0 0.0]
+        B_lwy = [1.0 -kappa * theta^2; 0.0 1.0; 0.0 0.0]
+        C_lwy = [alpha -kappa * theta -kappa; 0.0 0.0 1.0]
+        D_lwy = [1.0 -kappa * theta^2; 0.0 0.0]
+        abcd_lwy = ABCDSystem(A_lwy, B_lwy, C_lwy, D_lwy;
+                              state_names=[:k, :eps_tau, :eps_tau_lag],
+                              obs_names=[:k_obs, :tau_obs],
+                              shock_names=[:u_A, :eps_tau_news])
+
+        @test !is_invertible(abcd_lwy)
+        @test poor_mans_invertibility(abcd_lwy).status === :non_invertible_singular_D
+
+        innov_lwy = innovations_representation(abcd_lwy)
+        @test !innov_lwy.invertible
+        @test innov_lwy.dare_residual < 1e-12
+        @test maximum(abs, eigvals(innov_lwy.A - innov_lwy.K * innov_lwy.C)) < 1.0
+        @test minimum(eigvals(Symmetric(innov_lwy.Sigma_u))) > 0.0
+        @test all(>=(0.0), innov_lwy.information_loss)
+        @test maximum(innov_lwy.information_loss) > 0.1
+
+        # Wold representation is square & invertible and matches ALL autocovariances < 1e-11
+        wold_lwy = to_abcd(innov_lwy)
+        @test is_invertible(wold_lwy)
+        moms_orig = analytical_moments(abcd_lwy; lags=6, format=:matrices)
+        moms_wold = analytical_moments(wold_lwy; lags=6, format=:matrices)
+        @test length(moms_wold) == length(moms_orig) == 7
+        for h in eachindex(moms_orig)
+            @test moms_wold[h] ≈ moms_orig[h] atol=1e-11
+        end
+
+        # Default horizon H=20 IRF matches to_abcd(innov_lwy)
+        ir_def = irf(innov_lwy)
+        @test ir_def.horizon == 20
+        @test size(ir_def.values) == (20, 2, 2)
+        @test ir_def.values ≈ irf(wold_lwy, 20).values atol=1e-12
+    end
+
+    # =========================================================================
+    # 3. Convenience dispatches, n==0, Float32, display/report, RSER-01, errors
+    # =========================================================================
+    @testset "Convenience dispatches, Float32, display, RSER-01, and validation" begin
+        spec_nk = compute_steady_state(@dsge begin
+            parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+            endogenous: y, pi_v, i_rate, a
+            exogenous: eps_y
+            linear: true
+
+            y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+            pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+            i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+            a[t] = rho * a[t-1] + eps_y[t]
+        end)
+        sol_nk = solve(spec_nk; method=:gensys)
+        psol_nk = perturbation_solver(spec_nk; order=1)
+
+        inn_dsge = innovations_representation(sol_nk, [:y])
+        inn_pert = innovations_representation(psol_nk, [:y])
+        @test inn_dsge.Sigma_u ≈ inn_pert.Sigma_u atol=1e-8
+        @test inn_dsge.P ≈ inn_pert.P atol=1e-8
+
+        # StateSpaceModel dispatch
+        ss_corr = StateSpaceModel([1.0 0.2], [0.1;;], [0.7 0.1; 0.0 0.5], [0.4;;];
+                                  R=[1.0; 0.3;;], G=[0.05;;])
+        inn_ss = innovations_representation(ss_corr)
+        @test inn_ss isa InnovationsRepresentation{Float64}
+        @test inn_ss.dare_residual < 1e-12
+        @test analytical_moments(to_abcd(inn_ss); lags=4, format=:matrices) ≈
+              analytical_moments(abcd_representation(ss_corr); lags=4, format=:matrices) atol=1e-11
+
+        # Zero-state system (n == 0)
+        sys_zero = ABCDSystem(zeros(0, 0), zeros(0, 2), zeros(2, 0), [1.0 0.0; 0.0 2.0])
+        inn_zero = innovations_representation(sys_zero)
+        @test size(inn_zero.P) == (0, 0)
+        @test inn_zero.Sigma_u ≈ [1.0 0.0; 0.0 4.0] atol=1e-12
+        @test inn_zero.invertible
+        @test all(iszero, inn_zero.information_loss)
+        @test irf(inn_zero, 5).values[1, :, :] ≈ [1.0 0.0; 0.0 2.0] atol=1e-12
+
+        # Float32 precision preservation (both invertible and non-invertible FVRSW)
+        sys32_ni = ABCDSystem(Float32[1.0;;], Float32[1.0 - 1.0 / 1.2;;],
+                              Float32[-1.0;;], Float32[1.0 / 1.2;;])
+        inn32 = innovations_representation(sys32_ni)
+        @test inn32 isa InnovationsRepresentation{Float32}
+        @test eltype(inn32.P) === Float32
+        @test eltype(inn32.K) === Float32
+        @test eltype(inn32.Sigma_u) === Float32
+        @test eltype(inn32.Sigma_u_chol) === Float32
+        @test eltype(inn32.information_loss) === Float32
+        @test inn32.dare_residual isa Float32
+        @test inn32.P ≈ Float32[11.0 / 36.0;;] atol=1f-5
+        @test inn32.Sigma_u ≈ Float32[1.0;;] atol=1f-5
+        @test to_abcd(inn32) isa ABCDSystem{Float32}
+        @test irf(inn32, 8) isa ImpulseResponse{Float32}
+
+        # show and report across text and LaTeX backends
+        io = IOBuffer()
+        show(io, inn32)
+        s_txt = String(take!(io))
+        @test occursin("Wold Innovations", s_txt)
+
+        report(io, inn32)
+        r_txt = String(take!(io))
+        @test occursin("Information Loss", r_txt)
+        @test occursin("Kalman Gain", r_txt)
+
+        with_display_backend(:latex) do
+            show(io, inn_ss)
+            l_txt = String(take!(io))
+            @test occursin("tabular", l_txt)
+            report(io, inn32)
+            l_rep = String(take!(io))
+            @test occursin("tabular", l_rep)
+        end
+
+        # RSER-01 positional constructor & plain-field round-trip check
+        for obj in (inn32, inn_ss, inn_zero)
+            payload = Dict{String,Any}(string(f) => MEM._ser_field(getfield(obj, f)) for f in fieldnames(typeof(obj)))
+            MEM._assert_plain_payload(payload)
+            reconstructed = MEM._from_serializable(InnovationsRepresentation, payload, MEM.SERIALIZATION_FORMAT_VERSION)
+            @test typeof(reconstructed) === typeof(obj)
+            @test reconstructed.A == obj.A
+            @test reconstructed.K == obj.K
+            @test reconstructed.Sigma_u == obj.Sigma_u
+            @test reconstructed.P == obj.P
+            @test reconstructed.invertible == obj.invertible
+            @test reconstructed.information_loss == obj.information_loss
+        end
+
+        # Propertynames check
+        pnames = propertynames(inn32)
+        @test :Sigma_state in pnames
+        @test :Omega_innov in pnames
+        @test :D_hat in pnames
+        @test :B_hat in pnames
+        @test :M_innov in pnames
+
+        # Validation errors
+        @test_throws ArgumentError innovations_representation(sys32_ni; rcond_tol=0.0)
+        @test_throws ArgumentError irf(inn32, 0)
+        @test_throws ArgumentError InnovationsRepresentation{Float64}(
+            zeros(2, 3), zeros(2, 1), zeros(1, 2), zeros(1, 1), zeros(1, 1), zeros(2, 2),
+            0.0, true, [0.0], ["x_1", "x_2"], ["y_1"],
+        )
+    end
+end
