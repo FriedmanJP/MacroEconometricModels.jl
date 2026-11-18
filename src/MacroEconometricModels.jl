@@ -639,6 +639,7 @@ include("ri/dynamic.jl")
 include("ri/state_space.jl")
 include("ri/analysis.jl")
 include("ri/estimation.jl")
+include("ri/mackowiak_wiederholt.jl")
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -953,6 +954,7 @@ export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
 export DynamicRISolution, solve_ri_transition
 export to_statespace
 export RIEstimationResult, CGTestResult, estimate_ri, coibion_gorodnichenko_test, implied_cg_slope
+export MWAttentionResult, solve_mw_attention, rational_inattention_jacobian
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
