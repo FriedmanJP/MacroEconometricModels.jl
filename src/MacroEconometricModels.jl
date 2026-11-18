@@ -1566,7 +1566,7 @@ export dgp_nongaussian_var, dgp_heteroskedastic_var, dgp_ssvarma
 export dgp_arima, dgp_trend_cycle, dgp_ar2_peak, dgp_lagged_pair, dgp_state_space, dgp_unit_root_pair
 export dgp_vecm, dgp_cointreg, dgp_panel_var, dgp_ardl, dgp_nardl, dgp_pmg
 export dgp_garch_family, dgp_sv, dgp_mgarch, dgp_midas
-export dgp_dynamic_factors, dgp_mixed_frequency_panel
+export dgp_dynamic_factors, dgp_mixed_frequency_panel, dgp_quantile_factors, dgp_qfavar
 export dgp_infinite_gdfm
 export dgp_lp_iv, dgp_state_dependent_var, dgp_propensity, dgp_hac
 export dgp_cross_section, dgp_panel, dgp_staggered_did

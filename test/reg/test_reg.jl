@@ -2170,10 +2170,10 @@ end
         end
 
         # Medium well-conditioned design across all five quantiles
-        rng_m = Random.Xoshiro(88310)
+        rng = Random.Xoshiro(88310)
         n_m, k_m = 300, 4
-        X_m = hcat(ones(n_m), randn(rng_m, n_m, k_m - 1))
-        y_m = X_m * [1.0, -0.5, 2.0, 0.3] .+ randn(rng_m, n_m)
+        X_m = hcat(ones(n_m), randn(rng, n_m, k_m - 1))
+        y_m = X_m * [1.0, -0.5, 2.0, 0.3] .+ randn(rng, n_m)
         taus_5 = [0.05, 0.25, 0.50, 0.75, 0.95]
         m_def = estimate_qreg(y_m, X_m, taus_5)
         m_ipm = estimate_qreg(y_m, X_m, taus_5; solver=:ipm)
@@ -2444,9 +2444,9 @@ end
         ws50 = M._QRegWorkspace{Float32}(50, 16)
         b50 = zeros(Float32, 16)
         for seed in (15, 36, 40, 143), tau in (0.05f0, 0.5f0, 0.95f0)
-            rng50 = Random.MersenneTwister(seed)
-            X50 = Float32.(hcat(ones(50), randn(rng50, 50, 15)))
-            y50 = Float32.(X50 * ones(Float32, 16) .+ randn(rng50, 50))
+            rng = Random.MersenneTwister(seed)
+            X50 = Float32.(hcat(ones(50), randn(rng, 50, 15)))
+            y50 = Float32.(X50 * ones(Float32, 16) .+ randn(rng, 50))
             al = f32_alloc_check!(b50, X50, y50, tau, ws50)
             _, conv50 = M._qreg_ipm!(b50, X50, y50, tau, ws50)
             @test conv50
@@ -2454,9 +2454,9 @@ end
             @test al == 0
             @test all(isfinite, b50)
         end
-        rng_b = Random.MersenneTwister(143)
-        X_b = Float32.(randn(rng_b, 50, 16))
-        Y_b = Float32.(randn(rng_b, 50, 8))
+        rng = Random.MersenneTwister(143)
+        X_b = Float32.(randn(rng, 50, 16))
+        Y_b = Float32.(randn(rng, 50, 8))
         B_b = zeros(Float32, 16, 8)
         M._qreg_batch!(B_b, X_b, Y_b, 0.5f0; threaded=true)
         @test all(isfinite, B_b)

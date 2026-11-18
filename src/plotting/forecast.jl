@@ -474,3 +474,253 @@ end
 # and Local-Projection plots. Keeping a single method there avoids a same-type dispatch
 # collision that would silently override on include.
 # =============================================================================
+
+# =============================================================================
+# GrowthAtRiskResult (QFM-07)
+# =============================================================================
+
+const _GAR_PLOT_VIEWS = (:fan, :gar, :density)
+
+# Build the time-series fan / Growth-at-Risk panel for GrowthAtRiskResult.
+function _plot_gar_fan(g::GrowthAtRiskResult{T};
+                       quantile_idx::Int=0,
+                       ncols::Int=0,
+                       title::String="") where {T}
+    T_eff = g.n_eff
+    M = length(g.taus)
+    perm = sortperm(g.taus)
+
+    q_idx = quantile_idx > 0 ? quantile_idx :
+            (M >= 1 ? argmin(abs.(Float64.(g.taus) .- 0.5)) : 0)
+    q_label = q_idx > 0 ? (quantile_idx > 0 ? "Q(τ=$(_fmt(g.taus[q_idx]; digits=2)))" :
+                                              "Median (τ=$(_fmt(g.taus[q_idx]; digits=2)))") : ""
+
+    has_outer = M >= 2
+    lo_idx = has_outer ? perm[1] : 0
+    hi_idx = has_outer ? perm[end] : 0
+
+    has_inner = M >= 4
+    ilo_idx = has_inner ? perm[max(2, fld(M, 4))] : 0
+    ihi_idx = has_inner ? perm[min(M - 1, M + 1 - max(2, fld(M, 4)))] : 0
+    if has_inner && (ilo_idx == ihi_idx || (ilo_idx == lo_idx && ihi_idx == hi_idx))
+        has_inner = false
+    end
+
+    rows = Vector{Pair{String,String}}[]
+    for t in 1:T_eff
+        es_v = g.expected_shortfall[t]
+        gar_v = g.gar[t]
+        tail_ok = isfinite(es_v) && isfinite(gar_v)
+        row = Pair{String,String}[
+            "x" => _json(t),
+            "actual" => _json(g.actual_target[t]),
+            "gar" => _json(gar_v),
+            "es" => _json(es_v),
+            "tail_lo" => tail_ok ? _json(min(es_v, gar_v)) : "null",
+            "tail_hi" => tail_ok ? _json(max(es_v, gar_v)) : "null",
+        ]
+        if q_idx > 0
+            push!(row, "q_sel" => _json(g.fitted_quantiles[t, q_idx]))
+        end
+        if has_outer
+            push!(row, "q_lo" => _json(g.fitted_quantiles[t, lo_idx]))
+            push!(row, "q_hi" => _json(g.fitted_quantiles[t, hi_idx]))
+        end
+        if has_inner
+            push!(row, "q_ilo" => _json(g.fitted_quantiles[t, ilo_idx]))
+            push!(row, "q_ihi" => _json(g.fitted_quantiles[t, ihi_idx]))
+        end
+        push!(rows, row)
+    end
+    data_json = _json_array_of_objects(rows)
+
+    gar_pct = round(Int, 100 * Float64(g.alpha))
+    s_names = String["Actual ($(g.target_name))", "GaR ($(gar_pct)%)", "Expected Shortfall"]
+    s_colors = String[_PLOT_SERIES[1], _PLOT_SERIES[2], _PLOT_SERIES[4]]
+    s_keys = String["actual", "gar", "es"]
+    s_dash = String["", "", "5,3"]
+    if q_idx > 0
+        push!(s_names, q_label)
+        push!(s_colors, _PLOT_SERIES[3])
+        push!(s_keys, "q_sel")
+        push!(s_dash, "4,3")
+    end
+    s_json = _series_json(s_names, s_colors; keys=s_keys, dash=s_dash)
+
+    band_parts = String[]
+    if has_outer
+        lbl = "$(round(Int, 100 * Float64(g.taus[lo_idx])))–$(round(Int, 100 * Float64(g.taus[hi_idx])))% Fan"
+        push!(band_parts, "{\"lo_key\":\"q_lo\",\"hi_key\":\"q_hi\",\"color\":$(_json(_PLOT_SERIES[1])),\"alpha\":0.12,\"name\":$(_json(lbl))}")
+    end
+    if has_inner
+        lbl = "$(round(Int, 100 * Float64(g.taus[ilo_idx])))–$(round(Int, 100 * Float64(g.taus[ihi_idx])))% Fan"
+        push!(band_parts, "{\"lo_key\":\"q_ilo\",\"hi_key\":\"q_ihi\",\"color\":$(_json(_PLOT_SERIES[1])),\"alpha\":0.22,\"name\":$(_json(lbl))}")
+    end
+    push!(band_parts, "{\"lo_key\":\"tail_lo\",\"hi_key\":\"tail_hi\",\"color\":$(_json(_PLOT_ALERT)),\"alpha\":0.16,\"name\":\"ES–GaR Tail\"}")
+    bands_json = "[" * join(band_parts, ",") * "]"
+    refs_json = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+
+    id = _next_plot_id("gar_fan")
+    js = _render_line_js(id, data_json, s_json;
+                         bands_json=bands_json, ref_lines_json=refs_json,
+                         integer_x=true, xlabel="Period", ylabel=g.target_name)
+    ptitle = "$(g.target_name) (h=$(g.horizon), α=$(_fmt(g.alpha; digits=2)), $(g.density))"
+    ftitle = isempty(title) ? "Growth-at-Risk Forecast Fan — $(g.target_name)" : title
+    return _make_plot([_PanelSpec(id, ptitle, js)]; title=ftitle, ncols=(ncols <= 0 ? 1 : ncols))
+end
+
+# Build predictive density / quantile curve + OOS tail-risk bar summary for GrowthAtRiskResult.
+function _plot_gar_density(g::GrowthAtRiskResult{T};
+                           quantile_idx::Int=0,
+                           ncols::Int=0,
+                           title::String="") where {T}
+    M = length(g.taus)
+    perm = sortperm(g.taus)
+    panels = _PanelSpec[]
+
+    # Panel 1: OOS T+h|T predictive PDF (when parametric density params exist) or quantile curve
+    id1 = _next_plot_id("gar_dens")
+    has_skewt = g.density === :skewed_t && length(g.oos_density_params) == 4 &&
+                all(isfinite, g.oos_density_params) &&
+                g.oos_density_params[2] > zero(T) && g.oos_density_params[4] > zero(T)
+    has_norm = g.density === :normal && length(g.oos_density_params) == 2 &&
+               all(isfinite, g.oos_density_params) && g.oos_density_params[2] > zero(T)
+
+    if has_skewt || has_norm
+        mu = Float64(g.oos_density_params[1])
+        sig = Float64(g.oos_density_params[2])
+        fin_q = Float64[Float64(v) for v in g.oos_quantiles if isfinite(v)]
+        lo_candidates = Float64[mu - 3.5 * sig]
+        hi_candidates = Float64[mu + 3.5 * sig]
+        isfinite(g.oos_expected_shortfall) && push!(lo_candidates, Float64(g.oos_expected_shortfall) - sig)
+        isfinite(g.oos_gar) && push!(lo_candidates, Float64(g.oos_gar) - sig)
+        if !isempty(fin_q)
+            push!(lo_candidates, minimum(fin_q) - sig)
+            push!(hi_candidates, maximum(fin_q) + 1.5 * sig)
+        end
+        y_lo = minimum(lo_candidates)
+        y_hi = maximum(hi_candidates)
+        y_hi <= y_lo && (y_hi = y_lo + 1.0)
+        y_grid = collect(range(y_lo, y_hi; length=120))
+        dens_vals = if has_skewt
+            alp = Float64(g.oos_density_params[3])
+            nu = Float64(g.oos_density_params[4])
+            Float64[_skewt_pdf(yg, mu, sig, alp, nu) for yg in y_grid]
+        else
+            nd = Distributions.Normal(mu, sig)
+            Float64[Distributions.pdf(nd, yg) for yg in y_grid]
+        end
+        data1 = _keyed_rows_json(y_grid, ["pdf" => dens_vals])
+        dlabel = has_skewt ? "Skewed-t Density" : "Normal Density"
+        s1 = _series_json([dlabel], [_PLOT_SERIES[1]]; keys=["pdf"])
+        ref_parts = String[]
+        if isfinite(g.oos_gar)
+            push!(ref_parts, "{\"value\":$(_json(Float64(g.oos_gar))),\"color\":$(_json(_PLOT_SERIES[2])),\"dash\":\"5,3\",\"axis\":\"x\"}")
+        end
+        if isfinite(g.oos_expected_shortfall)
+            push!(ref_parts, "{\"value\":$(_json(Float64(g.oos_expected_shortfall))),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,2\",\"axis\":\"x\"}")
+        end
+        if quantile_idx > 0 && isfinite(g.oos_quantiles[quantile_idx])
+            push!(ref_parts, "{\"value\":$(_json(Float64(g.oos_quantiles[quantile_idx]))),\"color\":$(_json(_PLOT_SERIES[3])),\"dash\":\"3,3\",\"axis\":\"x\"}")
+        end
+        refs1 = "[" * join(ref_parts, ",") * "]"
+        js1 = _render_line_js(id1, data1, s1; ref_lines_json=refs1,
+                              xlabel=g.target_name, ylabel="Density")
+        push!(panels, _PanelSpec(id1, "Predictive Density (T+$(g.horizon)|T)", js1))
+    else
+        # Empirical quantile curve across taus
+        if M >= 2
+            taus_s = Float64[Float64(g.taus[j]) for j in perm]
+            oq_s = Float64[Float64(g.oos_quantiles[j]) for j in perm]
+            data1 = _keyed_rows_json(taus_s, ["q" => oq_s])
+            s1 = _series_json(["OOS Quantiles"], [_PLOT_SERIES[1]]; keys=["q"])
+            ref_parts = String[]
+            isfinite(g.oos_gar) && push!(ref_parts, "{\"value\":$(_json(Float64(g.oos_gar))),\"color\":$(_json(_PLOT_SERIES[2])),\"dash\":\"5,3\",\"axis\":\"y\"}")
+            isfinite(g.oos_expected_shortfall) && push!(ref_parts, "{\"value\":$(_json(Float64(g.oos_expected_shortfall))),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,2\",\"axis\":\"y\"}")
+            if quantile_idx > 0
+                push!(ref_parts, "{\"value\":$(_json(Float64(g.taus[quantile_idx]))),\"color\":$(_json(_PLOT_SERIES[3])),\"dash\":\"3,3\",\"axis\":\"x\"}")
+            end
+            js1 = _render_line_js(id1, data1, s1;
+                                  ref_lines_json="[" * join(ref_parts, ",") * "]",
+                                  xlabel="Quantile τ", ylabel=g.target_name)
+        else
+            rows1 = [["x" => _json("τ=$(_fmt(g.taus[1]; digits=2))"),
+                      "q" => _json(g.oos_quantiles[1])]]
+            s1 = _series_json(["OOS Quantile"], [_PLOT_SERIES[1]]; keys=["q"])
+            js1 = _render_bar_js(id1, _json_array_of_objects(rows1), s1;
+                                 mode="grouped", xlabel="Quantile", ylabel=g.target_name)
+        end
+        push!(panels, _PanelSpec(id1, "Conditional Quantile Function (T+$(g.horizon)|T)", js1))
+    end
+
+    # Panel 2: OOS Tail Risk Summary (horizontal bar chart)
+    id2 = _next_plot_id("gar_sum")
+    gar_pct = round(Int, 100 * Float64(g.alpha))
+    bar_rows = Vector{Pair{String,String}}[
+        ["x" => _json("GaR ($(gar_pct)%)"), "val" => _json(g.oos_gar)],
+        ["x" => _json("Expected Shortfall"), "val" => _json(g.oos_expected_shortfall)],
+    ]
+    if quantile_idx > 0
+        push!(bar_rows, ["x" => _json("Q(τ=$(_fmt(g.taus[quantile_idx]; digits=2)))"),
+                         "val" => _json(g.oos_quantiles[quantile_idx])])
+    elseif M >= 1
+        med_i = argmin(abs.(Float64.(g.taus) .- 0.5))
+        push!(bar_rows, ["x" => _json("Q(τ=$(_fmt(g.taus[med_i]; digits=2)))"),
+                         "val" => _json(g.oos_quantiles[med_i])])
+    end
+    if isfinite(g.oos_downside_entropy)
+        push!(bar_rows, ["x" => _json("Downside Entropy"), "val" => _json(g.oos_downside_entropy)])
+    end
+    if isfinite(g.oos_upside_entropy)
+        push!(bar_rows, ["x" => _json("Upside Entropy"), "val" => _json(g.oos_upside_entropy)])
+    end
+    s2 = _series_json(["OOS T+$(g.horizon)|T"], [_PLOT_SERIES[2]]; keys=["val"])
+    js2 = _render_bar_js(id2, _json_array_of_objects(bar_rows), s2;
+                         mode="grouped", orientation="h", xlabel="Value", ylabel="")
+    push!(panels, _PanelSpec(id2, "Tail Risk Summary (T+$(g.horizon)|T)", js2))
+
+    ftitle = isempty(title) ?
+        "Growth-at-Risk Predictive Density — $(g.target_name) (h=$(g.horizon), $(g.density))" : title
+    return _make_plot(panels; title=ftitle, ncols=(ncols <= 0 ? 2 : ncols))
+end
+
+"""
+    plot_result(g::GrowthAtRiskResult; view=:fan, quantile_idx=0, ncols=0, title="", save_path=nothing)
+
+Plot Growth-at-Risk conditional quantile forecasts and predictive density metrics.
+
+# Views
+- `:fan` / `:gar` — time series of `actual_target`, `gar`, and `expected_shortfall`
+  (with shaded ES–GaR lower-tail ribbon) overlaid on `fitted_quantiles` fan bands
+  (highlighting `quantile_idx` when `quantile_idx > 0`).
+- `:density` — `T+h|T` predictive density (`:skewed_t` or `:normal`) or quantile
+  curve (`:none`) with `oos_gar` / `oos_expected_shortfall` markers, paired with an
+  out-of-sample tail-risk summary bar chart.
+
+# Keyword Arguments
+- `view::Symbol = :fan` — exhibit view (`:fan`, `:gar`, or `:density`)
+- `quantile_idx::Int = 0` — optional 1-based index into `g.taus` to highlight (`0` = median/auto)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(g::GrowthAtRiskResult{T};
+                     view::Symbol=:fan,
+                     quantile_idx::Int=0,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _GAR_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view :$view for GrowthAtRiskResult. Valid views: $(_GAR_PLOT_VIEWS)"))
+    M = length(g.taus)
+    (0 <= quantile_idx <= M) || throw(ArgumentError(
+        "quantile_idx must be in 0:$M, got $quantile_idx"))
+
+    p = if view === :density
+        _plot_gar_density(g; quantile_idx=quantile_idx, ncols=ncols, title=title)
+    else
+        _plot_gar_fan(g; quantile_idx=quantile_idx, ncols=ncols, title=title)
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end

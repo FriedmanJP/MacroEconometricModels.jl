@@ -1346,3 +1346,715 @@ function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothin
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# QuantileFactorModel (QFM-02 / QFM-03)
+# =============================================================================
+
+const _QFM_PLOT_VIEWS = (:factors, :loadings, :variance, :scree)
+
+# Internal helper: factors view for QuantileFactorModel (no docstring per visualization.md).
+function _plot_qfm_factors(m::QuantileFactorModel{T};
+                           var::Union{Int,String,Nothing}=nothing,
+                           max_factors::Int=5,
+                           ncols::Int=0,
+                           title::String="") where {T}
+    T_obs, r = size(m.factors)
+    n_plot = min(r, max(1, max_factors))
+    panels = _PanelSpec[]
+
+    if m.se_factors !== nothing
+        xs = collect(1:T_obs)
+        for k in 1:n_plot
+            id = _next_plot_id("qfm_f")
+            est = Float64.(m.factors[:, k])
+            se = Float64.(m.se_factors[:, k])
+            lo = est .- 1.96 .* se
+            hi = est .+ 1.96 .* se
+            data_json = _keyed_rows_json(xs, ["est" => est, "lo" => lo, "hi" => hi])
+            col_k = _PLOT_SERIES[mod1(k, length(_PLOT_SERIES))]
+            s_json = _series_json(["Factor $k"], [col_k]; keys=["est"])
+            bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(col_k)),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"95% CI\"}]"
+            refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+            js = _render_line_js(id, data_json, s_json; bands_json=bands, ref_lines_json=refs,
+                                 integer_x=true, xlabel="Period", ylabel="Factor $k")
+            push!(panels, _PanelSpec(id, "Factor $k (±1.96 SE)", js))
+        end
+    else
+        id = _next_plot_id("qfm_fac")
+        fac_names = ["Factor $k" for k in 1:n_plot]
+        data_json = _timeseries_data_json(m.factors[:, 1:n_plot], fac_names)
+        s_json = _series_json(fac_names, _colors_for(fac_names); keys=["v$k" for k in 1:n_plot])
+        refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+        js = _render_line_js(id, data_json, s_json; ref_lines_json=refs,
+                             integer_x=true, xlabel="Period", ylabel="Factor Value")
+        push!(panels, _PanelSpec(id, _cap_title("Extracted Quantile Factors", n_plot, r), js))
+    end
+
+    if var !== nothing
+        vi = _resolve_var(var, m.varnames)
+        idv = _next_plot_id("qfm_fit")
+        vname = m.varnames[vi]
+        Y_cmp = hcat(m.X[:, vi], m.common_component[:, vi])
+        snames = [vname, "Common (τ=$(_fmt(m.tau; digits=2)))"]
+        data_v = _timeseries_data_json(Y_cmp, snames)
+        s_v = _series_json(snames, [_PLOT_SERIES[1], _PLOT_SERIES[2]]; keys=["v1", "v2"], dash=["", "5,3"])
+        js_v = _render_line_js(idv, data_v, s_v; integer_x=true, xlabel="Period", ylabel=vname)
+        push!(panels, _PanelSpec(idv, "Observed vs Common: $(vname)", js_v))
+    end
+
+    ftitle = isempty(title) ?
+        "Quantile Factor Model (τ=$(_fmt(m.tau; digits=3)), r=$(m.r), $(m.method))" : title
+    ncols_use = ncols <= 0 ? (length(panels) == 1 ? 1 : min(length(panels), 2)) : ncols
+    return _make_plot(panels; title=ftitle, ncols=ncols_use,
+                      note=_cap_note("factors", n_plot, r, "max_factors"))
+end
+
+# Internal helper: loadings view for QuantileFactorModel.
+function _plot_qfm_loadings(m::QuantileFactorModel{T};
+                            var::Union{Int,String,Nothing}=nothing,
+                            max_factors::Int=5,
+                            max_vars::Int=20,
+                            ncols::Int=0,
+                            title::String="") where {T}
+    N, r = size(m.loadings)
+    panels = _PanelSpec[]
+    note = ""
+
+    if var !== nothing
+        vi = _resolve_var(var, m.varnames)
+        vname = m.varnames[vi]
+        n_fac = min(r, max(1, max_factors))
+        id = _next_plot_id("qfm_lv")
+        if m.se_loadings !== nothing
+            rows = String[]
+            for k in 1:n_fac
+                est = m.loadings[vi, k]
+                se = m.se_loadings[vi, k]
+                lo = isfinite(est) && isfinite(se) ? est - 1.96 * se : est
+                hi = isfinite(est) && isfinite(se) ? est + 1.96 * se : est
+                push!(rows, "{\"name\":$(_json("Factor $k")),\"effect\":$(_json(est)),\"ci_lo\":$(_json(lo)),\"ci_hi\":$(_json(hi))}")
+            end
+            js = _render_coef_plot_js(id, "[" * join(rows, ",\n") * "]";
+                                      color=_PLOT_SERIES[1], ref_value=0,
+                                      xlabel="Loading λ(τ)", ylabel="")
+        else
+            rows = [Pair{String,String}["x" => _json("Factor $k"), "val" => _json(m.loadings[vi, k])]
+                    for k in 1:n_fac]
+            s_json = _series_json(["Loading"], [_PLOT_SERIES[1]]; keys=["val"])
+            js = _render_bar_js(id, _json_array_of_objects(rows), s_json;
+                                mode="grouped", orientation="h", xlabel="Loading λ(τ)", ylabel="")
+        end
+        push!(panels, _PanelSpec(id, _cap_title("Loadings: $(vname)", n_fac, r), js))
+        note = _cap_note("factors", n_fac, r, "max_factors")
+    else
+        shown_v = min(N, max(1, max_vars))
+        n_fac = min(r, max(1, max_factors))
+        if m.se_loadings !== nothing
+            for k in 1:n_fac
+                id = _next_plot_id("qfm_lk")
+                rows = String[]
+                for i in 1:shown_v
+                    est = m.loadings[i, k]
+                    se = m.se_loadings[i, k]
+                    lo = isfinite(est) && isfinite(se) ? est - 1.96 * se : est
+                    hi = isfinite(est) && isfinite(se) ? est + 1.96 * se : est
+                    push!(rows, "{\"name\":$(_json(m.varnames[i])),\"effect\":$(_json(est)),\"ci_lo\":$(_json(lo)),\"ci_hi\":$(_json(hi))}")
+                end
+                col_k = _PLOT_SERIES[mod1(k, length(_PLOT_SERIES))]
+                js = _render_coef_plot_js(id, "[" * join(rows, ",\n") * "]";
+                                          color=col_k, ref_value=0,
+                                          xlabel="Loading λ_$k(τ)", ylabel="")
+                push!(panels, _PanelSpec(id, _cap_title("Factor $k Loadings", shown_v, N), js))
+            end
+        else
+            id = _next_plot_id("qfm_lbar")
+            fac_names = ["Factor $k" for k in 1:n_fac]
+            rows = Vector{Pair{String,String}}[]
+            for i in 1:shown_v
+                row = Pair{String,String}["x" => _json(m.varnames[i])]
+                for k in 1:n_fac
+                    push!(row, "f$k" => _json(m.loadings[i, k]))
+                end
+                push!(rows, row)
+            end
+            s_json = _series_json(fac_names, _colors_for(fac_names); keys=["f$k" for k in 1:n_fac])
+            js = _render_bar_js(id, _json_array_of_objects(rows), s_json;
+                                mode="grouped", orientation="h", xlabel="Loading λ(τ)", ylabel="")
+            push!(panels, _PanelSpec(id, _cap_title("Factor Loadings", shown_v, N), js))
+        end
+        note_v = _cap_note("variables", shown_v, N, "max_vars")
+        note_f = _cap_note("factors", n_fac, r, "max_factors")
+        note = isempty(note_v) ? note_f : (isempty(note_f) ? note_v : note_v * " " * note_f)
+    end
+
+    ftitle = isempty(title) ?
+        "Quantile Factor Loadings (τ=$(_fmt(m.tau; digits=3)), r=$(m.r))" : title
+    ncols_use = ncols <= 0 ? (length(panels) == 1 ? 1 : min(length(panels), 2)) : ncols
+    return _make_plot(panels; title=ftitle, ncols=ncols_use, note=note)
+end
+
+# Internal helper: variance / scree view for QuantileFactorModel.
+function _plot_qfm_variance(m::QuantileFactorModel{T};
+                            var::Union{Int,String,Nothing}=nothing,
+                            max_vars::Int=20,
+                            ncols::Int=0,
+                            title::String="") where {T}
+    N = length(m.pseudo_r2)
+    r = length(m.sigma_sq)
+
+    id1 = _next_plot_id("qfm_scree")
+    rows1 = [Pair{String,String}["x" => _json("Factor $k"), "sig" => _json(m.sigma_sq[k])] for k in 1:r]
+    s1 = _series_json(["σ²"], [_PLOT_SERIES[1]]; keys=["sig"])
+    js1 = _render_bar_js(id1, _json_array_of_objects(rows1), s1;
+                         mode="grouped", xlabel="Factor", ylabel="Factor Strength (σ²)")
+    p1 = _PanelSpec(id1, "Factor Strength Scree", js1)
+
+    id2 = _next_plot_id("qfm_pr2")
+    var_idxs = var === nothing ? collect(1:min(N, max(1, max_vars))) : [_resolve_var(var, m.varnames)]
+    rows2 = [Pair{String,String}["x" => _json(m.varnames[i]), "r2" => _json(m.pseudo_r2[i])] for i in var_idxs]
+    s2 = _series_json(["Pseudo-R²"], [_PLOT_SERIES[2]]; keys=["r2"])
+    js2 = _render_bar_js(id2, _json_array_of_objects(rows2), s2;
+                         mode="grouped", orientation="h", xlabel="Pseudo-R²", ylabel="")
+    p2_title = var === nothing ? _cap_title("Series Pseudo-R²", length(var_idxs), N) :
+                                 "Pseudo-R²: $(m.varnames[var_idxs[1]])"
+    p2 = _PanelSpec(id2, p2_title, js2)
+
+    ftitle = isempty(title) ?
+        "Quantile Factor Strength & Pseudo-R² (τ=$(_fmt(m.tau; digits=3)), r=$(m.r))" : title
+    ncols_use = ncols <= 0 ? 2 : ncols
+    note = var === nothing ? _cap_note("variables", length(var_idxs), N, "max_vars") : ""
+    return _make_plot([p1, p2]; title=ftitle, ncols=ncols_use, note=note)
+end
+
+"""
+    plot_result(m::QuantileFactorModel; view=:factors, var=nothing, max_factors=5,
+                max_vars=20, ncols=0, title="", save_path=nothing)
+
+Plot an estimated [`QuantileFactorModel`](@ref).
+
+# Views
+- `:factors` — time series of estimated quantile factors `m.factors` (with `±1.96 SE`
+  bands when `m.se_factors !== nothing`), plus observed vs common component for `var` if given.
+- `:loadings` — horizontal bar or CI whisker plot of factor loadings `m.loadings` across
+  variables (or across factors for a selected variable `var`).
+- `:variance` / `:scree` — factor strength scree `m.sigma_sq` alongside per-series
+  Koenker–Machado `m.pseudo_r2`.
+
+# Keyword Arguments
+- `view::Symbol = :factors` — exhibit view (`:factors`, `:loadings`, `:variance`, or `:scree`)
+- `var::Union{Int,String,Nothing} = nothing` — optional variable index or name
+- `max_factors::Int = 5` — maximum number of factors displayed (C7 note if capped)
+- `max_vars::Int = 20` — maximum number of panel series displayed (C7 note if capped)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(m::QuantileFactorModel{T};
+                     view::Symbol=:factors,
+                     var::Union{Int,String,Nothing}=nothing,
+                     max_factors::Int=5,
+                     max_vars::Int=20,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _QFM_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view :$view for QuantileFactorModel. Valid views: $(_QFM_PLOT_VIEWS)"))
+
+    p = if view === :factors
+        _plot_qfm_factors(m; var=var, max_factors=max_factors, ncols=ncols, title=title)
+    elseif view === :loadings
+        _plot_qfm_loadings(m; var=var, max_factors=max_factors, max_vars=max_vars, ncols=ncols, title=title)
+    else
+        _plot_qfm_variance(m; var=var, max_vars=max_vars, ncols=ncols, title=title)
+    end
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end
+
+# =============================================================================
+# QuantileFactorGrid (QFM-05)
+# =============================================================================
+
+const _QFM_GRID_PLOT_VIEWS = (:factors, :loadings, :ic, :rank)
+
+"""
+    plot_result(g::QuantileFactorGrid; view=:factors, factor=1, var=1, max_taus=10,
+                max_factors=5, ncols=0, title="", save_path=nothing)
+
+Plot a multi-quantile [`QuantileFactorGrid`](@ref).
+
+# Views
+- `:factors` — overlay estimated quantile factor paths `F̂_factor(τ)` across `g.taus`.
+- `:loadings` — `τ`-profile of estimated loadings across `g.taus` for variable `var`
+  (with `±1.96 SE` band on `factor` when standard errors were computed).
+- `:ic` / `:rank` — quantile-specific factor count `r(τ)` (`r_by_tau`) and check-loss
+  objective across `g.taus`.
+
+# Keyword Arguments
+- `view::Symbol = :factors` — exhibit view (`:factors`, `:loadings`, `:ic`, or `:rank`)
+- `factor::Int = 1` — 1-based factor index for `:factors` (and CI band in `:loadings`)
+- `var::Union{Int,String} = 1` — variable index or name for `:loadings`
+- `max_taus::Int = 10` — maximum quantiles overlaid in `:factors` (C7 note if capped)
+- `max_factors::Int = 5` — maximum factor curves drawn in `:loadings` (C7 note if capped)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(g::QuantileFactorGrid{T};
+                     view::Symbol=:factors,
+                     factor::Int=1,
+                     var::Union{Int,String}=1,
+                     max_taus::Int=10,
+                     max_factors::Int=5,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    !isempty(g.models) || throw(ArgumentError("Cannot plot an empty QuantileFactorGrid"))
+    view in _QFM_GRID_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view :$view for QuantileFactorGrid. Valid views: $(_QFM_GRID_PLOT_VIEWS)"))
+    r_max = maximum(g.r_by_tau)
+    (1 <= factor <= r_max) || throw(ArgumentError("factor must be in 1:$r_max, got $factor"))
+    vi = _resolve_var(var, g.varnames)
+
+    perm = sortperm(g.taus)
+    M = length(g.taus)
+
+    p = if view === :factors
+        idxs_avail = [j for j in perm if factor <= g.models[j].r]
+        n_avail = length(idxs_avail)
+        n_show = min(n_avail, max(1, max_taus))
+        pick = n_show == n_avail ? idxs_avail :
+               idxs_avail[unique(round.(Int, range(1, n_avail; length=n_show)))]
+        T_obs = size(g.models[pick[1]].factors, 1)
+        s_names = ["τ=$(_fmt(g.taus[j]; digits=2))" for j in pick]
+        cols = ["t$k" => Float64.(g.models[j].factors[:, factor]) for (k, j) in enumerate(pick)]
+        data_json = _keyed_rows_json(collect(1:T_obs), cols)
+        s_json = _series_json(s_names, _colors_for(s_names); keys=["t$k" for k in 1:length(pick)])
+        refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+        id = _next_plot_id("qgrid_f")
+        js = _render_line_js(id, data_json, s_json; ref_lines_json=refs,
+                             integer_x=true, xlabel="Period", ylabel="Factor $factor")
+        ptitle = _cap_title("Factor $factor Across Quantiles", length(pick), n_avail)
+        ftitle = isempty(title) ? "Quantile Factor Grid — Factor $factor ($(M) quantiles)" : title
+        _make_plot([_PanelSpec(id, ptitle, js)]; title=ftitle,
+                   ncols=(ncols <= 0 ? 1 : ncols),
+                   note=_cap_note("quantiles", length(pick), n_avail, "max_taus"))
+    elseif view === :loadings
+        vname = g.varnames[vi]
+        n_fac = min(r_max, max(1, max_factors))
+        id = _next_plot_id("qgrid_l")
+        if M == 1
+            m1 = g.models[1]
+            k_lim = min(m1.r, n_fac)
+            rows = [Pair{String,String}["x" => _json("Factor $k"), "val" => _json(m1.loadings[vi, k])]
+                    for k in 1:k_lim]
+            s_json = _series_json(["Loading (τ=$(_fmt(m1.tau; digits=2)))"], [_PLOT_SERIES[1]]; keys=["val"])
+            js = _render_bar_js(id, _json_array_of_objects(rows), s_json;
+                                mode="grouped", orientation="h", xlabel="Loading λ(τ)", ylabel="")
+        else
+            taus_s = Float64[Float64(g.taus[j]) for j in perm]
+            has_se = any(g.models[j].se_loadings !== nothing && factor <= g.models[j].r for j in perm)
+            rows = Vector{Pair{String,String}}[]
+            for (pos, j) in enumerate(perm)
+                mj = g.models[j]
+                row = Pair{String,String}["x" => _json(taus_s[pos])]
+                for k in 1:n_fac
+                    val = k <= mj.r ? Float64(mj.loadings[vi, k]) : NaN
+                    push!(row, "f$k" => _json(val))
+                end
+                if has_se
+                    if mj.se_loadings !== nothing && factor <= mj.r
+                        est = Float64(mj.loadings[vi, factor])
+                        se = Float64(mj.se_loadings[vi, factor])
+                        push!(row, "lo" => _json(est - 1.96 * se))
+                        push!(row, "hi" => _json(est + 1.96 * se))
+                    else
+                        push!(row, "lo" => "null")
+                        push!(row, "hi" => "null")
+                    end
+                end
+                push!(rows, row)
+            end
+            fac_names = ["Factor $k" for k in 1:n_fac]
+            fac_cols = _colors_for(fac_names)
+            s_json = _series_json(fac_names, fac_cols; keys=["f$k" for k in 1:n_fac])
+            bands = has_se ?
+                "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(fac_cols[min(factor, length(fac_cols))])),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"Factor $factor 95% CI\"}]" : "[]"
+            refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+            js = _render_line_js(id, _json_array_of_objects(rows), s_json;
+                                 bands_json=bands, ref_lines_json=refs,
+                                 xlabel="Quantile τ", ylabel="Loading λ(τ)")
+        end
+        ptitle = _cap_title("Loading Profile: $(vname)", n_fac, r_max)
+        ftitle = isempty(title) ? "Quantile Factor Loading Profile — $(vname)" : title
+        _make_plot([_PanelSpec(id, ptitle, js)]; title=ftitle,
+                   ncols=(ncols <= 0 ? 1 : ncols),
+                   note=_cap_note("factors", n_fac, r_max, "max_factors"))
+    else
+        # :ic / :rank
+        id1 = _next_plot_id("qgrid_r")
+        rows1 = [Pair{String,String}["x" => _json("τ=$(_fmt(g.taus[j]; digits=2))"), "r" => _json(g.r_by_tau[j])]
+                 for j in perm]
+        s1 = _series_json(["Active Rank r(τ)"], [_PLOT_SERIES[1]]; keys=["r"])
+        js1 = _render_bar_js(id1, _json_array_of_objects(rows1), s1;
+                             mode="grouped", xlabel="Quantile τ", ylabel="Factors r(τ)")
+        p1 = _PanelSpec(id1, "Selected Factor Rank r(τ)", js1)
+
+        id2 = _next_plot_id("qgrid_obj")
+        if M >= 2
+            taus_s = Float64[Float64(g.taus[j]) for j in perm]
+            objs_s = Float64[Float64(g.models[j].objective) for j in perm]
+            data2 = _keyed_rows_json(taus_s, ["loss" => objs_s])
+            s2 = _series_json(["Check Loss"], [_PLOT_SERIES[2]]; keys=["loss"])
+            js2 = _render_line_js(id2, data2, s2; xlabel="Quantile τ", ylabel="Mean Check Loss")
+        else
+            rows2 = [Pair{String,String}["x" => _json("τ=$(_fmt(g.taus[1]; digits=2))"),
+                                         "loss" => _json(g.models[1].objective)]]
+            s2 = _series_json(["Check Loss"], [_PLOT_SERIES[2]]; keys=["loss"])
+            js2 = _render_bar_js(id2, _json_array_of_objects(rows2), s2;
+                                 mode="grouped", xlabel="Quantile τ", ylabel="Mean Check Loss")
+        end
+        p2 = _PanelSpec(id2, "Mean Check-Function Loss", js2)
+
+        ftitle = isempty(title) ? "Quantile Factor Grid — Rank & Loss Across τ" : title
+        _make_plot([p1, p2]; title=ftitle, ncols=(ncols <= 0 ? 2 : ncols))
+    end
+
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end
+
+# =============================================================================
+# QFMICResult (QFM-04)
+# =============================================================================
+
+const _QFM_IC_PLOT_VIEWS = (:ic, :scree, :loss)
+
+"""
+    plot_result(ic::QFMICResult; view=:ic, ncols=0, title="", save_path=nothing)
+
+Plot quantile factor selection criteria from [`ic_criteria_qfm`](@ref).
+
+# Views
+- `:ic` — check-loss `IC1`, `IC2`, `IC3` curves across `k = 0:r_max` (with vertical
+  reference lines at selected ranks), CDG rank-minimization scree `sigma_sq` vs
+  threshold `P_NT`, and check-function `loss` path.
+- `:scree` — factor strength scree `sigma_sq` vs `P_NT` and check-function `loss`.
+- `:loss` — average check-function `loss` path over `k = 0:r_max`.
+
+# Keyword Arguments
+- `view::Symbol = :ic` — exhibit view (`:ic`, `:scree`, or `:loss`)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(ic::QFMICResult{T};
+                     view::Symbol=:ic,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _QFM_IC_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view :$view for QFMICResult. Valid views: $(_QFM_IC_PLOT_VIEWS)"))
+
+    ks_full = collect(0:ic.r_max)
+    panels = _PanelSpec[]
+
+    if view === :ic
+        id1 = _next_plot_id("qfmic_ic")
+        data1 = _keyed_rows_json(ks_full, [
+            "ic1" => Float64.(ic.IC1),
+            "ic2" => Float64.(ic.IC2),
+            "ic3" => Float64.(ic.IC3),
+        ])
+        s1 = _series_json(["IC1 (r=$(ic.r_IC1))", "IC2 (r=$(ic.r_IC2))", "IC3 (r=$(ic.r_IC3))"],
+                          [_PLOT_SERIES[1], _PLOT_SERIES[2], _PLOT_SERIES[3]];
+                          keys=["ic1", "ic2", "ic3"], dash=["", "5,3", "2,2"])
+        sel_rs = unique([ic.r_IC1, ic.r_IC2, ic.r_IC3])
+        refs1 = "[" * join(["{\"value\":$(_json(rv)),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"4,3\",\"axis\":\"x\"}"
+                            for rv in sel_rs], ",") * "]"
+        js1 = _render_line_js(id1, data1, s1; ref_lines_json=refs1,
+                              integer_x=true, xlabel="Factors k", ylabel="IC Value")
+        push!(panels, _PanelSpec(id1, "Check-Loss Information Criteria", js1))
+    end
+
+    if view === :ic || view === :scree
+        id2 = _next_plot_id("qfmic_scree")
+        ks_sig = collect(1:ic.r_max)
+        rows2 = [Pair{String,String}["x" => _json(ks_sig[j]), "y" => _json(ic.sigma_sq[j])]
+                 for j in eachindex(ks_sig)]
+        refs2 = isfinite(ic.threshold_PNT) ?
+            "[{\"value\":$(_json(Float64(ic.threshold_PNT))),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]" : "[]"
+        js2 = _render_vbar_js(id2, _json_array_of_objects(rows2);
+                              bar_color=_PLOT_SERIES[1], ref_lines_json=refs2,
+                              tip_label="k =", integer_x=true,
+                              xlabel="Factor k", ylabel="Factor Strength (σ²)")
+        push!(panels, _PanelSpec(id2, "CDG Rank Scree (r_rank=$(ic.r_rank), P_NT=$(_fmt(ic.threshold_PNT; digits=3)))", js2))
+    end
+
+    id3 = _next_plot_id("qfmic_loss")
+    data3 = _keyed_rows_json(ks_full, ["loss" => Float64.(ic.loss)])
+    s3 = _series_json(["Check Loss"], [_PLOT_SERIES[4]]; keys=["loss"])
+    js3 = _render_line_js(id3, data3, s3; integer_x=true, xlabel="Factors k", ylabel="Mean Check Loss")
+    push!(panels, _PanelSpec(id3, "Check-Function Loss Path", js3))
+
+    ftitle = isempty(title) ?
+        "QFM Factor Selection (τ=$(_fmt(ic.tau; digits=3)), r_rank=$(ic.r_rank), r_IC2=$(ic.r_IC2))" : title
+    ncols_use = ncols <= 0 ? (length(panels) == 1 ? 1 : min(length(panels), 3)) : ncols
+    p = _make_plot(panels; title=ftitle, ncols=ncols_use)
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end
+
+# =============================================================================
+# QFMSpanningResult (QFM-05)
+# =============================================================================
+
+"""
+    plot_result(s::QFMSpanningResult; max_bars=24, ncols=0, title="", save_path=nothing)
+
+Plot PCA-vs-QFM factor spanning diagnostics from [`test_qfm_spanning`](@ref),
+comparing per-factor OLS ``R^2`` against Koenker–Machado quantile ``R^1(\\tau)``
+and showing canonical correlations across quantiles.
+
+# Keyword Arguments
+- `max_bars::Int = 24` — maximum `(τ, factor)` rows shown in the R² / R¹ bar chart (C7 note if capped)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(s::QFMSpanningResult{T};
+                     max_bars::Int=24,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    !isempty(s.taus) || throw(ArgumentError("Cannot plot an empty QFMSpanningResult"))
+    perm = sortperm(s.taus)
+    M = length(s.taus)
+
+    all_rows = Vector{Pair{String,String}}[]
+    for j in perm
+        tau_lbl = "τ=$(_fmt(s.taus[j]; digits=2))"
+        for k in 1:s.r_qfm[j]
+            flag = s.unspanned[j][k] ? " *" : ""
+            push!(all_rows, [
+                "x" => _json("$(tau_lbl) F$k$(flag)"),
+                "r2" => _json(s.ols_r2[j][k]),
+                "r1" => _json(s.quantile_r1[j][k]),
+            ])
+        end
+    end
+    n_total = length(all_rows)
+    n_show = min(n_total, max(1, max_bars))
+    rows1 = all_rows[1:n_show]
+
+    id1 = _next_plot_id("qspan_bar")
+    s1 = _series_json(["OLS R²", "Quantile R¹"], [_PLOT_SERIES[1], _PLOT_SERIES[2]]; keys=["r2", "r1"])
+    js1 = _render_bar_js(id1, _json_array_of_objects(rows1), s1;
+                         mode="grouped", orientation="h", xlabel="R² / Pseudo-R¹", ylabel="")
+    p1 = _PanelSpec(id1, _cap_title("Factor Spanning (* unspanned < $(_fmt(s.threshold; digits=2)))", n_show, n_total), js1)
+    panels = _PanelSpec[p1]
+
+    m_cc = maximum(length, s.cancor; init=0)
+    if m_cc >= 1
+        id2 = _next_plot_id("qspan_cc")
+        if M >= 2
+            taus_s = Float64[Float64(s.taus[j]) for j in perm]
+            cc_rows = Vector{Pair{String,String}}[]
+            for (pos, j) in enumerate(perm)
+                row = Pair{String,String}["x" => _json(taus_s[pos])]
+                ccj = s.cancor[j]
+                for k in 1:m_cc
+                    push!(row, "c$k" => _json(k <= length(ccj) ? Float64(ccj[k]) : NaN))
+                end
+                push!(cc_rows, row)
+            end
+            cc_names = ["Canonical Corr. $k" for k in 1:m_cc]
+            s2 = _series_json(cc_names, _colors_for(cc_names); keys=["c$k" for k in 1:m_cc])
+            js2 = _render_line_js(id2, _json_array_of_objects(cc_rows), s2;
+                                  xlabel="Quantile τ", ylabel="Canonical Correlation")
+        else
+            cc1 = s.cancor[perm[1]]
+            cc_rows = [Pair{String,String}["x" => _json("CC $k"), "cc" => _json(cc1[k])] for k in eachindex(cc1)]
+            s2 = _series_json(["Canonical Corr."], [_PLOT_SERIES[3]]; keys=["cc"])
+            js2 = _render_bar_js(id2, _json_array_of_objects(cc_rows), s2;
+                                 mode="grouped", xlabel="Component", ylabel="Canonical Correlation")
+        end
+        push!(panels, _PanelSpec(id2, "Canonical Correlations (r_pca=$(s.r_pca))", js2))
+    end
+
+    ftitle = isempty(title) ?
+        "PCA-vs-QFM Factor Spanning (r_pca=$(s.r_pca), threshold=$(_fmt(s.threshold; digits=2)))" : title
+    ncols_use = ncols <= 0 ? min(length(panels), 2) : ncols
+    p = _make_plot(panels; title=ftitle, ncols=ncols_use,
+                   note=_cap_note("factor-quantile pairs", n_show, n_total, "max_bars"))
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end
+
+# =============================================================================
+# QFMLoadingConstancyTest (QFM-05)
+# =============================================================================
+
+"""
+    plot_result(t::QFMLoadingConstancyTest; ncols=0, title="", save_path=nothing)
+
+Plot the bootstrap null distribution of the quantile loading constancy test
+[`test_qfm_loading_constancy`](@ref) (`t.boot_stats`) with a vertical reference
+line at the observed projection residual statistic `t.statistic` (or a summary
+bar chart if `t.boot_stats` is empty).
+
+# Keyword Arguments
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(t::QFMLoadingConstancyTest{T};
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    bs = Float64[Float64(v) for v in t.boot_stats if isfinite(v)]
+    id = _next_plot_id("qconst")
+
+    js = if !isempty(bs)
+        bins_json = _histogram_bins(bs; density=true)
+        has_spread = length(bs) >= 2 && Statistics.std(bs) > 1e-10
+        dens_json = has_spread ? _kde_line_json(bs) : "[]"
+        s_json = has_spread ?
+            _series_json(["Bootstrap Null", "KDE"], [_PLOT_SERIES[1], _PLOT_SERIES[2]]) :
+            _series_json(["Bootstrap Null"], [_PLOT_SERIES[1]])
+        refs_json = isfinite(t.statistic) ?
+            "[{\"value\":$(_json(Float64(t.statistic))),\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\",\"axis\":\"x\"}]" : "[]"
+        _render_histogram_js(id, bins_json, s_json;
+                             density_json=dens_json, ref_lines_json=refs_json,
+                             xlabel="Projection Residual Norm²", ylabel="Density")
+    else
+        rows = [
+            Pair{String,String}["x" => _json("Statistic S"), "val" => _json(t.statistic)],
+            Pair{String,String}["x" => _json("p-value"), "val" => _json(t.pvalue)],
+        ]
+        s_json = _series_json(["Test Summary"], [_PLOT_SERIES[1]]; keys=["val"])
+        _render_bar_js(id, _json_array_of_objects(rows), s_json;
+                       mode="grouped", orientation="h", xlabel="Value", ylabel="")
+    end
+
+    ptitle = "S = $(_fmt(t.statistic; digits=4)), p = $(_fmt(t.pvalue; digits=4)) ($(t.bootstrap), B=$(t.n_boot))"
+    ftitle = isempty(title) ?
+        "QFM Loading Constancy Test (τ₁=$(_fmt(t.tau1; digits=2)) vs τ₂=$(_fmt(t.tau2; digits=2)))" : title
+    p = _make_plot([_PanelSpec(id, ptitle, js)]; title=ftitle, ncols=(ncols <= 0 ? 1 : ncols))
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end
+
+# =============================================================================
+# QuantileFactorPanelModel (QFM-06)
+# =============================================================================
+
+const _QFM_PANEL_PLOT_VIEWS = (:coef, :factors, :loadings)
+
+"""
+    plot_result(m::QuantileFactorPanelModel; view=:coef, conf_level=0.95,
+                max_factors=5, max_vars=20, ncols=0, title="", save_path=nothing)
+
+Plot a panel quantile regression with interactive quantile factor effects
+([`QuantileFactorPanelModel`](@ref)).
+
+# Views
+- `:coef` — horizontal dot-and-whisker coefficient plot (`m.beta` with confidence
+  intervals from `StatsAPI.confint(m; level=conf_level)`), plus a unit-slope
+  box-plot panel when `m.slope == :heterogeneous`.
+- `:factors` — time series of extracted interactive quantile factors `m.factors`.
+- `:loadings` — horizontal grouped bar chart of unit factor loadings `m.loadings`.
+
+# Keyword Arguments
+- `view::Symbol = :coef` — exhibit view (`:coef`, `:factors`, or `:loadings`)
+- `conf_level::Real = 0.95` — confidence level in `(0, 1)` for `:coef` intervals
+- `max_factors::Int = 5` — maximum number of factors shown in `:factors`/`:loadings` (C7 note if capped)
+- `max_vars::Int = 20` — maximum number of cross-sectional units shown in `:loadings` (C7 note if capped)
+- `ncols::Int = 0` — number of grid columns (`0` = auto)
+- `title::String = ""` — custom figure title (`""` = auto-generated)
+- `save_path::Union{String,Nothing} = nothing` — optional output HTML path
+"""
+function plot_result(m::QuantileFactorPanelModel{T};
+                     view::Symbol=:coef,
+                     conf_level::Real=0.95,
+                     max_factors::Int=5,
+                     max_vars::Int=20,
+                     ncols::Int=0,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    view in _QFM_PANEL_PLOT_VIEWS || throw(ArgumentError(
+        "Unknown view :$view for QuantileFactorPanelModel. Valid views: $(_QFM_PANEL_PLOT_VIEWS)"))
+    (!(conf_level isa Bool) && isfinite(conf_level) && 0 < conf_level < 1) ||
+        throw(ArgumentError("conf_level must lie strictly in (0, 1), got $conf_level"))
+
+    p = if view === :coef
+        ci = StatsAPI.confint(m; level=conf_level)
+        rows = String[]
+        for j in eachindex(m.beta)
+            push!(rows, "{\"name\":$(_json(m.varnames[j])),\"effect\":$(_json(m.beta[j])),\"ci_lo\":$(_json(ci[j, 1])),\"ci_hi\":$(_json(ci[j, 2]))}")
+        end
+        id1 = _next_plot_id("qpan_coef")
+        js1 = _render_coef_plot_js(id1, "[" * join(rows, ",\n") * "]";
+                                   color=_PLOT_SERIES[1], ref_value=0,
+                                   xlabel="Coefficient (τ=$(_fmt(m.tau; digits=2)))", ylabel="")
+        pct = round(Int, 100 * Float64(conf_level))
+        slope_lbl = m.slope === :heterogeneous ? "Mean Group Slopes" : "Slope Coefficients"
+        panels = _PanelSpec[_PanelSpec(id1, "$(slope_lbl) ($(pct)% CI)", js1)]
+
+        if m.slope === :heterogeneous && size(m.beta_i, 1) >= 1 && size(m.beta_i, 2) == length(m.varnames)
+            id2 = _next_plot_id("qpan_het")
+            cols_i = [m.beta_i[:, j] for j in 1:size(m.beta_i, 2)]
+            js2 = _render_box_js(id2, _boxes_json(m.varnames, cols_i);
+                                 orientation=:h, xlabel="Unit Slope βᵢ(τ)", ylabel="")
+            push!(panels, _PanelSpec(id2, "Unit-Specific Slope Distribution (N=$(m.n_units))", js2))
+        end
+
+        ftitle = isempty(title) ?
+            "Interactive Quantile Factor Panel (τ=$(_fmt(m.tau; digits=2)), r=$(m.r), $(m.slope))" : title
+        _make_plot(panels; title=ftitle, ncols=(ncols <= 0 ? length(panels) : ncols))
+    elseif view === :factors
+        T_obs, r = size(m.factors)
+        n_fac = min(r, max(1, max_factors))
+        fac_names = ["Factor $k" for k in 1:n_fac]
+        id = _next_plot_id("qpan_fac")
+        data_json = _timeseries_data_json(m.factors[:, 1:n_fac], fac_names)
+        s_json = _series_json(fac_names, _colors_for(fac_names); keys=["v$k" for k in 1:n_fac])
+        refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+        js = _render_line_js(id, data_json, s_json; ref_lines_json=refs,
+                             integer_x=true, xlabel="Period", ylabel="Factor Value")
+        ftitle = isempty(title) ?
+            "Interactive Quantile Panel Factors (τ=$(_fmt(m.tau; digits=2)), r=$(m.r))" : title
+        _make_plot([_PanelSpec(id, _cap_title("Extracted Panel Factors", n_fac, r), js)];
+                   title=ftitle, ncols=(ncols <= 0 ? 1 : ncols),
+                   note=_cap_note("factors", n_fac, r, "max_factors"))
+    else
+        # :loadings
+        N, r = size(m.loadings)
+        shown_u = min(N, max(1, max_vars))
+        n_fac = min(r, max(1, max_factors))
+        fac_names = ["Factor $k" for k in 1:n_fac]
+        rows = Vector{Pair{String,String}}[]
+        for i in 1:shown_u
+            row = Pair{String,String}["x" => _json("Unit $i")]
+            for k in 1:n_fac
+                push!(row, "f$k" => _json(m.loadings[i, k]))
+            end
+            push!(rows, row)
+        end
+        id = _next_plot_id("qpan_load")
+        s_json = _series_json(fac_names, _colors_for(fac_names); keys=["f$k" for k in 1:n_fac])
+        js = _render_bar_js(id, _json_array_of_objects(rows), s_json;
+                            mode="grouped", orientation="h", xlabel="Loading λᵢ(τ)", ylabel="")
+        note_u = _cap_note("units", shown_u, N, "max_vars")
+        note_f = _cap_note("factors", n_fac, r, "max_factors")
+        note = isempty(note_u) ? note_f : (isempty(note_f) ? note_u : note_u * " " * note_f)
+        ftitle = isempty(title) ?
+            "Interactive Quantile Panel Loadings (τ=$(_fmt(m.tau; digits=2)), r=$(m.r))" : title
+        _make_plot([_PanelSpec(id, _cap_title("Unit Factor Loadings", shown_u, N), js)];
+                   title=ftitle, ncols=(ncols <= 0 ? 1 : ncols), note=note)
+    end
+
+    save_path !== nothing && save_plot(p, save_path)
+    return p
+end

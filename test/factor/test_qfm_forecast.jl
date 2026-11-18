@@ -419,10 +419,12 @@ const M_QF = MacroEconometricModels
         @test_throws ArgumentError growth_at_risk(X, N + 1, 1)
         @test_throws ArgumentError growth_at_risk(X, "GDP", 1)
         @test_throws ArgumentError growth_at_risk(X, "NONEXISTENT", 1; varnames=["V$i" for i in 1:N])
-        @test_throws ArgumentError growth_at_risk(X, randn(T_obs - 1), 1)
+        y_bad = randn(rng, T_obs - 1)
+        @test_throws ArgumentError growth_at_risk(X, y_bad, 1)
         @test_throws ArgumentError growth_at_risk(X, 1, 1; oos_split=2)
         @test_throws ArgumentError growth_at_risk(X, 1, 1; oos_split=T_obs)
-        @test_throws DimensionMismatch growth_at_risk(grid32, 1, 1; X=randn(T_obs - 2, N))
+        X_bad = randn(rng, T_obs - 2, N)
+        @test_throws DimensionMismatch growth_at_risk(grid32, 1, 1; X=X_bad)
     end
 
     @testset "No method ambiguities in MacroEconometricModels" begin

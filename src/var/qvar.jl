@@ -425,6 +425,40 @@ StatsAPI.dof(m::QuantileVARModel) = length(m.taus) * (nvars(m) * ncoefs(m) + div
 StatsAPI.dof_residual(m::QuantileVARModel) = max(effective_nobs(m) - (ncoefs(m) + nvars(m) - 1), 1)
 StatsAPI.islinear(::QuantileVARModel) = false
 
+"""
+    StatsAPI.vcov(m::QuantileVARModel{T})
+
+Diagonal variance-covariance matrix (when `length(m.taus) == 1`) or vector of
+diagonal variance-covariance matrices (when `length(m.taus) > 1`) constructed from
+the squared per-equation standard errors `m.se_list`.
+"""
+function StatsAPI.vcov(m::QuantileVARModel{T}) where {T}
+    length(m.se_list) == 1 && return LinearAlgebra.diagm(vec(m.se_list[1]) .^ 2)
+    return [LinearAlgebra.diagm(vec(se) .^ 2) for se in m.se_list]
+end
+
+"""
+    StatsAPI.confint(m::QuantileVARModel{T}; level::Real=0.95)
+
+Two-sided Student-`t` confidence intervals (`df = dof_residual(m)`) for the
+vectorized coefficients of `m`, returning a `(k * n) × 2` matrix for a single
+quantile or a `(k * n) × 2 × M` array across `M` quantiles.
+"""
+function StatsAPI.confint(m::QuantileVARModel{T}; level::Real=0.95) where {T}
+    (!(level isa Bool) && isfinite(level) && zero(T) < T(level) < one(T)) ||
+        throw(ArgumentError("level must lie strictly in (0, 1), got $level"))
+    df_r = StatsAPI.dof_residual(m)
+    crit = T(Distributions.quantile(Distributions.TDist(df_r), one(T) - (one(T) - T(level)) / 2))
+    if length(m.B_list) == 1
+        b = vec(m.B_list[1])
+        s = vec(m.se_list[1])
+        return hcat(b .- crit .* s, b .+ crit .* s)
+    end
+    cis = [hcat(vec(B) .- crit .* vec(se), vec(B) .+ crit .* vec(se))
+           for (B, se) in zip(m.B_list, m.se_list)]
+    return cat(cis...; dims=3)
+end
+
 # Result interface for QuantileImpulseResponse
 point_estimate(r::QuantileImpulseResponse) = r.values
 has_uncertainty(r::QuantileImpulseResponse) = r.ci_type != :none

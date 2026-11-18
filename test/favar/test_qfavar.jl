@@ -51,6 +51,40 @@ const M_QF = MacroEconometricModels
         @test qv.manifest isa ReproManifest
         @test qv.manifest.seed == 11
 
+        # StatsAPI.vcov and StatsAPI.confint (multi-tau)
+        V_multi = StatsAPI.vcov(qv)
+        @test V_multi isa Vector{Matrix{Float64}}
+        @test length(V_multi) == 3
+        @test size(V_multi[1]) == (7 * 3, 7 * 3)
+        @test isdiag(V_multi[1])
+        @test diag(V_multi[1]) ≈ vec(qv.se_list[1]) .^ 2
+        ci95 = StatsAPI.confint(qv)
+        ci90 = StatsAPI.confint(qv; level=0.90)
+        @test size(ci95) == (7 * 3, 2, 3)
+        @test size(ci90) == (7 * 3, 2, 3)
+        for m in 1:3
+            @test all(ci95[:, 1, m] .<= vec(qv.B_list[m]) .<= ci95[:, 2, m])
+            @test all(ci95[:, 2, m] .- ci95[:, 1, m] .> ci90[:, 2, m] .- ci90[:, 1, m])
+        end
+        @test_throws ArgumentError StatsAPI.confint(qv; level=0.0)
+        @test_throws ArgumentError StatsAPI.confint(qv; level=1.0)
+        @test_throws ArgumentError StatsAPI.confint(qv; level=true)
+
+        # Single-tau vcov/confint & Float32
+        qv_1 = estimate_qvar(Y, p, [0.50]; se=:asymptotic)
+        V_1 = StatsAPI.vcov(qv_1)
+        ci_1 = StatsAPI.confint(qv_1)
+        @test V_1 isa Matrix{Float64}
+        @test size(V_1) == (7 * 3, 7 * 3)
+        @test diag(V_1) ≈ vec(qv_1.se_list[1]) .^ 2
+        @test ci_1 isa Matrix{Float64}
+        @test size(ci_1) == (7 * 3, 2)
+        @test all(ci_1[:, 1] .<= vec(qv_1.B_list[1]) .<= ci_1[:, 2])
+
+        qv_f32 = estimate_qvar(Float32.(Y), 1, Float32[0.50]; se=:asymptotic)
+        @test StatsAPI.vcov(qv_f32) isa Matrix{Float32}
+        @test StatsAPI.confint(qv_f32) isa Matrix{Float32}
+
         # Exact structural equation identity: Y_eff * A0' - X_lag * B ≈ resid
         Y_eff, X_lag = construct_var_matrices(Y, p)
         for m in 1:3
@@ -417,6 +451,62 @@ const M_QF = MacroEconometricModels
         @test_throws ArgumentError qfavar_panel_irf(qf, 0)
         @test_throws ArgumentError qfavar_panel_irf(qf, 5; ci_type=:credible)
         @test_throws ArgumentError qfavar_panel_forecast(qf, 0)
+    end
+
+    @testset "dgp_qfavar recovery & tail amplification (#891, #892)" begin
+        # Calling forms, determinism, and validation
+        rng = Random.Xoshiro(42)
+        d1 = dgp_qfavar(rng; T_obs=80, N=20, r=2, p=1, n_key=1, seed=99)
+        d2 = dgp_qfavar(; T_obs=80, N=20, r=2, p=1, n_key=1, seed=99)
+        @test d1.X_panel == d2.X_panel
+        @test d1.X == d1.X_panel
+        @test d1.Y_key == d2.Y_key
+        @test d1.seed == 99
+        @test d1.X_panel[:, d1.Y_key_indices] == d1.Y_key
+        @test size(d1.X_panel) == (80, 20)
+        @test size(d1.B_lower) == (4, 3)
+        @test norm(d1.B_lower[2:end, 1:2]) > norm(d1.B_median[2:end, 1:2])
+        @test d1.B_median[2:end, :] == d1.B_upper[2:end, :]
+        @test all(d1.B_upper[1, :] .> d1.B_median[1, :] .> d1.B_lower[1, :])
+        @test d1.true_B(0.10) == d1.B_lower
+        @test d1.true_qirf(0.10, 4)[1, :, :] ≈ d1.true_qirf_impact
+        @test_throws ArgumentError dgp_qfavar(; T_obs=3, p=1)
+        @test_throws ArgumentError dgp_qfavar(; N=3, r=2, n_key=1)
+        @test_throws ArgumentError dgp_qfavar(; r=0)
+        @test_throws ArgumentError dgp_qfavar(; p=0)
+        @test_throws ArgumentError dgp_qfavar(; df_idio=0.0)
+        @test_throws ArgumentError dgp_qfavar(; tail_amplification=0.0)
+        @test_throws ArgumentError d1.true_B(0.0)
+        @test_throws ArgumentError d1.true_qirf(0.5, 0)
+
+        d_p2 = dgp_qfavar(; T_obs=60, N=25, r=2, p=2, n_key=2, seed=12)
+        @test size(d_p2.B_median) == (1 + 4 * 2, 4)
+        @test size(d_p2.Y_key) == (60, 2)
+        @test d_p2.X_panel[:, d_p2.Y_key_indices] == d_p2.Y_key
+
+        # Recovery of tail-amplified VAR transmission & QFAVAR panel IRFs
+        rng = Random.Xoshiro(42)
+        dq = dgp_qfavar(rng; T_obs=250, N=40, r=2, p=1, n_key=1, tail_amplification=1.5)
+        qv_dgp = estimate_qvar(hcat(dq.F, dq.Y_key), 1, [0.10, 0.50, 0.90])
+        @test norm(qv_dgp.B_list[1][4, 1:2]) > norm(qv_dgp.B_list[2][4, 1:2])
+        ir_qv_10 = qirf(qv_dgp, 5; tau_profile=0.10, baseline_tau=0.50, shock=3)
+        ir_qv_50 = qirf(qv_dgp, 5; tau_profile=0.50, baseline_tau=0.50, shock=3)
+        @test norm(ir_qv_10.values[2, 1:2, 1]) > norm(ir_qv_50.values[2, 1:2, 1])
+
+        qf_dgp = estimate_qfavar(dq.X_panel, dq.Y_key_indices, 2, 1, [0.10, 0.50, 0.90])
+        # Joint span [F_tilde(0.50), Y_key] recovers true latent factor space
+        Q_est = Matrix(qr(hcat(qf_dgp.factors_list[2], dq.Y_key)).Q)
+        for j in 1:2
+            r2_f = sum(abs2, Q_est' * dq.F[:, j]) / sum(abs2, dq.F[:, j])
+            @test r2_f > 0.85
+        end
+        ir10 = qfavar_panel_irf(qf_dgp, 5; shock=3, tau_profile=0.10)
+        ir50 = qfavar_panel_irf(qf_dgp, 5; shock=3, tau_profile=0.50)
+        ir90 = qfavar_panel_irf(qf_dgp, 5; shock=3, tau_profile=0.90)
+        @test ir10.values[1, 1, 1] ≈ 1.0 atol=1e-10
+        @test ir50.values[1, 1, 1] ≈ 1.0 atol=1e-10
+        @test sum(abs, ir10.values[2:4, 2:end, 1]) > sum(abs, ir50.values[2:4, 2:end, 1])
+        @test sum(abs, ir10.values[2:4, 2:end, 1]) > sum(abs, ir90.values[2:4, 2:end, 1])
     end
 
     @testset "Method ambiguity check" begin

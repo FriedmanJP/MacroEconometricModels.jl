@@ -86,15 +86,15 @@ const M_PAN = MacroEconometricModels
         @test m_pd.loadings == m_mat.loadings
 
         # Quantile-varying heteroskedastic factor & quantile slope shift
-        rng_h = Random.Xoshiro(88802)
-        f_mean = randn(rng_h, T_obs)
-        l_mean = 0.5 .+ rand(rng_h, N)
-        f_vol = 0.2 .+ 1.8 .* Float64.(rand(rng_h, T_obs) .> 0.5)
-        l_vol = 0.5 .+ 0.8 .* rand(rng_h, N)
+        rng = Random.Xoshiro(88802)
+        f_mean = randn(rng, T_obs)
+        l_mean = 0.5 .+ rand(rng, N)
+        f_vol = 0.2 .+ 1.8 .* Float64.(rand(rng, T_obs) .> 0.5)
+        l_vol = 0.5 .+ 0.8 .* rand(rng, N)
         W_het = Array{Float64,3}(undef, N, T_obs, 1)
-        W_het[:, :, 1] = 0.8 .* (l_mean * f_mean') .+ randn(rng_h, N, T_obs)
+        W_het[:, :, 1] = 0.8 .* (l_mean * f_mean') .+ randn(rng, N, T_obs)
         Y_het = 2.0 .* W_het[:, :, 1] .+ (l_mean * f_mean') .+
-                0.4 .* (l_vol * f_vol') .* randn(rng_h, N, T_obs)
+                0.4 .* (l_vol * f_vol') .* randn(rng, N, T_obs)
         m_het_05 = estimate_xtqreg_factors(Y_het, W_het, 1, 0.5; seed=10)
         @test abs(StatsAPI.coef(m_het_05)[1] - 2.0) < 0.05
     end

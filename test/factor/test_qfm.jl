@@ -135,12 +135,12 @@ end
         T_obs, N = 200, 80
 
         # 1. Heavy-tailed t(2) errors
-        rng_t = Random.Xoshiro(88403)
-        f1_t = randn(rng_t, T_obs)
-        g_t = exp.(0.8 .* randn(rng_t, T_obs)) .+ 0.2
-        lam1_t = randn(rng_t, N) .* 2.0
-        lam2_t = rand(rng_t, Uniform(0.8, 1.5), N)
-        X_t2 = f1_t * lam1_t' .+ (g_t * lam2_t') .* (0.3 .* rand(rng_t, TDist(2), T_obs, N))
+        rng = Random.Xoshiro(88403)
+        f1_t = randn(rng, T_obs)
+        g_t = exp.(0.8 .* randn(rng, T_obs)) .+ 0.2
+        lam1_t = randn(rng, N) .* 2.0
+        lam2_t = rand(rng, Uniform(0.8, 1.5), N)
+        X_t2 = f1_t * lam1_t' .+ (g_t * lam2_t') .* (0.3 .* rand(rng, TDist(2), T_obs, N))
 
         qfm_t_05 = estimate_qfm(X_t2, 1, 0.5; init=:quantile_svd, seed=1)
         qfm_t_01 = estimate_qfm(X_t2, 2, 0.1; init=:quantile_svd, seed=2)
@@ -153,12 +153,12 @@ end
         _qfm_check_norm_invariants(qfm_t_09)
 
         # 2. Heavy-tailed Cauchy errors: QFM recovers f1 at tau=0.5 and span(f1, g) at tau=0.1, 0.9
-        rng_c = Random.Xoshiro(2021)
-        f1_c = randn(rng_c, T_obs)
-        g_c = exp.(0.8 .* randn(rng_c, T_obs))
-        lam1_c = randn(rng_c, N) .* 2.0
-        lam2_c = rand(rng_c, Uniform(0.5, 1.5), N)
-        X_c = f1_c * lam1_c' .+ (g_c * lam2_c') .* (0.15 .* rand(rng_c, Cauchy(0, 1), T_obs, N))
+        rng = Random.Xoshiro(2021)
+        f1_c = randn(rng, T_obs)
+        g_c = exp.(0.8 .* randn(rng, T_obs))
+        lam1_c = randn(rng, N) .* 2.0
+        lam2_c = rand(rng, Uniform(0.5, 1.5), N)
+        X_c = f1_c * lam1_c' .+ (g_c * lam2_c') .* (0.15 .* rand(rng, Cauchy(0, 1), T_obs, N))
 
         qfm_c_05 = estimate_qfm(X_c, 1, 0.5; init=:quantile_svd, seed=1)
         qfm_c_01 = estimate_qfm(X_c, 2, 0.1; init=:quantile_svd, seed=1)
@@ -171,12 +171,12 @@ end
         @test _qfm_trace_r2(pca_c_raw.factors, hcat(f1_c, g_c)) < 0.40
 
         # Also check standard Cauchy(0, 1) where default estimate_factors(X, 2) fails (< 0.40)
-        rng_ch = Random.Xoshiro(8841)
-        f1_ch = randn(rng_ch, T_obs)
-        g_ch = rand(rng_ch, Uniform(0.5, 4.5), T_obs)
-        lam1_ch = randn(rng_ch, N) .* 4.0
-        lam2_ch = rand(rng_ch, Uniform(0.4, 0.8), N)
-        X_ch = f1_ch * lam1_ch' .+ (g_ch * lam2_ch') .* rand(rng_ch, Cauchy(0, 1), T_obs, N)
+        rng = Random.Xoshiro(8841)
+        f1_ch = randn(rng, T_obs)
+        g_ch = rand(rng, Uniform(0.5, 4.5), T_obs)
+        lam1_ch = randn(rng, N) .* 4.0
+        lam2_ch = rand(rng, Uniform(0.4, 0.8), N)
+        X_ch = f1_ch * lam1_ch' .+ (g_ch * lam2_ch') .* rand(rng, Cauchy(0, 1), T_obs, N)
         pca_ch_def = estimate_factors(X_ch, 2)
         qfm_ch_05 = estimate_qfm(X_ch, 1, 0.5; init=:quantile_svd, seed=1)
         @test _qfm_trace_r2(pca_ch_def.factors, hcat(f1_ch, g_ch)) < 0.40
@@ -526,10 +526,10 @@ end
             cov_sm_L = Float64[]
 
             for rep in 1:n_rep
-                r_rng = Random.Xoshiro(88510 + rep)
-                F0 = sqrt(T_mc) .* Matrix(qr(randn(r_rng, T_mc, r_mc)).Q)
-                L0 = randn(r_rng, N_mc, r_mc)
-                e = randn(r_rng, T_mc, N_mc) .- q_shift
+                rng = Random.Xoshiro(88510 + rep)
+                F0 = sqrt(T_mc) .* Matrix(qr(randn(rng, T_mc, r_mc)).Q)
+                L0 = randn(rng, N_mc, r_mc)
+                e = randn(rng, T_mc, N_mc) .- q_shift
                 X = F0 * L0' .+ 0.5 .* e
 
                 m_iqr = estimate_qfm(X, r_mc, tau; method=:iqr, se=:asymptotic,
@@ -723,13 +723,13 @@ end
             @test ic_high.r_IC1 >= 2
 
             # Heavy-tailed t(3) location-scale DGP: rank=1 at median, rank=2 at tail quantiles
-            rng2 = MersenneTwister(8862)
+            rng = MersenneTwister(8862)
             T2, N2 = 200, 80
-            f1_t = 1.2 .* randn(rng2, T2)
-            f2_t = exp.(0.6 .* randn(rng2, T2)) .+ 0.3
-            lam1_t = randn(rng2, N2)
-            lam2_t = 0.7 .+ 1.1 .* rand(rng2, N2)
-            X_t3 = f1_t * lam1_t' .+ (f2_t * lam2_t') .* (0.5 .* rand(rng2, TDist(3), T2, N2))
+            f1_t = 1.2 .* randn(rng, T2)
+            f2_t = exp.(0.6 .* randn(rng, T2)) .+ 0.3
+            lam1_t = randn(rng, N2)
+            lam2_t = 0.7 .+ 1.1 .* rand(rng, N2)
+            X_t3 = f1_t * lam1_t' .+ (f2_t * lam2_t') .* (0.5 .* rand(rng, TDist(3), T2, N2))
 
             ic_t_low = ic_criteria_qfm(X_t3, 5, 0.1)
             ic_t_med = ic_criteria_qfm(X_t3, 5, 0.5)
@@ -1098,6 +1098,91 @@ end
             @test_throws ArgumentError test_qfm_loading_constancy(X, 0.0, 0.5; r=2)
             @test_throws ArgumentError test_qfm_loading_constancy(X, 0.1, 0.5; r=[1])
         end
+    end
+
+    @testset "dgp_quantile_factors heavy-tail breakdown & rank recovery (#891, #892)" begin
+        # Calling forms and determinism
+        rng = Random.Xoshiro(101)
+        d1 = dgp_quantile_factors(rng; T_obs=80, N=30, seed=77)
+        d2 = dgp_quantile_factors(; T_obs=80, N=30, seed=77)
+        @test d1.X == d2.X
+        @test d1.F_loc == d2.F_loc
+        @test d1.Lambda_scale == d2.Lambda_scale
+        @test d1.seed == 77
+        @test size(d1.X) == (80, 30)
+        @test d1.r == 2
+        @test d1.true_r(0.50) == 1
+        @test d1.true_r(0.10) == 2
+        @test d1.true_r(0.90) == 2
+        @test size(d1.true_factors(0.50)) == (80, 1)
+        @test size(d1.true_loadings(0.10)) == (30, 2)
+        @test_throws ArgumentError dgp_quantile_factors(; T_obs=1, N=30)
+        @test_throws ArgumentError dgp_quantile_factors(; T_obs=80, N=1)
+        @test_throws ArgumentError dgp_quantile_factors(; T_obs=80, N=30, location_factors=-1)
+        @test_throws ArgumentError dgp_quantile_factors(; T_obs=80, N=30, df_idio=-1.0)
+        @test_throws ArgumentError d1.true_r(0.0)
+        @test_throws ArgumentError d1.true_factors(1.0)
+        @test_throws ArgumentError d1.true_loadings(-0.1)
+
+        # Heavy-tailed Student-t(2) panel: PCA breaks down while QFM recovers factors
+        T_qfm = FAST ? 160 : 200
+        N_qfm = FAST ? 60 : 80
+        rng = Random.Xoshiro(1)
+        dq = dgp_quantile_factors(rng; T_obs=T_qfm, N=N_qfm,
+                                  location_factors=1, scale_factors=1,
+                                  asym_factors=0, df_idio=2.0)
+        @test dq.true_r(0.50) == 1
+        @test dq.true_r(0.10) == 2
+        @test dq.true_r(0.90) == 2
+
+        pca2 = estimate_factors(dq.X, 2)
+        r2_pca2 = _qfm_trace_r2(pca2.factors, dq.true_factors(0.10))
+
+        rng = Random.Xoshiro(89102)
+        q50 = estimate_qfm(dq.X, 1, 0.50; standardize=false, se=:none, threaded=false, rng=rng)
+        r2_q50 = _qfm_trace_r2(q50.factors, dq.true_factors(0.50))
+        @test r2_q50 > 0.90
+
+        rng = Random.Xoshiro(89103)
+        q10 = estimate_qfm(dq.X, 2, 0.10; standardize=false, se=:none, threaded=false, rng=rng)
+        r2_q10 = _qfm_trace_r2(q10.factors, dq.true_factors(0.10))
+        @test r2_q10 > 0.85
+        @test r2_pca2 < 0.65
+        @test r2_q10 > r2_pca2 + 0.25
+
+        # Cauchy (df_idio=1.0): even 1-factor PCA breaks down while median QFM succeeds
+        rng = Random.Xoshiro(89108)
+        dq_cauchy = dgp_quantile_factors(rng; T_obs=T_qfm, N=N_qfm,
+                                         location_factors=1, scale_factors=1,
+                                         asym_factors=0, df_idio=1.0)
+        pca_c = estimate_factors(dq_cauchy.X, 1; standardize=false)
+        rng = Random.Xoshiro(89109)
+        q50_c = estimate_qfm(dq_cauchy.X, 1, 0.50; init=:quantile_svd, se=:none, threaded=false, rng=rng)
+        @test _qfm_trace_r2(pca_c.factors, dq_cauchy.true_factors(0.50)) < 0.60
+        @test _qfm_trace_r2(q50_c.factors, dq_cauchy.true_factors(0.50)) > 0.90
+
+        # IC rank recovery across quantiles (tail r=2 vs median r=1)
+        rng = Random.Xoshiro(89104)
+        ic10 = ic_criteria_qfm(dq.X, 4, 0.10; standardize=false, threaded=false, rng=rng)
+        rng = Random.Xoshiro(89105)
+        ic50 = ic_criteria_qfm(dq.X, 4, 0.50; standardize=false, threaded=false, rng=rng)
+        rng = Random.Xoshiro(89106)
+        ic90 = ic_criteria_qfm(dq.X, 4, 0.90; standardize=false, threaded=false, rng=rng)
+        @test ic10.r_IC1 == 2 || ic10.r_IC2 == 2
+        @test ic50.r_IC1 == 1 || ic50.r_IC2 == 1
+        @test ic90.r_IC1 == 2 || ic90.r_IC2 == 2
+
+        # Location + scale + asymmetry factors
+        rng = Random.Xoshiro(89107)
+        dq_asym = dgp_quantile_factors(rng; T_obs=120, N=40,
+                                       location_factors=1, scale_factors=1,
+                                       asym_factors=1, df_idio=4.0)
+        @test dq_asym.r == 3
+        @test dq_asym.true_r(0.50) == 1
+        @test dq_asym.true_r(0.10) == 3
+        @test dq_asym.true_r(0.90) == 3
+        @test size(dq_asym.true_loadings(0.10)) == (40, 3)
+        @test size(dq_asym.true_factors(0.50)) == (120, 1)
     end
 
     @testset "No method ambiguities in MacroEconometricModels" begin
