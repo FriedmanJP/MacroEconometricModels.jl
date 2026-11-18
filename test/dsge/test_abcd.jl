@@ -1240,3 +1240,362 @@ end
         )
     end
 end
+
+@testset "Shock Recoverability, Population VAR & 3-Way IRF Audit (#912)" begin
+    MEM = MacroEconometricModels
+
+    # =========================================================================
+    # 1. Sims (2012) shock_recoverability: invertible, FVRSW, partial, LWY
+    # =========================================================================
+    @testset "Sims (2012) shock_recoverability R²_j(ℓ)" begin
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, surplus
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            surplus[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            surplus[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+
+        # Invertible observables: R²_j(0) ≈ 1.0 (< 1e-10)
+        rec_c = shock_recoverability(sol_fv, [:c]; max_lead=10)
+        @test rec_c isa ShockRecoverabilityResult{Float64}
+        @test rec_c.is_invertible
+        @test is_invertible(rec_c)
+        @test abs(rec_c.r2_contemp[1] - 1.0) < 1e-10
+        @test MEM.StatsAPI.r2(rec_c) == rec_c.r2_contemp
+        @test size(rec_c.r2_matrix) == (11, 1)
+        @test all(x -> abs(x - 1.0) < 1e-10, rec_c.r2_matrix)
+
+        rec_y = shock_recoverability(sol_fv; observables=[:y], max_lead=8)
+        @test rec_y.is_invertible
+        @test abs(rec_y.r2_contemp[1] - 1.0) < 1e-10
+
+        # Invertible stationary ARMA(1,1)
+        sys_arma = ABCDSystem([0.7;;], [1.0;;], [1.1;;], [1.0;;])
+        rec_arma = shock_recoverability(sys_arma; max_lead=6)
+        @test rec_arma.is_invertible
+        @test abs(rec_arma.r2_contemp[1] - 1.0) < 1e-10
+
+        # Invertible tall system (k = 2 > m = 1, singular D*D')
+        sys_tall = ABCDSystem([0.4;;], [1.0;;], [0.5; 0.3;;], [2.0; 0.0;;])
+        rec_tall = shock_recoverability(sys_tall; max_lead=6)
+        @test rec_tall.is_invertible
+        @test abs(rec_tall.r2_contemp[1] - 1.0) < 1e-10
+
+        # Non-invertible FVRSW Permanent Income (R = 1.2, [:surplus]):
+        # Exact closed form R²(ℓ) = 1 - (11/36) * (25/36)^ℓ
+        rec_s = shock_recoverability(sol_fv, [:surplus]; max_lead=30)
+        @test !rec_s.is_invertible
+        @test !is_invertible(rec_s)
+        @test rec_s.r2_contemp[1] < 1.0
+        @test rec_s.r2_contemp[1] ≈ 25.0 / 36.0 atol=1e-10
+        for ell in 0:30
+            expected = 1.0 - (11.0 / 36.0) * (25.0 / 36.0)^ell
+            @test rec_s.r2_matrix[ell + 1, 1] ≈ expected atol=1e-10
+        end
+        @test all(diff(vec(rec_s.r2_matrix)) .> 0.0)
+        @test rec_s.r2_matrix[end, 1] > 0.9999
+
+        # Multi-shock partial recoverability: shock 1 invertible (R²₁ = 1), shock 2 news-like (R²₂ < 1 -> 1)
+        A_p = [0.6 0.0; 0.0 0.0]
+        B_p = [1.0 0.0; 0.0 1.0]
+        C_p = [0.3 0.0; 0.0 1.0]
+        D_p = [1.0 0.0; 0.0 0.0]
+        sys_partial = ABCDSystem(A_p, B_p, C_p, D_p;
+                                 obs_names=[:y1, :y2], shock_names=[:w_contemp, :w_news])
+        rec_p = shock_recoverability(sys_partial; max_lead=4)
+        @test !rec_p.is_invertible
+        @test abs(rec_p.r2_contemp[1] - 1.0) < 1e-10
+        @test rec_p.r2_contemp[2] ≈ 0.0 atol=1e-10
+        @test rec_p.r2_matrix[2, 2] ≈ 1.0 atol=1e-10
+
+        # Leeper-Walker-Yang (2013) 2-period fiscal foresight
+        alpha, kappa, theta = 0.5, 0.4, 0.8
+        A_lwy = [alpha -kappa * theta -kappa; 0.0 0.0 0.0; 0.0 1.0 0.0]
+        B_lwy = [1.0 -kappa * theta^2; 0.0 1.0; 0.0 0.0]
+        C_lwy = [alpha -kappa * theta -kappa; 0.0 0.0 1.0]
+        D_lwy = [1.0 -kappa * theta^2; 0.0 0.0]
+        abcd_lwy = ABCDSystem(A_lwy, B_lwy, C_lwy, D_lwy;
+                              obs_names=[:k_obs, :tau_obs],
+                              shock_names=[:u_A, :eps_tau_news])
+        rec_lwy = shock_recoverability(abcd_lwy; max_lead=8)
+        @test !rec_lwy.is_invertible
+        @test rec_lwy.r2_contemp[1] > rec_lwy.r2_contemp[2]
+        @test rec_lwy.r2_matrix[end, 2] > rec_lwy.r2_contemp[2]
+        @test all(0.0 .<= rec_lwy.r2_matrix .<= 1.0)
+
+        # Zero-state wide underdetermined system: y_t = w_1t + 0.5 w_2t
+        sys_wide0 = ABCDSystem(zeros(0, 0), zeros(0, 2), zeros(1, 0), [1.0 0.5])
+        rec_w0 = shock_recoverability(sys_wide0; max_lead=3)
+        @test !rec_w0.is_invertible
+        @test rec_w0.r2_contemp ≈ [0.8, 0.2] atol=1e-12
+    end
+
+    # =========================================================================
+    # 2. FVRSW (2007) Figure 1 vs Figure 2 Present-Value Budget Balance
+    # =========================================================================
+    @testset "FVRSW Figure 1 vs Figure 2 PV budget balance" begin
+        R_gross = 1.2
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, surplus
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            surplus[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            surplus[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+        abcd_s = abcd_representation(sol_fv, [:surplus])
+        innov_s = innovations_representation(abcd_s)
+
+        ir_dsge = irf(abcd_s, 201)
+        ir_wold = irf(innov_s, 201)
+
+        pv_dsge = sum(R_gross^(-h) * ir_dsge.values[h + 1, 1, 1] for h in 0:200)
+        pv_wold = sum(R_gross^(-h) * ir_wold.values[h + 1, 1, 1] for h in 0:200)
+        @test abs(pv_dsge) < 1e-6
+        @test pv_wold > 0.3
+        @test pv_wold ≈ 11.0 / 6.0 atol=1e-6
+
+        # Also check through compare_dsge_svar_irf at p=20
+        audit_pv = compare_dsge_svar_irf(abcd_s, 20, 201; identification=:cholesky)
+        pv_audit_dsge = sum(R_gross^(-h) * audit_pv.irf_dsge[h + 1, 1, 1] for h in 0:200)
+        pv_audit_svar = sum(R_gross^(-h) * audit_pv.irf_svar[h + 1, 1, 1] for h in 0:200)
+        @test abs(pv_audit_dsge) < 1e-6
+        @test pv_audit_svar > 0.3
+    end
+
+    # =========================================================================
+    # 3. population_var exact Yule-Walker recovery & compatibility
+    # =========================================================================
+    @testset "population_var exact Yule-Walker & SVAR compatibility" begin
+        # Exact stationary VAR(1) in ABCD form: y_{t+1} = Phi_1 y_t + L w_{t+1}
+        Phi1_true = [0.65 0.15; -0.10 0.45]
+        L_true = [0.8 0.0; 0.3 0.6]
+        c_true = [0.5, -0.2]
+        # x_{t+1} = c + Phi1 x_t + L w_{t+1}, y_{t+1} = c + Phi1 x_t + L w_{t+1}
+        sys_var1 = ABCDSystem(Phi1_true, L_true, Phi1_true, L_true;
+                              c_state=c_true, d_obs=c_true, obs_names=[:x1, :x2])
+        pvar = @test_nowarn population_var(sys_var1, 2; n_obs_effective=500)
+        @test pvar isa VARModel{Float64}
+        @test pvar.p == 2
+        @test effective_nobs(pvar) == 500
+        @test pvar.varnames == ["x1", "x2"]
+
+        Ar_est = extract_ar_coefficients(pvar.B, 2, 2)
+        @test Ar_est[1] ≈ Phi1_true atol=1e-10
+        @test norm(Ar_est[2]) < 1e-10
+        @test pvar.B[1, :] ≈ c_true atol=1e-10
+        @test pvar.Sigma ≈ L_true * L_true' atol=1e-10
+
+        # Deterministic sample consistency: Y_eff - X * B == U and U'U/T_eff == Sigma
+        Y_eff, X = construct_var_matrices(pvar.Y, pvar.p)
+        @test Y_eff - X * pvar.B ≈ pvar.U atol=1e-10
+        @test (pvar.U' * pvar.U) / effective_nobs(pvar) ≈ pvar.Sigma atol=1e-10
+
+        # Compatible with irf, fevd, compute_Q, report, show, DataFrame
+        ir_pv = irf(pvar, 12; method=:cholesky)
+        @test ir_pv.values ≈ irf(sys_var1, 12).values atol=1e-10
+        fv_pv = fevd(pvar, 12; method=:cholesky)
+        @test fv_pv.proportions ≈ fevd(sys_var1, 12).proportions atol=1e-10
+        @test compute_Q(pvar, :long_run)' * compute_Q(pvar, :long_run) ≈ I(2) atol=1e-10
+
+        io = IOBuffer()
+        @test_nowarn report(io, pvar)
+        df_pv = @test_nowarn DataFrame(pvar)
+        @test nrow(df_pv) == 2 * (1 + 2 * 2)
+
+        # Zero-state system (n == 0)
+        sys_z = ABCDSystem(zeros(0, 0), zeros(0, 2), zeros(2, 0), [1.0 0.0; 0.2 0.8])
+        pvar_z = population_var(sys_z, 1)
+        @test pvar_z.Sigma ≈ [1.0 0.2; 0.2 0.68] atol=1e-12
+        @test norm(pvar_z.B[2:end, :]) < 1e-12
+    end
+
+    # =========================================================================
+    # 4. Ravenna (2007) 3-Way IRF Distortion Decomposition
+    # =========================================================================
+    @testset "compare_dsge_svar_irf 3-way distortion decomposition" begin
+        # 4a. FVRSW Permanent Income (non-invertible, R = 1.2):
+        # Lag-truncation wedge -> 0 monotonically across p = 1, 4, 12, 30
+        spec_fv = @dsge begin
+            parameters: R_gross = 1.2, sigma_w = 1.0
+            endogenous: y, c, surplus
+            exogenous: w
+
+            c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+            surplus[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+            surplus[t] = y[t] - c[t]
+
+            steady_state = [0.0, 0.0, 0.0]
+        end
+        sol_fv = solve(spec_fv; method=:gensys)
+
+        ps = [1, 4, 12, 30]
+        audits = [compare_dsge_svar_irf(sol_fv, p, 20; observables=[:surplus]) for p in ps]
+        @test all(a -> !a.is_invertible, audits)
+        @test all(a -> a.identification_wedge == 0.0, audits)
+        # Non-invertibility wedge is positive and independent of p
+        @test audits[1].noninvertibility_wedge > 0.1
+        for a in audits
+            @test a.noninvertibility_wedge ≈ audits[1].noninvertibility_wedge atol=1e-12
+        end
+        # Truncation wedge converges monotonically to 0
+        tws = [a.truncation_wedge for a in audits]
+        @test tws[1] > tws[2] > tws[3] > tws[4]
+        @test tws[4] < 1e-3
+        # Telescoping identity holds everywhere
+        a4 = audits[2]
+        @test (a4.irf_svar .- a4.irf_wold_id) .+
+              (a4.irf_wold_id .- a4.irf_wold_best) .+
+              (a4.irf_wold_best .- a4.irf_dsge) ≈ (a4.irf_svar .- a4.irf_dsge) atol=1e-12
+
+        # 4b. Invertible non-recursive 2-shock system:
+        # :best_rotation -> noninv ≈ 0, id == 0; :cholesky -> noninv ≈ 0, id > 0
+        A_inv = [0.5 0.1; -0.05 0.4]
+        B_inv = [1.0 0.0; 0.0 1.0]
+        C_inv = [0.3 -0.2; 0.15 0.25]
+        # Full non-triangular orthogonal rotation of impact
+        theta_rot = 0.6
+        D_inv = [cos(theta_rot) -sin(theta_rot); sin(theta_rot) cos(theta_rot)] * [1.0 0.0; 0.3 0.8]
+        sys_nr = ABCDSystem(A_inv, B_inv, C_inv, D_inv; obs_names=[:y, :pi], shock_names=[:w1, :w2])
+        @test is_invertible(sys_nr)
+
+        aud_best = compare_dsge_svar_irf(sys_nr, 8, 15; identification=:best_rotation)
+        @test aud_best.is_invertible
+        @test aud_best.noninvertibility_wedge < 1e-10
+        @test aud_best.identification_wedge == 0.0
+        @test aud_best.truncation_wedge < 1e-4
+
+        aud_chol = compare_dsge_svar_irf(sys_nr, 8, 15; identification=:cholesky)
+        @test aud_chol.noninvertibility_wedge < 1e-10
+        @test aud_chol.identification_wedge > 0.05
+        @test aud_chol.truncation_wedge < 1e-4
+
+        # :long_run and :sign schemes
+        aud_lr = compare_dsge_svar_irf(sys_nr, 8, 15; identification=:long_run)
+        @test aud_lr.noninvertibility_wedge < 1e-10
+        @test aud_lr.truncation_wedge < 1e-3
+
+        cf_pos(ir) = ir[1, 1, 1] > 0.0 && ir[1, 2, 2] > 0.0
+        aud_sign1 = compare_dsge_svar_irf(sys_nr, 8, 15; identification=:sign, check_func=cf_pos, seed=42)
+        aud_sign2 = compare_dsge_svar_irf(sys_nr, 8, 15; identification=:sign, check_func=cf_pos, seed=42)
+        @test aud_sign1.Q_id_inf == aud_sign2.Q_id_inf
+        @test aud_sign1.Q_id_p == aud_sign2.Q_id_p
+        @test aud_sign1.truncation_wedge < 1e-3
+
+        # Tall rectangular system (k = 2, m = 1) with :best_rotation
+        sys_tall = ABCDSystem([0.4;;], [1.0;;], [0.5; 0.3;;], [2.0; 0.0;;])
+        aud_tall = compare_dsge_svar_irf(sys_tall, 4, 10; identification=:best_rotation)
+        @test aud_tall.noninvertibility_wedge < 1e-9
+        @test size(aud_tall.Q_best) == (2, 1)
+        @test_throws ArgumentError compare_dsge_svar_irf(sys_tall, 4, 10; identification=:cholesky)
+    end
+
+    # =========================================================================
+    # 5. Convenience dispatches, Float32, display/report, RSER-01, validation
+    # =========================================================================
+    @testset "Convenience dispatches, Float32, display, RSER-01, and errors (#912)" begin
+        spec_nk = compute_steady_state(@dsge begin
+            parameters: rho = 0.9, sigma_y = 0.5, kappa = 0.3, phi_pi = 1.5, rho_r = 0.7
+            endogenous: y, pi_v, i_rate, a
+            exogenous: eps_y
+            linear: true
+
+            y[t] = y[t+1] - sigma_y * (i_rate[t] - pi_v[t+1])
+            pi_v[t] = 0.99 * pi_v[t+1] + kappa * y[t]
+            i_rate[t] = rho_r * i_rate[t-1] + (1.0 - rho_r) * phi_pi * pi_v[t] + a[t]
+            a[t] = rho * a[t-1] + eps_y[t]
+        end)
+        sol_nk = solve(spec_nk; method=:gensys)
+        psol_nk = perturbation_solver(spec_nk; order=1)
+
+        # DSGESolution & PerturbationSolution parity
+        @test shock_recoverability(sol_nk, [:y]).r2_matrix ≈
+              shock_recoverability(psol_nk, [:y]).r2_matrix atol=1e-7
+        @test population_var(sol_nk, [:y], 4).B ≈
+              population_var(psol_nk, [:y], 4).B atol=1e-7
+        @test compare_dsge_svar_irf(sol_nk, [:y], 4, 10).total_rmse ≈
+              compare_dsge_svar_irf(psol_nk, [:y], 4, 10).total_rmse atol=1e-7
+
+        # StateSpaceModel dispatch
+        ss_corr = StateSpaceModel([1.0 0.2], [0.1;;], [0.7 0.1; 0.0 0.5], [0.4;;];
+                                  R=[1.0; 0.3;;], G=[0.05;;])
+        @test shock_recoverability(ss_corr) isa ShockRecoverabilityResult{Float64}
+        @test population_var(ss_corr, 2) isa VARModel{Float64}
+        @test compare_dsge_svar_irf(ss_corr, 2, 10) isa DSGEVARIRFAudit{Float64}
+
+        # HADSGESolution dispatch
+        ha_spec = load_ha_example(:krusell_smith)
+        ha_ss = compute_steady_state(ha_spec; max_iter=100, tol=1e-4)
+        ha_sol = solve(ha_spec; method=:ssj, ss=ha_ss, T_horizon=50, n_reduced=10)
+        @test shock_recoverability(ha_sol) isa ShockRecoverabilityResult{Float64}
+        @test population_var(ha_sol, 2) isa VARModel{Float64}
+        @test compare_dsge_svar_irf(ha_sol, 2, 10) isa DSGEVARIRFAudit{Float64}
+
+        # Float32 precision preservation
+        sys32 = ABCDSystem(Float32[0.7;;], Float32[1.0;;], Float32[1.1;;], Float32[1.0;;])
+        rec32 = shock_recoverability(sys32; max_lead=4)
+        pvar32 = population_var(sys32, 2; n_obs_effective=200)
+        aud32 = compare_dsge_svar_irf(sys32, 2, 8)
+        @test rec32 isa ShockRecoverabilityResult{Float32}
+        @test pvar32 isa VARModel{Float32}
+        @test aud32 isa DSGEVARIRFAudit{Float32}
+        @test eltype(aud32.irf_dsge) === Float32
+        @test eltype(aud32.Q_best) === Float32
+
+        # show and report across text and LaTeX backends
+        io = IOBuffer()
+        show(io, rec32)
+        @test occursin("Recoverability", String(take!(io)))
+        report(io, rec32)
+        @test occursin("Shock Recoverability", String(take!(io)))
+        show(io, aud32)
+        @test occursin("Ravenna", String(take!(io)))
+        report(io, aud32)
+        @test occursin("Wedges by Horizon", String(take!(io)))
+
+        with_display_backend(:latex) do
+            show(io, rec32)
+            @test occursin("tabular", String(take!(io)))
+            report(io, aud32)
+            @test occursin("tabular", String(take!(io)))
+        end
+
+        # Propertynames check
+        @test :irf_wold in propertynames(aud32)
+        @test :rmse in propertynames(aud32)
+        @test aud32.irf_wold == aud32.irf_wold_id
+        @test aud32.rmse == aud32.total_rmse
+
+        # RSER-01 positional constructor & plain-field round-trip
+        for obj in (rec32, aud32)
+            payload = Dict{String,Any}(string(f) => MEM._ser_field(getfield(obj, f)) for f in fieldnames(typeof(obj)))
+            MEM._assert_plain_payload(payload)
+            reconstructed = MEM._from_serializable(Base.typename(typeof(obj)).wrapper, payload, MEM.SERIALIZATION_FORMAT_VERSION)
+            @test typeof(reconstructed) === typeof(obj)
+            for f in fieldnames(typeof(obj))
+                @test getfield(reconstructed, f) == getfield(obj, f)
+            end
+        end
+
+        # Validation errors
+        @test_throws ArgumentError shock_recoverability(sys32; max_lead=-1)
+        @test_throws ArgumentError shock_recoverability(sys32; rcond_tol=0.0)
+        @test_throws ArgumentError population_var(sys32, 0)
+        @test_throws ArgumentError population_var(sys32, 1; n_obs_effective=0)
+        @test_throws ArgumentError population_var(ABCDSystem([1.5;;], [1.0;;], [1.0;;], [1.0;;]), 1)
+        @test_throws ArgumentError compare_dsge_svar_irf(sys32, 0, 10)
+        @test_throws ArgumentError compare_dsge_svar_irf(sys32, 1, 0)
+        @test_throws ArgumentError compare_dsge_svar_irf(sys32, 1, 10; identification=:sign)
+        @test_throws ArgumentError compare_dsge_svar_irf(sys32, 1, 10; identification=:nonexistent)
+    end
+end

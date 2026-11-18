@@ -631,6 +631,7 @@ include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
 include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
 include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
+include("dsge/abcd_var.jl")                     # ABCD-04 (#912): shock recoverability, population VAR, 3-way IRF audit
 include("ri/types.jl")
 include("ri/steady_state.jl")
 include("ri/dynamic.jl")
@@ -846,6 +847,7 @@ export evaluate_policy, evaluate_value, physical_nodes, max_euler_error, vfi_sol
 export ABCDSystem, abcd_representation
 export InvertibilityResult, poor_mans_invertibility, is_invertible
 export InnovationsRepresentation, innovations_representation, to_abcd
+export ShockRecoverabilityResult, DSGEVARIRFAudit, shock_recoverability, population_var, compare_dsge_svar_irf
 export nstates, nobservables
 export nshocks, is_determined, is_stable
 
