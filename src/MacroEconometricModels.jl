@@ -639,6 +639,7 @@ include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD
 include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
 include("dsge/abcd_var.jl")                     # ABCD-04 (#912): shock recoverability, population VAR, 3-way IRF audit
 include("dsge/abcd_search.jl")                  # ABCD-05 (#913): observable-set invertibility search
+include("dsge/dsge_var.jl")                     # ABCD-06 (#914): Del Negro-Schorfheide Bayesian DSGE-VAR(λ)
 include("ri/types.jl")
 include("ri/steady_state.jl")
 include("ri/dynamic.jl")
@@ -1075,6 +1076,7 @@ export optimize_hyperparameters_glp, GLPHyperparameters
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model
+export DSGEVARPrior, DSGEVARLambdaProfile, DSGEVARPosterior, dsge_var_prior, dsge_var_logml, select_dsge_var_lambda, estimate_dsge_var
 
 # =============================================================================
 # Exports - Prior Functions
