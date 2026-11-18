@@ -1834,3 +1834,59 @@ end
         @test_throws BoundsError search_invertible_observables(sys32, 1; target_shocks=[99])
     end
 end
+
+@testset "Canonical FVRSW (2007) PIH End-to-End Integration (#915)" begin
+    spec_pih_base = @dsge begin
+        parameters: R_gross = 1.2, sigma_w = 1.0
+        endogenous: y, c, surplus
+        exogenous: w
+
+        c[t] = c[t-1] + sigma_w * (1 - 1/R_gross) * w[t]
+        surplus[t] = -c[t-1] + sigma_w * (1/R_gross) * w[t]
+        surplus[t] = y[t] - c[t]
+
+        steady_state = [0.0, 0.0, 0.0]
+    end
+    for R_val in (1.05, 1.2, 1.5)
+        spec_pih = MacroEconometricModels._respec(
+            spec_pih_base, Dict(:R_gross => R_val, :sigma_w => 1.0))
+        sol_pih = solve(spec_pih; method=:gensys)
+        abcd_s = abcd_representation(sol_pih, [:surplus])
+
+        # Exact FVRSW (2007) closed-form benchmarks for arbitrary R > 1
+        inv_s = poor_mans_invertibility(abcd_s)
+        @test !inv_s.invertible
+        @test inv_s.M ≈ [R_val;;] atol=1e-10
+        @test inv_s.max_modulus ≈ R_val atol=1e-10
+
+        inn_s = innovations_representation(abcd_s)
+        @test !inn_s.invertible
+        @test inn_s.P ≈ [(R_val^2 - 1) / R_val^2;;] atol=1e-10
+        @test inn_s.K ≈ [-(1 - 1 / R_val);;] atol=1e-10
+        @test inn_s.Sigma_u ≈ [1.0;;] atol=1e-10
+        @test inn_s.M_innov ≈ [1 / R_val;;] atol=1e-10
+
+        rec_s = shock_recoverability(abcd_s; max_lead=10)
+        @test rec_s.r2_contemp[1] ≈ 1 / R_val^2 atol=1e-10
+        for ell in 0:10
+            @test rec_s.r2_matrix[ell + 1, 1] ≈ 1 - (1 - 1 / R_val^2) * R_val^(-2 * ell) atol=1e-10
+        end
+
+        srch_s = search_invertible_observables(sol_pih, 1)
+        @test srch_s.observables[end] == [:surplus]
+        @test srch_s.is_invertible[1] == true
+        @test srch_s.is_invertible[end] == false
+
+        audit_s = compare_dsge_svar_irf(abcd_s, 8, 20)
+        @test audit_s.noninvertibility_wedge > 0.05
+
+        # Plot integration across all ABCD diagnostic structs
+        @test plot_result(abcd_s) isa PlotOutput
+        @test plot_result(inv_s) isa PlotOutput
+        @test plot_result(inn_s) isa PlotOutput
+        @test plot_result(rec_s) isa PlotOutput
+        @test plot_result(srch_s) isa PlotOutput
+        @test plot_result(audit_s; view=:irf_comparison) isa PlotOutput
+        @test plot_result(audit_s; view=:wedges) isa PlotOutput
+    end
+end

@@ -121,8 +121,8 @@ using MacroEconometricModels
         abcd_nz = ABCDSystem{Float64}(A_nz, B_nz, C_nz, D_nz, c_nz, d_nz,
                                       ["s1", "s2"], ["y1", "y2"], ["e1", "e2"])
         T_long = 250_000
-        rng_nz = Random.Xoshiro(77)
-        shocks_nz = randn(rng_nz, T_long, 2)
+        rng = Random.Xoshiro(77)
+        shocks_nz = randn(rng, T_long, 2)
         states_nz = zeros(T_long, 2)
         y_nz = zeros(T_long, 2)
         for t in 1:T_long
@@ -260,16 +260,17 @@ using MacroEconometricModels
         @test prof_true.logml_hat >= maximum(prof_true.log_marginal_likelihoods) - 1e-12
 
         # Distorted DGP with strong omitted ad-hoc lag dynamics + cross-correlations
-        rng_mis = Random.Xoshiro(999)
+        rng = Random.Xoshiro(999)
         T_burn = 150
         Y_mis_all = zeros(T_burn + 250, 3)
         A1_bad = [0.25 -0.40 0.30; 0.35 0.15 -0.25; -0.20 0.30 0.20]
         A2_bad = [-0.45 0.25 0.0; -0.25 -0.35 0.20; 0.30 -0.20 -0.35]
         S_bad = [0.02, 0.015, 0.02]
         for t in 3:(T_burn + 250)
+            eps_mis = randn(rng, 3)
             Y_mis_all[t, :] = A1_bad * Y_mis_all[t - 1, :] +
                               A2_bad * Y_mis_all[t - 2, :] +
-                              S_bad .* randn(rng_mis, 3)
+                              S_bad .* eps_mis
         end
         Y_mis = Y_mis_all[(T_burn + 1):end, :]
 
@@ -577,5 +578,61 @@ using MacroEconometricModels
 
         # Ambiguity audit across entire MacroEconometricModels module
         @test isempty(Test.detect_ambiguities(MacroEconometricModels))
+    end
+
+    # =========================================================================
+    # 8. An-Schorfheide / Smets-Wouters Style DSGE-VAR IRF Recovery & Plots
+    # =========================================================================
+    @testset "An-Schorfheide / Smets-Wouters Style DSGE-VAR Recovery & Plots" begin
+        # Pre-linearized AR(1)+Phillips+Taylor NK model (An-Schorfheide 2007 style)
+        as_spec = @dsge begin
+            parameters: beta = 0.99, tau = 1.0, kappa = 0.35, psi1 = 1.65,
+                        rho_r = 0.65, rho_g = 0.75, rho_z = 0.70,
+                        sig_r = 0.01, sig_g = 0.01, sig_z = 0.01
+            endogenous: y, pi, r, g, z
+            exogenous: e_r, e_g, e_z
+            steady_state: [0.0, 0.0, 0.0, 0.0, 0.0]
+            linear: true
+
+            y[t] = y[t+1] - (1 / tau) * (r[t] - pi[t+1]) + (1 - rho_g) * g[t] + rho_z * z[t]
+            pi[t] = beta * pi[t+1] + kappa * (y[t] - g[t])
+            r[t] = rho_r * r[t-1] + (1 - rho_r) * (psi1 * pi[t]) + sig_r * e_r[t]
+            g[t] = rho_g * g[t-1] + sig_g * e_g[t]
+            z[t] = rho_z * z[t-1] + sig_z * e_z[t]
+        end
+        sol_as = solve(as_spec; method=:gensys)
+        @test is_determined(sol_as)
+
+        as_obs = [:y, :pi, :r]
+        sim_as = simulate(sol_as, 500; seed=2007)
+        as_idx = [findfirst(==(s), sol_as.spec.endog) for s in as_obs]
+        Y_as = Matrix{Float64}(sim_as[201:end, as_idx])
+
+        # True-DGP lambda selection picks high weight >= 2.0 and finite profile
+        prof_as = select_dsge_var_lambda(sol_as, Y_as, 2; observables=as_obs)
+        @test prof_as.lambda_hat >= 2.0
+        @test prof_as.logml_hat >= prof_as.logml_inf - 1e-10
+
+        # Posterior IRF bands cover true DSGE-ABCD IRF across horizon
+        post_as = estimate_dsge_var(sol_as, Y_as, 2;
+                                    lambda=:auto, observables=as_obs,
+                                    n_draws=200, seed=2007)
+        irf_post_as = irf(post_as, 12; method=:dsge_qr, quantiles=[0.025, 0.5, 0.975])
+        irf_true_as = irf(abcd_representation(sol_as, as_obs), 12)
+        covered = count(
+            irf_post_as.quantiles[h, i, j, 1] - 1e-3 <= irf_true_as.values[h, i, j] <=
+            irf_post_as.quantiles[h, i, j, 3] + 1e-3
+            for h in 1:12, i in 1:3, j in 1:3
+        )
+        @test covered >= 90  # >= ~83% of 108 (h,i,j) cells inside 95% DSGE-VAR bands
+
+        # Plot integration across prior, lambda profile, and posterior views
+        prior_as = dsge_var_prior(sol_as, 2, 1.5, size(Y_as, 1) - 2; observables=as_obs)
+        @test plot_result(prior_as; view=:phi) isa PlotOutput
+        @test plot_result(prior_as; view=:sigma) isa PlotOutput
+        @test plot_result(prof_as) isa PlotOutput
+        @test plot_result(post_as; view=:irf, var="y", shock="e_r", horizon=12) isa PlotOutput
+        @test plot_result(post_as; view=:draws, max_panels=4) isa PlotOutput
+        @test plot_result(post_as; view=:lambda) isa PlotOutput
     end
 end
