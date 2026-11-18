@@ -612,6 +612,7 @@ include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
 include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
+include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -818,7 +819,9 @@ export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_
 export pruned_state_space
 export evaluate_policy, evaluate_value, physical_nodes, max_euler_error, vfi_solver
 
-# Accessors
+# Accessors & ABCD representation
+export ABCDSystem, abcd_representation
+export nstates, nobservables
 export nshocks, is_determined, is_stable
 
 # OccBin types and functions
