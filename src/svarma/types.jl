@@ -185,6 +185,8 @@ Fields:
 - `shock_names::Vector{String}` — structural shock names (`n`)
 - `converged::Bool` — convergence indicator
 - `method::Symbol` — estimation or construction method tag
+- `vcov::Matrix{T}` — asymptotic parameter covariance matrix (`k × k`, empty when unestimated)
+- `se::Vector{T}` — parameter standard errors corresponding to `coef(m)` (empty when unestimated)
 
 Virtual properties accessible via `getproperty`:
 - `ma_eigenvalues` — `Complex.(m.ma_eig_re, m.ma_eig_im)`
@@ -216,6 +218,8 @@ struct SVARMAModel{T<:AbstractFloat} <: AbstractVARModel
     shock_names::Vector{String}
     converged::Bool
     method::Symbol
+    vcov::Matrix{T}
+    se::Vector{T}
 
     function SVARMAModel{T}(
         Y::AbstractMatrix,
@@ -239,6 +243,8 @@ struct SVARMAModel{T<:AbstractFloat} <: AbstractVARModel
         shock_names::AbstractVector,
         converged::Bool,
         method::Symbol,
+        vcov::AbstractMatrix,
+        se::AbstractVector,
     ) where {T<:AbstractFloat}
         Y_mat = Matrix{T}(Y)
         T_obs, n = size(Y_mat)
@@ -275,12 +281,47 @@ struct SVARMAModel{T<:AbstractFloat} <: AbstractVARModel
         sn_vec = String[string(s) for s in shock_names]
         length(sn_vec) == n ||
             throw(ArgumentError("shock_names length ($(length(sn_vec))) must match n ($n)"))
+        vcov_mat = Matrix{T}(vcov)
+        isempty(vcov_mat) || size(vcov_mat, 1) == size(vcov_mat, 2) ||
+            throw(ArgumentError("vcov must be square or empty, got $(size(vcov_mat))"))
+        se_vec = Vector{T}(se)
         new{T}(
             Y_mat, p_int, q_int, mu_vec, Phi_arr, Theta_arr, C_mat, shocks_mat,
             re_vec, im_vec, regime, gmr_region, dists_vec, dp_vec,
             T(loglik), T(aic), T(bic), vn_vec, sn_vec, converged, method,
+            vcov_mat, se_vec,
         )
     end
+end
+
+function SVARMAModel{T}(
+    Y::AbstractMatrix,
+    p::Integer,
+    q::Integer,
+    mu::AbstractVector,
+    Phi::AbstractArray{<:Real,3},
+    Theta::AbstractArray{<:Real,3},
+    C::AbstractMatrix,
+    shocks::AbstractMatrix,
+    ma_eig_re::AbstractVector,
+    ma_eig_im::AbstractVector,
+    regime::Symbol,
+    gmr_region::Symbol,
+    distributions::AbstractVector,
+    dist_params::AbstractVector,
+    loglik::Real,
+    aic::Real,
+    bic::Real,
+    varnames::AbstractVector,
+    shock_names::AbstractVector,
+    converged::Bool,
+    method::Symbol,
+) where {T<:AbstractFloat}
+    SVARMAModel{T}(
+        Y, p, q, mu, Phi, Theta, C, shocks, ma_eig_re, ma_eig_im,
+        regime, gmr_region, distributions, dist_params, loglik, aic, bic,
+        varnames, shock_names, converged, method, zeros(T, 0, 0), T[],
+    )
 end
 
 function SVARMAModel(
@@ -311,6 +352,39 @@ function SVARMAModel(
         Y, p, q, mu, Phi, Theta, C, shocks, ma_eig_re, ma_eig_im,
         regime, gmr_region, distributions, dist_params, loglik, aic, bic,
         varnames, shock_names, converged, method,
+    )
+end
+
+function SVARMAModel(
+    Y::AbstractMatrix,
+    p::Integer,
+    q::Integer,
+    mu::AbstractVector,
+    Phi::AbstractArray{<:Real,3},
+    Theta::AbstractArray{<:Real,3},
+    C::AbstractMatrix,
+    shocks::AbstractMatrix,
+    ma_eig_re::AbstractVector,
+    ma_eig_im::AbstractVector,
+    regime::Symbol,
+    gmr_region::Symbol,
+    distributions::AbstractVector,
+    dist_params::AbstractVector,
+    loglik::Real,
+    aic::Real,
+    bic::Real,
+    varnames::AbstractVector,
+    shock_names::AbstractVector,
+    converged::Bool,
+    method::Symbol,
+    vcov::AbstractMatrix,
+    se::AbstractVector,
+)
+    T = float(promote_type(eltype(Y), eltype(mu), eltype(Phi), eltype(Theta), eltype(C)))
+    SVARMAModel{T}(
+        Y, p, q, mu, Phi, Theta, C, shocks, ma_eig_re, ma_eig_im,
+        regime, gmr_region, distributions, dist_params, loglik, aic, bic,
+        varnames, shock_names, converged, method, vcov, se,
     )
 end
 
@@ -364,6 +438,8 @@ varnames(m::SVARMAModel) = m.varnames
 
 StatsAPI.nobs(m::SVARMAModel) = size(m.Y, 1)
 StatsAPI.coef(m::SVARMAModel{T}) where {T} = vcat(m.mu, vec(m.Phi), vec(m.Theta), vec(m.C))
+StatsAPI.vcov(m::SVARMAModel) = m.vcov
+StatsAPI.stderror(m::SVARMAModel) = m.se
 StatsAPI.residuals(m::SVARMAModel) = m.shocks
 StatsAPI.loglikelihood(m::SVARMAModel) = m.loglik
 StatsAPI.aic(m::SVARMAModel) = m.aic
@@ -420,6 +496,14 @@ function report(io::IO, m::SVARMAModel{T}) where {T}
     for j in 1:m.q
         _matrix_table(io, @view(m.Theta[:, :, j]), "MA Coefficient Matrix Θ_$j";
             row_labels = m.varnames, col_labels = m.varnames)
+    end
+
+    k_coef = n + m.p * n^2 + m.q * n^2 + n^2
+    if length(m.se) == k_coef
+        c_off = n + m.p * n^2 + m.q * n^2
+        c_names = ["C[$i,$j]" for j in 1:n for i in 1:n]
+        _coef_table(io, "Structural Impact Matrix (C) Inference",
+                    c_names, vec(m.C), Vector{T}(m.se[(c_off + 1):k_coef]); dist=:z)
     end
     return nothing
 end

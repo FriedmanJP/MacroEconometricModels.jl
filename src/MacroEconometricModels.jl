@@ -559,6 +559,8 @@ include("nongaussian/lanne_luoto_gmm.jl")
 include("svarma/types.jl")
 include("svarma/schur_filter.jl")
 include("svarma/blaschke.jl")
+include("svarma/gmm_2sls.jl")
+include("svarma/ml.jl")
 
 # VECM analysis and forecasting (after irf + fevd + hd)
 include("vecm/forecast.jl")
@@ -1390,8 +1392,9 @@ export test_overidentification, test_label_stability
 export test_lambda_distinct, test_restrictions
 export test_gaussian_shock_count
 
-# Non-fundamental Strong SVARMA core (NGID-05, #905)
+# Non-fundamental Strong SVARMA core & estimation (NGID-05 #905, NGID-06 #906)
 export SVARMAModel, ssvarma_filter_shocks, fundamentalness_regime, blaschke_representations
+export estimate_ssvarma
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)
