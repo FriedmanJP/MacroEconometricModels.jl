@@ -499,6 +499,9 @@ include("ardl/pmg.jl")
 # Panel Quantile Regression with Interactive Quantile Factor Effects (QFM-06, #888)
 include("factor/quantile_panel.jl")
 
+# QFM Distributional Forecasting & Growth-at-Risk (QFM-07, #889)
+include("factor/quantile_forecast.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -1644,6 +1647,9 @@ export forecast_evaluate, diebold_mariano, clark_west, mincer_zarnowitz,
        forecast_encompassing, combine_forecasts,
        ForecastEvaluation, DMTestResult, ClarkWestResult, MincerZarnowitzResult,
        ForecastEncompassingResult, ForecastCombination
+
+# QFM Distributional Forecasting & Growth-at-Risk (QFM-07, #889)
+export GrowthAtRiskResult, growth_at_risk
 
 # =============================================================================
 # Exports - Plotting
