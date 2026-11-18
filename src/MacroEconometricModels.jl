@@ -551,6 +551,11 @@ include("core/irf.jl")
 include("core/fevd.jl")
 include("core/hd.jl")
 
+# Non-fundamental Strong SVARMA core (NGID-05, #905; after irf + fevd + hd)
+include("svarma/types.jl")
+include("svarma/schur_filter.jl")
+include("svarma/blaschke.jl")
+
 # VECM analysis and forecasting (after irf + fevd + hd)
 include("vecm/forecast.jl")
 include("vecm/analysis.jl")
@@ -1363,6 +1368,9 @@ export test_overidentification, test_label_stability
 export test_lambda_distinct, test_restrictions
 export test_gaussian_shock_count
 
+# Non-fundamental Strong SVARMA core (NGID-05, #905)
+export SVARMAModel, ssvarma_filter_shocks, fundamentalness_regime, blaschke_representations
+
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)
 # =============================================================================
@@ -1505,7 +1513,7 @@ export load_example
 
 # Simulation DGPs (public simulators, ex-test/dgp)
 export dgp_var, lyapunov_gamma0, var_irf, var_fevd, var_hd
-export dgp_nongaussian_var, dgp_heteroskedastic_var
+export dgp_nongaussian_var, dgp_heteroskedastic_var, dgp_ssvarma
 export dgp_arima, dgp_trend_cycle, dgp_ar2_peak, dgp_lagged_pair, dgp_state_space, dgp_unit_root_pair
 export dgp_vecm, dgp_cointreg, dgp_panel_var, dgp_ardl, dgp_nardl, dgp_pmg
 export dgp_garch_family, dgp_sv, dgp_mgarch, dgp_midas
