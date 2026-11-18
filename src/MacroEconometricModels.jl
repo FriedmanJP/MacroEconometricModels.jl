@@ -625,6 +625,8 @@ include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent
 include("ri/types.jl")
 include("ri/steady_state.jl")
 include("ri/dynamic.jl")
+include("ri/state_space.jl")
+include("ri/analysis.jl")
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -935,6 +937,7 @@ export spanning_diagnostic, forecast_sufficiency
 # Rational Inattention (Sims 2003 steady-state & Afrouzi-Yang 2021 dynamic LQG Kalman filter)
 export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
 export DynamicRISolution, solve_ri_transition
+export to_statespace, to_abcd
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator

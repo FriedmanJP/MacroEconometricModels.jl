@@ -4,7 +4,7 @@
 # This file is part of MacroEconometricModels.jl.
 # Licensed under GPL-3.0-or-later. See LICENSE for details.
 
-using Test, MacroEconometricModels, LinearAlgebra, Statistics
+using Test, MacroEconometricModels, LinearAlgebra, Statistics, Random
 
 @testset "Sims (2003) Steady-State RI Kalman Filter (#917)" begin
 
@@ -448,3 +448,265 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics
         @test occursin("<table", html_out)
     end
 end
+
+@testset "RI Signal Realization, State Space, IRF, FEVD & Simulation (#919)" begin
+
+    # =========================================================================
+    # 1. Exact Kalman & Mutual Information Identities
+    # =========================================================================
+    @testset "Kalman Update & Signal Mutual Information Identities" begin
+        # 1D and multivariate multi-rank systems
+        probs = (
+            RationalInattentionProblem(0.85, 1.1, 1.0; beta=0.98, capacity=1.3, units=:bits),
+            RationalInattentionProblem(
+                [0.85 0.1 0.0 0.0; 0.0 0.75 0.1 0.0; 0.0 0.0 0.65 0.05; 0.0 0.0 0.0 0.5],
+                [1.0 0.2 0.0; 0.0 0.8 0.1; 0.0 0.0 0.7; 0.1 0.0 0.6],
+                [1.0 0.2 0.0; 0.0 1.0 0.1; 0.0 0.0 1.0; 0.2 -0.1 0.3];
+                M=[2.0 0.3 0.0; 0.3 1.5 0.1; 0.0 0.1 1.0],
+                beta=0.95, omega=1.2,
+            ),
+        )
+        for prob in probs
+            sol = solve_ri_kalman(prob)
+            n = size(prob.A, 1)
+            In = Matrix{Float64}(I, n, n)
+            IKY = In - sol.K_gain * sol.Y_signal'
+            @test isapprox(IKY * sol.Sigma_prior, sol.Sigma_post; atol=1e-10)
+            S_sig = sol.Y_signal' * sol.Sigma_prior * sol.Y_signal + sol.Sigma_psi
+            mi_nats = 0.5 * (logdet(Symmetric(Matrix(S_sig))) - logdet(Symmetric(Matrix(sol.Sigma_psi))))
+            @test abs(mi_nats - sol.capacity_nats) < 1e-10
+        end
+    end
+
+    # =========================================================================
+    # 2. Joint State Space, to_statespace, to_abcd & Corner Cases
+    # =========================================================================
+    @testset "to_statespace, to_abcd & Corner Cases" begin
+        A = [0.8 0.1; 0.0 0.6]
+        B = [1.0 0.0; 0.2 0.8]
+        H = [1.0, 0.5]
+        B_u = [0.15, -0.05]
+        prob = RationalInattentionProblem(A, B, H; B_u=B_u, beta=0.96, capacity=1.2,
+            state_names=["y", "pi"], action_names=["i"], shock_names=["e_y", "e_pi"])
+        sol = solve_ri_kalman(prob)
+        n, m, d, r_s = 2, 2, 1, sol.signal_rank
+
+        # Validation errors
+        @test_throws ArgumentError to_statespace(sol; observables=:invalid)
+        @test_throws ArgumentError to_abcd(sol; observables=:invalid)
+        @test_throws ArgumentError irf(sol, 0)
+        @test_throws ArgumentError fevd(sol, 0)
+        @test_throws ArgumentError simulate(sol, 0)
+        @test_throws ArgumentError simulate(sol, 10; burn=-1)
+        @test_throws ArgumentError simulate(sol, 10; x0=[1.0])
+        @test_throws ArgumentError simulate(sol, 10; xhat0=[1.0, NaN])
+
+        # to_statespace across observables modes
+        for (obs_sym, k_exp) in ((:actions, d), (:actions_and_states, n + d), (:all, 2n + d))
+            ssm = to_statespace(sol; observables=obs_sym)
+            @test ssm isa StateSpaceModel{Float64}
+            @test ssm.n_obs == k_exp
+            @test ssm.n_state == 2n
+            @test size(ssm.R) == (2n, m + r_s)
+            @test iszero(ssm.H)
+            @test ssm.Q == Matrix{Float64}(I, m + r_s, m + r_s)
+            @test ssm.init_mode === :stationary
+        end
+
+        # to_abcd matches irf(sol) exactly and matches StateSpaceModel stationary covariance
+        for (obs_sym, k_exp) in ((:actions, d), (:actions_and_states, n + d), (:all, 2n + d))
+            abcd = to_abcd(sol; observables=obs_sym)
+            @test abcd isa ABCDSystem{Float64}
+            @test nstates(abcd) == 2n
+            @test nobservables(abcd) == k_exp
+            @test nshocks(abcd) == m + r_s
+            @test abcd.shock_names[1:m] == ["Fundamental: e_y", "Fundamental: e_pi"]
+            @test abcd.shock_names[(m + 1):(m + r_s)] == ["RI Noise: s$(j)" for j in 1:r_s]
+
+            ir_abcd = irf(abcd, 20)
+            ir_sol = irf(sol, 20; observables=obs_sym)
+            @test ir_sol isa ImpulseResponse{Float64}
+            @test ir_sol.horizon == 20
+            @test size(ir_sol.values) == (20, k_exp, m + r_s)
+            @test ir_sol.variables == ir_abcd.variables
+            @test ir_sol.shocks == ir_abcd.shocks
+            @test isapprox(ir_sol.values, ir_abcd.values; atol=1e-12)
+        end
+
+        # Check control feedback B_u inside T_joint and analytical covariance parity
+        abcd_all = to_abcd(sol; observables=:all)
+        ssm_all = to_statespace(sol; observables=:all)
+        @test isapprox(abcd_all.A[1:n, (n + 1):2n], B_u * sol.F_policy; atol=1e-12)
+        G0_abcd = analytical_moments(abcd_all; lags=0, format=:matrices)[1]
+        G0_ssm = ssm_all.Z * ssm_all.P1 * ssm_all.Z'
+        @test isapprox(G0_abcd, G0_ssm; atol=1e-10)
+
+        # r_s == 0 zero-attention corner case
+        sol_zero = solve_ri_kalman(RationalInattentionProblem(0.8, 1.0, 1.0; omega=100.0))
+        @test sol_zero.signal_rank == 0
+        ssm_z = to_statespace(sol_zero; observables=:all)
+        abcd_z = to_abcd(sol_zero; observables=:all)
+        ir_z = irf(sol_zero, 10; observables=:all)
+        fv_z = fevd(sol_zero, 10; observables=:actions)
+        sim_z = simulate(sol_zero, 40; burn=10, seed=7)
+        @test size(ssm_z.R) == (2, 1)
+        @test nshocks(abcd_z) == 1
+        @test size(ir_z.values) == (10, 3, 1)
+        @test all(iszero, ir_z.values[:, 2:3, :]) # zero belief & action response
+        @test size(fv_z.proportions) == (1, 1, 10)
+        @test size(sim_z.signals) == (40, 0)
+        @test size(sim_z.ri_noise) == (40, 0)
+        @test all(iszero, sim_z.beliefs)
+        @test all(iszero, sim_z.actions)
+    end
+
+    # =========================================================================
+    # 3. Sims (2003) Inertial / Hump-Shaped IRF & RI Processing-Noise FEVD
+    # =========================================================================
+    @testset "Sims (2003) Inertial IRF & RI Noise FEVD Transition" begin
+        rho = 0.9
+        sigma_w = 1.0
+        H = 25
+
+        sol_low = solve_ri_kalman(RationalInattentionProblem(rho, sigma_w, 1.0; capacity=0.1, units=:bits))
+        sol_mid = solve_ri_kalman(RationalInattentionProblem(rho, sigma_w, 1.0; capacity=0.8, units=:bits))
+        sol_high = solve_ri_kalman(RationalInattentionProblem(rho, sigma_w, 1.0; capacity=20.0, units=:bits))
+
+        ir_low = irf(sol_low, H; observables=:all)
+        ir_mid = irf(sol_mid, H; observables=:all)
+        ir_high = irf(sol_high, H; observables=:all)
+
+        # Row 1 = x_t, Row 2 = xhat_{t|t}, Row 3 = u_t; Col 1 = fundamental shock, Col 2 = RI noise
+        u_resp_low = ir_low.values[:, 3, 1]
+        u_resp_mid = ir_mid.values[:, 3, 1]
+        u_resp_high = ir_high.values[:, 3, 1]
+        x_resp_high = ir_high.values[:, 1, 1]
+
+        # At low capacity (0.1 bits): sluggish impact and strictly delayed hump-shaped peak
+        @test u_resp_low[1] < 0.25
+        @test argmax(u_resp_low) > 1
+        @test maximum(u_resp_low) > u_resp_low[1] * 1.5
+
+        # Monotonic impact increase toward full info across capacities
+        @test u_resp_low[1] < u_resp_mid[1] < u_resp_high[1]
+        @test isapprox(u_resp_high, x_resp_high; atol=1e-3)
+        @test argmax(u_resp_high) == 1
+
+        # FEVD: non-trivial RI noise share at κ=0.1 bits, vanishing (< 1e-4) at κ=20.0 bits
+        fv_low = fevd(sol_low, H; observables=:actions)
+        fv_mid = fevd(sol_mid, H; observables=:actions)
+        fv_high = fevd(sol_high, H; observables=:actions)
+
+        @test fv_low isa FEVD{Float64}
+        @test size(fv_low.proportions) == (1, 2, H)
+        for h in 1:H
+            @test isapprox(sum(fv_low.proportions[1, :, h]), 1.0; atol=1e-12)
+            @test isapprox(sum(fv_high.proportions[1, :, h]), 1.0; atol=1e-12)
+        end
+
+        noise_share_low = fv_low.proportions[1, 2, 1]
+        noise_share_mid = fv_mid.proportions[1, 2, 1]
+        noise_share_high = fv_high.proportions[1, 2, end]
+        @test noise_share_low > 0.25
+        @test noise_share_low > noise_share_mid > noise_share_high
+        @test noise_share_high < 1e-4
+    end
+
+    # =========================================================================
+    # 4. Luo (2008) Permanent-Income RI Benchmark (Excess Smoothness & Sensitivity)
+    # =========================================================================
+    @testset "Luo (2008) Permanent-Income RI Benchmark" begin
+        # Exact unit-root permanent income: y_{p,t} = y_{p,t-1} + σ_w w_t
+        sigma_w = 1.0
+        kappa_bits = 0.8
+        prob_pi = RationalInattentionProblem(1.0, sigma_w, 1.0; capacity=kappa_bits, units=:bits)
+        sol_pi = solve_ri_kalman(prob_pi)
+        K_pi = sol_pi.K_gain[1, 1] # 1 - 2^(-2κ)
+
+        # Analytical excess smoothness of fundamental consumption change & positive excess sensitivity
+        ir_pi = irf(sol_pi, 80; observables=:all)
+        c_irf = ir_pi.values[:, 3, 1]
+        dc_irf = vcat(c_irf[1], diff(c_irf))
+        var_dc_fund = sum(abs2, dc_irf)
+        @test isapprox(var_dc_fund, (K_pi / (2.0 - K_pi)) * sigma_w^2; atol=1e-10)
+        @test var_dc_fund < sigma_w^2 # Excess smoothness relative to Var(Δy_p) = σ_w^2
+
+        excess_sens_exact = K_pi * (1.0 - K_pi) * sigma_w
+        @test excess_sens_exact > 0.0
+        @test isapprox(c_irf[2] - c_irf[1], excess_sens_exact; atol=1e-12)
+
+        # Simulated PIH sample: positive Cov(Δc_t, w_{t-1})
+        sim_pi = simulate(sol_pi, 25_000; burn=500, seed=2008)
+        dc_sim = diff(sim_pi.actions[:, 1])
+        w_lag = sim_pi.fundamental_shocks[1:(end - 1), 1]
+        cov_sens = cov(dc_sim, w_lag)
+        @test cov_sens > 0.0
+        @test isapprox(cov_sens, excess_sens_exact; atol=0.03)
+
+        # Persistent near-unit-root permanent income (ρ = 0.95): total Var(Δc_t) < Var(Δy_p) AND Cov(Δc_t, w_{t-1}) > 0
+        prob_near = RationalInattentionProblem(0.95, sigma_w, 1.0; capacity=0.6, units=:bits)
+        sol_near = solve_ri_kalman(prob_near)
+        sim_near = simulate(sol_near, 25_000; burn=500, seed=2009)
+        dy_near = diff(sim_near.states[:, 1])
+        dc_near = diff(sim_near.actions[:, 1])
+        w_lag_near = sim_near.fundamental_shocks[1:(end - 1), 1]
+        @test var(dc_near) < var(dy_near) # Total individual excess smoothness
+        @test cov(dc_near, w_lag_near) > 0.0 # Excess sensitivity
+    end
+
+    # =========================================================================
+    # 5. Stochastic Simulation Moments, Reproducibility & Float32 Support
+    # =========================================================================
+    @testset "Simulation Sample Moments & Float32" begin
+        A = [0.75 0.1; 0.05 0.6]
+        B = [1.0 0.0; 0.2 0.8]
+        H = [1.0 0.3; 0.0 1.0]
+        prob = RationalInattentionProblem(A, B, H; beta=0.95, capacity=1.2, units=:bits)
+        sol = solve_ri_kalman(prob)
+
+        # Seed reproducibility & unpacking
+        s1 = simulate(sol, 200; burn=50, seed=919)
+        s2 = simulate(sol, 200; burn=50, seed=919)
+        s3 = simulate(sol, 200; burn=50, seed=920)
+        states_u, beliefs_u, signals_u, actions_u, w_u, psi_u = s1
+        @test states_u == s2.states && beliefs_u == s2.beliefs
+        @test signals_u == s2.signals && actions_u == s2.actions
+        @test w_u == s2.fundamental_shocks && psi_u == s2.ri_noise
+        @test states_u != s3.states
+
+        # Large-sample moment convergence
+        sim = simulate(sol, 30_000; burn=500, seed=42)
+        @test isapprox(sim.signals, sim.states * sol.Y_signal + sim.ri_noise; atol=1e-12)
+        @test isapprox(sim.actions, sim.beliefs * sol.F_policy'; atol=1e-12)
+        @test isapprox(cov(sim.fundamental_shocks), Matrix{Float64}(I, 2, 2); atol=0.05)
+        @test isapprox(cov(sim.ri_noise), sol.Sigma_psi; atol=0.05 * max(norm(sol.Sigma_psi), 1.0))
+        @test isapprox(cov(sim.states - sim.beliefs), sol.Sigma_post; atol=0.05)
+
+        # Float32 precision support
+        A32 = Float32[0.8 0.1; 0.0 0.6]
+        B32 = Float32[1.0 0.0; 0.0 0.8]
+        H32 = Float32[1.0, 0.5]
+        p32 = RationalInattentionProblem(A32, B32, H32; beta=0.95f0, capacity=1.2f0)
+        sol32 = solve_ri_kalman(p32)
+        ssm32 = to_statespace(sol32; observables=:all)
+        abcd32 = to_abcd(sol32; observables=:all)
+        ir32 = irf(sol32, 12; observables=:all)
+        fv32 = fevd(sol32, 12; observables=:actions)
+        sim32 = simulate(sol32, 50; burn=20, seed=11)
+
+        @test ssm32 isa StateSpaceModel{Float32}
+        @test abcd32 isa ABCDSystem{Float32}
+        @test ir32 isa ImpulseResponse{Float32}
+        @test fv32 isa FEVD{Float32}
+        @test eltype(sim32.states) === Float32
+        @test eltype(sim32.beliefs) === Float32
+        @test eltype(sim32.signals) === Float32
+        @test eltype(sim32.actions) === Float32
+        @test eltype(sim32.fundamental_shocks) === Float32
+        @test eltype(sim32.ri_noise) === Float32
+        @test isapprox(ir32.values, irf(abcd32, 12).values; atol=1f-6)
+
+        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
+    end
+end
+
