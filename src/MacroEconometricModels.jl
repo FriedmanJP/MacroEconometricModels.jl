@@ -553,6 +553,7 @@ include("core/bootstrap_schemes.jl")   # T271 (#370): wild/block resampling + Ki
 include("core/irf.jl")
 include("core/fevd.jl")
 include("core/hd.jl")
+include("nongaussian/lanne_luoto_gmm.jl")
 
 # Non-fundamental Strong SVARMA core (NGID-05, #905; after irf + fevd + hd)
 include("svarma/types.jl")
@@ -1369,6 +1370,8 @@ export nonlinear_svar_hypothesis, test_svar_hypothesis, diagnose_nongaussian_sva
 
 # Moment-based GMM SVAR
 export identify_gmm_moments
+export LanneLuotoGMMResult, GMMMomentSelectionResult,
+       estimate_lanne_luoto_gmm, select_gmm_moments
 
 # Time-varying-volatility SVAR (Lewis 2021)
 export identify_lewis_tvv

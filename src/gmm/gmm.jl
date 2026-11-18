@@ -35,8 +35,8 @@ abstract type AbstractGMMModel <: StatsAPI.StatisticalModel end
 GMM weighting matrix specification.
 
 Fields:
-- method: Weighting method (:identity, :optimal, :two_step, :iterated)
-- max_iter: Maximum iterations for iterated GMM
+- method: Weighting method (:identity, :optimal, :two_step, :iterated, :cue)
+- max_iter: Maximum iterations for iterated/CUE GMM
 - tol: Convergence tolerance
 """
 struct GMMWeighting{T<:AbstractFloat}
@@ -45,8 +45,8 @@ struct GMMWeighting{T<:AbstractFloat}
     tol::T
 
     function GMMWeighting{T}(method::Symbol, max_iter::Int, tol::T) where {T<:AbstractFloat}
-        method ∉ (:identity, :optimal, :two_step, :iterated) &&
-            throw(ArgumentError("method must be :identity, :optimal, :two_step, or :iterated"))
+        method ∉ (:identity, :optimal, :two_step, :iterated, :cue) &&
+            throw(ArgumentError("method must be :identity, :optimal, :two_step, :iterated, or :cue"))
         @assert max_iter > 0
         @assert tol > 0
         new{T}(method, max_iter, tol)
@@ -346,6 +346,119 @@ end
 # =============================================================================
 
 """
+Evaluate the Continuous Updating Estimator (CUE) objective at `theta`:
+`ḡ(θ)' S(θ)⁻¹ ḡ(θ)` where `S(θ)` is recomputed from `moment_fn(θ, data)`.
+"""
+function _gmm_cue_objective(theta::AbstractVector{T}, moment_fn::Function, data;
+                            hac::Bool=true, bandwidth::Int=0,
+                            fixed_bw::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
+    G = moment_fn(theta, data)
+    all(isfinite, G) || return T(Inf)
+    n, q = size(G)
+    g_bar = vec(mean(G, dims=1))
+    if n <= 1
+        return T(dot(g_bar, g_bar))
+    end
+    G_demean = G .- g_bar'
+    Omega = if hac
+        if fixed_bw !== nothing
+            fixed_bw == 0 ? (G_demean' * G_demean) / n :
+                long_run_covariance(G_demean; bandwidth=fixed_bw, kernel=:bartlett)
+        else
+            long_run_covariance(G_demean; bandwidth=bandwidth, kernel=:bartlett)
+        end
+    else
+        (G_demean' * G_demean) / n
+    end
+    all(isfinite, Omega) || return T(Inf)
+    Omega_sym = Hermitian((Omega + Omega') / 2)
+    eigvals_O = eigvals(Omega_sym)
+    W = if minimum(eigvals_O) < eps(T)
+        Omega_reg = Omega_sym + T(1e-8) * I
+        Matrix{T}(robust_inv(Matrix(Omega_reg); silent=true))
+    else
+        Matrix{T}(robust_inv(Matrix(Omega_sym); silent=true))
+    end
+    val = T(dot(g_bar, W * g_bar))
+    isfinite(val) ? val : T(Inf)
+end
+
+"""Minimize the CUE objective `ḡ(θ)' S(θ)⁻¹ ḡ(θ)` directly with respect to `θ`."""
+function _minimize_gmm_cue(moment_fn::Function, theta0::AbstractVector{T}, data;
+                           hac::Bool=true, bandwidth::Int=0,
+                           max_iter::Int=100, tol::T=T(1e-8)) where {T<:AbstractFloat}
+    G0 = moment_fn(theta0, data)
+    n_obs, n_moments = size(G0)
+    if n_obs <= 1
+        W1 = identity_weighting(n_moments, T)
+        r1 = minimize_gmm(moment_fn, theta0, data, W1; max_iter=max_iter, tol=tol)
+        return (theta=r1.theta, objective=r1.objective, converged=r1.converged, iterations=r1.iterations)
+    end
+
+    # Warm-start from 1-step identity GMM (avoids |θ| -> ∞ CUE plateaus) unless theta0 is already better
+    W1 = identity_weighting(n_moments, T)
+    r1 = minimize_gmm(moment_fn, theta0, data, W1; max_iter=max_iter, tol=tol)
+    q_init = _gmm_cue_objective(theta0, moment_fn, data; hac=hac, bandwidth=bandwidth)
+    q_step1 = _gmm_cue_objective(r1.theta, moment_fn, data; hac=hac, bandwidth=bandwidth)
+    theta_curr = (isfinite(q_step1) && q_step1 <= q_init) ? copy(r1.theta) : copy(theta0)
+    total_iter = r1.iterations
+    converged = false
+    best_obj = min(q_init, q_step1)
+
+    if hac && bandwidth == 0
+        # Hold discrete NW truncation lag fixed per smooth L-BFGS pass, updating if optimal bw shifts
+        bw_curr = optimal_bandwidth_nw(
+            let Gc = moment_fn(theta_curr, data); Gc .- mean(Gc, dims=1) end;
+            kernel=:bartlett
+        )
+        for _ in 1:3
+            obj_pass(t) = _gmm_cue_objective(t, moment_fn, data; hac=true, fixed_bw=bw_curr)
+            res = Optim.optimize(obj_pass, theta_curr, Optim.LBFGS(),
+                                 Optim.Options(iterations=max_iter, f_reltol=tol))
+            total_iter += Optim.iterations(res)
+            cand = Optim.minimizer(res)
+            converged = Optim.converged(res)
+            if !converged
+                res_nm = Optim.optimize(obj_pass, theta_curr, Optim.NelderMead(),
+                                        Optim.Options(iterations=max_iter * 10, f_reltol=tol))
+                total_iter += Optim.iterations(res_nm)
+                if Optim.minimum(res_nm) < Optim.minimum(res)
+                    cand = Optim.minimizer(res_nm)
+                    converged = Optim.converged(res_nm)
+                end
+            end
+            theta_curr = Vector{T}(cand)
+            G_new = moment_fn(theta_curr, data)
+            bw_new = optimal_bandwidth_nw(G_new .- mean(G_new, dims=1); kernel=:bartlett)
+            best_obj = _gmm_cue_objective(theta_curr, moment_fn, data; hac=true, bandwidth=0)
+            bw_new == bw_curr && break
+            bw_curr = bw_new
+        end
+    else
+        obj_direct(t) = _gmm_cue_objective(t, moment_fn, data; hac=hac, bandwidth=bandwidth)
+        res = Optim.optimize(obj_direct, theta_curr, Optim.LBFGS(),
+                             Optim.Options(iterations=max_iter, f_reltol=tol))
+        total_iter += Optim.iterations(res)
+        cand = Optim.minimizer(res)
+        converged = Optim.converged(res)
+        best_obj = T(Optim.minimum(res))
+        if !converged
+            res_nm = Optim.optimize(obj_direct, theta_curr, Optim.NelderMead(),
+                                    Optim.Options(iterations=max_iter * 10, f_reltol=tol))
+            total_iter += Optim.iterations(res_nm)
+            if Optim.minimum(res_nm) < Optim.minimum(res)
+                cand = Optim.minimizer(res_nm)
+                converged = Optim.converged(res_nm)
+                best_obj = T(Optim.minimum(res_nm))
+            end
+        end
+        theta_curr = Vector{T}(cand)
+    end
+
+    (theta=theta_curr, objective=best_obj, converged=converged, iterations=total_iter)
+end
+
+"""
     estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
                  weighting::Symbol=:two_step, max_iter::Int=100,
                  tol::T=T(1e-8), hac::Bool=true, bandwidth::Int=0,
@@ -360,7 +473,7 @@ Arguments:
 - moment_fn: Function (theta, data) -> Matrix of moment conditions (n × q)
 - theta0: Initial parameter guess
 - data: Data passed to moment function
-- weighting: Weighting method (:identity, :optimal, :two_step, :iterated)
+- weighting: Weighting method (:identity, :optimal, :two_step, :iterated, :cue)
 - max_iter: Maximum iterations for optimization and/or iterated GMM
 - tol: Convergence tolerance
 - hac: Use HAC correction for optimal weighting
@@ -440,7 +553,7 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         iterations = result1.iterations + result2.iterations
 
     elseif weighting == :iterated
-        # Continuously updated GMM (iterate until convergence)
+        # Iterated GMM (alternate θ and W(θ) until convergence)
         theta_curr = copy(working_theta0)
         converged = false
         total_iter = 0
@@ -465,8 +578,20 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
         theta_hat = theta_curr
         iterations = total_iter
 
+    elseif weighting == :cue
+        # Continuous Updating Estimator (Hansen, Heaton & Yaron 1996):
+        # minimize ḡ(θ)' S(θ)⁻¹ ḡ(θ) directly with parameter-dependent S(θ)
+        res_cue = _minimize_gmm_cue(working_fn, working_theta0, data;
+                                    hac=hac, bandwidth=bandwidth,
+                                    max_iter=max_iter, tol=tol)
+        theta_hat = res_cue.theta
+        W_final = n_obs <= 1 ? identity_weighting(n_moments, T) :
+            optimal_weighting_matrix(working_fn, theta_hat, data; hac=hac, bandwidth=bandwidth)
+        converged = res_cue.converged
+        iterations = res_cue.iterations
+
     else
-        throw(ArgumentError("weighting must be :identity, :optimal, :two_step, or :iterated"))
+        throw(ArgumentError("weighting must be :identity, :optimal, :two_step, :iterated, or :cue"))
     end
 
     # Map back to constrained space if bounded
@@ -497,7 +622,7 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
     # classical minimum-distance under the chosen W: V = (G'WG)^{-1}.
     if n_obs == 1
         vcov = bread_inv
-    elseif weighting in (:optimal, :two_step, :iterated)
+    elseif weighting in (:optimal, :two_step, :iterated, :cue)
         vcov = bread_inv / n_obs
     else
         # General sandwich
@@ -519,7 +644,7 @@ function estimate_gmm(moment_fn::Function, theta0::AbstractVector{T}, data;
     J_stat, J_pvalue = if n_moments > n_params
         J = n_obs * (g_bar' * W_final * g_bar)
         df = n_moments - n_params
-        pv = weighting in (:optimal, :two_step, :iterated) ? T(1 - cdf(Chisq(df), J)) : T(NaN)
+        pv = weighting in (:optimal, :two_step, :iterated, :cue) ? T(1 - cdf(Chisq(df), J)) : T(NaN)
         (J, pv)
     else
         (zero(T), one(T))  # Just identified

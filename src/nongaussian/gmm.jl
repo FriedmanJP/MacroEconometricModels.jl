@@ -155,8 +155,8 @@ Identify ``B₀ = L Q(θ)`` from higher-moment conditions (Keweloh 2021; Lanne &
 
 `moments` selects the Keweloh (2021, eqs. 7–9) block: third-moment coskewness,
 fourth-moment cokurtosis, or both. `weighting=:two_step` is Hansen two-step GMM;
-`:cue` maps to the kernel's iterated GMM (continuously updated weighting between
-steps). Sandwich standard errors for `θ` are converted to ``B₀`` SEs by the
+`:cue` is the Continuous Updating Estimator minimizing ``\\bar{g}(\\theta)' S(\\theta)^{-1} \\bar{g}(\\theta)``
+directly. Sandwich standard errors for `θ` are converted to ``B₀`` SEs by the
 delta method. Covariance moments are automatic under the ``LQ`` parameterisation.
 """
 function identify_gmm_moments(model::VARModel{T};
@@ -187,7 +187,6 @@ function identify_gmm_moments(model::VARModel{T};
     L = Matrix{T}(safe_cholesky(model.Sigma))
     Z = Matrix{T}(model.U / L')
     data = (Z=Z, n=n, moments=moments)
-    w_kernel = weighting === :cue ? :iterated : weighting
 
     starts = Vector{Vector{T}}(undef, n_starts)
     starts[1] = zeros(T, n_angles)
@@ -198,7 +197,7 @@ function identify_gmm_moments(model::VARModel{T};
     best = nothing
     for θ0 in starts
         gmm = estimate_gmm(_keweloh_moment_matrix, θ0, data;
-                           weighting=w_kernel, hac=hac, bandwidth=bandwidth,
+                           weighting=weighting, hac=hac, bandwidth=bandwidth,
                            max_iter=max_iter, tol=tol)
         if best === nothing || gmm.J_stat < best.J_stat
             best = gmm
