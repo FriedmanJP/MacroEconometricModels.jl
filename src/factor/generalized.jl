@@ -325,33 +325,6 @@ function _estimate_spectral_density_lagwindow(X::AbstractMatrix{T}, M::Int, kern
     frequencies, spectral
 end
 
-"""Linear interpolation of spectral loadings onto the T/2+1 FFT ordinates."""
-function _interp_loadings_to_fft_grid(loadings::Array{Complex{T},3}, src_freq::Vector{T}, T_obs::Int) where {T<:AbstractFloat}
-    N, q, n_src = size(loadings)
-    n_fft = div(T_obs, 2) + 1
-    dest_freq = [T(2π * (j - 1) / T_obs) for j in 1:n_fft]
-    L = _align_eigenvector_phases(loadings)
-    L_out = Array{Complex{T},3}(undef, N, q, n_fft)
-    src = copy(src_freq)
-    # FFT grid lives in [0, π]; lag-window grid is already [0, π]
-    @inbounds for j in 1:n_fft
-        ω = dest_freq[j]
-        if ω <= src[1]
-            L_out[:, :, j] = L[:, :, 1]
-        elseif ω >= src[end]
-            L_out[:, :, j] = L[:, :, n_src]
-        else
-            i2 = searchsortedfirst(src, ω)
-            i1 = max(i2 - 1, 1)
-            i2 = min(i2, n_src)
-            Δ = src[i2] - src[i1]
-            t = Δ > 0 ? (ω - src[i1]) / Δ : zero(T)
-            L_out[:, :, j] = (1 - t) .* L[:, :, i1] .+ t .* L[:, :, i2]
-        end
-    end
-    L_out
-end
-
 """Align eigenvector signs/phases across adjacent frequencies before interpolation."""
 function _align_eigenvector_phases(loadings::Array{Complex{T},3}) where {T<:AbstractFloat}
     L = copy(loadings)

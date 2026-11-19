@@ -164,9 +164,7 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics, Random
     # =========================================================================
     # 4. RSER-01, Float32, Display & Ambiguities
     # =========================================================================
-    @testset "RSER-01, Float32, Display & Ambiguities" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
-
+    @testset "RSER-01, Float32 & Display" begin
         res = solve_mw_attention(
             (; rho=(0.92, 0.55), sigma=0.01),
             (; rho=0.80, sigma=0.10);

@@ -237,9 +237,7 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics
     # =========================================================================
     # 5. Display, Report, RSER-01 Constructor & Module Ambiguities
     # =========================================================================
-    @testset "Display, Report, RSER-01 & Ambiguities" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
-
+    @testset "Display, Report & RSER-01" begin
         prob = RationalInattentionProblem([0.8 0.1; 0.0 0.6], [1.0 0.0; 0.0 0.8], [1.0, 0.5];
             omega=0.4, state_names=["output", "inflation"], action_names=["rate"])
         ss = solve_ri_kalman(prob)

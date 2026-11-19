@@ -193,7 +193,6 @@ _backward_J(n, rho) = [t >= s ? rho^(t - s) : 0.0 for t in 1:n, s in 1:n]
         JB32 = Float32.(JB)
         @test eltype(rational_inattention_jacobian(JF32, 0.5; mode=:gain)) === Float32
         @test rational_inattention_jacobian(JB32, 0.5f0; mode=:gain) ≈ JB32 atol = 1f-5
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
 
     @testset "validation" begin

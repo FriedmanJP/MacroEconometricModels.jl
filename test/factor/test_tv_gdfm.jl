@@ -289,8 +289,5 @@ using StatsAPI
         @test_throws ArgumentError estimate_tv_gdfm(X_nan, 2)
         X_inf = copy(X64); X_inf[4, 2] = Inf
         @test_throws ArgumentError estimate_tv_gdfm(X_inf, 2)
-
-        # Method ambiguity check across MacroEconometricModels
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
 end

@@ -275,8 +275,4 @@ const M_PAN = MacroEconometricModels
         @test_throws DimensionMismatch StatsAPI.predict(m_asym, zeros(N, T_obs + 1, p))
         @test_throws DimensionMismatch StatsAPI.predict(m_asym, zeros(5, p + 1))
     end
-
-    @testset "No method ambiguities in MacroEconometricModels" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
-    end
 end

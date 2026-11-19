@@ -88,19 +88,21 @@ const TEST_GROUPS = [
         "factor/test_gdfm.jl",
         "factor/test_gdfm_i1.jl",          # GDFM-04 (#896): Cointegrated I(1) GDFM & BLL (2021) structural IRFs
         "factor/test_tv_gdfm.jl",          # GDFM-06 (#898): Locally stationary time-varying spectral GDFM
-        "factor/test_qfm.jl",
-        "factor/test_qfm_panel.jl",        # QFM-06 (#888): Quantile factor panel regression (Ando-Bai 2020)
-        "factor/test_qfm_forecast.jl",     # QFM-07 (#889): QFM distributional forecasting & Growth-at-Risk
         "factor/test_fhlz.jl",
         "factor/test_factor_selection.jl",   # GDFM-03 (#895): Onatski (2009/2010) & Ahn-Horenstein (2013)
         "factor/test_factor_forecast.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
-        "favar/test_qfavar.jl",            # QFM-08 (#890): Quantile VAR & Quantile FAVAR
         "factor/test_structural_dfm.jl",
         "nowcast/test_nowcast.jl",
         "did/test_did.jl",
         "did/test_lpdid.jl",
+    ]),
+    ("Quantile Factor & FAVAR" => [
+        "factor/test_qfm.jl",
+        "factor/test_qfm_panel.jl",        # QFM-06 (#888): Quantile factor panel regression (Ando-Bai 2020)
+        "factor/test_qfm_forecast.jl",     # QFM-07 (#889): QFM distributional forecasting & Growth-at-Risk
+        "favar/test_qfavar.jl",            # QFM-08 (#890): Quantile VAR & Quantile FAVAR
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
     ("ARIMA & Tests & Data & Reg" => [
@@ -119,11 +121,6 @@ const TEST_GROUPS = [
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "arima/test_sarima.jl",   # T242 (#341): multiplicative seasonal ARIMA
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
-        "ri/test_ri_kalman.jl",           # RI-02 (#917), RI-04 (#919): Sims steady-state LQG rational inattention & joint state space
-        "ri/test_ri_dynamic.jl",          # RI-03 (#918): Afrouzi-Yang dynamic RI transition path
-        "ri/test_ri_estimation.jl",       # RI-05 (#920): Empirical RI estimation & Coibion-Gorodnichenko tests
-        "ri/test_ri_mw.jl",               # RI-06 (#921): Maćkowiak-Wiederholt multivariate RI pricing
-        "ri/test_ri_discrete.jl",         # RI-07 (#922): Matejka-McKay & CDL discrete-choice RI
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
@@ -177,12 +174,6 @@ const TEST_GROUPS = [
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
         "nongaussian/test_nongaussian_svar.jl",
         "nongaussian/test_nongaussian_internals.jl",
-        "nongaussian/test_lms_svar.jl",     # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML
-        "nongaussian/test_lms_hypothesis.jl", # NGID-03 (#903): LMS structural hypothesis testing suite & diagnostics
-        "nongaussian/test_lanne_luoto_gmm.jl", # NGID-04 (#904): Lanne-Luoto (2021) full-system GMM + MSC/RMSC + CUE
-        "svarma/test_ssvarma_core.jl",    # NGID-05 (#905): GMR (2020) non-fundamental SSVARMA core & Schur filter
-        "svarma/test_ssvarma_estimation.jl", # NGID-06 (#906): SSVARMA(p,q) PML/ML/GMM estimation & II-2SLS
-        "svarma/test_fundamentalness.jl", # NGID-07 (#907): Fundamentalness & sufficient information tests
         "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
         "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
         "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
@@ -190,6 +181,21 @@ const TEST_GROUPS = [
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+    ]),
+    ("Non-Gaussian & SVARMA" => [
+        "nongaussian/test_lms_svar.jl",       # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML
+        "nongaussian/test_lms_hypothesis.jl", # NGID-03 (#903): LMS structural hypothesis testing suite & diagnostics
+        "nongaussian/test_lanne_luoto_gmm.jl", # NGID-04 (#904): Lanne-Luoto (2021) full-system GMM + MSC/RMSC + CUE
+        "svarma/test_ssvarma_core.jl",        # NGID-05 (#905): GMR (2020) non-fundamental SSVARMA core & Schur filter
+        "svarma/test_ssvarma_estimation.jl",  # NGID-06 (#906): SSVARMA(p,q) PML/ML/GMM estimation & II-2SLS
+        "svarma/test_fundamentalness.jl",     # NGID-07 (#907): Fundamentalness & sufficient information tests
+    ]),
+    ("Rational Inattention" => [
+        "ri/test_ri_kalman.jl",               # RI-02 (#917), RI-04 (#919): Sims steady-state LQG rational inattention & joint state space
+        "ri/test_ri_dynamic.jl",              # RI-03 (#918): Afrouzi-Yang dynamic RI transition path
+        "ri/test_ri_estimation.jl",           # RI-05 (#920): Empirical RI estimation & Coibion-Gorodnichenko tests
+        "ri/test_ri_mw.jl",                   # RI-06 (#921): Maćkowiak-Wiederholt multivariate RI pricing
+        "ri/test_ri_discrete.jl",             # RI-07 (#922): Matejka-McKay & CDL discrete-choice RI
     ]),
     # Plotting — consolidated plot_result harness (PLT-39). Split from the old
     # monolith (test_plot_result.jl) into per-domain lanes + the Wave-2 dispatch
@@ -280,6 +286,7 @@ const TEST_GROUPS = [
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
         "coverage/test_codecov_gaps.jl",
+        "coverage/test_v110_coverage.jl",
     ]),
     # Group 10b: IO. Sub-second files; stay in empirical (not a coverage harness).
     ("IO" => [

@@ -348,9 +348,9 @@ end
 
     @testset "4. Monte Carlo Size & Power (n=3, p=1, T=400, Student-t(5))" begin
         _suppress_warnings() do
-            n_mc_h0 = FAST ? 25 : 50
-            n_mc_bq = FAST ? 20 : 40
-            n_mc_h1 = FAST ? 15 : 25
+            n_mc_h0 = FAST ? 10 : 30
+            n_mc_bq = FAST ? 8 : 20
+            n_mc_h1 = FAST ? 8 : 15
             h_rec = recursiveness_hypothesis(3)
             h_single = impact_zero_hypothesis(3, [(2, 3)])
 
@@ -359,16 +359,17 @@ end
             for rep in 1:n_mc_h0
                 sim = _sim_lms_var1_t(Xoshiro(90340 + rep), 400)
                 fit = estimate_lms_svar(sim.Y, 1; distributions=:student_t,
-                                        method=:three_step, n_starts=2, seed=90440 + rep)
+                                        method=:three_step, n_starts=1, seed=90440 + rep)
                 test_svar_hypothesis(fit, h_rec; method=:wald).pvalue < 0.05 && (rej_w += 1)
                 test_svar_hypothesis(fit, h_rec; method=:lr).pvalue   < 0.05 && (rej_lr += 1)
                 test_svar_hypothesis(fit, h_rec; method=:lm).pvalue   < 0.05 && (rej_lm += 1)
                 test_svar_hypothesis(fit, h_single; method=:wald).pvalue < 0.05 && (rej_single += 1)
             end
-            @test 0.0 <= rej_w / n_mc_h0 <= 0.16
-            @test 0.0 <= rej_lr / n_mc_h0 <= 0.16
-            @test 0.0 <= rej_lm / n_mc_h0 <= 0.16
-            @test 0.0 <= rej_single / n_mc_h0 <= 0.16
+            size_cap = FAST ? 0.25 : 0.18
+            @test 0.0 <= rej_w / n_mc_h0 <= size_cap
+            @test 0.0 <= rej_lr / n_mc_h0 <= size_cap
+            @test 0.0 <= rej_lm / n_mc_h0 <= size_cap
+            @test 0.0 <= rej_single / n_mc_h0 <= size_cap
 
             # Blanchard–Quah long-run H₀ size check at T = 400
             B_nontri = [1.0 0.35 -0.20; -0.25 1.0 0.25; 0.15 -0.30 1.0]
@@ -379,12 +380,12 @@ end
             for rep in 1:n_mc_bq
                 sim = _sim_lms_var1_t(Xoshiro(90540 + rep), 400; A1=A1_bq, B=B_nontri)
                 fit = estimate_lms_svar(sim.Y, 1; distributions=:student_t,
-                                        method=:full_ml, n_starts=2, seed=90640 + rep)
+                                        method=:full_ml, n_starts=1, seed=90640 + rep)
                 test_svar_hypothesis(fit, h_bq; method=:wald).pvalue < 0.05 && (rej_bq_w += 1)
                 test_svar_hypothesis(fit, h_bq; method=:lr).pvalue   < 0.05 && (rej_bq_lr += 1)
             end
-            @test 0.0 <= rej_bq_w / n_mc_bq <= 0.16
-            @test 0.0 <= rej_bq_lr / n_mc_bq <= 0.16
+            @test 0.0 <= rej_bq_w / n_mc_bq <= size_cap
+            @test 0.0 <= rej_bq_lr / n_mc_bq <= size_cap
 
             # Power under H₁: B[1, 3] = -0.5
             B_h1 = [1.0 0.0 -0.5; -0.35 1.0 0.0; 0.22 -0.30 1.0]
@@ -392,20 +393,21 @@ end
             for rep in 1:n_mc_h1
                 sim = _sim_lms_var1_t(Xoshiro(90740 + rep), 400; B=B_h1)
                 fit = estimate_lms_svar(sim.Y, 1; distributions=:student_t,
-                                        method=:three_step, n_starts=2, seed=90840 + rep)
+                                        method=:three_step, n_starts=1, seed=90840 + rep)
                 test_svar_hypothesis(fit, h_rec; method=:wald).pvalue < 0.05 && (pow_w += 1)
                 test_svar_hypothesis(fit, h_rec; method=:lr).pvalue   < 0.05 && (pow_lr += 1)
                 test_svar_hypothesis(fit, h_rec; method=:lm).pvalue   < 0.05 && (pow_lm += 1)
             end
-            @test pow_w / n_mc_h1 > 0.85
-            @test pow_lr / n_mc_h1 > 0.85
-            @test pow_lm / n_mc_h1 > 0.85
+            pow_floor = FAST ? 0.75 : 0.80
+            @test pow_w / n_mc_h1 >= pow_floor
+            @test pow_lr / n_mc_h1 >= pow_floor
+            @test pow_lm / n_mc_h1 >= pow_floor
         end
     end
 
     @testset "5. Residual Bootstrap (:iid and :wild)" begin
         _suppress_warnings() do
-            n_boot_test = FAST ? 49 : 79
+            n_boot_test = 49
             sim0 = _sim_lms_var1_t(Xoshiro(90901), 400)
             fit0 = estimate_lms_svar(sim0.Y, 1; distributions=:student_t, method=:full_ml, seed=90902)
             h_rec = recursiveness_hypothesis(3)

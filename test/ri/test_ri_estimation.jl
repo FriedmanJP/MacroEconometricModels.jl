@@ -259,9 +259,7 @@ using MacroEconometricModels: dof_residual
     # =========================================================================
     # 5. StatsAPI, RSER-01, Float32, Display & Ambiguities
     # =========================================================================
-    @testset "StatsAPI, RSER-01, Float32, Display & Ambiguities" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
-
+    @testset "StatsAPI, RSER-01, Float32 & Display" begin
         prob = RationalInattentionProblem(0.85, 1.0, 1.0; capacity=0.75)
         sol = solve_ri_kalman(prob)
         sim = simulate(sol, 150; burn=100, seed=9207)

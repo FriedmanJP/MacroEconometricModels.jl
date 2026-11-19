@@ -266,19 +266,27 @@ function _svarma_gmm_scaled_inv(A::AbstractMatrix{T}) where {T<:AbstractFloat}
     d_inv = Diagonal(one(T) ./ d)
     R = Matrix{T}(d_inv * As * d_inv)
     R = Matrix{T}((R .+ transpose(R)) ./ T(2))
-    R_inv = _spd_inv(R)
+    F = eigen(Symmetric(R))
+    lam_floor = max(sqrt(eps(T)) * max(maximum(F.values), one(T)), eps(T))
+    inv_vals = one(T) ./ max.(F.values, lam_floor)
+    R_inv = F.vectors * Diagonal(inv_vals) * transpose(F.vectors)
     A_inv = Matrix{T}(d_inv * R_inv * d_inv)
     A_inv = Matrix{T}((A_inv .+ transpose(A_inv)) ./ T(2))
-    lam_min = try
-        eigmin(Symmetric(A_inv))
-    catch
-        zero(T)
-    end
-    if !isfinite(lam_min) || lam_min <= zero(T)
-        lam_max = maximum(abs, diag(A_inv))
-        shift = (isfinite(lam_min) && lam_min < zero(T) ? -lam_min : zero(T)) +
-                max(sqrt(eps(T)) * lam_max, eps(T))
-        A_inv = A_inv + shift * Matrix{T}(I, n, n)
+    if !isposdef(Symmetric(A_inv))
+        lam_min = try
+            eigmin(Symmetric(A_inv))
+        catch
+            zero(T)
+        end
+        scale = max(maximum(abs, diag(A_inv)), one(T))
+        jitter = (isfinite(lam_min) && lam_min < zero(T) ? -lam_min : zero(T)) +
+                 max(sqrt(eps(T)) * scale, eps(T))
+        for _ in 1:6
+            cand = A_inv + jitter * Matrix{T}(I, n, n)
+            isposdef(Symmetric(cand)) && return cand
+            jitter *= T(10)
+        end
+        return A_inv + jitter * Matrix{T}(I, n, n)
     end
     return A_inv
 end

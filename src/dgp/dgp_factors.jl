@@ -402,8 +402,9 @@ function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
     amp = Float64(tail_amplification)
     n_aug = r + n_key
     k_lag = 1 + n_aug * p
-    sig_f = 0.40
-    sig_y = 0.90
+    sig_f = 0.65
+    sig_y = 0.55
+    c_shift = 6.0
 
     A0 = Matrix{Float64}(I, n_aug, n_aug)
     for k in 1:n_key, j in 1:r
@@ -411,28 +412,31 @@ function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
     end
     A0_inv = inv(A0)
 
-    _w_tail(tau::Float64) = clamp((0.50 - tau) / 0.40, 0.0, 1.0)
     _q_f(tau::Float64) = isinf(df_f) ? Float64(Distributions.quantile(Distributions.Normal(), tau)) :
                                        Float64(Distributions.quantile(Distributions.TDist(df_f), tau))
     _q_y(tau::Float64) = Float64(Distributions.quantile(Distributions.Normal(), tau))
+    delta_f = 0.14 * max(amp - 1.0, 0.0) / n_key
+    delta_y = 0.10 * max(amp - 1.0, 0.0) / n_key
 
+    # Zero-threshold one-sided left-tail scale gives strictly monotone conditional quantiles
+    # (no Koenker-Xiao crossing) while preserving identical slopes for τ ≥ 0.50.
     function _build_lag_mats(tau::Float64)
         As = [zeros(n_aug, n_aug) for _ in 1:p]
-        tau_boost = clamp(_w_tail(tau) * (amp - 1.0), -1.0, 1.5)
-        f_diag = clamp(0.45 + 0.20 * tau_boost, 0.10, 0.78)
+        q_f_neg = tau < 0.50 ? 1.45 * _q_f(tau) : 0.0
+        q_y_neg = tau < 0.50 ? 1.25 * _q_y(tau) : 0.0
         for j in 1:r
-            As[1][j, j] = f_diag
+            As[1][j, j] = 0.45
             if r > 1
                 for j2 in 1:r
                     j2 != j && (As[1][j, j2] = 0.05 / (r - 1))
                 end
             end
         end
-        fy_coef = -0.35 * (1.0 + (amp - 1.0) * _w_tail(tau)) / n_key
+        fy_coef = clamp(-0.38 / n_key + delta_f * q_f_neg, -0.78 / n_key, -0.10 / n_key)
         for j in 1:r, k in 1:n_key
             As[1][j, r + k] = fy_coef
         end
-        y_diag = clamp(0.45 + 0.20 * tau_boost, 0.10, 0.78)
+        y_diag = clamp(0.45 - delta_y * q_y_neg, 0.10, 0.82)
         for k in 1:n_key
             As[1][r + k, r + k] = y_diag
         end
@@ -445,18 +449,20 @@ function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
         return As
     end
 
+    A_med = _build_lag_mats(0.50)
+
     true_B(tau::Real) = begin
         tf = Float64(tau)
         (!(tau isa Bool) && isfinite(tf) && 0.0 < tf < 1.0) ||
             throw(ArgumentError("tau must lie strictly in (0, 1), got $tau"))
         B = zeros(k_lag, n_aug)
-        qf = sig_f * _q_f(tf)
-        qy = sig_y * _q_y(tf)
+        qf_int = tf < 0.50 ? (sig_f + n_key * delta_f * c_shift) * 1.45 * _q_f(tf) : sig_f * _q_f(tf)
+        qy_int = tf < 0.50 ? (sig_y + delta_y * c_shift) * 1.25 * _q_y(tf) : sig_y * _q_y(tf)
         for j in 1:r
-            B[1, j] = qf
+            B[1, j] = qf_int
         end
         for k in 1:n_key
-            B[1, r + k] = qy
+            B[1, r + k] = qy_int
         end
         As = _build_lag_mats(tf)
         for lag in 1:p
@@ -469,29 +475,36 @@ function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
     N_tot = T_obs + burn + p
     Z = zeros(N_tot, n_aug)
     for t in (p + 1):N_tot
+        key_pos = zero(Float64)
+        @inbounds for k in 1:n_key
+            key_pos += max(Z[t - 1, r + k] + c_shift, 0.05)
+        end
         # Slow factors first
         for j in 1:r
             u = clamp(rand(rng_use), 1e-6, 1.0 - 1e-6)
-            As_u = _build_lag_mats(u)
-            val = sig_f * _q_f(u)
+            val = zero(Float64)
             for lag in 1:p, col in 1:n_aug
-                val += As_u[lag][j, col] * Z[t - lag, col]
+                val += A_med[lag][j, col] * Z[t - lag, col]
             end
-            Z[t, j] = val
+            qf = _q_f(u)
+            eps_f = u < 0.50 ? (sig_f + delta_f * key_pos) * 1.45 * qf : sig_f * qf
+            Z[t, j] = val + eps_f
         end
         # Fast key variables react contemporaneously via A0
         for k in 1:n_key
             eq = r + k
             u = clamp(rand(rng_use), 1e-6, 1.0 - 1e-6)
-            As_u = _build_lag_mats(u)
-            val = sig_y * _q_y(u)
+            val = zero(Float64)
             for j in 1:r
                 val -= A0[eq, j] * Z[t, j]
             end
             for lag in 1:p, col in 1:n_aug
-                val += As_u[lag][eq, col] * Z[t - lag, col]
+                val += A_med[lag][eq, col] * Z[t - lag, col]
             end
-            Z[t, eq] = val
+            qy = _q_y(u)
+            key_neg = max(c_shift - Z[t - 1, eq], 0.05)
+            eps_y = u < 0.50 ? (sig_y + delta_y * key_neg) * 1.25 * qy : sig_y * qy
+            Z[t, eq] = val + eps_y
         end
     end
 
@@ -509,10 +522,10 @@ function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
 
     Lambda_y = zeros(N, n_key)
     Lambda_y[1:n_key, 1:n_key] .= Matrix{Float64}(I, n_key, n_key)
-    Lambda_y[(n_key + 1):N, :] .= 0.3 .* randn(rng_use, N - n_key, n_key)
+    Lambda_y[(n_key + 1):N, :] .= 0.08 .* randn(rng_use, N - n_key, n_key)
 
     n_nonkey = N - n_key
-    idio_nonkey = 0.18 .* (isinf(df_f) ? randn(rng_use, T_obs, n_nonkey) :
+    idio_nonkey = 0.15 .* (isinf(df_f) ? randn(rng_use, T_obs, n_nonkey) :
                                         rand(rng_use, Distributions.TDist(df_f), T_obs, n_nonkey))
     X_nonkey = F_true * @view(Lambda[(n_key + 1):N, :])' .+
                Y_key * @view(Lambda_y[(n_key + 1):N, :])' .+

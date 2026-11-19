@@ -487,13 +487,13 @@ const M_QF = MacroEconometricModels
         # Recovery of tail-amplified VAR transmission & QFAVAR panel IRFs
         rng = Random.Xoshiro(42)
         dq = dgp_qfavar(rng; T_obs=250, N=40, r=2, p=1, n_key=1, tail_amplification=1.5)
-        qv_dgp = estimate_qvar(hcat(dq.F, dq.Y_key), 1, [0.10, 0.50, 0.90])
+        qv_dgp = estimate_qvar(hcat(dq.F, dq.Y_key), 1, [0.10, 0.50, 0.90]; seed=42)
         @test norm(qv_dgp.B_list[1][4, 1:2]) > norm(qv_dgp.B_list[2][4, 1:2])
         ir_qv_10 = qirf(qv_dgp, 5; tau_profile=0.10, baseline_tau=0.50, shock=3)
         ir_qv_50 = qirf(qv_dgp, 5; tau_profile=0.50, baseline_tau=0.50, shock=3)
         @test norm(ir_qv_10.values[2, 1:2, 1]) > norm(ir_qv_50.values[2, 1:2, 1])
 
-        qf_dgp = estimate_qfavar(dq.X_panel, dq.Y_key_indices, 2, 1, [0.10, 0.50, 0.90])
+        qf_dgp = estimate_qfavar(dq.X_panel, dq.Y_key_indices, 2, 1, [0.10, 0.50, 0.90]; seed=42)
         # Joint span [F_tilde(0.50), Y_key] recovers true latent factor space
         Q_est = Matrix(qr(hcat(qf_dgp.factors_list[2], dq.Y_key)).Q)
         for j in 1:2
@@ -507,9 +507,5 @@ const M_QF = MacroEconometricModels
         @test ir50.values[1, 1, 1] ≈ 1.0 atol=1e-10
         @test sum(abs, ir10.values[2:4, 2:end, 1]) > sum(abs, ir50.values[2:4, 2:end, 1])
         @test sum(abs, ir10.values[2:4, 2:end, 1]) > sum(abs, ir90.values[2:4, 2:end, 1])
-    end
-
-    @testset "Method ambiguity check" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
 end

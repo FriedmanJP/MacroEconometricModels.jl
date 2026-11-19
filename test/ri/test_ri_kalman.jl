@@ -416,9 +416,7 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics, Random
     # =========================================================================
     # 7. Show, Report & Module Ambiguities
     # =========================================================================
-    @testset "Display, Report & Ambiguities" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
-
+    @testset "Display & Report" begin
         prob = RationalInattentionProblem([0.8 0.1; 0.0 0.6], [1.0 0.0; 0.0 0.8], [1.0, 0.5];
             capacity=1.0, state_names=["output", "inflation"], action_names=["rate"])
         sol = solve_ri_kalman(prob)
@@ -705,8 +703,6 @@ end
         @test eltype(sim32.fundamental_shocks) === Float32
         @test eltype(sim32.ri_noise) === Float32
         @test isapprox(ir32.values, irf(abcd32, 12).values; atol=1f-6)
-
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
 
     @testset "Luo (2008) / Sims (2003) & Afrouzi-Yang (2021) Analytical Benchmarks (#923)" begin

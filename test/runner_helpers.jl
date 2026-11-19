@@ -19,7 +19,10 @@ function _expected_rank(name::AbstractString)
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
     name == "Volatility & Filters" && return 54  # GARCH/FIGARCH/MCEM sequential; start with ARIMA (#828)
+    name == "Non-Gaussian & SVARMA"           && return 53
+    name == "Quantile Factor & FAVAR"         && return 53
     name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
+    name == "Rational Inattention"            && return 51
     name == "Serialization DSGE"  && return 88  # DSER is DSGE-Core-sized; start with HA
     name == "IRF & VECM"          && return 50
     name == "Serialization"       && return 48  # RSER files pulled out of empirical groups

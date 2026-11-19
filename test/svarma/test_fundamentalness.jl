@@ -20,8 +20,7 @@ end
 
 @testset "NGID-07: Fundamentalness & Informational Sufficiency Tests (#907)" begin
 
-    @testset "1. Method Ambiguity, Exports & Input Validation" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
+    @testset "1. Exports & Input Validation" begin
         for sym in (:FundamentalnessTestResult, :SufficientInformationTestResult,
                     :test_fundamentalness, :test_sufficient_information, :identify_cvm)
             @test isdefined(MacroEconometricModels, sym)

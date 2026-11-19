@@ -1461,19 +1461,26 @@ using Random
         @test all(isfinite, nc.panel_imputed)
         @test nc.panel_imputed[nc.observed_mask] == X_nan[nc.observed_mask]
 
-        # Lower RMSE on masked T_obs entries than univariate AR(2) benchmark
-        rmse_nc = sqrt(mean(abs2, nc.nowcast[tail_idx] .- X[T_obs, tail_idx]))
-        ar2_preds = Float64[]
-        for j in tail_idx
-            y = X_nan[1:(T_obs - 1), j]
-            medj = median(filter(!isnan, y))
-            yc = [isnan(v) ? medj : v for v in y]
-            Y_t = yc[3:end]
-            Z_t = hcat(ones(length(Y_t)), yc[2:(end - 1)], yc[1:(end - 2)])
-            b = Z_t \ Y_t
-            push!(ar2_preds, b[1] + b[2] * yc[end] + b[3] * yc[end - 1])
+        # Lower RMSE on masked tail entries across rolling origins than univariate AR(2) benchmark
+        se_nc_sq = Float64[]
+        se_ar2_sq = Float64[]
+        for t_eval in (T_obs - 11):T_obs
+            X_eval = copy(X_nan[1:t_eval, :])
+            X_eval[t_eval, tail_idx] .= NaN
+            nc_eval = nowcast_gdfm(gdfm_clean, X_eval, 0)
+            for (idx_pos, j) in enumerate(tail_idx)
+                push!(se_nc_sq, abs2(nc_eval.nowcast[j] - X[t_eval, j]))
+                y = X_eval[1:(t_eval - 1), j]
+                medj = median(filter(!isnan, y))
+                yc = [isnan(v) ? medj : v for v in y]
+                Y_t = yc[3:end]
+                Z_t = hcat(ones(length(Y_t)), yc[2:(end - 1)], yc[1:(end - 2)])
+                b = Z_t \ Y_t
+                push!(se_ar2_sq, abs2((b[1] + b[2] * yc[end] + b[3] * yc[end - 1]) - X[t_eval, j]))
+            end
         end
-        rmse_ar2 = sqrt(mean(abs2, ar2_preds .- X[T_obs, tail_idx]))
+        rmse_nc = sqrt(mean(se_nc_sq))
+        rmse_ar2 = sqrt(mean(se_ar2_sq))
         @test rmse_nc < rmse_ar2
 
         # Multi-horizon (h > 0 forecast, h < 0 backcast), unstandardized, smoothed_periodogram

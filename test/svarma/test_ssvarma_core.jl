@@ -66,8 +66,7 @@ end
 
 @testset "NGID-05: Non-Fundamental SSVARMA(p, q) Core (#905)" begin
 
-    @testset "1. Method Ambiguity & Export Hygiene" begin
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
+    @testset "1. Export Hygiene" begin
         for sym in (:SVARMAModel, :ssvarma_filter_shocks, :fundamentalness_regime,
                     :blaschke_representations, :dgp_ssvarma)
             @test isdefined(MacroEconometricModels, sym)

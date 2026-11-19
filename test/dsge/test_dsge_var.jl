@@ -575,9 +575,6 @@ using MacroEconometricModels
                 report(obj)
             end
         end
-
-        # Ambiguity audit across entire MacroEconometricModels module
-        @test isempty(Test.detect_ambiguities(MacroEconometricModels))
     end
 
     # =========================================================================

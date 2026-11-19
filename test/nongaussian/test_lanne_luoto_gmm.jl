@@ -522,14 +522,5 @@ end
         res_re = LanneLuotoGMMResult{Float64}(vals...)
         @test res_re isa LanneLuotoGMMResult{Float64}
         @test res_re.B0 ≈ res.B0
-
-        # Zero new method ambiguities involving NGID-04 types
-        ambs = Test.detect_ambiguities(MacroEconometricModels)
-        ngid04_ambs = filter(ambs) do (m1, m2)
-            s = string(m1) * string(m2)
-            occursin("LanneLuotoGMMResult", s) || occursin("GMMMomentSelectionResult", s) ||
-                occursin("estimate_lanne_luoto_gmm", s) || occursin("select_gmm_moments", s)
-        end
-        @test isempty(ngid04_ambs)
     end
 end

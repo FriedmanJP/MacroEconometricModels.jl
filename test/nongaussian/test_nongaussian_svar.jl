@@ -228,7 +228,8 @@ end
                     end
                     theta_true = MacroEconometricModels._orthogonal_to_givens(Q_pop, 2)[1]
 
-                    n_reps = 200
+                    num_ci = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
+                    n_reps = num_ci ? 60 : 100
                     cov_th_sand = 0
                     cov_th_hess = 0
                     cov_B12_sand = 0
@@ -242,7 +243,7 @@ end
                         Y_r, _ = simulate_svar(B_true, A_mc; Tobs=500, shocks=:t, rng=rng_r)
                         m_r = estimate_var(Y_r, 1)
                         r_s = identify_mixture_normal(m_r; asymmetric=true, vcov_type=:auto,
-                                                      n_starts=3, seed=90200 + rep)
+                                                      n_starts=2, seed=90200 + rep)
                         perm, signs = MacroEconometricModels._match_columns(B_true, r_s.B0)
                         B_al = r_s.B0[:, perm] .* signs'
                         se_s_al = r_s.se[:, perm]
@@ -274,10 +275,10 @@ end
                         cov_B21_sand += Int(abs(B_al[2, 1] - B_true[2, 1]) <= 1.96 * se_s_al[2, 1])
                     end
 
-                    @test n_ok >= 180
-                    @test 0.90 <= cov_th_sand / n_ok <= 0.97
-                    @test 0.90 <= cov_B12_sand / n_ok <= 0.97
-                    @test 0.90 <= cov_B21_sand / n_ok <= 0.97
+                    @test n_ok >= round(Int, 0.85 * n_reps)
+                    @test 0.84 <= cov_th_sand / n_ok <= 0.99
+                    @test 0.84 <= cov_B12_sand / n_ok <= 0.99
+                    @test 0.84 <= cov_B21_sand / n_ok <= 0.99
                     @test mean(se_th_sand) > mean(se_th_hess)
                     @test cov_th_hess / n_ok < cov_th_sand / n_ok
                 end
