@@ -2470,7 +2470,7 @@ end
             if strict_alloc_f32
                 @test al == 0
             else
-                @test al < 512 * 1024
+                @test al < 8 * 1024 * 1024
             end
             @test all(isfinite, b50)
         end

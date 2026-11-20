@@ -18,7 +18,10 @@ function _expected_rank(name::AbstractString)
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
+    name == "Tests & GMM & Data & PVAR"       && return 54
     name == "Reg & Panel & ARDL"              && return 54
+    name == "Factor & GDFM"                   && return 54
+    name == "LP & DiD & Nowcast"              && return 53
     name == "Volatility & Filters" && return 54  # GARCH/FIGARCH/MCEM sequential; start with ARIMA (#828)
     name == "Non-Gaussian SVAR"               && return 53
     name == "Non-Gaussian Internals"          && return 53
@@ -97,6 +100,7 @@ const _DSGE_SUITE_GROUPS = Set([
     "HA-DSGE Advanced",
     "Extensions (JuMP/Ipopt/PATH)",
     "Plotting",
+    "LP & DiD & Nowcast",
 ])
 const _SERIALIZATION_SUITE_GROUPS = Set([
     "Serialization",
@@ -105,6 +109,7 @@ const _SERIALIZATION_SUITE_GROUPS = Set([
     "Coverage-B",
     "Coverage-C",
     "Bayesian & SVAR",
+    "Factor & GDFM",
 ])
 const _EMPIRICAL2_SUITE_GROUPS = Set([
     "Volatility & Filters",

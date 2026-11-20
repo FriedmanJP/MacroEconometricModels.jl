@@ -333,20 +333,22 @@ const MEM_IH = MacroEconometricModels
                   "IO" => ["io/test_io_types.jl"],
                   "Core & VAR" => ["core/test_kalman.jl"],
                   "Plotting" => ["plotting/test_plot_render.jl"],
+                  "LP & DiD & Nowcast" => ["lp/test_lp.jl"],
+                  "Factor & GDFM" => ["factor/test_gdfm.jl"],
                   "Bayesian & SVAR" => ["bvar/test_bayesian.jl"],
                   "Volatility & Filters" => ["volatility/test_volatility.jl"],
                   "Rational Inattention" => ["ri/test_ri_kalman.jl"],
                   "Serialization" => ["core/test_serialization.jl"],
                   "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
-              ["HA-DSGE", "DSGE Core", "Plotting"]
+              ["HA-DSGE", "DSGE Core", "Plotting", "LP & DiD & Nowcast"]
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
               ["IO", "Core & VAR"]
         @test first.(_ci_suite_groups(dummy2, "empirical2")) ==
               ["Volatility & Filters", "Rational Inattention"]
         @test first.(_ci_suite_groups(dummy2, "serialization")) ==
               ["Coverage-A", "Coverage-B", "Coverage-C",
-               "Bayesian & SVAR", "Serialization", "Serialization DSGE"]
+               "Factor & GDFM", "Bayesian & SVAR", "Serialization", "Serialization DSGE"]
         @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
         @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
         @test _expected_rank("Serialization DSGE") > _expected_rank("Serialization")

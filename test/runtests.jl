@@ -76,13 +76,18 @@ const TEST_GROUPS = [
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
-    # Group 4: LP & Factor Models & Nowcasting & DiD
-    ("LP & Factor & Nowcast" => [
+    # Group 4: LP/DiD/Nowcasting and Factor/GDFM (split for macOS balance)
+    ("LP & DiD & Nowcast" => [
         "lp/test_lp.jl",
         "lp/test_lp_structural.jl",
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
         "lp/test_lp_weak_iv.jl",   # T245 (#344): MOP effective F + LP-IV AR bands
+        "nowcast/test_nowcast.jl",
+        "did/test_did.jl",
+        "did/test_lpdid.jl",
+    ]),
+    ("Factor & GDFM" => [
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
@@ -94,9 +99,6 @@ const TEST_GROUPS = [
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
         "factor/test_structural_dfm.jl",
-        "nowcast/test_nowcast.jl",
-        "did/test_did.jl",
-        "did/test_lpdid.jl",
     ]),
     ("Quantile Factor & FAVAR" => [
         "factor/test_qfm.jl",
@@ -121,6 +123,8 @@ const TEST_GROUPS = [
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "arima/test_sarima.jl",   # T242 (#341): multiplicative seasonal ARIMA
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
+    ]),
+    ("Tests & GMM & Data & PVAR" => [
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
