@@ -112,12 +112,10 @@ const _SERIALIZATION_SUITE_GROUPS = Set([
     "Factor & GDFM",
 ])
 const _EMPIRICAL2_SUITE_GROUPS = Set([
-    "Volatility & Filters",
     "Non-Gaussian SVAR",
     "Non-Gaussian Internals",
     "Non-Gaussian & SVARMA",
     "Quantile Factor & FAVAR",
-    "Rational Inattention",
 ])
 
 function _ci_suite_groups(groups, suite::AbstractString)

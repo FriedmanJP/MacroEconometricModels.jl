@@ -336,8 +336,8 @@ const MEM_IH = MacroEconometricModels
                   "LP & DiD & Nowcast" => ["lp/test_lp.jl"],
                   "Factor & GDFM" => ["factor/test_gdfm.jl"],
                   "Bayesian & SVAR" => ["bvar/test_bayesian.jl"],
-                  "Volatility & Filters" => ["volatility/test_volatility.jl"],
-                  "Rational Inattention" => ["ri/test_ri_kalman.jl"],
+                  "Non-Gaussian SVAR" => ["nongaussian/test_nongaussian_svar.jl"],
+                  "Quantile Factor & FAVAR" => ["factor/test_qfm.jl"],
                   "Serialization" => ["core/test_serialization.jl"],
                   "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
@@ -345,7 +345,7 @@ const MEM_IH = MacroEconometricModels
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
               ["IO", "Core & VAR"]
         @test first.(_ci_suite_groups(dummy2, "empirical2")) ==
-              ["Volatility & Filters", "Rational Inattention"]
+              ["Non-Gaussian SVAR", "Quantile Factor & FAVAR"]
         @test first.(_ci_suite_groups(dummy2, "serialization")) ==
               ["Coverage-A", "Coverage-B", "Coverage-C",
                "Factor & GDFM", "Bayesian & SVAR", "Serialization", "Serialization DSGE"]
@@ -373,7 +373,7 @@ const MEM_IH = MacroEconometricModels
             @test "coverage/test_dsge_coverage.jl" ∉ dsge_files
             @test "coverage/test_misc_coverage.jl" in ser_files
             @test "io/test_io_types.jl" in emp_files
-            @test "ri/test_ri_kalman.jl" in emp2_files
+            @test "factor/test_qfm.jl" in emp2_files
             if "dsge/test_dsge_serialization.jl" in serial_files
                 @test "dsge/test_dsge_serialization.jl" in ser_files
                 @test "dsge/test_dsge_serialization.jl" ∉ dsge_files
