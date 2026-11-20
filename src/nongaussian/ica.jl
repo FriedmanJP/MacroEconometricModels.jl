@@ -39,11 +39,13 @@ Fields:
 - `W::Matrix{T}` — unmixing matrix (n × n): ε_t = W u_t
 - `Q::Matrix{T}` — rotation matrix for `compute_Q` integration
 - `shocks::Matrix{T}` — recovered structural shocks (T_eff × n)
-- `method::Symbol` — `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`
+- `method::Symbol` — `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, or `:cvm`
 - `converged::Bool`
 - `iterations::Int`
 - `objective::T` — final objective value
 - `shock_names::Vector{String}` — labels for the n structural shocks
+- `vcov::Matrix{T}` — plug-in asymptotic covariance of ``\\operatorname{vec}(B_0)`` (n² × n²)
+- `se::Matrix{T}` — asymptotic standard errors for `B0` (n × n)
 """
 struct ICASVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     B0::Matrix{T}
@@ -55,18 +57,51 @@ struct ICASVARResult{T<:AbstractFloat} <: AbstractNonGaussianSVAR
     iterations::Int
     objective::T
     shock_names::Vector{String}
+    vcov::Matrix{T}
+    se::Matrix{T}
+end
+
+function ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations,
+                          objective, shock_names::Vector{String}) where {T<:AbstractFloat}
+    n1, n2 = size(B0)
+    ICASVARResult{T}(Matrix{T}(B0), Matrix{T}(W), Matrix{T}(Q), Matrix{T}(shocks),
+                     method, converged, iterations, T(objective), shock_names,
+                     zeros(T, 0, 0), fill(T(NaN), n1, n2))
+end
+
+function ICASVARResult(B0, W, Q, shocks, method, converged, iterations,
+                       objective, shock_names::Vector{String})
+    T = float(eltype(B0))
+    ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, objective, shock_names)
 end
 
 function ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations,
                           objective) where {T<:AbstractFloat}
     n = size(B0, 2)
-    ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, objective,
+    ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, T(objective),
                      _default_shock_names(n))
 end
 
 function ICASVARResult(B0, W, Q, shocks, method, converged, iterations, objective)
-    T = eltype(B0)
+    T = float(eltype(B0))
     ICASVARResult{T}(B0, W, Q, shocks, method, converged, iterations, objective)
+end
+
+StatsAPI.vcov(r::ICASVARResult) = r.vcov
+function StatsAPI.stderror(r::ICASVARResult{T}) where {T}
+    isempty(r.vcov) ? vec(r.se) : T[sqrt(max(r.vcov[i, i], zero(T))) for i in 1:size(r.vcov, 1)]
+end
+
+function _transform_statid_vcov(result::ICASVARResult{T}, perm::Vector{Int},
+                                signs::Vector{Int}, n::Int, Q_new) where {T<:AbstractFloat}
+    V = result.vcov
+    size(V) == (n * n, n * n) || return V
+    P_signed = zeros(T, n, n)
+    @inbounds for j in 1:n
+        P_signed[perm[j], j] = T(signs[j])
+    end
+    A = kron(transpose(P_signed), Matrix{T}(I, n, n))
+    Matrix{T}(Symmetric(A * V * transpose(A)))
 end
 
 function Base.show(io::IO, r::ICASVARResult{T}) where {T}
@@ -84,7 +119,124 @@ function Base.show(io::IO, r::ICASVARResult{T}) where {T}
         column_labels = ["", ""],
         alignment = [:l, :r],
     )
-    _show_B0_ses(io, r.B0, fill(T(NaN), n, n))
+    se_disp = size(r.se) == (n, n) ? r.se : fill(T(NaN), n, n)
+    _show_B0_ses(io, r.B0, se_disp)
+end
+
+"""Compute GMR (2017) / Keweloh plug-in GMM sandwich covariance for ICA B₀ (n² × n²)."""
+function _ica_cvm_sandwich_vcov(B0::Matrix{T}, U::AbstractMatrix{T},
+                                 method::Symbol) where {T<:AbstractFloat}
+    T_eff, n = size(U)
+    if T_eff < 4 || n < 1
+        return zeros(T, n * n, n * n), fill(T(NaN), n, n)
+    end
+    U_mat = Matrix{T}(U)
+    if n == 1
+        w1 = one(T) / max(abs(B0[1, 1]), sqrt(eps(T)))
+        e1 = U_mat[:, 1] .* w1
+        s2 = e1 .^ 2 .- one(T)
+        v11 = max(mean(abs2, s2) * B0[1, 1]^2 / T(4 * T_eff), sqrt(eps(T)))
+        return reshape(T[v11], 1, 1), reshape(T[sqrt(v11)], 1, 1)
+    end
+
+    use_lag = (method === :sobi && T_eff > 12)
+    T_m = use_lag ? (T_eff - 1) : T_eff
+    n_cov = (n * (n + 1)) ÷ 2
+    n_pairs = n * (n - 1)
+    K_mom = n_cov + 2 * n_pairs + (use_lag ? n_pairs : 0)
+
+    function moment_matrix(b::AbstractVector{Tb}) where {Tb<:Real}
+        B_m = reshape(b, n, n)
+        W_m = Matrix{Tb}(robust_inv(B_m; silent=true))
+        E_m = Tb.(U_mat) * transpose(W_m)
+
+        # Compute tanh(E_m) and centered τ_t = tanh(ε_t) - mean(tanh(ε))
+        E_off = use_lag ? @view(E_m[2:T_eff, :]) : E_m
+        T_rows = size(E_off, 1)
+        Tau = tanh.(E_off)
+        tau_bar = vec(mean(Tau; dims=1))
+        Tau_c = Tau .- transpose(tau_bar)
+
+        G = Matrix{Tb}(undef, T_rows, K_mom)
+        col = 0
+        # 1. Second-moment identification: ε_i ε_j - δ_ij
+        @inbounds for i in 1:n, j in i:n
+            col += 1
+            d_ij = i == j ? one(Tb) : zero(Tb)
+            for t in 1:T_rows
+                G[t, col] = E_off[t, i] * E_off[t, j] - d_ij
+            end
+        end
+        # 2. Bounded odd non-Gaussian independence contrast: (tanh(ε_i) - μ_τ,i) ε_j
+        @inbounds for i in 1:n, j in 1:n
+            i == j && continue
+            col += 1
+            for t in 1:T_rows
+                G[t, col] = Tau_c[t, i] * E_off[t, j]
+            end
+        end
+        # 3. Skewness / asymmetric cross-moments: (ε_i² - 1)(tanh(ε_j) - μ_τ,j)
+        @inbounds for i in 1:n, j in 1:n
+            i == j && continue
+            col += 1
+            for t in 1:T_rows
+                G[t, col] = (E_off[t, i]^2 - one(Tb)) * Tau_c[t, j]
+            end
+        end
+        # 4. Lagged cross-autocovariance for SOBI temporal identification
+        if use_lag
+            E_lag = @view E_m[1:(T_eff - 1), :]
+            @inbounds for i in 1:n, j in 1:n
+                i == j && continue
+                col += 1
+                for t in 1:T_rows
+                    G[t, col] = E_off[t, i] * E_lag[t, j]
+                end
+            end
+        end
+        return G
+    end
+
+    b_hat = vec(Matrix{T}(B0))
+    G0 = moment_matrix(b_hat)
+    G0c = G0 .- mean(G0; dims=1)
+    Omega_raw = Matrix{T}(Symmetric((transpose(G0c) * G0c) / T(T_m)))
+    # Equilibrated SPD inverse so differing moment scales never drop modes
+    d_o = T[sqrt(max(Omega_raw[k, k], sqrt(eps(T)))) for k in 1:K_mom]
+    d_o_inv = Diagonal(one(T) ./ d_o)
+    Omega_inv = Matrix{T}(Symmetric(d_o_inv * _spd_inv(Matrix{T}(d_o_inv * Omega_raw * d_o_inv)) * d_o_inv))
+
+    D = Matrix{T}(ForwardDiff.jacobian(b -> vec(mean(moment_matrix(b); dims=1)), b_hat))
+    H_info = Matrix{T}(Symmetric(transpose(D) * Omega_inv * D))
+
+    F_H = eigen(Symmetric(H_info))
+    eig_max = maximum(F_H.values; init=zero(T))
+    eig_floor = max(T(1e-3), T(1e-8) * eig_max)
+    inv_eigs = T[v > eig_floor ? one(T) / v : one(T) / eig_floor for v in F_H.values]
+    V_mat = (F_H.vectors * Diagonal(inv_eigs) * transpose(F_H.vectors)) ./ T(T_m)
+    V_sym = Matrix{T}((V_mat .+ transpose(V_mat)) ./ T(2))
+
+    se_mat = reshape(T[sqrt(max(V_sym[i, i], zero(T))) for i in 1:(n * n)], n, n)
+    _finite_se!(se_mat)
+    return V_sym, se_mat
+end
+
+function _ica_cvm_finalize_result(B0::AbstractMatrix{T}, W_full::AbstractMatrix{T},
+                                  Q::AbstractMatrix{T}, shocks::AbstractMatrix{T},
+                                  method::Symbol, converged::Bool, iterations::Int,
+                                  objective::T, U::AbstractMatrix{T}) where {T<:AbstractFloat}
+    B0_m = Matrix{T}(B0)
+    W_m = Matrix{T}(W_full)
+    Q_m = Matrix{T}(Q)
+    S_m = Matrix{T}(shocks)
+    vcov_B0, se_B0 = try
+        _ica_cvm_sandwich_vcov(B0_m, U, method)
+    catch
+        n = size(B0_m, 1)
+        zeros(T, 0, 0), fill(T(NaN), n, n)
+    end
+    return ICASVARResult{T}(B0_m, W_m, Q_m, S_m, method, converged, iterations,
+                            objective, _default_shock_names(size(B0_m, 2)), vcov_B0, se_B0)
 end
 
 # =============================================================================
@@ -189,7 +341,7 @@ function _fastica_symmetric(Z::Matrix{T}, n::Int; contrast::Symbol=:logcosh,
 
         # Symmetric decorrelation: W = (W W')^{-1/2} W
         F = eigen(Symmetric(W * W'))
-        D_inv_sqrt = Diagonal(1.0 ./ sqrt.(max.(F.values, eps(T))))
+        D_inv_sqrt = Diagonal(one(T) ./ sqrt.(max.(F.values, eps(T))))
         W = F.vectors * D_inv_sqrt * F.vectors' * W
 
         # Check convergence
@@ -247,7 +399,7 @@ function identify_fastica(model::VARModel{T}; contrast::Symbol=:logcosh,
         obj += abs(mean(x -> g_func(x)[1], s) - mean(x -> g_func(x)[1], randn(rng, T, length(s))))
     end
 
-    ICASVARResult{T}(B0, W_full, Q, shocks, :fastica, iters < max_iter * n, iters, obj)
+    _ica_cvm_finalize_result(B0, W_full, Q, shocks, :fastica, iters < max_iter * n, iters, obj, model.U)
 end
 
 # =============================================================================
@@ -366,7 +518,7 @@ function identify_jade(model::VARModel{T}; max_iter::Int=100,
         end
     end
 
-    ICASVARResult{T}(B0, W_full, Q, shocks, :jade, iters < max_iter, iters, obj)
+    _ica_cvm_finalize_result(B0, W_full, Q, shocks, :jade, iters < max_iter, iters, obj, model.U)
 end
 
 # =============================================================================
@@ -416,7 +568,7 @@ function identify_sobi(model::VARModel{T}; lags::AbstractRange=1:12,
         end
     end
 
-    ICASVARResult{T}(B0, W_full, Q, shocks, :sobi, iters < max_iter, iters, obj)
+    _ica_cvm_finalize_result(B0, W_full, Q, shocks, :sobi, iters < max_iter, iters, obj, model.U)
 end
 
 # =============================================================================
@@ -521,8 +673,8 @@ function identify_dcov(model::VARModel{T}; max_iter::Int=200,
     W_full = Q_opt * W_white
     B0, Q, shocks = _ica_to_svar(W_full, model)
 
-    ICASVARResult{T}(B0, W_full, Q, shocks, :dcov, Optim.converged(result),
-                     Optim.iterations(result), T(Optim.minimum(result)))
+    _ica_cvm_finalize_result(B0, W_full, Q, shocks, :dcov, Optim.converged(result),
+                             Optim.iterations(result), T(Optim.minimum(result)), model.U)
 end
 
 # =============================================================================
@@ -645,6 +797,218 @@ function identify_hsic(model::VARModel{T}; kernel::Symbol=:gaussian,
     W_full = Q_opt * W_white
     B0, Q, shocks = _ica_to_svar(W_full, model)
 
-    ICASVARResult{T}(B0, W_full, Q, shocks, :hsic, Optim.converged(result),
-                     Optim.iterations(result), T(Optim.minimum(result)))
+    _ica_cvm_finalize_result(B0, W_full, Q, shocks, :hsic, Optim.converged(result),
+                             Optim.iterations(result), T(Optim.minimum(result)), model.U)
+end
+
+# =============================================================================
+# Cramér–von Mises Empirical-Copula ICA (Herwartz & Plödt 2016)
+# =============================================================================
+
+function _ica_cvm_objective(S::AbstractMatrix{T}, U_pit::Matrix{T},
+                            ord_buf::Vector{Int}) where {T<:AbstractFloat}
+    T_eff, n = size(S)
+    inv_Tp1 = one(T) / T(T_eff + 1)
+
+    @inbounds for j in 1:n
+        col_j = @view S[:, j]
+        sortperm!(ord_buf, col_j)
+        # Average tied ranks if any exact ties occur
+        idx = 1
+        while idx <= T_eff
+            v0 = col_j[ord_buf[idx]]
+            end_idx = idx
+            while end_idx < T_eff && col_j[ord_buf[end_idx + 1]] == v0
+                end_idx += 1
+            end
+            avg_rank = T(idx + end_idx) / T(2) * inv_Tp1
+            for k in idx:end_idx
+                U_pit[ord_buf[k], j] = avg_rank
+            end
+            idx = end_idx + 1
+        end
+    end
+
+    # Genest & Rémillard (2004) / Herwartz & Plödt (2016) Möbius empirical-copula CvM statistic
+    # with Anderson–Darling tail weighting K_AD(a,b) = -log((1 - min(a,b)) * max(a,b)) - 1
+    # (or uniform K(a,b) = 1/3 + (a^2 + b^2)/2 - max(a,b)).
+    tot = zero(T)
+    @inbounds for t in 1:T_eff
+        p_d = one(T)
+        s1_d = zero(T)
+        for j in 1:n
+            u = U_pit[t, j]
+            kv = -log((one(T) - u) * u) - one(T)
+            p_d *= (one(T) + kv)
+            s1_d += kv
+        end
+        tot += p_d - one(T) - s1_d
+
+        acc = zero(T)
+        for s in (t + 1):T_eff
+            p_ts = one(T)
+            s1_ts = zero(T)
+            for j in 1:n
+                a = U_pit[t, j]
+                b = U_pit[s, j]
+                lo = a < b ? a : b
+                hi = a > b ? a : b
+                kv = -log((one(T) - lo) * hi) - one(T)
+                p_ts *= (one(T) + kv)
+                s1_ts += kv
+            end
+            acc += p_ts - one(T) - s1_ts
+        end
+        tot += T(2) * acc
+    end
+
+    return max(zero(T), tot / T(T_eff))
+end
+
+"""
+    identify_cvm(model::VARModel{T}; max_iter::Int=200, n_starts::Int=3, tol::Real=1e-6,
+                 rng::AbstractRNG=Random.default_rng(),
+                 seed::Union{Integer,Nothing}=nothing) -> ICASVARResult{T}
+
+Identify structural SVAR shocks via **Cramér–von Mises (CvM) empirical-copula ICA**
+(Herwartz & Plödt 2016; Herwartz 2018).
+
+Minimizes the Möbius-decomposed Anderson–Darling-weighted empirical copula Cramér–von Mises
+independence discrepancy over Givens rotations ``Q(\\theta) \\in SO(n)`` applied to
+whitened VAR residuals ``\\hat{\\varepsilon}(\\theta) = Z \\, Q(\\theta)``:
+
+```math
+\\mathcal{M}_T(\\theta) = \\frac{1}{T} \\sum_{t=1}^T \\sum_{s=1}^T \\left[
+\\prod_{j=1}^n \\bigl(1 + K(u_{t,j}, u_{s,j})\\bigr) - 1 - \\sum_{j=1}^n K(u_{t,j}, u_{s,j})
+\\right],
+```
+
+where:
+- ``u_{t,j} = \\operatorname{rank}(\\hat{\\varepsilon}_{t,j}(\\theta)) / (T + 1)`` are
+  empirical probability integral transforms,
+- ``K(a, b) = -\\log\\bigl((1 - \\min(a,b))\\max(a,b)\\bigr) - 1`` is the tail-weighted
+  Anderson–Darling copula kernel ``\\int_0^1 \\frac{(\\mathbb{I}(a \\le x) - x)(\\mathbb{I}(b \\le x) - x)}{x(1-x)} dx``,
+- ``Z`` is the whitened VAR residual matrix and ``Q(\\theta)`` is parameterized by Givens
+  rotations.
+
+# Arguments
+- `model::VARModel{T}`: estimated reduced-form VAR model
+- `max_iter::Int=200`: maximum Nelder–Mead iterations per start
+- `n_starts::Int=3`: number of additional random starting rotations (augmented by identity, FastICA, and JADE warm starts)
+- `tol::Real=1e-6`: optimizer convergence tolerance
+- `rng::AbstractRNG=Random.default_rng()`: random number generator
+- `seed::Union{Integer,Nothing}=nothing`: optional random seed
+
+# Example
+```julia
+sim = dgp_var(; T=500, n=2, seed=1)
+m = estimate_var(sim.Y, 1)
+res = identify_cvm(m; seed=1)
+```
+"""
+function identify_cvm(model::VARModel{T};
+                      max_iter::Int=200,
+                      n_starts::Int=3,
+                      tol::Real=1e-6,
+                      rng::AbstractRNG=Random.default_rng(),
+                      seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
+    max_iter < 1 && throw(ArgumentError("max_iter must be ≥ 1, got $max_iter"))
+    n_starts < 1 && throw(ArgumentError("n_starts must be ≥ 1, got $n_starts"))
+    rng_eff = _resolve_repro_rng(rng, seed)
+
+    U = model.U
+    T_eff, n = size(U)
+    Z, W_white, _ = _whiten(U)
+
+    if n == 1
+        W_ica = ones(T, 1, 1)
+        W_full = W_ica * W_white
+        B0, Q, shocks = _ica_to_svar(W_full, model)
+        return _ica_cvm_finalize_result(B0, W_full, Q, shocks, :cvm, true, 0, zero(T), U)
+    end
+
+    U_pit = Matrix{T}(undef, T_eff, n)
+    S_buf = Matrix{T}(undef, T_eff, n)
+    ord_buf = Vector{Int}(undef, T_eff)
+
+    function cvm_loss(angles::AbstractVector)
+        Q_rot = _givens_to_orthogonal(T.(angles), n)
+        mul!(S_buf, Z, Q_rot)
+        return Float64(_ica_cvm_objective(S_buf, U_pit, ord_buf))
+    end
+
+    n_angles = (n * (n - 1)) ÷ 2
+    starts = Vector{Float64}[]
+
+    # 1. Exact coarse grid scan when n == 2 guarantees global optimum across piecewise rank surface
+    if n == 2
+        grid_th = range(-pi / 4, pi / 4; length=73)
+        grid_vals = Float64[cvm_loss([th]) for th in grid_th]
+        top_idx = partialsortperm(grid_vals, 1:min(4, length(grid_vals)))
+        for idx in top_idx
+            push!(starts, [Float64(grid_th[idx])])
+        end
+    else
+        push!(starts, zeros(Float64, n_angles))
+    end
+
+    # 2. FastICA & JADE warm starts
+    try
+        W_f, _ = _fastica_symmetric(Z, n; contrast=:logcosh, max_iter=150, tol=T(1e-6), rng=rng_eff)
+        push!(starts, Float64.(_q_to_so_givens(Matrix{T}(transpose(W_f)), n)))
+    catch
+    end
+    try
+        cum_mats = _jade_cumulant_matrices(Z)
+        V_j, _ = _joint_diagonalization(cum_mats; max_iter=100, tol=T(1e-6))
+        push!(starts, Float64.(_q_to_so_givens(Matrix{T}(V_j), n)))
+    catch
+    end
+
+    # 3. Random SO(n) starts
+    for _ in 1:n_starts
+        A_r = randn(rng_eff, T, n, n)
+        Q_r = Matrix{T}(qr(A_r).Q)
+        if det(Q_r) < zero(T)
+            Q_r[:, 1] .*= -one(T)
+        end
+        push!(starts, Float64.(_q_to_so_givens(Q_r, n)))
+    end
+
+    best_angles = copy(starts[1])
+    best_obj = Inf
+    best_conv = false
+    total_iters = 0
+
+    opts = Optim.Options(iterations=max_iter, f_reltol=Float64(tol), g_tol=Float64(tol))
+    for st in starts
+        if n == 2
+            a0 = st[1]
+            res_b = Optim.optimize(x -> cvm_loss([x]), a0 - pi / 18, a0 + pi / 18, Optim.Brent();
+                                   iterations=max_iter, rel_tol=Float64(tol))
+            val = Optim.minimum(res_b)
+            total_iters += Optim.iterations(res_b)
+            if val < best_obj
+                best_obj = val
+                best_angles = [Optim.minimizer(res_b)]
+                best_conv = Optim.converged(res_b)
+            end
+        else
+            res_nm = Optim.optimize(cvm_loss, st, Optim.NelderMead(), opts)
+            val = Optim.minimum(res_nm)
+            total_iters += Optim.iterations(res_nm)
+            if val < best_obj
+                best_obj = val
+                best_angles = copy(Optim.minimizer(res_nm))
+                best_conv = Optim.converged(res_nm)
+            end
+        end
+    end
+
+    Q_rot = _givens_to_orthogonal(T.(best_angles), n)
+    W_ica = Matrix{T}(transpose(Q_rot))
+    W_full = W_ica * W_white
+    B0, Q, shocks = _ica_to_svar(W_full, model)
+    return _ica_cvm_finalize_result(B0, W_full, Q, shocks, :cvm, best_conv,
+                                    total_iters, T(best_obj), U)
 end

@@ -21,6 +21,7 @@ var_hd
 ```@docs
 dgp_nongaussian_var
 dgp_heteroskedastic_var
+dgp_ssvarma
 ```
 
 ---
@@ -67,6 +68,9 @@ dgp_midas
 ```@docs
 dgp_dynamic_factors
 dgp_mixed_frequency_panel
+dgp_quantile_factors
+dgp_qfavar
+dgp_infinite_gdfm
 ```
 
 ---

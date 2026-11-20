@@ -1121,4 +1121,60 @@ using MacroEconometricModels
 
     include(joinpath(@__DIR__, "test_sdfm_recovery.jl"))
 
+    @testset "FHLZ method integration (#894)" begin
+        rng = Random.Xoshiro(8941)
+        T_obs, N, q = 180, 16, 2
+        d = dgp_dynamic_factors(rng; A=0.5 * Matrix{Float64}(I, q, q), N=N, T=T_obs, idio_sd=0.25)
+        X = d.X
+        names = ["s$i" for i in 1:N]
+
+        # Two-step estimation from existing GDFM
+        gdfm = estimate_gdfm(X, q; varnames=names)
+        sdfm_2step = estimate_structural_dfm(gdfm; method=:fhlz, identification=:cholesky,
+            order=[1, 2], H=12, n_perm=10, seed=42)
+        @test sdfm_2step.method === :fhlz
+        @test sdfm_2step.gdfm === gdfm
+        @test size(irf(sdfm_2step, 12).values) == (12, N, q)
+        @test size(sdfm_panel_irf(sdfm_2step, 70).values) == (70, N, q)
+        @test MacroEconometricModels.loadings(sdfm_2step) == sdfm_2step.loadings_td
+        @test size(MacroEconometricModels.factors(sdfm_2step), 2) == q
+
+        # Standardized units + :aic lag criterion via p=:aic
+        sdfm_std_aic = estimate_structural_dfm(X, q; method=:fhlz, p=:aic, p_max=4,
+            units=:standardized, H=10, n_perm=8, varnames=names, seed=43)
+        @test sdfm_std_aic.units === :standardized
+        @test verify_decomposition(historical_decomposition(sdfm_std_aic); tol=1e-8)
+        @test size(forecast(sdfm_std_aic, 4).observables) == (4, N)
+
+        # Narrative, non-Gaussian (:mixture_normal_asym), and max-share
+        sdfm_nar = estimate_structural_dfm(X, q; method=:fhlz, identification=:narrative,
+            sign_check=(ir -> ir[1, 1, 1] > 0), narrative_check=(sh -> true),
+            H=8, n_perm=8, max_draws=500, varnames=names, seed=44)
+        @test sdfm_nar.identification === :narrative
+        @test irf(sdfm_nar, 8).values[1, 1, 1] > 0
+
+        sdfm_asym = estimate_structural_dfm(X, q; method=:fhlz, identification=:mixture_normal_asym,
+            H=8, n_perm=8, varnames=names, seed=45)
+        @test sdfm_asym.identification === :mixture_normal_asym
+        @test sdfm_asym.Q' * sdfm_asym.Q ≈ I(q) atol=1e-8
+
+        sdfm_ms = estimate_structural_dfm(X, q; method=:fhlz, identification=:max_share,
+            H=10, n_perm=8, varnames=names, seed=46)
+        @test sdfm_ms.identification === :max_share
+        @test sdfm_ms.Q' * sdfm_ms.Q ≈ I(q) atol=1e-8
+        @test occursin("Max-Share", sprint(report, sdfm_ms))
+
+        # FEVD panel and factor spaces + bootstrap IRF schemes
+        fv = fevd(sdfm_2step, 8; space=:panel, include_idiosyncratic=true, idio_model=:ar1)
+        @test size(fv.proportions) == (N, q + 1, 8)
+        for h in 1:8, i in 1:N
+            @test sum(fv.proportions[i, :, h]) ≈ 1.0 atol=1e-10
+        end
+        for sch in (:iid, :wild, :block)
+            irb = irf(sdfm_2step, 6; ci_type=:bootstrap, reps=10, bootstrap=sch, rng=Random.Xoshiro(7))
+            @test irb.ci_type === :bootstrap
+            @test all(irb.ci_lower .<= irb.values .<= irb.ci_upper)
+        end
+    end
+
 end

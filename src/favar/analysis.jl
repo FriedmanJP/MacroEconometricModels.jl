@@ -597,6 +597,25 @@ function _sdfm_bootstrap_irf(sdfm::StructuralDFM{T}, horizon::Int;
         copy(sdfm.shock_names), :bootstrap, sim, conf_level; manifest=manifest)
 end
 
+function _fhlz_unrotated_irf(sdfm::StructuralDFM{T}, H::Int) where {T<:AbstractFloat}
+    H_st, N, q = size(sdfm.structural_irf)
+    h_copy = min(H, H_st)
+    Q_inv = _q_is_orthogonal(sdfm.Q) ? Matrix{T}(transpose(sdfm.Q)) : Matrix{T}(robust_inv(sdfm.Q; silent=true))
+    B_panel = zeros(T, H, N, q)
+    @inbounds for h in 1:h_copy
+        B_panel[h, :, :] = @view(sdfm.structural_irf[h, :, :]) * Q_inv
+    end
+    B_panel
+end
+
+function _fhlz_panel_irf_values(sdfm::StructuralDFM{T}, H::Int) where {T<:AbstractFloat}
+    H_st, N, q = size(sdfm.structural_irf)
+    H <= H_st && return copy(sdfm.structural_irf[1:H, :, :])
+    vals = zeros(T, H, N, q)
+    vals[1:H_st, :, :] .= sdfm.structural_irf
+    vals
+end
+
 function _sdfm_one_boot_irf(sdfm::StructuralDFM{T}, fv::VARModel{T}, U, F_init, p, T_eff,
     Lambda, q, N, order, horizon, bootstrap, block_length, wild_dist, rng) where {T<:AbstractFloat}
     z = sdfm.instrument
@@ -606,6 +625,40 @@ function _sdfm_one_boot_irf(sdfm::StructuralDFM{T}, fv::VARModel{T}, U, F_init, 
     else
         U_boot = _resample_residuals(U, bootstrap, rng; block_length=block_length, wild_dist=wild_dist)
         z_boot = nothing
+    end
+    if sdfm.method === :fhlz
+        T_eff <= 2 + q && return _fhlz_panel_irf_values(sdfm, horizon)
+        mstar = estimate_var(U_boot, 1; check_stability=false)
+        Phi_u = _ma_array(mstar, horizon)
+        L_u = safe_cholesky(mstar.Sigma; silent=true)
+        B_panel = _fhlz_unrotated_irf(sdfm, horizon)
+        B_boot = zeros(T, horizon, N, q)
+        PL = Array{T,3}(undef, horizon, q, q)
+        @inbounds for h in 1:horizon
+            PL[h, :, :] = @view(Phi_u[h, :, :]) * L_u
+        end
+        @inbounds for h in 1:horizon, s in 1:h
+            mul!(@view(B_boot[h, :, :]), @view(B_panel[s, :, :]), @view(PL[h - s + 1, :, :]), one(T), one(T))
+        end
+        Hstar = if z_boot !== nothing
+            _sdfm_proxy_H(B_boot[1, :, :], Matrix{T}(I, q, q), mstar, z_boot, (order[1], 1.0), sdfm.varnames)[1]
+        elseif sdfm.identification === :cholesky
+            P = B_boot[1, order, :]
+            Matrix{T}(P \ safe_cholesky(P * P'; silent=true))
+        elseif sdfm.identification === :long_run
+            C_lr = dropdims(sum(B_boot; dims=1); dims=1)
+            P = C_lr[order, :]
+            Hlr = Matrix{T}(P \ safe_cholesky(P * P'; silent=true))
+            (C_lr * Hlr)[order[1], 1] < zero(T) && (Hlr[:, 1] .*= -one(T))
+            Hlr
+        else
+            sdfm.Q
+        end
+        panel = zeros(T, horizon, N, q)
+        @inbounds for h in 1:horizon
+            panel[h, :, :] = @view(B_boot[h, :, :]) * Hstar
+        end
+        return panel
     end
     F_boot = _simulate_var(F_init, fv.B, U_boot, T_eff + p)
     mstar = estimate_var(F_boot, p; check_stability=false)
@@ -657,6 +710,16 @@ end
 
 """Panel IRFs for one rotation `Q` at an arbitrary horizon."""
 function _sdfm_panel_from_Q(sdfm::StructuralDFM{T}, Q::AbstractMatrix{T}, horizon::Int) where {T}
+    if sdfm.method === :fhlz
+        B_panel = _fhlz_unrotated_irf(sdfm, horizon)
+        N = size(B_panel, 2)
+        q = size(B_panel, 3)
+        panel = zeros(T, horizon, N, q)
+        @inbounds for h in 1:horizon
+            panel[h, :, :] = @view(B_panel[h, :, :]) * Q
+        end
+        return panel
+    end
     if sdfm.method === :fglr
         B0 = sdfm.K * Q
         return _fglr_panel_irf(sdfm.factor_var, sdfm.loadings_static, B0, horizon;
@@ -766,7 +829,44 @@ function historical_decomposition(sdfm::StructuralDFM{T},
     fv = sdfm.factor_var
     T_eff = effective_nobs(fv)
     horizon = min(horizon, T_eff)
+    horizon >= 1 || throw(ArgumentError("horizon must be >= 1"))
     shocks = _sdfm_structural_shocks(sdfm)          # T_eff × q
+    if sdfm.method === :fhlz
+        shocks_h = shocks[1:horizon, :]
+        if space === :factor
+            Theta_f = [s == 1 ? Matrix{T}(sdfm.B0) : zeros(T, size(sdfm.B0)...) for s in 1:horizon]
+            contrib_f = _compute_hd_contributions(shocks_h, Theta_f)
+            actual_f = fv.U[1:horizon, :]
+            init_f = _compute_initial_conditions(actual_f, contrib_f)
+            return HistoricalDecomposition{T}(contrib_f, init_f, actual_f, shocks_h,
+                horizon, copy(fv.varnames), copy(sdfm.shock_names), sdfm.identification)
+        end
+        X = sdfm.gdfm.X
+        N = size(X, 2)
+        q = sdfm.gdfm.q
+        p = sdfm.p_var
+        actual = X[(p + 1):(p + horizon), :]
+        C_irf = sdfm_panel_irf(sdfm, horizon).values
+        if sdfm.gdfm.standardized && sdfm.units === :standardized
+            σ = max.(vec(std(X; dims=1)), T(1e-10))
+            C_irf = C_irf .* reshape(σ, 1, N, 1)
+        end
+        Theta_p = [Matrix{T}(C_irf[s, :, :]) for s in 1:horizon]
+        contrib_c = _compute_hd_contributions(shocks_h, Theta_p)
+        init = sdfm.gdfm.standardized ? repeat(mean(X; dims=1), horizon, 1) : zeros(T, horizon, N)
+        sn = copy(sdfm.shock_names)
+        if include_idiosyncratic
+            n_s = q + 1
+            contrib = zeros(T, horizon, N, n_s)
+            contrib[:, :, 1:q] .= contrib_c
+            contrib[:, :, n_s] = actual .- dropdims(sum(contrib_c; dims=3); dims=3) .- init
+            push!(sn, "Idiosyncratic")
+        else
+            contrib = contrib_c
+        end
+        return HistoricalDecomposition{T}(contrib, init, actual, shocks_h, horizon,
+            copy(sdfm.varnames), sn, sdfm.identification)
+    end
     Theta = _sdfm_structural_ma(sdfm, horizon)      # Vector of r×q
     contrib_f = _compute_hd_contributions(shocks[1:horizon, :], Theta)
     actual_f = fv.Y[(fv.p + 1):end, :]
@@ -848,6 +948,10 @@ function forecast(sdfm::StructuralDFM{T}, h::Int;
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
     ci_method in (:none, :bootstrap) || throw(ArgumentError(
         "ci_method must be :none or :bootstrap, got :$ci_method"))
+    if sdfm.method === :fhlz
+        return _forecast_sdfm_fhlz(sdfm, h; ci_method=ci_method, reps=reps,
+                                   conf_level=conf_level, rng=rng)
+    end
     Lambda = sdfm.method === :fglr ? sdfm.loadings_static : sdfm.loadings_td
     N = size(Lambda, 1)
     r = size(Lambda, 2)
@@ -897,6 +1001,86 @@ function forecast(sdfm::StructuralDFM{T}, h::Int;
         h, T(conf_level), ci_method)
 end
 
+function _forecast_sdfm_fhlz(sdfm::StructuralDFM{T}, h::Int;
+    ci_method::Symbol, reps::Int, conf_level::Real, rng::AbstractRNG) where {T<:AbstractFloat}
+    C_irf = sdfm.structural_irf
+    H_st, N, q = size(C_irf)
+    shocks = _sdfm_structural_shocks(sdfm)
+    T_eff = size(shocks, 1)
+    X = sdfm.gdfm.X
+    μ_add = (sdfm.gdfm.standardized && sdfm.units === :raw) ? vec(mean(X; dims=1)) : zeros(T, N)
+
+    F_fc = zeros(T, h, q)
+    X_fc = zeros(T, h, N)
+    @inbounds for step in 1:h
+        acc = copy(μ_add)
+        for s in step:(H_st - 1)
+            t_src = T_eff + step - s
+            t_src < 1 && break
+            mul!(acc, @view(C_irf[s + 1, :, :]), @view(shocks[t_src, :]), one(T), one(T))
+        end
+        X_fc[step, :] .= acc
+    end
+
+    F_lo = zeros(T, h, q)
+    F_hi = zeros(T, h, q)
+    X_lo = zeros(T, h, N)
+    X_hi = zeros(T, h, N)
+    F_se = zeros(T, h, q)
+    X_se = zeros(T, h, N)
+
+    if ci_method === :bootstrap
+        reps < 1 && throw(ArgumentError("reps must be ≥ 1"))
+        p_eff = sdfm.p_var
+        X_eff = X[(p_eff + 1):end, :]
+        if sdfm.gdfm.standardized && sdfm.units === :standardized
+            μ_x = vec(mean(X; dims=1))
+            σ_x = max.(vec(std(X; dims=1)), T(1e-10))
+            X_eff = (X_eff .- μ_x') ./ σ_x'
+        end
+        fitted_eff = repeat(μ_add', T_eff, 1)
+        @inbounds for t in 1:T_eff
+            for s in 0:min(t - 1, H_st - 1)
+                fitted_eff[t, :] .+= @view(C_irf[s + 1, :, :]) * @view(shocks[t - s, :])
+            end
+        end
+        idio_eff = X_eff - fitted_eff
+        idio_c = idio_eff .- mean(idio_eff; dims=1)
+        shocks_c = shocks .- mean(shocks; dims=1)
+
+        F_boot = zeros(T, reps, h, q)
+        X_boot = zeros(T, reps, h, N)
+        ε_path = Matrix{T}(undef, h, q)
+        @inbounds for b in 1:reps
+            for step in 1:h
+                idx_s = rand(rng, 1:T_eff)
+                ε_path[step, :] .= @view(shocks_c[idx_s, :])
+                F_boot[b, step, :] .= @view(ε_path[step, :])
+                δX = copy(@view(idio_c[rand(rng, 1:T_eff), :]))
+                for s in 0:min(step - 1, H_st - 1)
+                    mul!(δX, @view(C_irf[s + 1, :, :]), @view(ε_path[step - s, :]), one(T), one(T))
+                end
+                X_boot[b, step, :] .= @view(X_fc[step, :]) .+ δX
+            end
+        end
+        alpha = (one(T) - T(conf_level)) / 2
+        @inbounds for hi in 1:h, j in 1:q
+            d = @view F_boot[:, hi, j]
+            F_lo[hi, j] = min(quantile(d, alpha), F_fc[hi, j])
+            F_hi[hi, j] = max(quantile(d, one(T) - alpha), F_fc[hi, j])
+            F_se[hi, j] = std(d)
+        end
+        @inbounds for hi in 1:h, j in 1:N
+            d = @view X_boot[:, hi, j]
+            X_lo[hi, j] = min(quantile(d, alpha), X_fc[hi, j])
+            X_hi[hi, j] = max(quantile(d, one(T) - alpha), X_fc[hi, j])
+            X_se[hi, j] = std(d)
+        end
+    end
+    _build_factor_forecast(F_fc, X_fc, F_lo, F_hi, X_lo, X_hi, F_se, X_se,
+        h, T(conf_level), ci_method)
+end
+
 # =============================================================================
 # sdfm_panel_irf — Project structural factor IRFs to panel observables
 # =============================================================================
@@ -919,6 +1103,13 @@ rotation `Q`, then `Λ * factor_irf` at each horizon.
 """
 function sdfm_panel_irf(sdfm::StructuralDFM{T}, H::Int) where {T}
     H >= 1 || throw(ArgumentError("horizon H must be >= 1"))
+    if sdfm.method === :fhlz
+        vals = _fhlz_panel_irf_values(sdfm, H)
+        N = size(vals, 2)
+        q = size(vals, 3)
+        return ImpulseResponse{T}(vals, zeros(T, H, N, q), zeros(T, H, N, q), H,
+            copy(sdfm.varnames), copy(sdfm.shock_names), :none, nothing, zero(T))
+    end
     factor_irf = _sdfm_factor_structural_irf(sdfm, H)
     _sdfm_project_irf(sdfm, factor_irf, H)
 end

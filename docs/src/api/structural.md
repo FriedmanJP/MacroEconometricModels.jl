@@ -49,7 +49,14 @@ NormalityTestResult
 NormalityTestSuite
 ICASVARResult
 NonGaussianMLResult
+LMSSVARResult
+SVARHypothesisTest
+NonGaussianDiagnostics
 NonGaussianGMMResult
+LanneLuotoGMMResult
+GMMMomentSelectionResult
+FundamentalnessTestResult
+SufficientInformationTestResult
 LewisTVVResult
 MarkovSwitchingSVARResult
 GARCHSVARResult
@@ -183,6 +190,7 @@ identify_jade
 identify_sobi
 identify_dcov
 identify_hsic
+identify_cvm
 ```
 
 ### Non-Gaussian ML Identification
@@ -198,10 +206,27 @@ identify_skew_normal
 identify_nongaussian_ml
 ```
 
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["nongaussian/lms.jl", "nongaussian/hypothesis.jl"]
+Order   = [:function]
+Private = false
+```
+
 ### Moment-Based GMM Identification
 
 ```@docs
 identify_gmm_moments
+estimate_lanne_luoto_gmm
+select_gmm_moments
+test_svar_hypothesis(::LanneLuotoGMMResult{T}, ::MacroEconometricModels._SVARHypothesisSpec) where {T<:AbstractFloat}
+```
+
+### Fundamentalness and Information Sufficiency
+
+```@docs
+test_fundamentalness
+test_sufficient_information
 ```
 
 ### Time-Varying Volatility Identification

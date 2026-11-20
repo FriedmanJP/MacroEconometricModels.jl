@@ -259,3 +259,65 @@ end
 function reproduce(::NARDLMultipliers)
     _needs_source_report("NARDLMultipliers", "dynamic_multipliers(m, H; seed=N)")
 end
+
+function reproduce(::QuantileFactorModel)
+    _needs_source_report("QuantileFactorModel", "estimate_qfm(X, r, tau; seed=N)")
+end
+
+function reproduce(::FHLZModel)
+    _needs_source_report("FHLZModel", "estimate_gdfm_fhlz(X, q; seed=N)")
+end
+
+function reproduce(::LMSSVARResult)
+    _needs_source_report("LMSSVARResult", "estimate_lms_svar(Y, p; seed=N)")
+end
+
+function reproduce(::RILogitModel)
+    _needs_source_report("RILogitModel", "estimate_ri_logit(choices, menu_attributes, env_id; seed=N)")
+end
+
+function reproduce(::SVARHypothesisTest)
+    _needs_source_report("SVARHypothesisTest", "test_svar_hypothesis(res, hyp; seed=N)")
+end
+
+# --- Wave-4 v1.1.0 (#887, #888, #896, #904, #920) ---
+function reproduce(::QuantileFactorGrid)
+    _needs_source_report("QuantileFactorGrid", "estimate_qfm(X, r_vec, taus; seed=N)")
+end
+
+function reproduce(::QFMLoadingConstancyTest)
+    _needs_source_report("QFMLoadingConstancyTest", "test_qfm_loading_constancy(grid, tau1, tau2; seed=N)")
+end
+
+function reproduce(::QuantileFactorPanelModel)
+    _needs_source_report("QuantileFactorPanelModel", "estimate_xtqreg_factors(pd, y, x; seed=N)")
+end
+
+function reproduce(::CointegratedGDFM)
+    _needs_source_report("CointegratedGDFM", "estimate_gdfm_i1(X, r, q; seed=N)")
+end
+
+function reproduce(::LanneLuotoGMMResult)
+    _needs_source_report("LanneLuotoGMMResult", "estimate_lanne_luoto_gmm(Y, p; seed=N)")
+end
+
+function reproduce(::RIEstimationResult)
+    _needs_source_report("RIEstimationResult", "estimate_ri(prob, Y; seed=N)")
+end
+
+# --- Wave-5 v1.1.0 (#889, #890) ---
+function reproduce(::GrowthAtRiskResult)
+    _needs_source_report("GrowthAtRiskResult", "growth_at_risk(X, target_col, h; seed=N)")
+end
+
+function reproduce(::QuantileVARModel)
+    _needs_source_report("QuantileVARModel", "estimate_qvar(Y, p, taus; seed=N)")
+end
+
+function reproduce(::QuantileFAVAR)
+    _needs_source_report("QuantileFAVAR", "estimate_qfavar(X_panel, Y_key, r, p; seed=N)")
+end
+
+function reproduce(::VBQuantileFAVAR)
+    _needs_source_report("VBQuantileFAVAR", "estimate_qfavar(X_panel, Y_key, r, p; method=:vb, seed=N)")
+end

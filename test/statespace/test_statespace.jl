@@ -328,12 +328,144 @@ using Test, MacroEconometricModels, Random, LinearAlgebra, Statistics, Distribut
         @test StateSpaceModel(Z, H, Tt, Q).init_mode === :kappa
         @test local_level(y).init_mode === :kappa
         @test local_linear_trend(y).init_mode === :kappa
-        @test estimate_tvp_reg(y, randn(Xoshiro(3), 80, 1)).init_mode === :kappa
+        X_tvp = randn(Xoshiro(3), 80, 1)
+        @test estimate_tvp_reg(y, X_tvp).init_mode === :kappa
         # :diffuse remains reachable and is a genuinely different initialization on a
         # model with a stationary direction (it warns about the nonstationary one).
         @test StateSpaceModel(Z, H, Tt, Q; init_mode=:diffuse).init_mode === :diffuse
         Ts = reshape([0.5], 1, 1)
         @test StateSpaceModel(Z, H, Ts, Q; init_mode=:diffuse).P1 !=
               StateSpaceModel(Z, H, Ts, Q; init_mode=:kappa).P1
+    end
+
+    # ------------------------------------------------------------------
+    # Correlated state-measurement noise G & steady_state_kalman (#916)
+    # ------------------------------------------------------------------
+    @testset "correlated noise G & steady_state_kalman" begin
+        rng = Xoshiro(9160)
+        # System with R != I (n_state=2, r=1, n_obs=1)
+        Z = [1.0 0.3]
+        Tt = [0.7 0.1; 0.0 0.5]
+        R = reshape([1.0, 0.4], 2, 1)
+        Q = reshape([0.8], 1, 1)
+        H = reshape([0.5], 1, 1)
+        G_good = reshape([0.45], 1, 1)   # r × n_obs; joint [Q G; G' H] is PD
+
+        @test StateSpaceModel(Z, H, Tt, Q; R=R).G === nothing
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; R=R, G=ones(2, 1))
+        @test_throws ArgumentError StateSpaceModel(Z, H, Tt, Q; R=R, G=ones(1, 2))
+
+        ss_spec = StateSpaceModel(Z, H, Tt, Q; R=R, G=G_good, init_mode=:stationary)
+        @test ss_spec.G == G_good
+
+        ssk = steady_state_kalman(ss_spec)
+        @test ssk isa SteadyStateKalman{Float64}
+        @test all(abs.(ssk.closed_loop_eigs) .< 1.0)
+
+        # Simulate T=500 from the exact correlated DGP and verify filter convergence
+        L_j = cholesky(Symmetric([Q G_good; G_good' H])).L
+        T_obs = 500
+        y = zeros(T_obs, 1)
+        α = zeros(2)
+        for t in 1:T_obs
+            w = L_j * randn(rng, 2)
+            y[t, 1] = (Z * α)[1] + w[2]
+            α = Tt * α + R * w[1:1]
+        end
+        fit_corr = estimate_statespace(ss_spec, y)
+        @test fit_corr.G == G_good
+        @test norm(fit_corr.filtered_cov[:, :, end] - ssk.P_filt) < 1e-10
+
+        # Parametric MLE with G in NamedTuple improves log-likelihood over G=0
+        build_corr = θ -> (
+            Z = Z, H = reshape([exp(θ[1])], 1, 1),
+            T = Tt, Q = reshape([exp(θ[2])], 1, 1),
+            R = R,
+            G = reshape([0.9 * sqrt(exp(θ[1]) * exp(θ[2])) * tanh(θ[3])], 1, 1)
+        )
+        m_mle = estimate_statespace(build_corr, [log(0.5), log(0.8), 0.5], y;
+                                    init_mode=:stationary,
+                                    param_names=["logσ²_ε", "logσ²_η", "atanh(ρ)"])
+        @test m_mle isa StateSpaceModel
+        @test m_mle.G !== nothing
+        @test m_mle.G[1, 1] > 0.1
+        ss_uncorr = StateSpaceModel(Z, H, Tt, Q; R=R, init_mode=:stationary)
+        @test m_mle.loglik > estimate_statespace(ss_uncorr, y).loglik
+
+        # Exact stacked-Gaussian GLS oracle for forecast(ss, h) with G !== nothing & R != I
+        rng = Xoshiro(9162)
+        ns_f, no_f, r_f, T_f, h_f = 3, 2, 2, 12, 4
+        Z_f = [1.0 0.2 0.0; 0.0 1.0 -0.3]
+        Tt_f = [0.65 0.1 0.0; 0.0 0.55 0.1; -0.05 0.0 0.45]
+        R_f = [1.0 0.0; 0.4 1.0; 0.0 0.6]
+        B_f = randn(rng, r_f + no_f, r_f + no_f)
+        Sig_f = B_f * B_f' / 4 + 0.1 * I
+        Q_f = Sig_f[1:r_f, 1:r_f]; G_f = Sig_f[1:r_f, (r_f+1):end]; H_f = Sig_f[(r_f+1):end, (r_f+1):end]
+        d_f = [0.05, -0.03]; c_f = [0.1, -0.05, 0.02]
+        a1_f = [0.2, -0.1, 0.05]; P1_f = [0.8 0.1 0.0; 0.1 0.6 0.05; 0.0 0.05 0.5]
+        y_f = randn(rng, T_f, no_f)
+        ss_f = StateSpaceModel(Z_f, H_f, Tt_f, Q_f; d=d_f, c=c_f, R=R_f, G=G_f, a1=a1_f, P1=P1_f)
+        fit_f = estimate_statespace(ss_f, y_f)
+        fc_f = forecast(fit_f, h_f)
+
+        T_tot = T_f + h_f
+        RQR_f = R_f * Q_f * R_f'; Gk_f = R_f * G_f
+        Na_tot = ns_f * T_tot; Ny_tot = no_f * T_tot
+        mu_a = zeros(Na_tot); mu_y = zeros(Ny_tot)
+        mc = c_f + Tt_f * a1_f
+        for t in 1:T_tot
+            mu_a[(t-1)*ns_f+1:t*ns_f] = mc
+            mu_y[(t-1)*no_f+1:t*no_f] = d_f + Z_f * mc
+            mc = c_f + Tt_f * mc
+        end
+        nu_f = ns_f + ns_f + (T_tot - 1) * (ns_f + no_f) + no_f
+        Su_f = zeros(nu_f, nu_f)
+        Su_f[1:ns_f, 1:ns_f] = P1_f
+        Su_f[(ns_f+1):2ns_f, (ns_f+1):2ns_f] = RQR_f
+        for t in 1:(T_tot-1)
+            idx = 2ns_f + (t - 1) * (ns_f + no_f)
+            Su_f[(idx+1):(idx+ns_f+no_f), (idx+1):(idx+ns_f+no_f)] = [RQR_f Gk_f; Gk_f' H_f]
+        end
+        idxT = nu_f - no_f
+        Su_f[(idxT+1):nu_f, (idxT+1):nu_f] = H_f
+        Ma_f = zeros(Na_tot, nu_f); My_f = zeros(Ny_tot, nu_f)
+        Ma_f[1:ns_f, 1:ns_f] = Tt_f; Ma_f[1:ns_f, (ns_f+1):2ns_f] = I(ns_f)
+        for t in 1:(T_tot-1)
+            idx = 2ns_f + (t - 1) * (ns_f + no_f)
+            My_f[(t-1)*no_f+1:t*no_f, :] = Z_f * Ma_f[(t-1)*ns_f+1:t*ns_f, :]
+            My_f[(t-1)*no_f+1:t*no_f, (idx+ns_f+1):(idx+ns_f+no_f)] = I(no_f)
+            Ma_f[t*ns_f+1:(t+1)*ns_f, :] = Tt_f * Ma_f[(t-1)*ns_f+1:t*ns_f, :]
+            Ma_f[t*ns_f+1:(t+1)*ns_f, (idx+1):(idx+ns_f)] = I(ns_f)
+        end
+        My_f[(T_tot-1)*no_f+1:T_tot*no_f, :] = Z_f * Ma_f[(T_tot-1)*ns_f+1:T_tot*ns_f, :]
+        My_f[(T_tot-1)*no_f+1:T_tot*no_f, (idxT+1):nu_f] = I(no_f)
+        Mz_f = vcat(Ma_f, My_f)
+        Sz_f = Mz_f * Su_f * Mz_f'
+        y_obs_vec = vec(permutedims(y_f))
+        obs_i = 1:(no_f * T_f)
+        fut_a = (ns_f * T_f + 1):Na_tot
+        fut_y = (Na_tot + no_f * T_f + 1):(Na_tot + Ny_tot)
+        S_obs = Sz_f[Na_tot .+ obs_i, Na_tot .+ obs_i]
+        S_ao = Sz_f[fut_a, Na_tot .+ obs_i]
+        S_yo = Sz_f[fut_y, Na_tot .+ obs_i]
+        mu_a_fut = mu_a[fut_a] + S_ao * (S_obs \ (y_obs_vec - mu_y[obs_i]))
+        P_a_fut = Sz_f[fut_a, fut_a] - S_ao * (S_obs \ S_ao')
+        mu_y_fut = mu_y[(no_f * T_f + 1):Ny_tot] + S_yo * (S_obs \ (y_obs_vec - mu_y[obs_i]))
+        P_y_fut = Sz_f[fut_y, fut_y] - S_yo * (S_obs \ S_yo')
+
+        for i in 1:h_f
+            @test fc_f.state[i, :] ≈ mu_a_fut[(i-1)*ns_f+1:i*ns_f] atol = 1e-12
+            @test fc_f.mean[i, :] ≈ mu_y_fut[(i-1)*no_f+1:i*no_f] atol = 1e-12
+            @test fc_f.state_cov[:, :, i] ≈ P_a_fut[(i-1)*ns_f+1:i*ns_f, (i-1)*ns_f+1:i*ns_f] atol = 1e-12
+            P_yi = P_y_fut[(i-1)*no_f+1:i*no_f, (i-1)*no_f+1:i*no_f]
+            @test fc_f.obs_cov[:, :, i] ≈ P_yi atol = 1e-12
+            @test fc_f.se[i, :] ≈ sqrt.(diag(P_yi)) atol = 1e-12
+        end
+
+        # Also test scalar n_obs = 1 correlated forecast
+        fc_corr1 = forecast(fit_corr, 3)
+        @test size(fc_corr1.mean) == (3, 1)
+        @test all(isfinite, fc_corr1.mean)
+        @test all(fc_corr1.se .> 0)
     end
 end

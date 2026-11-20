@@ -937,6 +937,39 @@ The chain of tests narrows the specification. Breusch-Pagan rejects a common int
 
 ---
 
+## Panel Quantile Factor Regression
+
+When cross-sectional units respond heterogeneously across conditional quantiles while sharing unobservable common shocks that correlate with observed regressors, standard pooled or additive fixed-effect quantile estimators suffer omitted-variable bias. Ando & Bai (2020) jointly estimate structural slopes and quantile-specific interactive factors:
+
+```math
+Q_{\tau}(y_{it} \mid x_{it}, f_t) = \alpha_i(\tau) + x_{it}' \beta(\tau) + \lambda_i(\tau)' f_t(\tau)
+```
+
+where:
+- ``y_{it}`` and ``x_{it} \in \mathbb{R}^p`` are the panel response and observed covariates for unit ``i`` at date ``t``,
+- ``\beta(\tau) \in \mathbb{R}^p`` is the homogeneous (or unit-specific ``\beta_i(\tau)`` when `slope=:heterogeneous`) structural quantile slope vector,
+- ``\lambda_i(\tau)' f_t(\tau)`` captures ``r`` interactive latent factors normalized via Chen, Dolado & Gonzalo (2021) with rank ``r`` selected automatically when `r=:auto`.
+
+[`estimate_xtqreg_factors`](@ref) accepts either a balanced `PanelData` container via variable symbols or raw `(Y_mat, W_arr)` arrays and returns a [`QuantileFactorPanelModel`](@ref) implementing `StatsAPI.RegressionModel`.
+
+```@example preg
+using DataFrames, Random
+rng_qf = Random.Xoshiro(888)
+Nq, Tq = 25, 30
+f_q = randn(rng_qf, Tq, 1)
+lam_q = 0.6 .+ rand(rng_qf, Nq, 1)
+x1_q = lam_q * f_q' .+ randn(rng_qf, Nq, Tq)
+x2_q = 0.4 .* (lam_q * f_q') .+ randn(rng_qf, Nq, Tq)
+y_q = 1.5 .* x1_q .- 0.8 .* x2_q .+ lam_q * f_q' .+ 0.4 .* randn(rng_qf, Nq, Tq)
+df_q = DataFrame(id=repeat(1:Nq, outer=Tq), t=repeat(1:Tq, inner=Nq),
+                 y=vec(y_q), x1=vec(x1_q), x2=vec(x2_q))
+pd_q = xtset(df_q, :id, :t)
+m_qfp = estimate_xtqreg_factors(pd_q, :y, [:x1, :x2], 1, 0.5; maxiter=30, seed=42)
+report(m_qfp)
+```
+
+---
+
 ## Saving Results
 
 [`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
@@ -1007,3 +1040,5 @@ typeof(m_fe2)
 - Swamy, P. A. V. B. & Arora, S. S. (1972). The Exact Finite Sample Properties of the Estimators of Coefficients in the Error Components Regression Models. *Econometrica* 40(2), 261-275. [DOI](https://doi.org/10.2307/1909405)
 - Windmeijer, F. (2005). A Finite Sample Correction for the Variance of Linear Efficient Two-Step GMM Estimators. *Journal of Econometrics* 126(1), 25-51. [DOI](https://doi.org/10.1016/j.jeconom.2004.02.005)
 - Wooldridge, J. M. (2010). *Econometric Analysis of Cross Section and Panel Data*. 2nd ed. MIT Press. ISBN 978-0-262-23258-6.
+- Ando, T. & Bai, J. (2020). Quantile Co-Movement in Financial Markets: A Panel Quantile Model With Unobserved Heterogeneity. *Journal of the American Statistical Association* 115(529), 266-279. [DOI](https://doi.org/10.1080/01621459.2018.1543598)
+- Chen, L., Dolado, J. J. & Gonzalo, J. (2021). Quantile Factor Models. *Econometrica* 89(2), 875-910. [DOI](https://doi.org/10.3982/ECTA16881)

@@ -23,16 +23,17 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 
 **Multivariate Models**
 
-- **VAR**: OLS estimation with lag order selection (AIC, BIC, HQ), stability diagnostics, companion matrix
-- **Bayesian VAR**: Conjugate Normal-Inverse-Wishart posterior with Minnesota prior; direct and Gibbs samplers; automatic hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri 2015)
+- **VAR**: OLS estimation with lag order selection (AIC, BIC, HQ), stability diagnostics, companion matrix; Quantile VAR (`estimate_qvar`) for distributional dynamics and tail impulse responses
+- **Structural SVARMA**: Gouriéroux, Monfort & Renne (2020) causal/non-causal and invertible/non-invertible structural VARMA estimation via PML and 2SLS-GMM (`estimate_ssvarma`), Schur filtering, polynomial root-flipping, and Blaschke representations (`blaschke_representations`)
+- **Bayesian VAR**: Conjugate Normal-Inverse-Wishart posterior with Minnesota prior; direct and Gibbs samplers; automatic hyperparameter optimization via marginal likelihood (Giannone, Lenza & Primiceri 2015); Del Negro & Schorfheide (2004) DSGE-VAR(``\lambda``) prior and marginal-likelihood profiling (`estimate_dsge_var`)
 - **VECM**: Johansen MLE and Engle-Granger two-step estimation for cointegrated systems; automatic rank selection; IRF/FEVD/HD via VAR conversion (`to_var`); VECM-specific forecasting; Granger causality (short-run, long-run, strong)
 - **ARDL and Bounds Testing**: ARDL and NARDL estimation with long-run multipliers, the conditional error-correction form, and the Pesaran-Shin-Smith (2001) bounds test; panel ARDL via pooled mean group
 - **Cointegrating Regression**: FMOLS (Phillips-Hansen 1990), CCR (Park 1992), and DOLS (Saikkonen 1991; Stock & Watson 1993) for single-equation and panel cointegrating vectors
 - **Systems of Equations**: Seemingly unrelated regressions and three-stage least squares
 - **Panel VAR**: GMM estimation via Arellano-Bond (1991) first-difference and Blundell-Bond (1998) system GMM; fixed-effects OLS; Windmeijer (2005) corrected standard errors; Hansen J-test, Andrews-Lu MMSC; OIRF, GIRF, FEVD; group-level bootstrap CIs; lag selection
 - **Local Projections**: Jorda (2005) with extensions for IV (Stock & Watson 2018), smooth LP (Barnichon & Brownlees 2019), state-dependence (Auerbach & Gorodnichenko 2013), propensity score weighting (Angrist et al. 2018), structural LP (Plagborg-Moller & Wolf 2021), LP forecasting, and LP-FEVD (Gorodnichenko & Lee 2019)
-- **Factor Models**: Static (PCA), dynamic (two-step/EM), and generalized dynamic (spectral GDFM) with Bai-Ng information criteria; unified forecasting with theoretical and bootstrap CIs
-- **FAVAR**: Factor-augmented VAR via two-step (PCA + VAR) or Bayesian Gibbs (Carter-Kohn smoother + NIW); `favar_panel_irf` maps factor IRFs to N observables via loadings
+- **Factor Models**: Static (PCA), dynamic (two-step/EM), generalized dynamic (spectral GDFM), FHLZ (2015, 2017) one-sided dynamic VAR, Barigozzi–Lippi–Luciani (2020) cointegrated ``I(1)`` GDFM, and Eichler–Motta–von Sachs (2011) time-varying GDFM; Bai–Ng, Hallin–Liška, Ahn–Horenstein, and Onatski rank selection; band-pass filtering, Eurocoin indicator, and ragged-edge nowcasting; Chen–Dolado–Gonzalo (2021) quantile factor models and interactive quantile panel fixed effects with distributional forecasting and Growth-at-Risk
+- **FAVAR**: Factor-augmented VAR via two-step (PCA + VAR), Bayesian Gibbs (Carter-Kohn smoother + NIW), and Ando–Tsay (2011) Quantile FAVAR (`estimate_qfavar`); `favar_panel_irf` and `qfavar_panel_irf` map factor IRFs to N observables via loadings
 - **Structural DFM**: Structural dynamic factor model wrapping GDFM + VAR for identified factor shocks
 - **GMM and SMM**: Flexible moment estimation with one-step, two-step, and iterated weighting; Hansen J-test; simulated method of moments
 
@@ -54,6 +55,7 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 - **Bayesian Estimation**: Sequential Monte Carlo (SMC with adaptive tempering), SMC-squared (SMC² with particle filter likelihood), random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions; posterior mode and marginal likelihood, MCMC convergence diagnostics, and Iskrev identification tests
 - **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton, JuMP+Ipopt NLP) with an optional PATH (MCP) backend
 - **Heterogeneity and Continuous Time**: Heterogeneous agents via the sequence-space Jacobian (Auclert et al. 2021), Reiter (2009), and Krusell-Smith (1998); overlapping generations (Blanchard 1985 perpetual youth, Auerbach-Kotlikoff life cycle); continuous-time HJB / Kolmogorov-Forward solvers on sparse grids
+- **Invertibility, DSGE-VAR, and Rational Inattention**: Canonical `ABCDSystem` mapping (`abcd_representation`), Fernández-Villaverde et al. (2007) poor-man's invertibility and Komunjer–Ng zeros, Hansen–Sargent DARE innovations and shock recoverability diagnostics, Del Negro–Schorfheide (2004) DSGE-VAR(``\lambda``), Sims (2003) / Afrouzi–Yang (2021) / Maćkowiak–Wiederholt (2009) Gaussian LQG rational-inattention filters and attention allocation, and Matějka–McKay (2015) Shannon discrete choice
 
 **Input-Output Analysis**
 
@@ -75,10 +77,10 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 - Proxy SVAR, AB-model ML, max-share / news-shock identification, and structural VECM (KPSW)
 - Fifteen further schemes exploit statistical structure instead, so the `method=` keyword accepts twenty-five symbols in total, every one of them returning the same result object
 - Non-Gaussian ICA: FastICA, JADE, SOBI, dCov, HSIC
-- Non-Gaussian ML: Student-t, mixture-normal, PML, skew-normal, plus the `:nongaussian_ml` dispatcher; GMM from coskewness / cokurtosis
+- Non-Gaussian ML: Student-t, mixture-normal, PML, skew-normal, plus the `:nongaussian_ml` dispatcher and Lanne–Meitz–Saikkonen (2017) 1/3-step ML; GMM from coskewness / cokurtosis including Lanne–Luoto (2021) moment selection; asymptotic delta-method and bootstrap inference for IRFs, FEVDs, and historical decompositions
 - Heteroskedasticity-based: Markov-switching, GARCH, smooth-transition, external volatility (K-regime joint ML)
 - Set-identified summaries (`median_target`, `modal_model`, `joint_band`) and Giacomini–Kitagawa robust Bayes
-- Identifiability diagnostics: gaussianity tests, independence tests, distinct-``\lambda`` Wald, label-stability
+- Identifiability diagnostics: gaussianity tests, independence tests, distinct-``\lambda`` Wald, label-stability, overidentification, structural hypothesis tests (`test_svar_hypothesis`), and SSVARMA fundamentalness tests (`test_fundamentalness`, `test_sufficient_information`)
 
 **Nowcasting**
 
@@ -177,20 +179,22 @@ The package is organized into the following modules:
 | `spectral/` | Spectral analysis: periodogram, Welch, AR, cross-spectrum, ACF/PACF/CCF, portmanteau tests |
 | `reg/` | Cross-sectional regression: OLS, WLS, IV/2SLS, Logit, Probit, Ordered, Multinomial, count, Tobit/Heckman, penalized, robust, marginal effects |
 | `preg/` | Panel regression: FE/RE/FD/Between/CRE/AB/BB, Panel IV, Panel Logit/Probit, PCSE, specification tests |
-| `var/` | VAR estimation (OLS), structural identification, IRF, FEVD, historical decomposition |
+| `var/` | VAR and Quantile VAR estimation (OLS/IQR), structural identification, IRF, FEVD, historical decomposition |
+| `svarma/` | Structural VARMA: causal/non-causal and invertible/non-invertible PML/2SLS-GMM estimation, Schur filter, Blaschke transforms |
 | `vecm/` | VECM: Johansen MLE, Engle-Granger, cointegrating vectors, forecasting, Granger causality |
 | `bvar/` | Bayesian VAR: conjugate NIW posterior sampling, Minnesota prior, hyperparameter optimization |
 | `ardl/` | ARDL and NARDL, bounds testing, long-run multipliers, panel ARDL (pooled mean group) |
 | `cointreg/` | Cointegrating regression: FMOLS, CCR, DOLS for single equations and panels |
 | `system/` | Systems of equations: seemingly unrelated regressions and 3SLS |
 | `lp/` | Local Projections: core, IV, smooth, state-dependent, propensity, structural LP, forecast, LP-FEVD |
-| `factor/` | Static (PCA), dynamic (two-step/EM), generalized (spectral) factor models with forecasting |
-| `favar/` | Factor-Augmented VAR: two-step (PCA + VAR) and Bayesian Gibbs estimation, panel IRFs |
-| `nongaussian/` | Statistical identification: non-Gaussian ICA and ML, heteroskedasticity-based schemes, identifiability tests |
+| `factor/` | Static (PCA), dynamic (two-step/EM), generalized dynamic (FHLZ, ``I(1)``, TV-GDFM, Eurocoin), and quantile factor models with forecasting |
+| `favar/` | Factor-Augmented VAR: two-step (PCA + VAR), Bayesian Gibbs, and Quantile FAVAR estimation, panel IRFs |
+| `nongaussian/` | Statistical identification: non-Gaussian ICA, ML (including LMS), co-kurtosis GMM, heteroskedasticity schemes, identifiability and hypothesis tests |
 | `teststat/` | Statistical tests: unit root, cointegration, structural breaks, panel unit root, normality, Granger causality, bubbles, LR/LM, ARCH diagnostics |
 | `pvar/` | Panel VAR: types, transforms, instruments, estimation (GMM/FE-OLS), analysis, bootstrap, tests |
 | `did/` | Difference-in-Differences: TWFE, Callaway-Sant'Anna, Sun-Abraham, BJS, de Chaisemartin-D'Haultfoeuille; event study LP; LP-DiD |
-| `dsge/` | DSGE: specification, linearization, solution (Gensys/BK/Klein/perturbation/projection/PFI/VFI), constrained solvers (Optim/NLopt/projected Newton), OccBin, heterogeneous agents, Bayesian estimation (SMC/SMC²/MH) |
+| `dsge/` | DSGE: specification, linearization, solvers (Gensys/BK/Klein/perturbation/projection/PFI/VFI), constraints, OccBin, HA, Bayesian estimation, ABCD invertibility, DSGE-VAR |
+| `ri/` | Rational Inattention: Sims LQG Kalman filter, Afrouzi-Yang dynamic transitions, Maćkowiak-Wiederholt attention, Matějka-McKay discrete choice |
 | `olg/` | Overlapping generations: perpetual-youth and life-cycle solvers |
 | `ct/` | Continuous-time heterogeneous agents: HJB and Kolmogorov-Forward solvers |
 | `io/` | Input-Output analysis: Leontief/Ghosh models, multipliers, linkages, SDA, extraction, environmental extensions, Baqaee-Farhi (2019), MRIO downloaders |

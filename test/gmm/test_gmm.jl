@@ -788,3 +788,55 @@ end
     @test occursin("1st-stage F", shown)
     @test occursin("Weak instruments", shown)
 end
+
+@testset "True Continuous Updating Estimator (weighting=:cue)" begin
+    w_cue = GMMWeighting(method=:cue)
+    @test w_cue.method === :cue
+    @test_throws ArgumentError GMMWeighting(method=:unknown_weighting)
+
+    # Overidentified heteroskedastic IV design where finite-sample CUE != iterated GMM
+    rc = Random.Xoshiro(2026)
+    dc = dgp_gmm(rc; kind=:iv, beta=[1.0, -0.6], n=120, hetero=true, overid_k=3, pi1=0.35)
+    dat_c = hcat(dc.y, dc.X, dc.Z)
+    nz = size(dc.Z, 2)
+    mom_iv(th, dd) = dd[:, 4:(3 + nz)] .* (dd[:, 1] .- dd[:, 2:3] * th)
+
+    res_2s = estimate_gmm(mom_iv, [0.0, 0.0], dat_c; weighting=:two_step, hac=false)
+    res_it = estimate_gmm(mom_iv, [0.0, 0.0], dat_c; weighting=:iterated, hac=false, tol=1e-10)
+    res_cue = estimate_gmm(mom_iv, [0.0, 0.0], dat_c; weighting=:cue, hac=false, tol=1e-10)
+
+    @test res_cue.converged
+    @test res_cue.weighting.method === :cue
+    @test all(isfinite, res_cue.theta)
+    @test res_cue.J_stat >= 0
+    @test isfinite(res_cue.J_pvalue) && 0 <= res_cue.J_pvalue <= 1
+    @test all(diag(res_cue.vcov) .> 0)
+
+    # Finite-sample CUE solution strictly differs from iterated GMM
+    @test maximum(abs.(res_cue.theta .- res_it.theta)) > 1e-5
+    @test maximum(abs.(res_cue.theta .- res_2s.theta)) > 1e-5
+
+    # Direct CUE objective Q_cue(theta) = ḡ(theta)' S(theta)^{-1} ḡ(theta)
+    function _direct_cue_obj(th, mom, dd; hac::Bool=false)
+        M = mom(th, dd)
+        gb = vec(mean(M; dims=1))
+        M_d = M .- mean(M; dims=1)
+        S = hac ? MacroEconometricModels.long_run_covariance(M_d) :
+                  (transpose(M_d) * M_d) / size(M_d, 1)
+        return dot(gb, MacroEconometricModels.robust_inv(S) * gb)
+    end
+
+    q_at_cue = _direct_cue_obj(res_cue.theta, mom_iv, dat_c; hac=false)
+    q_at_it = _direct_cue_obj(res_it.theta, mom_iv, dat_c; hac=false)
+    @test q_at_cue < q_at_it + 1e-10
+    @test q_at_cue < _direct_cue_obj(res_cue.theta .+ [0.05, -0.05], mom_iv, dat_c; hac=false)
+
+    # Bounded CUE with HAC enabled on heteroskedastic/autocorrelated moments
+    bounds_c = MacroEconometricModels.ParameterTransform([0.0, -2.0], [3.0, 2.0])
+    res_cue_hac = estimate_gmm(mom_iv, [0.5, -0.2], dat_c;
+                               weighting=:cue, hac=true, bounds=bounds_c, tol=1e-9)
+    @test res_cue_hac.weighting.method === :cue
+    @test 0.0 < res_cue_hac.theta[1] < 3.0
+    @test -2.0 < res_cue_hac.theta[2] < 2.0
+    @test isfinite(res_cue_hac.J_pvalue)
+end

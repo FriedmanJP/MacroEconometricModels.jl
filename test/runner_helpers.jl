@@ -18,8 +18,17 @@ function _expected_rank(name::AbstractString)
     name == "Extensions (JuMP/Ipopt/PATH)"    && return 60   # cold-load: schedule early
     startswith(name, "Coverage-A")            && return 60
     name == "ARIMA & Tests & Data & Reg"      && return 55
+    name == "Tests & GMM & Data & PVAR"       && return 54
+    name == "Reg & Panel & ARDL"              && return 54
+    name == "Factor & GDFM"                   && return 54
+    name == "LP & DiD & Nowcast"              && return 53
     name == "Volatility & Filters" && return 54  # GARCH/FIGARCH/MCEM sequential; start with ARIMA (#828)
+    name == "Non-Gaussian SVAR"               && return 53
+    name == "Non-Gaussian Internals"          && return 53
+    name == "Non-Gaussian & SVARMA"           && return 53
+    name == "Quantile Factor & FAVAR"         && return 53
     name == "Plotting"            && return 52   # render + 11 lanes; schedule early to avoid a straggler
+    name == "Rational Inattention"            && return 51
     name == "Serialization DSGE"  && return 88  # DSER is DSGE-Core-sized; start with HA
     name == "IRF & VECM"          && return 50
     name == "Serialization"       && return 48  # RSER files pulled out of empirical groups
@@ -81,15 +90,17 @@ function _numerical_groups(groups, numerical::Bool)
     return out
 end
 
-# CI job split (`MACRO_CI_SUITE=dsge|empirical|serialization`): DSGE/HA vs
-# round-trip files vs the empirical rest. julia-actions/cache@v3 keys on the
-# full matrix (include-matrix), so suite jobs do not share a compiled/ depot.
+# CI job split (`MACRO_CI_SUITE=dsge|empirical|empirical2|serialization`):
+# DSGE/HA vs round-trip files vs balanced empirical halves. julia-actions/cache@v3
+# keys on the full matrix (include-matrix), so suite jobs do not share a compiled/ depot.
 const _DSGE_SUITE_GROUPS = Set([
     "DSGE Core",
     "DSGE Bayesian & HD",
     "HA-DSGE",
     "HA-DSGE Advanced",
     "Extensions (JuMP/Ipopt/PATH)",
+    "Plotting",
+    "LP & DiD & Nowcast",
 ])
 const _SERIALIZATION_SUITE_GROUPS = Set([
     "Serialization",
@@ -97,22 +108,33 @@ const _SERIALIZATION_SUITE_GROUPS = Set([
     "Coverage-A",
     "Coverage-B",
     "Coverage-C",
+    "Bayesian & SVAR",
+    "Factor & GDFM",
+])
+const _EMPIRICAL2_SUITE_GROUPS = Set([
+    "Non-Gaussian SVAR",
+    "Non-Gaussian Internals",
+    "Non-Gaussian & SVARMA",
+    "Quantile Factor & FAVAR",
 ])
 
 function _ci_suite_groups(groups, suite::AbstractString)
     isempty(suite) && return groups
-    suite in ("dsge", "empirical", "serialization") || throw(ArgumentError(
-        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", \"serialization\", or empty; got $(repr(suite))"))
+    suite in ("dsge", "empirical", "empirical2", "serialization") || throw(ArgumentError(
+        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", \"empirical2\", \"serialization\", or empty; got $(repr(suite))"))
     out = Pair{String, Vector{String}}[]
     for (name, files) in groups
         in_dsge = name in _DSGE_SUITE_GROUPS
         in_ser = name in _SERIALIZATION_SUITE_GROUPS
+        in_emp2 = name in _EMPIRICAL2_SUITE_GROUPS
         keep = if suite == "dsge"
             in_dsge
         elseif suite == "serialization"
             in_ser
+        elseif suite == "empirical2"
+            in_emp2
         else
-            !in_dsge && !in_ser
+            !in_dsge && !in_ser && !in_emp2
         end
         keep && push!(out, String(name) => Vector{String}(files))
     end

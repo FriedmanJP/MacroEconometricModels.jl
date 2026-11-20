@@ -139,6 +139,44 @@ end
                 end
             end
 
+            @testset "Mixture normal (asymmetric)" begin
+                r_asym = identify_mixture_normal(model; asymmetric=true, seed=42)
+                @test r_asym isa NonGaussianMLResult{Float64}
+                @test r_asym.distribution == :mixture_normal_asym
+                @test norm(r_asym.Q' * r_asym.Q - I) < 1e-6
+                @test r_asym.dist_params[:vcov_type] == :sandwich
+                @test length(r_asym.dist_params[:all_params]) == 3 * n
+
+                p_m = r_asym.dist_params[:p_mix]
+                mu1 = r_asym.dist_params[:mu1]
+                mu2 = r_asym.dist_params[:mu2]
+                s1 = r_asym.dist_params[:sigma1]
+                s2 = r_asym.dist_params[:sigma2]
+                for j in 1:n
+                    @test 0.0 < p_m[j] < 1.0
+                    @test s1[j] > 0.0 && s2[j] > 0.0
+                    @test p_m[j] * mu1[j] + (1.0 - p_m[j]) * mu2[j] ≈ 0.0 atol = 1e-12
+                    @test p_m[j] * (mu1[j]^2 + s1[j]^2) + (1.0 - p_m[j]) * (mu2[j]^2 + s2[j]^2) ≈ 1.0 atol = 1e-12
+                end
+
+                # Seed reproducibility
+                r_asym2 = identify_mixture_normal(model; asymmetric=true, seed=42)
+                @test r_asym.B0 ≈ r_asym2.B0
+                @test r_asym.loglik ≈ r_asym2.loglik
+
+                # Signed permutation negates :mu1 and :mu2
+                B_flip = copy(r_asym.B0)
+                B_flip[:, 1] .*= -1.0
+                r_lab = label_shocks(r_asym; by=:reference, B_ref=B_flip)
+                @test r_lab.dist_params[:mu1][1] ≈ -r_asym.dist_params[:mu1][1]
+                @test r_lab.dist_params[:mu2][1] ≈ -r_asym.dist_params[:mu2][1]
+                @test r_lab.dist_params[:mu1][2] ≈ r_asym.dist_params[:mu1][2]
+
+                # Downstream gaussian-vs-nongaussian & overidentification
+                lr_asym = test_gaussian_vs_nongaussian(model; distribution=:mixture_normal_asym)
+                @test lr_asym.details[:df] == 3 * n
+            end
+
             @testset "PML" begin
                 result = identify_pml(model)
                 @test result isa NonGaussianMLResult{Float64}
@@ -156,10 +194,93 @@ end
             end
 
             @testset "Unified dispatcher" begin
-                for dist in [:student_t, :mixture_normal, :pml, :skew_normal]
-                    result = identify_nongaussian_ml(model; distribution=dist)
+                for dist in [:student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal]
+                    result = identify_nongaussian_ml(model; distribution=dist, seed=42)
                     @test result isa NonGaussianMLResult{Float64}
                     @test result.distribution == dist
+                end
+                r_disp = identify_nongaussian_ml(model; distribution=:mixture_normal,
+                                                 asymmetric=true, seed=42)
+                @test r_disp.distribution == :mixture_normal_asym
+
+                # vcov_type options & validation
+                for vt in (:auto, :hessian, :sandwich, :opg)
+                    rv = identify_pml(model; vcov_type=vt, n_starts=2, seed=42)
+                    @test all(isfinite, rv.se)
+                    expected_vt = vt === :auto ? :sandwich : vt
+                    @test rv.dist_params[:vcov_type] == expected_vt
+                end
+                @test identify_student_t(model; n_starts=2, seed=42).dist_params[:vcov_type] == :hessian
+                @test identify_skew_normal(model; n_starts=2, seed=42).dist_params[:vcov_type] == :hessian
+                @test identify_mixture_normal(model; n_starts=2, seed=42).dist_params[:vcov_type] == :sandwich
+                @test_throws ArgumentError identify_student_t(model; vcov_type=:bogus)
+                @test_throws ArgumentError identify_student_t(model; n_starts=0)
+            end
+
+            @testset "NGID-01 AC-2: Misspecified PML sandwich CI coverage" begin
+                if !FAST
+                    B_true = [1.0 0.3; -0.4 1.0]
+                    A_mc = [0.4 * Matrix{Float64}(I, 2, 2)]
+                    L_pop = cholesky(Symmetric(B_true * B_true')).L
+                    Q_pop = Matrix(L_pop) \ B_true
+                    if det(Q_pop) < 0
+                        Q_pop[:, 2] .*= -1.0
+                    end
+                    theta_true = MacroEconometricModels._orthogonal_to_givens(Q_pop, 2)[1]
+
+                    num_ci = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
+                    n_reps = num_ci ? 60 : 100
+                    cov_th_sand = 0
+                    cov_th_hess = 0
+                    cov_B12_sand = 0
+                    cov_B21_sand = 0
+                    se_th_sand = Float64[]
+                    se_th_hess = Float64[]
+                    n_ok = 0
+
+                    for rep in 1:n_reps
+                        rng_r = Xoshiro(90200 + rep)
+                        Y_r, _ = simulate_svar(B_true, A_mc; Tobs=500, shocks=:t, rng=rng_r)
+                        m_r = estimate_var(Y_r, 1)
+                        r_s = identify_mixture_normal(m_r; asymmetric=true, vcov_type=:auto,
+                                                      n_starts=2, seed=90200 + rep)
+                        perm, signs = MacroEconometricModels._match_columns(B_true, r_s.B0)
+                        B_al = r_s.B0[:, perm] .* signs'
+                        se_s_al = r_s.se[:, perm]
+                        Q_al = r_s.Q[:, perm] .* signs'
+                        if det(Q_al) < 0
+                            Q_al[:, 2] .*= -1.0
+                        end
+                        ang_al = MacroEconometricModels._orthogonal_to_givens(Q_al, 2)[1]
+                        dth = mod(ang_al - theta_true + pi / 2, pi) - pi / 2
+                        abs(dth) > 0.4 && continue
+                        n_ok += 1
+
+                        se_s = sqrt(max(r_s.vcov[1, 1], 0.0))
+                        L_r = MacroEconometricModels.safe_cholesky(m_r.Sigma)
+                        ang_r = MacroEconometricModels._Q_givens_angles(r_s.Q, 2)
+                        dp_r = MacroEconometricModels._ml_dist_init(r_s, [1, 2])
+                        if det(r_s.Q) < 0
+                            dp_r[5] = -dp_r[5]
+                        end
+                        vcov_h, _ = MacroEconometricModels._nongaussian_vcov(
+                            vcat(ang_r, dp_r), m_r.U, L_r, 2, :mixture_normal_asym; vcov_type=:hessian)
+                        se_h = sqrt(max(vcov_h[1, 1], 0.0))
+
+                        push!(se_th_sand, se_s)
+                        push!(se_th_hess, se_h)
+                        cov_th_sand += Int(abs(dth) <= 1.96 * se_s)
+                        cov_th_hess += Int(abs(dth) <= 1.96 * se_h)
+                        cov_B12_sand += Int(abs(B_al[1, 2] - B_true[1, 2]) <= 1.96 * se_s_al[1, 2])
+                        cov_B21_sand += Int(abs(B_al[2, 1] - B_true[2, 1]) <= 1.96 * se_s_al[2, 1])
+                    end
+
+                    @test n_ok >= round(Int, 0.85 * n_reps)
+                    @test 0.84 <= cov_th_sand / n_ok <= 0.99
+                    @test 0.84 <= cov_B12_sand / n_ok <= 0.99
+                    @test 0.84 <= cov_B21_sand / n_ok <= 0.99
+                    @test mean(se_th_sand) > mean(se_th_hess)
+                    @test cov_th_hess / n_ok < cov_th_sand / n_ok
                 end
             end
         end
@@ -349,7 +470,7 @@ end
     @testset "compute_Q Integration" begin
         _suppress_warnings() do
             # Test that ICA methods work through compute_Q → irf pipeline
-            for method in [:fastica, :jade, :sobi, :dcov, :hsic]
+            for method in [:fastica, :jade, :sobi, :dcov, :hsic, :cvm]
                 Q = MacroEconometricModels.compute_Q(model, method, 10, nothing, nothing)
                 @test size(Q) == (n, n)
                 @test norm(Q' * Q - I) < 1e-4
@@ -1225,6 +1346,88 @@ end
                 @test n_ok_pow >= 50
                 @test n_rej_pow / n_ok_pow > 0.80
             end
+        end
+    end
+
+    @testset "Cramér-von Mises ICA (identify_cvm) & ICA Asymptotic SEs" begin
+        _suppress_warnings() do
+            @test !(:manifest in fieldnames(ICASVARResult{Float64}))
+
+            # Backward-compatible 8-arg and 9-arg ICASVARResult constructors
+            B_bc = [1.0 0.2; 0.0 1.0]
+            W_bc = inv(B_bc)
+            Q_bc = Matrix{Float64}(I, 2, 2)
+            S_bc = randn(Xoshiro(907801), 20, 2)
+            r8 = ICASVARResult(B_bc, W_bc, Q_bc, S_bc, :fastica, true, 5, 0.1)
+            r9 = ICASVARResult{Float64}(B_bc, W_bc, Q_bc, S_bc, :jade, true, 4, 0.2, ["S1", "S2"])
+            @test r8 isa ICASVARResult{Float64} && size(r8.vcov) == (0, 0) && all(isnan, r8.se)
+            @test r9 isa ICASVARResult{Float64} && size(r9.vcov) == (0, 0) && all(isnan, r9.se)
+
+            # Recover B0 via identify_cvm on Student-t(5) and skewed-normal DGPs (Procrustes < 0.12 at T=500)
+            B_true2 = [1.0 0.35; -0.45 1.1]
+            A_true2 = [[0.45 0.08; -0.05 0.40]]
+            Yt, _ = simulate_svar(B_true2, A_true2; Tobs=500, shocks=:t, rng=Xoshiro(907802))
+            mt = estimate_var(Yt, 1)
+            rt = identify_cvm(mt; seed=907803)
+            @test rt isa ICASVARResult{Float64}
+            @test rt.method === :cvm
+            @test size(rt.B0) == (2, 2)
+            @test norm(rt.Q' * rt.Q - I) < 1e-6
+            @test MacroEconometricModels._procrustes_distance(rt.B0, B_true2) < 0.12
+
+            # Seed reproducibility
+            rt2 = identify_cvm(mt; seed=907803)
+            @test rt.B0 == rt2.B0 && rt.vcov == rt2.vcov
+
+            # Skewed-normal 2-variable and 3-variable recovery
+            Ysk, _ = simulate_svar(B_true2, A_true2; Tobs=500, shocks=:skewnormal, rng=Xoshiro(907804))
+            msk = estimate_var(Ysk, 1)
+            rsk = identify_cvm(msk; seed=907805)
+            @test MacroEconometricModels._procrustes_distance(rsk.B0, B_true2) < 0.12
+
+            B_true3 = [1.0 0.2 -0.15; 0.3 0.9 0.25; -0.2 0.15 1.1]
+            A_true3 = [0.4 * Matrix{Float64}(I, 3, 3)]
+            Y3, _ = simulate_svar(B_true3, A_true3; Tobs=500, shocks=:t, rng=Xoshiro(907806))
+            m3 = estimate_var(Y3, 1)
+            r3_cvm = identify_cvm(m3; max_iter=200, n_starts=3, seed=907807)
+            @test size(r3_cvm.vcov) == (9, 9) && size(r3_cvm.se) == (3, 3)
+            @test MacroEconometricModels._procrustes_distance(r3_cvm.B0, B_true3) < 0.35
+
+            Y3_sk, _ = simulate_svar(B_true3, A_true3; Tobs=800, shocks=:skewnormal, rng=Xoshiro(907810))
+            r3_sk = identify_cvm(estimate_var(Y3_sk, 1); max_iter=200, n_starts=3, seed=907811)
+            @test MacroEconometricModels._procrustes_distance(r3_sk.B0, B_true3) < 0.12
+
+            # Finite plug-in asymptotic vcov & se across ALL ICA estimators + StatsAPI + show
+            for fn in (identify_fastica, identify_jade, identify_sobi,
+                       identify_dcov, identify_hsic, identify_cvm)
+                ri = fn === identify_cvm ? fn(mt; seed=907808) : fn(mt)
+                @test size(ri.vcov) == (4, 4)
+                @test size(ri.se) == (2, 2)
+                @test all(isfinite, ri.vcov)
+                @test isposdef(Symmetric(ri.vcov))
+                @test all(isfinite, ri.se) && all(>=(0.0), ri.se)
+                @test StatsAPI.vcov(ri) === ri.vcov
+                @test isapprox(StatsAPI.stderror(ri), vec(ri.se); atol=1e-12)
+
+                buf_s = IOBuffer()
+                show(buf_s, ri)
+                txt_s = String(take!(buf_s))
+                @test occursin("Structural Impact Matrix", txt_s) || occursin("B0", txt_s) || occursin("ICA-SVAR", txt_s)
+                @test !occursin("NaN", txt_s)
+
+                # Signed permutation via label_shocks transforms vcov & se consistently
+                rl = label_shocks(ri; by=:reference, B_ref=[0.0 1.0; -1.0 0.0], shock_names=["A", "B"])
+                @test size(rl.vcov) == (4, 4) && size(rl.se) == (2, 2)
+                @test isapprox(sqrt.(diag(rl.vcov)), vec(rl.se); atol=1e-10)
+            end
+
+            # Float32 support
+            m_f32 = VARModel(Float32.(mt.Y), mt.p, Float32.(mt.B), Float32.(mt.U),
+                             Float32.(mt.Sigma), Float32(mt.aic), Float32(mt.bic),
+                             Float32(mt.hqic), mt.varnames)
+            r_f32 = identify_cvm(m_f32; seed=907809)
+            @test r_f32 isa ICASVARResult{Float32}
+            @test all(isfinite, r_f32.se)
         end
     end
 end

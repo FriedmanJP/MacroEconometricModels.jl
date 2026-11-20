@@ -395,7 +395,7 @@ plot_result(fc)
 Factor forecast standard errors widen with the horizon and then flatten: for this two-factor model they are 0.52 and 0.61 at ``h = 1`` and 0.83 and 0.86 by ``h = 10``. Because the factors are normalized to unit variance, a standard error of one *is* the unconditional standard deviation, so the bands are already three-quarters of the way to conveying no information at all — which is what weakly persistent monthly factors imply. Bootstrap intervals are preferred to theoretical ones whenever the innovations are visibly non-Gaussian, since they inherit the empirical residual distribution rather than assuming normality.
 
 !!! note "Technical Note"
-    Observable forecast standard errors combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``. GDFM forecasts instead extrapolate each factor as an AR(1) with the closed-form variance ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}``.
+    Observable forecast standard errors combine factor uncertainty with idiosyncratic variance: ``\text{Var}(\hat{X}_{T+h}) = \Lambda \cdot \text{MSE}_h \cdot \Lambda' + \Sigma_e``. Under `method=:ar`, GDFM forecasts extrapolate each two-sided factor as an AR(1) with variance ``\text{Var}(\hat{F}_{T+h,i}) = \sigma_i^2 \sum_{j=0}^{h-1} \phi_i^{2j}``; under `method=:one_sided` (or `:spectral`), theoretical standard errors combine common-component projection error ``\hat\Gamma_\chi(0) - W_h G_z W_h'`` with idiosyncratic variance.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -451,7 +451,7 @@ where:
 In the frequency domain the spectral density splits as ``\Sigma_X(\omega) = \Sigma_\chi(\omega) + \Sigma_\xi(\omega)``. Common factors produce eigenvalues that **diverge** with ``N`` while idiosyncratic components produce **bounded** ones, and that separation identifies the factor space without any finite-order restriction on factor dynamics.
 
 !!! note "Technical Note"
-    The default estimator is the FHLR lag-window spectrum ``\hat\Sigma_X(\theta)=(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}``, evaluated on ``\theta_h=\pi h/M``. The Hermitian eigendecomposition at each grid point supplies the leading-``q`` dynamic principal components; those loadings are interpolated onto the Fourier ordinates so the time-domain projector ``L L^H`` can reconstruct ``\chi_t``. Pass `spectral=:smoothed_periodogram` for the older kernel-smoothed periodogram. Under `:lag_window`, `bandwidth=0` selects ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``, which is 4 for the 60-observation panel used here.
+    The default estimator is the FHLR lag-window spectrum ``\hat\Sigma_X(\theta)=(1/2\pi)\sum_{k=-M}^{M} w(k/M)\hat\Gamma_k e^{-ik\theta}``, evaluated on ``\theta_h=\pi h/M``. The Hermitian eigendecomposition at each grid point supplies the leading-``q`` dynamic principal components ``L(\theta)``; inverting ``L(\theta) L(\theta)^H`` yields finite-lag symmetric time-domain filter coefficients ``K_k`` (``|k| \le M``) applied with reflection boundary padding to reconstruct ``\chi_t``. Pass `spectral=:smoothed_periodogram` for the older kernel-smoothed periodogram. Under `:lag_window`, `bandwidth=0` selects ``M=\max(3,\mathrm{round}(\tfrac12\sqrt{T}))``, which is 4 for the 60-observation panel used here.
 
 ```@example factor
 gdfm = estimate_gdfm(X, 2;
@@ -472,7 +472,7 @@ shares = common_variance_share(gdfm)
  mean_r2=round(mean(r2(gdfm)), digits=3))
 ```
 
-Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cumulative). The reconstructed common component accounts for a median 26.9% of the variance of an individual series (mean 31.3%). Three *static* factors deliver 37.8% of contemporaneous co-movement on the same panel. With ``T=60`` and ``M=4`` the lag-window common component is more conservative than static PCA: a short lag truncation on a wide panel does not automatically recover more variance than three contemporaneous factors.
+Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cumulative). The finite-lag two-sided common component accounts for a median 49.5% of the variance of an individual series (mean 52.5%, mean ``R^2 = 0.515``), exceeding the 37.8% explained by three *static* factors on the same panel because dynamic loadings capture lead-lag co-movement across the ``M = 4`` lag window.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -504,7 +504,7 @@ Two dynamic factors carry 28.7% and 15.0% of the average spectral mass (43.8% cu
 | `factors_onesided` | `Matrix{T}` | ``T \times r`` contemporaneous factors ``F_t = Z' X_t`` |
 | `common_component_onesided` | `Matrix{T}` | ``T \times N`` one-sided common component |
 
-`factors` and `common_component` are the **two-sided** FHLR (2000) reconstruction (inverse FFT over the sample). They use future observations and wrap at the sample ends, so they are for in-sample decomposition and historical decomposition. `Z` and `factors_onesided` are the **one-sided** FHLR (2005) filter: ``F_t`` depends on ``X_t`` only, given ``Z``.
+`factors` and `common_component` are the **two-sided** FHLR (2000) reconstruction computed via a non-circular finite-lag symmetric time-domain filter ``\sum_{k=-M}^{M} K_k X_{t-k}`` with reflection padding at the sample boundaries. They use future observations within the ``\pm M`` window without wrapping end-of-sample shocks to the start of the sample, so they are for in-sample decomposition and historical decomposition. `Z` and `factors_onesided` are the **one-sided** FHLR (2005) filter: ``F_t`` depends on ``X_t`` only, given ``Z``.
 
 ### Selecting the Number of Dynamic Factors
 
@@ -536,8 +536,16 @@ Bai–Ng (2007) fits a VAR on ``r`` static PCA factors and reads rank statistics
 ```@example factor
 bn = bai_ng_q(X, 4; p=1)
 aw = amengual_watson_q(X, 4, 1)
-(q_D1=bn.q_D1, q_D2=bn.q_D2, q_AW=aw.q)
+oq = onatski_q_test(X, 0, 3)
+q_on, _ = onatski_q_select(X; k_max=5, alpha=0.05)
+ah = ahn_horenstein(X, 6)
+oed = onatski_ed(X, 6)
+(q_D1=bn.q_D1, q_D2=bn.q_D2, q_AW=aw.q,
+ onatski_stat=round(oq.statistic; digits=3), onatski_p=round(oq.pvalue; digits=4),
+ q_onatski=q_on, r_ER=ah.r_er, r_GR=ah.r_gr, r_ED=oed.r_ed)
 ```
+
+For spectral dynamic rank testing, [`onatski_q_test`](@ref) implements Onatski (2009) using the maximum eigenvalue spacing ratio over disjoint Fourier-frequency blocks calibrated against exact complex Tracy–Widom ``TW_2`` quantiles, and [`onatski_q_select`](@ref) steps sequentially upward from ``k_0 = 0``. For static panels, [`ahn_horenstein`](@ref) computes the Ahn & Horenstein (2013) `ER` and `GR` criteria (including the mock zero-factor eigenvalue ``\hat\mu_0`` so factorless panels are identified as ``r = 0``), while [`onatski_ed`](@ref) implements Onatski's (2010) Edge Distribution (`ED`) iterative bulk-slope threshold estimator.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -563,14 +571,31 @@ where:
 - ``\hat\Gamma_X(0)`` is the contemporaneous covariance matrix of the panel observables
 - ``X_T`` is the observed panel data vector at forecast origin ``T``
 
-`forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path. `method=:ar` is the older AR(1) recursion on the two-sided factors. `:spectral` is no longer a silent alias for `:ar`.
+`forecast(gdfm, h; method=:one_sided)` (or `method=:spectral`) implements that path, while `method=:ar` runs an AR(1) recursion on the two-sided factors (`:spectral` is not an alias for `:ar`). Under `ci_method=:theoretical`, observable forecast error variances combine the common-component projection error with idiosyncratic variance:
+
+```math
+\text{Var}(x_{T+h} - \hat\chi_{T+h|T}) = \mathrm{diag}\!\left(\hat\Gamma_\chi(0) - W_h G_z W_h'\right) + \mathrm{diag}(\hat\Sigma_\xi)
+```
+
+where:
+- ``x_{T+h}`` is the ``N \times 1`` observable vector at horizon ``T+h``
+- ``\hat\chi_{T+h|T}`` is the ``h``-step-ahead FHLR common-component projection
+- ``W_h = W_1 \Phi_F^{h-1}`` is the ``h``-step projection weight matrix propagated via the stationary factor VAR(1) transition ``\Phi_F`` from ``W_1 = \hat\Gamma_\chi(1) Z G_z^{-1}``
+- ``G_z = Z'\hat\Gamma_X(0) Z`` is the covariance matrix of the one-sided factors ``F_t = Z' X_t``
+- ``\hat\Gamma_\chi(0)`` is the contemporaneous covariance matrix of the common components
+- ``\hat\Sigma_\xi`` is the diagonal idiosyncratic residual covariance matrix
+
+Factor standard errors follow ``\mathrm{diag}(G_z - \Phi_F^h G_z (\Phi_F^h)')``, and `ci_method=:bootstrap` resamples factor VAR(1) innovations alongside idiosyncratic residuals (reproducible via `rng` or `seed`).
 
 ```@example factor
-fc_fhlr = forecast(gdfm, 4; method=:one_sided, ci_method=:none)
+fc_fhlr = forecast(gdfm, 4; method=:one_sided, ci_method=:theoretical)
 fc_ar = forecast(gdfm, 4; method=:ar, ci_method=:none)
 (size_os=size(fc_fhlr.observables), size_ar=size(fc_ar.observables),
- maxabs_diff=round(maximum(abs, fc_fhlr.observables - fc_ar.observables); digits=3))
+ maxabs_diff=round(maximum(abs, fc_fhlr.observables - fc_ar.observables); digits=3),
+ factor_se=round.(fc_fhlr.factors_se[:, 1]; digits=3))
 ```
+
+The FHLR projection forecast differs substantially from the two-sided AR(1) recursion (`maxabs_diff = 12.114`), and the factor forecast standard errors widen monotonically with the horizon (0.92, 0.954, 0.973, 0.984 for the first factor across ``h = 1, \dots, 4``).
 
 ### DFM vs GDFM
 
@@ -983,6 +1008,235 @@ IC2 selects four factors, one more than the three used in the sections above, an
 
 ---
 
+## Quantile Factor Models
+
+Principal components and linear dynamic factor models extract common factors under a symmetric quadratic loss targeting conditional means. When heavy tails, skewness, or tail comovement shift the factor loading structure across the conditional distribution, **Quantile Factor Models (QFM)** (Chen, Dolado & Gonzalo 2021) estimate quantile-specific latent factors by minimizing the check-function loss at quantile level ``\tau \in (0, 1)``:
+
+```math
+Q_{\tau}(X_{it} \mid f_t) = \lambda_i(\tau)' f_t(\tau), \qquad \min_{F, \Lambda} \frac{1}{NT} \sum_{t=1}^{T} \sum_{i=1}^{N} \rho_{\tau}\!\left(X_{it} - \lambda_i' f_t\right)
+```
+
+where:
+- ``X_{it}`` is observable series ``i`` at time ``t`` (standardized optionally by median and IQR when `standardize=true`),
+- ``f_t(\tau) \in \mathbb{R}^r`` is the quantile-``\tau`` latent factor vector normalized so ``F'F / T = I_r``,
+- ``\lambda_i(\tau) \in \mathbb{R}^r`` is the loading vector for variable ``i`` normalized so ``\Lambda'\Lambda / N`` is diagonal with non-increasing entries,
+- ``\rho_{\tau}(u) = u \left(\tau - \mathbf{1}\{u < 0\}\right)`` is the asymmetric check loss function.
+
+[`estimate_qfm`](@ref) alternates batched primal-dual interior-point quantile regressions across rows (`T` factor updates) and columns (`N` loading updates) with strict objective monotonicity guards and multi-start initialization (`init=:pca`, `:quantile_svd`, or `:random`).
+
+```@example factor
+qfm_med = estimate_qfm(X, 2, 0.5; standardize=true, seed=42)
+qfm_tail = estimate_qfm(X, 2, 0.9; standardize=true, seed=42)
+report(qfm_med)
+(median_r2 = round(mean(r2(qfm_med)), digits=3),
+ upper_tail_r2 = round(mean(r2(qfm_tail)), digits=3))
+```
+
+Passing `method=:smoothed_iqr` replaces the piecewise-linear check loss with a ``C^1`` convolution-smoothed surrogate (`kernel = :gaussian | :logistic | :epanechnikov`) minimized via `Optim.LBFGS()` with exact analytical gradients. Setting `se=:asymptotic` computes Chen, Dolado & Gonzalo (2021, Theorem 1) Powell/Hall–Sheather sandwich standard errors (with optional Newey–West HAC via `hac_bandwidth`), while `se=:bootstrap` draws wild multipliers and Procrustes-aligns each replicate. [`ic_criteria_qfm`](@ref) evaluates the rank-minimization estimator `r_rank` alongside Bai–Ng check-loss criteria `IC1`–`IC3`, and `estimate_qfm(X, :auto, tau)` automates rank selection.
+
+```@example factor
+qfm_smooth = estimate_qfm(X, 2, 0.5; method=:smoothed_iqr, kernel=:gaussian,
+                          se=:asymptotic, standardize=true, seed=42)
+ic_q = ic_criteria_qfm(X, 4, 0.5; standardize=true, warn_boundary=false)
+(se_loading_11 = round(qfm_smooth.se_loadings[1, 1]; digits=4),
+ r_rank = ic_q.r_rank, r_IC1 = ic_q.r_IC1)
+```
+
+### Options (`estimate_qfm`)
+
+| Option | Default | Description |
+|---|---|---|
+| `tau` | `0.5` | Quantile level in ``(0, 1)`` |
+| `method` | `:iqr` | `:iqr` (exact interior-point alternating QR) or `:smoothed_iqr` (L-BFGS on kernel-smoothed check loss) |
+| `kernel` | `:gaussian` | Smoothing kernel (`:gaussian`, `:logistic`, or `:epanechnikov`) |
+| `se` | `:none` | Standard error estimator (`:none`, `:asymptotic`, or `:bootstrap`) |
+| `standardize` | `false` | Center and scale columns prior to estimation |
+| `robust_scale` | `true` | Use median and IQR (`false` uses mean and SD) when `standardize=true` |
+| `init` | `:pca` | Starting factor initializer (`:pca`, `:quantile_svd`, or `:random`) |
+| `n_starts` | `3` | Multi-start runs retained by lowest check loss |
+
+### Multi-Quantile Grid, Spanning, and Loading Constancy
+
+Estimating quantile factors over a grid of quantiles ``\tau_1 < \dots < \tau_M`` via `estimate_qfm(X, r_or_auto, taus)` returns a [`QuantileFactorGrid`](@ref) indexing container (`grid[j]` or `grid[tau=0.5]`). Given the quantile grid and a baseline mean [`FactorModel`](@ref), [`test_qfm_spanning`](@ref) evaluates Chen, Dolado & Gonzalo (2021) linear spanning regressions projecting quantile factors onto PCA factors (and vice versa), while [`test_qfm_loading_constancy`](@ref) tests whether loadings remain proportional across quantiles ``\tau_1 \ne \tau_2`` up to an orthogonal rotation ``Q``:
+
+```math
+H_0\!: \Lambda(\tau_2) = \Lambda(\tau_1)\, Q, \qquad \widehat{\mathcal{S}}(\tau_1, \tau_2) = \min_{Q \in \mathcal{O}_r} \|\hat{\Lambda}(\tau_2) - \hat{\Lambda}(\tau_1) Q\|_F^2
+```
+
+where:
+- ``\Lambda(\tau) \in \mathbb{R}^{N \times r}`` is the quantile-``\tau`` factor loading matrix,
+- ``Q \in \mathcal{O}_r`` solves the orthogonal Procrustes alignment between quantile levels ``\tau_1`` and ``\tau_2``,
+- ``\widehat{\mathcal{S}}(\tau_1, \tau_2)`` is the block-bootstrap discrepancy statistic summarized by [`QFMLoadingConstancyTest`](@ref) and [`QFMSpanningResult`](@ref).
+
+```@example factor
+X_sub = X[:, 1:20]
+qgrid = estimate_qfm(X_sub, 2, [0.25, 0.5, 0.75]; max_iter=30, standardize=true, seed=42)
+span_res = test_qfm_spanning(qgrid, X_sub)
+const_res = test_qfm_loading_constancy(qgrid, 0.25, 0.75; n_boot=39, max_iter=25, seed=42)
+report(span_res)
+(grid_taus = qgrid.taus,
+ ols_r2_median = round.(span_res.ols_r2[2]; digits=3),
+ constancy_pval = round(const_res.pvalue; digits=3))
+```
+
+### Quantile Factor Forecasting and Growth-at-Risk
+
+Multi-step forecasting from an estimated [`QuantileFactorModel`](@ref) or [`QuantileFactorGrid`](@ref) fits a quantile autoregression QAR(`p`)/QVAR(`p`) on the extracted quantile factors and maps trajectories back to observables; across a multi-quantile grid, `forecast(grid, h; rearrange=true)` applies Chernozhukov, Fernández-Val & Galichon (2010) monotone rearrangement at every horizon–variable cell so conditional quantile curves never cross. For direct macroeconomic tail-risk surveillance, [`growth_at_risk`](@ref) implements Adrian, Boyarchenko & Giannone (2019) **Growth-at-Risk** by running direct ``h``-step quantile regressions on the quantile factors and lagged target values, fitting a predictive density across conditional quantiles (`density = :skewed_t`, `:normal`, or `:none`), and reporting [`GrowthAtRiskResult`](@ref) risk statistics:
+
+```math
+Q_{y_{t+h}}(\tau \mid I_t) = \alpha_h(\tau) + \beta_h(\tau)' \hat{F}_t(\tau) + \gamma_h(\tau)' y_{t:-1:t-p+1}, \qquad
+f(y; \mu, \sigma, \alpha_s, \nu) = \frac{2}{\sigma}\, t_{\nu}\!\left(\frac{y - \mu}{\sigma}\right) T_{\nu+1}\!\left(\alpha_s \frac{y - \mu}{\sigma} \sqrt{\frac{\nu + 1}{\nu + \left(\frac{y - \mu}{\sigma}\right)^2}}\right)
+```
+
+where:
+- ``y_{t+h}`` is the target series ``h`` steps ahead (selected by column index, name, symbol, or external vector),
+- ``\hat{F}_t(\tau)`` are the quantile-``\tau`` factors extracted from the panel at quantile level ``\tau``,
+- ``y_{t:-1:t-p+1}`` collects `lags` lagged realizations of the target series ``y``,
+- ``f(y; \mu, \sigma, \alpha_s, \nu)`` is the Azzalini–Capitanio (2003) skewed-``t`` predictive density calibrated to the conditional quantiles, delivering `gar` (``\mathrm{GaR}_\alpha``), `expected_shortfall` (``\mathrm{ES}_\alpha``), downside/upside relative entropies, continuous ranked probability scores (`crps`), and optional expanding-window `oos_split` probability integral transforms (`pit`).
+
+```@example factor
+fc_qgrid = forecast(qgrid, 4; p=1, rearrange=true)
+gar_res = growth_at_risk(X_sub, 1, 1; r=2, taus=[0.05, 0.25, 0.50, 0.75, 0.95],
+                         density=:skewed_t, oos_split=40, seed=42)
+report(gar_res)
+(gar_5pct = round(gar_res.oos_gar; digits=3),
+ es_5pct = round(gar_res.oos_expected_shortfall; digits=3),
+ n_pit = length(gar_res.pit))
+```
+
+---
+
+## One-Sided Infinite-Order GDFM (FHLZ)
+
+When observables respond to dynamic shocks with infinite-order rational distributed lags (the generic case in DSGE equilibrium laws of motion), a finite-dimensional static factor representation (`r` static factors in `FGLR`) suffers truncation bias whenever ``r`` is capped below the true lag span. Forni, Hallin, Lippi & Zaffaroni (2015, 2017) (**FHLZ**) avoid finite static-rank truncation by estimating the spectral density matrix of common components ``\hat{\Sigma}_{\chi}(\theta)``, factorizing it into an autoregressive panel operator ``A^{(b)}(L)`` over cross-sectional blocks of size ``q + 1``, averaging across random variable permutations to eliminate ordering noise, and inverting each block filter recursively into strict one-sided moving-average responses:
+
+```math
+\chi_{it} = \sum_{h=0}^{\infty} B_{ih} u_{t-h}, \qquad A^{(b)}(L) \chi_{b,t} = R_b u_t
+```
+
+where:
+- ``\chi_{it}`` is the one-sided common component of variable ``i`` at time ``t``,
+- ``u_t \in \mathbb{R}^q`` are the fundamental orthonormal dynamic common innovations,
+- ``A^{(b)}(L) = I - \sum_{k=1}^{p_b} \Phi_k^{(b)} L^k`` is the blockwise autoregressive filter estimated from the block covariance sequence implied by ``\hat{\Sigma}_{\chi}(\theta)``,
+- ``R_b`` maps the ``q`` common shocks onto block ``b`` of size ``q + 1``.
+
+[`estimate_gdfm_fhlz`](@ref) estimates the reduced-form one-sided FHLZ model, and [`estimate_structural_dfm`](@ref) accepts `method=:fhlz` so all structural identification schemes (Cholesky, sign, narrative, non-Gaussian/heteroskedastic, max-share), `irf`, `fevd`, `historical_decomposition`, and `forecast` apply directly to infinite-order panels.
+
+```@example factor
+X_sub = X[:, 1:24]
+fhlz = estimate_gdfm_fhlz(X_sub, 2; n_perm=10, bandwidth=6, p_max=3, seed=42)
+report(fhlz)
+```
+
+```@example factor
+sdfm_fhlz = estimate_structural_dfm(X_sub, 2; method=:fhlz, identification=:cholesky,
+                                    order=[1, 2], n_perm=10, bandwidth=6, H=12, seed=42)
+report(sdfm_fhlz)
+```
+
+---
+
+## Cointegrated I(1) Dynamic Factor Model
+
+When macro and financial panels share common stochastic trends across ``N`` series alongside stationary dynamic factors, Barigozzi, Lippi & Luciani (2021) estimate a **cointegrated I(1) generalized dynamic factor model** via dynamic PCA on first differences, error-correction filtering in levels, and a common VECM decomposition:
+
+```math
+X_{it} = d_{it} + \chi_{it} + \xi_{it}, \qquad A(L)\, \Delta f_t = -\alpha \beta' f_{t-1} + u_t
+```
+
+where:
+- ``X_{it}`` is the observed level series decomposed into deterministic trend ``d_{it}``, common I(1)/I(0) component ``\chi_{it}``, and idiosyncratic disturbance ``\xi_{it}``,
+- ``f_t \in \mathbb{R}^r`` stacks the ``r`` common static factors driven by ``q`` fundamental structural shocks ``u_t`` with cointegrating matrix ``\beta`` separating permanent trends from transitory cycles.
+
+[`estimate_gdfm_i1`](@ref) returns a [`CointegratedGDFM`](@ref) container supporting structural level impulse responses (`irf`) identified via `:permanent_transitory`, `:cholesky`, `:long_run`, `:sign`, or `:proxy`.
+
+```@example factor
+X_i1 = cumsum(X_sub; dims=1)
+m_i1 = estimate_gdfm_i1(X_i1, 2; n_perm=8, p_max=2, irf_horizon=16, seed=42)
+(q = m_i1.q,
+ n_perm_shocks = m_i1.n_permanent,
+ irf_size = size(irf(m_i1, 16).values))
+```
+
+---
+
+## Band-Pass GDFM, Eurocoin, and Spectral FEVD
+
+Frequency-band filtering isolates medium-run business-cycle fluctuations or trend components directly from the estimated dynamic spectral density (Cristadoro et al. 2005; Altissimo et al. 2010):
+
+```math
+\chi_{it}^{\mathcal{B}} = \sum_{|k| \le M} K_{i,\mathcal{B}}(k)\, X_{t-k}, \qquad \omega \in \mathcal{B} = [\omega_{\text{lo}}, \omega_{\text{hi}}] \subseteq [0, \pi]
+```
+
+where:
+- ``\chi_{it}^{\mathcal{B}}`` is the common component attributable to angular frequency band ``\mathcal{B}`` (e.g. periods between 6 and 32 quarters at ``[2\pi/32, 2\pi/6]``),
+- ``K_{i,\mathcal{B}}(k)`` is the band-pass filter weight vector derived from the dynamic common spectral loadings over half-width ``M``.
+
+[`bandpass_gdfm`](@ref) returns both two-sided and one-sided filtered components in [`BandPassGDFMResult`](@ref); [`eurocoin_indicator`](@ref) computes Altissimo et al.'s (2010) real-time contemporaneous linear projection indicator in [`EurocoinResult`](@ref); and [`spectral_fevd`](@ref) integrates structural spectral power over ``\mathcal{B}`` for any [`StructuralDFM`](@ref) (`:fglr`, `:gdfm_var`, or `:fhlz`), returning [`SpectralFEVDResult`](@ref).
+
+```@example factor
+gdfm_bp = estimate_gdfm(X_sub, 2; r=3, spectral=:lag_window, bandwidth=6)
+bp_res = bandpass_gdfm(gdfm_bp, (2π / 32, 2π / 6))
+ec_res = eurocoin_indicator(X_sub, X_sub[:, 1], 2; r=3, cutoff=π / 6)
+sfevd_res = spectral_fevd(sdfm_fhlz, (2π / 32, 2π / 6); include_idiosyncratic=true)
+report(sfevd_res)
+(mean_bp_share = round(mean(bp_res.variance_share); digits=3),
+ eurocoin_r2 = round(ec_res.r2; digits=3),
+ shock_shares_row1 = round.(sfevd_res.shares[1, :]; digits=3))
+```
+
+---
+
+## Locally Stationary Time-Varying GDFM
+
+When factor loadings or shock volatilities evolve smoothly over time across structural transitions, the static-spectrum GDFM attenuates time-varying comovement. [`estimate_tv_gdfm`](@ref) implements the locally stationary generalized dynamic factor model of Eichler, Motta & von Sachs (2011) and Barigozzi, Hallin, Soccorsi & von Sachs (2021), returning [`TimeVaryingGDFM`](@ref). At each rescaled time point ``u_r \in (0, 1)``, symmetric kernel-tapered lag autocovariances construct the local spectral density matrix, whose top-``q`` dynamic eigenvectors invert into local two-sided projection filters:
+
+```math
+\hat{\Gamma}(u_r, k) = \sum_{t=k+1}^{T} \sqrt{w_t(u_r)\, w_{t-k}(u_r)}\, X_t X_{t-k}^{\top}, \qquad
+\hat{\Sigma}_X(u_r, \theta) = \sum_{k=-M_T}^{M_T} \kappa\!\left(\frac{|k|}{M_T}\right) \hat{\Gamma}(u_r, k)\, e^{-i k \theta}
+```
+
+where:
+- ``u_r`` is the ``r``-th rescaled time point in `(0, 1)` on a grid of length `n_grid`,
+- ``w_t(u_r)`` are normalized local time-kernel weights controlled by `time_bandwidth` and `time_kernel` (`:epanechnikov`, `:gaussian`, or `:uniform`),
+- ``\kappa(|k| / M_T)`` is the spectral lag-window taper controlled by `lag_bandwidth` (``M_T``) and `lag_kernel` (`:bartlett`, `:parzen`, or `:tukey`),
+- ``X_t`` is the ``N \times 1`` panel vector at observation ``t``; [`common_variance_share`](@ref) extracts the resulting ``T \times q`` time path of explained spectral variance shares.
+
+```@example factor
+tv_res = estimate_tv_gdfm(X_sub, 2; n_grid=8, time_bandwidth=0.35)
+report(tv_res)
+(tv_r2 = round(mean(r2(tv_res)); digits=3),
+ share_t1 = round.(common_variance_share(tv_res)[1, :]; digits=3),
+ share_tend = round.(common_variance_share(tv_res)[end, :]; digits=3))
+```
+
+---
+
+## Ragged-Edge EM-Spectral GDFM and Nowcasting
+
+Real-time macroeconomic panels routinely contain interior gaps and asynchronous end-of-sample releases ("ragged edges"). Passing `allow_missing=true` to [`estimate_gdfm`](@ref) or [`estimate_gdfm_fhlz`](@ref) warm-starts missing `NaN` cells via cross-sectional EM-PCA and iterates spectral common-component reconstruction until convergence (`em_max_iter`, `em_tol`), with optional stacked multi-lag one-sided projection via `n_lags_proj`. Given a fitted [`GeneralizedDynamicFactorModel`](@ref), [`nowcast_gdfm`](@ref) computes exact minimum-MSE Wiener–Kolmogorov projections (returning [`GDFMNowcastResult`](@ref)) at horizon ``h`` (`h = 0` nowcast, `h < 0` backcast, `h > 0` short-horizon forecast):
+
+```math
+\hat{\chi}_{T_r + h \mid T_r} = C_{\chi, \text{obs}}\, \Sigma_{\text{obs}, \text{obs}}^{-1}\, X_{\text{obs}}
+```
+
+where:
+- ``X_{\text{obs}}`` stacks all non-missing standardized entries inside the trailing `(n_lags + 1)`-period release window ending at ``T_r``,
+- ``\Sigma_{\text{obs}, \text{obs}}`` is the spectral panel autocovariance block restricted to observed `(variable, time)` indices,
+- ``C_{\chi, \text{obs}}`` collects cross-covariances between target common components at ``T_r + h`` and the observed stacked release vector, yielding both point nowcasts and MSE standard errors incorporating idiosyncratic variance.
+
+```@example factor
+X_rag = copy(X_sub)
+X_rag[end, 1:4] .= NaN
+gdfm_em = estimate_gdfm(X_rag, 2; r=3, allow_missing=true, em_max_iter=15)
+nc_res = nowcast_gdfm(gdfm_em, X_rag, 0; n_lags=2)
+report(nc_res)
+(nowcast_1_4 = round.(nc_res.nowcast[1:4]; digits=3),
+ se_1_4 = round.(nc_res.se[1:4]; digits=3))
+```
+
+---
+
 ## Saving Results
 
 [`save_model`](@ref) persists the fitted result to a versioned JLD2 file; [`load_model`](@ref) reconstructs it. JLD2 is a package dependency --- no extra `using` is required. Every exported result type on this page is saveable; the living catalog is the [API Reference](@ref api_page) Persistence table. See [Data Management](@ref data_page) for bundles, `note=`, `model_info`, compression, and the reproducibility manifest.
@@ -1056,14 +1310,32 @@ typeof(fm2)
 - Forni, M., Hallin, M., Lippi, M., & Reichlin, L. (2005). The Generalized Dynamic Factor Model: One-Sided Estimation and Forecasting.
   *Journal of the American Statistical Association*, 100(471), 830-840. [DOI](https://doi.org/10.1198/016214504000002050)
 
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2015). Dynamic Factor Models with Infinite-Dimensional Factor Spaces: One-Sided Representations.
+  *Journal of Econometrics*, 185(2), 359-371. [DOI](https://doi.org/10.1016/j.jeconom.2013.10.017)
+
+- Forni, M., Hallin, M., Lippi, M., & Zaffaroni, P. (2017). Dynamic Factor Models with Infinite-Dimensional Factor Space: Asymptotic Analysis.
+  *Journal of Econometrics*, 199(1), 74-92. [DOI](https://doi.org/10.1016/j.jeconom.2017.04.002)
+
 - Hallin, M., & Liska, R. (2007). Determining the Number of Factors in the General Dynamic Factor Model.
   *Journal of the American Statistical Association*, 102(478), 603-617. [DOI](https://doi.org/10.1198/016214506000001275)
 
 - Bai, J., & Ng, S. (2007). Determining the Number of Primitive Shocks in Factor Models.
   *Journal of Business & Economic Statistics*, 25(1), 52-60. [DOI](https://doi.org/10.1198/073500106000000413)
 
+- Chen, L., Dolado, J. J., & Gonzalo, J. (2021). Quantile Factor Models.
+  *Econometrica*, 89(2), 875-910. [DOI](https://doi.org/10.3982/ECTA16881)
+
 - Amengual, D., & Watson, M. W. (2007). Consistent Estimation of the Number of Dynamic Factors in a Large N and T Panel.
   *Journal of Business & Economic Statistics*, 25(1), 91-96. [DOI](https://doi.org/10.1198/073500106000000613)
+
+- Ahn, S. C., & Horenstein, A. R. (2013). Eigenvalue Ratio Test for the Number of Factors.
+  *Econometrica*, 81(3), 1203-1227. [DOI](https://doi.org/10.3982/ECTA8968)
+
+- Onatski, A. (2009). Testing Hypotheses About the Number of Factors in Large Factor Models.
+  *Econometrica*, 77(5), 1447-1479. [DOI](https://doi.org/10.3982/ECTA6964)
+
+- Onatski, A. (2010). Determining the Number of Factors from Empirical Distribution of Eigenvalues.
+  *Review of Economics and Statistics*, 92(4), 1004-1016. [DOI](https://doi.org/10.1162/REST_a_00043)
 
 - McCracken, M. W., & Ng, S. (2016). FRED-MD: A Monthly Database for Macroeconomic Research.
   *Journal of Business & Economic Statistics*, 34(4), 574-589. [DOI](https://doi.org/10.1080/07350015.2015.1086655)
@@ -1073,3 +1345,24 @@ typeof(fm2)
 
 - Stock, J. H., & Watson, M. W. (2002b). Macroeconomic Forecasting Using Diffusion Indexes.
   *Journal of Business & Economic Statistics*, 20(2), 147-162. [DOI](https://doi.org/10.1198/073500102317351921)
+
+- Altissimo, F., Cristadoro, R., Forni, M., Lippi, M., & Veronese, G. (2010). New Eurocoin: Tracking Economic Growth in Real Time.
+  *Review of Economics and Statistics*, 92(4), 1024-1034. [DOI](https://doi.org/10.1162/REST_a_00045)
+
+- Barigozzi, M., Lippi, M., & Luciani, M. (2021). Large-Dimensional Dynamic Factor Models: Estimation of Impulse-Response Functions with I(1) Cointegrated Factors.
+  *Journal of Econometrics*, 221(2), 455-482. [DOI](https://doi.org/10.1016/j.jeconom.2020.05.004)
+
+- Cristadoro, R., Forni, M., Reichlin, L., & Veronese, G. (2005). A Core Inflation Indicator for the Euro Area.
+  *Journal of Money, Credit and Banking*, 37(3), 539-560. [DOI](https://doi.org/10.1353/mcb.2005.0028)
+
+- Adrian, T., Boyarchenko, N., & Giannone, D. (2019). Vulnerable Growth.
+  *American Economic Review*, 109(4), 1263-1289. [DOI](https://doi.org/10.1257/aer.20161923)
+
+- Barigozzi, M., Hallin, M., Soccorsi, S., & von Sachs, R. (2021). Time-Varying General Dynamic Factor Models and the Measurement of Financial Connectedness.
+  *Journal of Econometrics*, 222(1), 324-343. [DOI](https://doi.org/10.1016/j.jeconom.2020.07.004)
+
+- Chernozhukov, V., Fernández-Val, I., & Galichon, A. (2010). Quantile and Probability Curves Without Crossing.
+  *Econometrica*, 78(3), 1093-1125. [DOI](https://doi.org/10.3982/ECTA7880)
+
+- Eichler, M., Motta, G., & von Sachs, R. (2011). Fitting Dynamic Factor Models to Non-Stationary Time Series.
+  *Journal of Econometrics*, 163(1), 51-70. [DOI](https://doi.org/10.1016/j.jeconom.2010.11.007)

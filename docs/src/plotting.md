@@ -156,6 +156,26 @@ Results that carry more than one natural exhibit dispatch on `view::Symbol`. Pas
 | `MSRegModel` | `:probabilities` (default), `:filtered`, `:diagnostics` |
 | `LPModel`, `LPIVModel` | `:irf` (default), `:diagnostics` |
 | `PanelRegModel`, `PanelIVModel` | `:coef` (default), `:diagnostics` |
+| `QuantileFactorModel` | `:factors` (default), `:loadings`, `:variance`, `:scree` |
+| `QuantileFactorGrid` | `:factors` (default), `:loadings`, `:ic`, `:rank` |
+| `QFMICResult` | `:ic` (default), `:scree`, `:loss` |
+| `QuantileFactorPanelModel` | `:coef` (default), `:factors`, `:loadings` |
+| `GrowthAtRiskResult` | `:fan` (default), `:gar`, `:density` |
+| `FHLZModel` | `:common` (default), `:innovations`, `:factors`, `:irf` |
+| `CointegratedGDFM` | `:common` (default), `:irf`, `:idiosyncratic` |
+| `BandPassGDFMResult` | `:comparison` (default), `:variance_share` |
+| `TimeVaryingGDFM` | `:heatmap` (default), `:variance`, `:connectedness` |
+| `AhnHorensteinResult` | `:ratios` (default), `:eigenvalues` |
+| `SVARMAModel` | `:regime_map` (default), `:shock_densities`, `:roots` |
+| `LMSSVARResult`, `LanneLuotoGMMResult` | `:qq` (default), `:densities` |
+| `ABCDSystem`, `InnovationsRepresentation` | `:eigenvalues` (default), `:singular_values` / `:gain` |
+| `ShockRecoverabilityResult` | `:leads` (default), `:contemp` |
+| `DSGEVARIRFAudit` | `:irf_comparison` (default), `:wedges` |
+| `DSGEVARPrior` | `:phi` (default), `:sigma`, `:both` |
+| `DSGEVARPosterior` | `:irf` (default), `:draws`, `:lambda` |
+| `SimsKalmanSolution` | `:irf_by_capacity` (default), `:fevd`, `:water_filling` |
+| `DynamicRISolution` | `:attention_path` (default), `:omega` |
+| `RIDiscreteChoiceSolution` | `:choice_curves` (default), `:kkt` |
 | `PerfectForesightPath` | `:levels` (default), `:deviations` |
 | `BaiPerronResult` | `:criteria` (default), `:breaks` |
 | `HeckmanModel` | `:outcome` (default), `:selection` |

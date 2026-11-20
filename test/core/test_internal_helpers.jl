@@ -333,15 +333,22 @@ const MEM_IH = MacroEconometricModels
                   "IO" => ["io/test_io_types.jl"],
                   "Core & VAR" => ["core/test_kalman.jl"],
                   "Plotting" => ["plotting/test_plot_render.jl"],
+                  "LP & DiD & Nowcast" => ["lp/test_lp.jl"],
+                  "Factor & GDFM" => ["factor/test_gdfm.jl"],
+                  "Bayesian & SVAR" => ["bvar/test_bayesian.jl"],
+                  "Non-Gaussian SVAR" => ["nongaussian/test_nongaussian_svar.jl"],
+                  "Quantile Factor & FAVAR" => ["factor/test_qfm.jl"],
                   "Serialization" => ["core/test_serialization.jl"],
                   "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
-              ["HA-DSGE", "DSGE Core"]
+              ["HA-DSGE", "DSGE Core", "Plotting", "LP & DiD & Nowcast"]
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
-              ["IO", "Core & VAR", "Plotting"]
+              ["IO", "Core & VAR"]
+        @test first.(_ci_suite_groups(dummy2, "empirical2")) ==
+              ["Non-Gaussian SVAR", "Quantile Factor & FAVAR"]
         @test first.(_ci_suite_groups(dummy2, "serialization")) ==
               ["Coverage-A", "Coverage-B", "Coverage-C",
-               "Serialization", "Serialization DSGE"]
+               "Factor & GDFM", "Bayesian & SVAR", "Serialization", "Serialization DSGE"]
         @test collect(_ci_suite_groups(dummy2, "")) == collect(dummy2)
         @test_throws ArgumentError _ci_suite_groups(dummy2, "bogus")
         @test _expected_rank("Serialization DSGE") > _expected_rank("Serialization")
@@ -353,14 +360,20 @@ const MEM_IH = MacroEconometricModels
             @test "dsge/test_modelspec_kinds.jl" in serial_files
             ser_files = Set(f for (n, fs) in TEST_GROUPS if n in _SERIALIZATION_SUITE_GROUPS for f in fs)
             dsge_files = Set(f for (n, fs) in TEST_GROUPS if n in _DSGE_SUITE_GROUPS for f in fs)
-            emp_files = Set(f for (n, fs) in TEST_GROUPS if n ∉ _DSGE_SUITE_GROUPS && n ∉ _SERIALIZATION_SUITE_GROUPS for f in fs)
+            emp2_files = Set(f for (n, fs) in TEST_GROUPS if n in _EMPIRICAL2_SUITE_GROUPS for f in fs)
+            emp_files = Set(f for (n, fs) in TEST_GROUPS if n ∉ _DSGE_SUITE_GROUPS && n ∉ _SERIALIZATION_SUITE_GROUPS && n ∉ _EMPIRICAL2_SUITE_GROUPS for f in fs)
             @test isempty(ser_files ∩ dsge_files)
+            @test isempty(emp_files ∩ emp2_files)
+            @test isempty(emp2_files ∩ dsge_files)
+            @test isempty(emp2_files ∩ ser_files)
+            @test length(ser_files) + length(dsge_files) + length(emp_files) + length(emp2_files) == length(serial_files)
             @test "core/test_serialization.jl" in ser_files
             @test "core/test_serialization.jl" ∉ emp_files
             @test "coverage/test_dsge_coverage.jl" in ser_files
             @test "coverage/test_dsge_coverage.jl" ∉ dsge_files
             @test "coverage/test_misc_coverage.jl" in ser_files
             @test "io/test_io_types.jl" in emp_files
+            @test "factor/test_qfm.jl" in emp2_files
             if "dsge/test_dsge_serialization.jl" in serial_files
                 @test "dsge/test_dsge_serialization.jl" in ser_files
                 @test "dsge/test_dsge_serialization.jl" ∉ dsge_files

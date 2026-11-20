@@ -271,11 +271,12 @@ function _identify_for_method(model::VARModel, method::Symbol;
     method === :sobi && return identify_sobi(model)
     method === :dcov && return identify_dcov(model)
     method === :hsic && return identify_hsic(model)
-    method === :student_t && return identify_student_t(model)
-    method === :mixture_normal && return identify_mixture_normal(model)
-    method === :pml && return identify_pml(model)
-    method === :skew_normal && return identify_skew_normal(model)
-    method === :nongaussian_ml && return identify_nongaussian_ml(model)
+    method === :student_t && return identify_student_t(model; rng=rng)
+    method === :mixture_normal && return identify_mixture_normal(model; rng=rng)
+    method === :mixture_normal_asym && return identify_mixture_normal(model; asymmetric=true, rng=rng)
+    method === :pml && return identify_pml(model; rng=rng)
+    method === :skew_normal && return identify_skew_normal(model; rng=rng)
+    method === :nongaussian_ml && return identify_nongaussian_ml(model; rng=rng)
     method === :gmm_moments && return identify_gmm_moments(model)
     method === :markov_switching && return identify_markov_switching(model; rng=rng)
     method === :garch && return identify_garch(model)
@@ -703,13 +704,22 @@ function _Q_givens_angles(Q::AbstractMatrix{T}, n::Int) where {T<:AbstractFloat}
 end
 
 function _givens_vec_B0_vcov(θ::Vector{T}, Vθ::AbstractMatrix{T}, Lmat::AbstractMatrix{T},
-                             n::Int) where {T<:AbstractFloat}
+                             n::Int; flip_last::Bool=false,
+                             post_diag::Union{Nothing,Diagonal{T,Vector{T}}}=nothing) where {T<:AbstractFloat}
     n_angles = length(θ)
     n_angles == 0 && return nothing
     size(Vθ) == (n_angles, n_angles) || return nothing
     _vcov_wald_ok(Vθ) || return nothing
     VB = try
-        _, VBm = _delta_B0_se(θ, Vθ, ϑ -> Lmat * _givens_to_orthogonal(ϑ, n), n)
+        B0_fn = if post_diag !== nothing
+            ϑ -> Lmat * _givens_to_orthogonal(ϑ, n) * post_diag
+        elseif flip_last
+            S_last = Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n])
+            ϑ -> Lmat * _givens_to_orthogonal(ϑ, n) * S_last
+        else
+            ϑ -> Lmat * _givens_to_orthogonal(ϑ, n)
+        end
+        _, VBm = _delta_B0_se(θ, Vθ, B0_fn, n)
         VBm
     catch
         return nothing
@@ -727,14 +737,25 @@ function _vec_B0_vcov(result::NonGaussianMLResult{T},
     n_angles == 0 && return nothing
     Vθ = Matrix{T}(V[1:n_angles, 1:n_angles])
     Lmat = Matrix{T}(safe_cholesky(model.Sigma))
-    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n)
+    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n;
+                         flip_last=det(result.Q) < zero(T))
 end
 
-function _vec_B0_vcov(result::NonGaussianGMMResult{T},
+function _vec_B0_vcov(result::Union{NonGaussianGMMResult{T}, LewisTVVResult{T}},
                       model::VARModel{T}) where {T<:AbstractFloat}
     n = size(result.B0, 1)
     Lmat = Matrix{T}(safe_cholesky(model.Sigma))
-    _givens_vec_B0_vcov(Vector{T}(result.theta), Matrix{T}(result.vcov), Lmat, n)
+    n_angles = n * (n - 1) ÷ 2
+    if length(result.theta) == n_angles && all(isfinite, result.theta)
+        Q_th = n_angles == 0 ? Matrix{T}(I, n, n) : _givens_to_orthogonal(Vector{T}(result.theta), n)
+        D_s = Diagonal(T[dot(@view(Q_th[:, j]), @view(result.Q[:, j])) < zero(T) ? -one(T) : one(T) for j in 1:n])
+        if maximum(abs.(Q_th * D_s - result.Q)) < T(1e-8)
+            return _givens_vec_B0_vcov(Vector{T}(result.theta), Matrix{T}(result.vcov), Lmat, n;
+                                       post_diag=all(==(one(T)), D_s.diag) ? nothing : D_s)
+        end
+    end
+    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Matrix{T}(result.vcov), Lmat, n;
+                         flip_last=det(result.Q) < zero(T))
 end
 
 function _vec_B0_vcov(result::Union{MarkovSwitchingSVARResult{T},
@@ -758,7 +779,8 @@ function _vec_B0_vcov(result::GARCHSVARResult{T},
     n_angles == 0 && return nothing
     Vθ = Matrix{T}(V[1:n_angles, 1:n_angles])
     Lmat = Matrix{T}(safe_cholesky(model.Sigma))
-    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n)
+    _givens_vec_B0_vcov(_Q_givens_angles(result.Q, n), Vθ, Lmat, n;
+                         flip_last=det(result.Q) < zero(T))
 end
 
 function _vec_B0_vcov(result::SmoothTransitionSVARResult{T}, ::Any) where {T<:AbstractFloat}
@@ -780,10 +802,12 @@ function _vec_B0_vcov(result::SmoothTransitionSVARResult{T}, ::Any) where {T<:Ab
     p = vcat(_st_pack_L(L_mat), θ, log.(max.(result.Lambda[2], T(1e-12))), xγ,
              result.threshold)
     length(p) == size(V, 1) || return nothing
+    flip_last = n_angles > 0 && det(result.Q) < zero(T)
+    S_last = flip_last ? Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n]) : I
     B0_fn = z -> begin
         Lp = _st_unpack_L(view(z, 1:n_L), n)
         Qp = n_angles == 0 ? Matrix{eltype(z)}(I, n, n) :
-             _givens_to_orthogonal(z[(n_L + 1):(n_L + n_angles)], n)
+             _givens_to_orthogonal(z[(n_L + 1):(n_L + n_angles)], n) * S_last
         Lp * Qp
     end
     VB = try
@@ -838,13 +862,36 @@ function _ml_dist_init(result::NonGaussianMLResult{T}, perm::Vector{Int}) where 
         p_mix = dp[:p_mix][perm]
         σ1 = dp[:sigma1][perm]
         out = Vector{T}(undef, 2n)
+        eps_p = T(1e-4)
+        eps_v = T(1e-4)
         @inbounds for j in 1:n
-            pj = clamp(p_mix[j], T(1e-6), T(1) - T(1e-6))
-            out[2j - 1] = log(pj / (1 - pj))
-            # invert σ₁² = (1/p) * sigmoid(raw)  ⇒  sigmoid(raw) = p σ₁²
-            s2 = σ1[j]^2
-            sig = clamp(pj * s2, T(1e-8), T(1) - T(1e-8))
-            out[2j] = log(sig / (1 - sig))
+            pj = clamp(p_mix[j], T(2e-4), T(1) - T(2e-4))
+            sig_p = clamp((pj - eps_p) / (one(T) - T(2) * eps_p), T(1e-6), one(T) - T(1e-6))
+            out[2j - 1] = log(sig_p / (one(T) - sig_p))
+            w = clamp(pj * σ1[j]^2, T(2e-4), T(1) - T(2e-4))
+            sig_v = clamp((w - eps_v) / (one(T) - T(2) * eps_v), T(1e-6), one(T) - T(1e-6))
+            out[2j] = log(sig_v / (one(T) - sig_v))
+        end
+        return out
+    elseif d === :mixture_normal_asym
+        p_mix = dp[:p_mix][perm]
+        μ1 = dp[:mu1][perm]
+        σ1 = dp[:sigma1][perm]
+        out = Vector{T}(undef, 3n)
+        eps_p = T(1e-4)
+        eps_b = T(1e-4)
+        eps_v = T(1e-4)
+        @inbounds for j in 1:n
+            pj = clamp(p_mix[j], T(2e-4), T(1) - T(2e-4))
+            sig_p = clamp((pj - eps_p) / (one(T) - T(2) * eps_p), T(1e-6), one(T) - T(1e-6))
+            out[3j - 2] = log(sig_p / (one(T) - sig_p))
+            r_mu = μ1[j] * sqrt(pj / (one(T) - pj))
+            t_u2 = clamp(r_mu / (one(T) - eps_b), -one(T) + T(1e-6), one(T) - T(1e-6))
+            out[3j - 1] = atanh(t_u2)
+            B = max(one(T) - r_mu^2, T(1e-8))
+            w = clamp(pj * σ1[j]^2 / B, T(2e-4), T(1) - T(2e-4))
+            sig_v = clamp((w - eps_v) / (one(T) - T(2) * eps_v), T(1e-6), one(T) - T(1e-6))
+            out[3j] = log(sig_v / (one(T) - sig_v))
         end
         return out
     elseif d === :pml
@@ -860,143 +907,646 @@ function _ml_dist_init(result::NonGaussianMLResult{T}, perm::Vector{Int}) where 
     zeros(T, _n_dist_params(d) * n)
 end
 
-"""Solve Givens angles so ``(LQ)[\\mathrm{mask}]\\approx 0`` (drop those rotations)."""
-function _solve_givens_for_zeros(Lmat::AbstractMatrix{T}, mask::BitMatrix,
-                                 θ0::Vector{T}) where {T<:AbstractFloat}
-    n = size(Lmat, 1)
-    n_angles = n * (n - 1) ÷ 2
-    n_angles == 0 && return (T[], zero(T))
-    obj = θ -> begin
-        Tθ = eltype(θ)
-        B0 = Lmat * _givens_to_orthogonal(θ, n)
-        s = zero(Tθ)
-        @inbounds for i in 1:n, j in 1:n
-            mask[i, j] && (s += abs2(B0[i, j]))
-        end
-        s
+"""Build n×n skew-symmetric matrix from strictly upper-triangular vector `k`."""
+function _skew_from_vec(k::AbstractVector{T}, n::Int) where {T<:Real}
+    K = zeros(T, n, n)
+    idx = 0
+    @inbounds for i in 1:(n - 1), j in (i + 1):n
+        idx += 1
+        v = k[idx]
+        K[i, j] = v
+        K[j, i] = -v
     end
-    best_θ = Vector{T}(θ0)
-    best_f = T(obj(θ0))
-    for start in (copy(θ0), zeros(T, n_angles))
-        r = try
-            g! = (G, x) -> ForwardDiff.gradient!(G, obj, x)
-            Optim.optimize(obj, g!, start, Optim.LBFGS(),
-                           Optim.Options(iterations=200, g_tol=T(1e-12),
-                                         allow_f_increases=true))
-        catch
-            Optim.optimize(obj, start, Optim.NelderMead(),
-                           Optim.Options(iterations=400, g_tol=T(1e-12)))
-        end
-        f = T(Optim.minimum(r))
-        if f < best_f
-            best_f = f
-            best_θ = Vector{T}(Optim.minimizer(r))
-        end
-    end
-    (best_θ, best_f)
+    K
 end
 
-"""Constrained non-Gaussian ML: Givens + dist with ``(LQ)[\\mathrm{mask}]=0`` (NLopt SLSQP)."""
-function _nongaussian_slsqp_zeros(U::Matrix{T}, Lchol, Lmat::Matrix{T}, n::Int,
-                                  dist::Symbol, mask::BitMatrix,
-                                  θ0::Vector{T}, dp0::Vector{T}) where {T<:AbstractFloat}
-    n_angles = length(θ0)
-    n_dp = length(dp0)
-    n_p = n_angles + n_dp
-    n_p == 0 && return T(-Inf)
-    zeros_ij = Tuple{Int,Int}[(i, j) for j in 1:n for i in 1:n if mask[i, j]]
-    p0 = Float64.(vcat(θ0, dp0))
-    L64 = Matrix{Float64}(Lmat)
-    nll64 = function (x::Vector{Float64})
-        p = T.(x)
-        ang = n_angles == 0 ? T[] : Vector{T}(p[1:n_angles])
-        dp = Vector{T}(p[(n_angles + 1):end])
-        Float64(-_nongaussian_loglik(ang, dp, U, Lchol, n; distribution=dist))
+"""Cayley map ``C(k) = (I + K)^{-1}(I - K) \\in SO(n)``, Dual- and Float32-compatible."""
+function _cayley_orthogonal(k::AbstractVector{T}, n::Int) where {T<:Real}
+    n <= 1 && return Matrix{T}(I, n, n)
+    K = _skew_from_vec(k, n)
+    (I + K) \ (I - K)
+end
+
+"""Project matrix onto ``SO(n)`` via SVD polar retraction."""
+function _project_so(Q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(Q, 1)
+    n <= 1 && return Matrix{T}(I, n, n)
+    F = svd(Matrix{T}(Q))
+    Qp = F.U * F.Vt
+    if det(Qp) < zero(T)
+        U = copy(F.U)
+        U[:, end] .*= -one(T)
+        Qp = U * F.Vt
     end
-    opt = NLopt.Opt(:LD_SLSQP, n_p)
-    NLopt.min_objective!(opt, (x, g) -> begin
-        val = nll64(x)
-        if length(g) > 0
-            ε = 1e-6
-            @inbounds for i in 1:n_p
-                xi = x[i]
-                x[i] = xi + ε
-                g[i] = (nll64(x) - val) / ε
-                x[i] = xi
+    Qp
+end
+
+"""Sum of squared entries of ``LQ`` on `mask`."""
+function _mask_zero_residual(Lmat::AbstractMatrix{T}, Q::AbstractMatrix,
+                             mask::BitMatrix) where {T<:AbstractFloat}
+    B0 = Lmat * Q
+    n = size(Lmat, 1)
+    s = zero(T)
+    @inbounds for j in 1:n, i in 1:n
+        mask[i, j] && (s += abs2(T(B0[i, j])))
+    end
+    s
+end
+
+"""Solve ``Q \\in SO(n)`` so ``(LQ)[\\mathrm{mask}] \\approx 0`` via re-centered Cayley steps."""
+function _solve_cayley_for_zeros(Lmat::AbstractMatrix{T}, mask::BitMatrix,
+                                 Q_init::AbstractMatrix{T};
+                                 max_recenter::Int=8,
+                                 tol::T=T(1e-24)) where {T<:AbstractFloat}
+    n = size(Lmat, 1)
+    n_angles = n * (n - 1) ÷ 2
+    Q_cur = _project_so(Q_init)
+    f_cur = _mask_zero_residual(Lmat, Q_cur, mask)
+    n_angles == 0 && return (Q_cur, f_cur)
+    tol_eff = max(tol, T(16) * eps(T)^2)
+    f_cur <= tol_eff && return (Q_cur, f_cur)
+
+    for _ in 1:max_recenter
+        Q_base = Q_cur
+        obj = k -> begin
+            Tk = eltype(k)
+            B0 = Lmat * (Q_base * _cayley_orthogonal(k, n))
+            s = zero(Tk)
+            @inbounds for j in 1:n, i in 1:n
+                mask[i, j] && (s += abs2(B0[i, j]))
+            end
+            s
+        end
+        k0 = zeros(T, n_angles)
+        r = try
+            cfg = ForwardDiff.GradientConfig(obj, k0)
+            g! = (G, x) -> ForwardDiff.gradient!(G, obj, x, cfg)
+            Optim.optimize(obj, g!, k0, Optim.LBFGS(),
+                           Optim.Options(iterations=200, g_tol=eps(T),
+                                         f_reltol=zero(T), allow_f_increases=true))
+        catch
+            try
+                Optim.optimize(obj, k0, Optim.NelderMead(),
+                               Optim.Options(iterations=400, g_tol=T(1e-12)))
+            catch
+                nothing
             end
         end
-        val
-    end)
-    for (i, j) in zeros_ij
-        let i = i, j = j
-            NLopt.equality_constraint!(opt, (x, g) -> begin
-                ang = n_angles == 0 ? Float64[] : x[1:n_angles]
-                Q = n_angles == 0 ? Matrix{Float64}(I, n, n) :
-                    _givens_to_orthogonal(ang, n)
-                val = (L64 * Q)[i, j]
-                if length(g) > 0
-                    fill!(g, 0.0)
-                    if n_angles > 0
-                        gj = ForwardDiff.gradient(
-                            θ -> (L64 * _givens_to_orthogonal(θ, n))[i, j], ang)
-                        copyto!(view(g, 1:n_angles), gj)
-                    end
-                end
-                val
-            end, 1e-8)
+        r === nothing && break
+        k_star = Vector{T}(Optim.minimizer(r))
+        Q_new = _project_so(Q_base * _cayley_orthogonal(k_star, n))
+        f_new = _mask_zero_residual(Lmat, Q_new, mask)
+        if f_new < f_cur
+            Q_cur = Q_new
+            f_cur = f_new
+        else
+            break
+        end
+        (f_cur <= tol_eff || maximum(abs, k_star) <= T(1e-10)) && break
+    end
+    (Q_cur, f_cur)
+end
+
+"""Canonicalize column signs so largest-magnitude entry per column is non-negative and `det(Q) > 0`."""
+function _canonical_col_signs!(B::AbstractMatrix{T}, Q::AbstractMatrix{T}) where {T<:AbstractFloat}
+    n = size(Q, 2)
+    @inbounds for j in 1:n
+        i_max = 1
+        v_max = abs(B[1, j])
+        for i in 2:n
+            v = abs(B[i, j])
+            if v > v_max
+                v_max = v
+                i_max = i
+            end
+        end
+        if B[i_max, j] < zero(T)
+            B[:, j] .*= -one(T)
+            Q[:, j] .*= -one(T)
         end
     end
-    NLopt.xtol_rel!(opt, 1e-10)
-    NLopt.maxeval!(opt, 400)
-    minx = try
-        _, xopt, _ = NLopt.optimize(opt, p0)
-        Vector{Float64}(xopt)
-    catch
-        return T(-Inf)
+    if n > 0 && det(Q) < zero(T)
+        B[:, n] .*= -one(T)
+        Q[:, n] .*= -one(T)
     end
-    pstar = T.(minx)
-    θs = n_angles == 0 ? T[] : Vector{T}(pstar[1:n_angles])
-    dps = Vector{T}(pstar[(n_angles + 1):end])
-    _nongaussian_loglik(θs, dps, U, Lchol, n; distribution=dist)
+    Q
+end
+
+"""Canonical column alignment of `(B0, Q)` to `mask_can`, invariant to input column permutation/signs."""
+function _canonical_align_to_mask(B0::AbstractMatrix{T}, Q::AbstractMatrix{T},
+                                  mask_can::BitMatrix) where {T<:AbstractFloat}
+    n = size(B0, 1)
+    n <= 1 && return (Matrix{T}(I, n, n), collect(1:n))
+
+    B_can = copy(B0)
+    Q_can = copy(Q)
+    @inbounds for j in 1:n
+        i_max = 1
+        v_max = abs(B_can[1, j])
+        for i in 2:n
+            v = abs(B_can[i, j])
+            if v > v_max
+                v_max = v
+                i_max = i
+            end
+        end
+        if B_can[i_max, j] < zero(T)
+            B_can[:, j] .*= -one(T)
+            Q_can[:, j] .*= -one(T)
+        end
+    end
+    col_order = sortperm(1:n; by=k -> Tuple(@view(B_can[:, k])))
+    B_ord = B_can[:, col_order]
+    Q_ord = Q_can[:, col_order]
+
+    best_perm = collect(1:n)
+    if n <= 7
+        best = T(Inf)
+        for perm in _permutations(n)
+            s = zero(T)
+            @inbounds for j in 1:n, i in 1:n
+                mask_can[i, j] && (s += abs2(B_ord[i, perm[j]]))
+            end
+            if s < best
+                best = s
+                best_perm = copy(perm)
+            end
+        end
+    else
+        used = falses(n)
+        col_order_mask = sortperm(1:n; by=j -> -count(@view(mask_can[:, j])))
+        for j in col_order_mask
+            best_c = 1
+            best_s = T(Inf)
+            for c in 1:n
+                used[c] && continue
+                s = zero(T)
+                @inbounds for i in 1:n
+                    mask_can[i, j] && (s += abs2(B_ord[i, c]))
+                end
+                if s < best_s
+                    best_s = s
+                    best_c = c
+                end
+            end
+            used[best_c] = true
+            best_perm[j] = best_c
+        end
+    end
+
+    B_al = B_ord[:, best_perm]
+    Q_al = Q_ord[:, best_perm]
+    _canonical_col_signs!(B_al, Q_al)
+    orig_idx = col_order[best_perm]
+    (Q_al, orig_idx)
+end
+
+"""Flip asymmetry/skewness parameters in `dp` whenever `Q_new[:, j]` flips relative to `Q_ref[:, j]`."""
+function _align_dp_signs!(dp::Vector{T}, Q_new::AbstractMatrix{T},
+                          Q_ref::AbstractMatrix{T}, dist::Symbol,
+                          n::Int) where {T<:AbstractFloat}
+    @inbounds for j in 1:n
+        if dot(@view(Q_new[:, j]), @view(Q_ref[:, j])) < zero(T)
+            if dist === :skew_normal
+                dp[j] = -dp[j]
+            elseif dist === :pml
+                dp[(j - 1) * 2 + 1] = -dp[(j - 1) * 2 + 1]
+            elseif dist === :mixture_normal_asym
+                dp[(j - 1) * 3 + 2] = -dp[(j - 1) * 3 + 2]
+            end
+        end
+    end
+    dp
+end
+
+"""Separable per-shock multi-start optimization of distribution parameters `dp` at fixed `Q`."""
+function _optimize_dp_fixed_Q(Z_chol::Matrix{T}, logdet_inv::T, n::Int, dist::Symbol,
+                              Q_fixed::Matrix{T},
+                              dp_warm::Union{Nothing,Vector{T}}=nothing) where {T<:AbstractFloat}
+    shocks = Z_chol * Q_fixed
+    T_obs = size(Z_chol, 1)
+    k_dp = _n_dist_params(dist)
+    dp_best = Vector{T}(undef, n * k_dp)
+    n_starts_dp = dist === :mixture_normal_asym ? 5 : 2
+    ll_total = T(T_obs) * logdet_inv
+
+    for j in 1:n
+        s_j = @view(shocks[:, j])
+        idx = (j - 1) * k_dp
+        obj_j = dpj -> -_nongaussian_shock_loglik_1d(s_j, dpj, dist)
+
+        cands = Vector{T}[]
+        if dp_warm !== nothing && length(dp_warm) == n * k_dp
+            push!(cands, Vector{T}(dp_warm[(idx + 1):(idx + k_dp)]))
+        end
+        for s in 1:n_starts_dp
+            push!(cands, _default_dist_start(T, 1, dist, s))
+        end
+        if dist === :mixture_normal_asym
+            push!(cands, T[1.1, -0.5, 0.5], T[1.1, -0.5, -0.5], T[1.1, 0.5, 0.5], T[0.0, -0.5, -0.8])
+        end
+
+        best_dp_j = copy(cands[1])
+        best_nll_j = T(Inf)
+        for dp0_j in cands
+            res = try
+                cfg = ForwardDiff.GradientConfig(obj_j, dp0_j)
+                g! = (G, x) -> ForwardDiff.gradient!(G, obj_j, x, cfg)
+                Optim.optimize(obj_j, g!, dp0_j, Optim.LBFGS(),
+                               Optim.Options(iterations=400, g_tol=max(T(1e-10), eps(T)),
+                                             f_reltol=zero(T), allow_f_increases=true))
+            catch
+                try
+                    Optim.optimize(obj_j, dp0_j, Optim.NelderMead(),
+                                   Optim.Options(iterations=400, g_tol=T(1e-8),
+                                                 allow_f_increases=true))
+                catch
+                    nothing
+                end
+            end
+            res === nothing && continue
+            v = T(Optim.minimum(res))
+            if isfinite(v) && v < best_nll_j
+                best_nll_j = v
+                best_dp_j = Vector{T}(Optim.minimizer(res))
+            end
+        end
+        if !isfinite(best_nll_j)
+            best_nll_j = T(obj_j(best_dp_j))
+        end
+        dp_best[(idx + 1):(idx + k_dp)] .= best_dp_j
+        ll_total -= best_nll_j
+    end
+    (T(ll_total), dp_best)
+end
+
+"""Re-centered Cayley SLSQP constrained non-Gaussian ML for ``(LQ)[\\mathrm{mask}]=0``."""
+function _nongaussian_cayley_slsqp_zeros(Z_chol::Matrix{T}, logdet_inv::T,
+                                         Lmat::Matrix{T}, n::Int, dist::Symbol,
+                                         mask::BitMatrix, Q0_in::Matrix{T},
+                                         dp0_in::Vector{T};
+                                         max_recenter::Int=3) where {T<:AbstractFloat}
+    n_angles = n * (n - 1) ÷ 2
+    n_dp = length(dp0_in)
+    n_p = n_angles + n_dp
+    zeros_ij = Tuple{Int,Int}[(i, j) for j in 1:n for i in 1:n if mask[i, j]]
+    q = length(zeros_ij)
+    (q == 0 || n_angles == 0) && return (T(-Inf), copy(Q0_in), copy(dp0_in), T(Inf))
+
+    Z64 = Matrix{Float64}(Z_chol)
+    L64 = Matrix{Float64}(Lmat)
+    ld64 = Float64(logdet_inv)
+    Q_cur = Matrix{Float64}(_project_so(Q0_in))
+    dp_cur = Float64.(dp0_in)
+    best_ll = T(-Inf)
+    best_Q = copy(Q0_in)
+    best_dp = copy(dp0_in)
+    best_cmax = T(Inf)
+
+    lb = vcat(fill(-4.0, n_angles), fill(-Inf, n_dp))
+    ub = vcat(fill(4.0, n_angles), fill(Inf, n_dp))
+    tol_vec = fill(1e-9, q)
+
+    for _ in 1:max_recenter
+        Q_base = Q_cur
+        nll_fn = x -> begin
+            k = view(x, 1:n_angles)
+            dp = view(x, (n_angles + 1):n_p)
+            Q = Q_base * _cayley_orthogonal(k, n)
+            -_nongaussian_loglik_from_Q(Q, dp, Z64, ld64, n, dist)
+        end
+        con_fn = k -> begin
+            B0 = L64 * (Q_base * _cayley_orthogonal(k, n))
+            [B0[i, j] for (i, j) in zeros_ij]
+        end
+
+        opt = NLopt.Opt(:LD_SLSQP, n_p)
+        NLopt.lower_bounds!(opt, lb)
+        NLopt.upper_bounds!(opt, ub)
+        res_obj = ForwardDiff.DiffResults.GradientResult(zeros(Float64, n_p))
+        cfg_obj = ForwardDiff.GradientConfig(nll_fn, zeros(Float64, n_p))
+        NLopt.min_objective!(opt, (x, g) -> begin
+            if length(g) > 0
+                ForwardDiff.gradient!(res_obj, nll_fn, x, cfg_obj)
+                copyto!(g, ForwardDiff.DiffResults.gradient(res_obj))
+                val = ForwardDiff.DiffResults.value(res_obj)
+            else
+                val = nll_fn(x)
+            end
+            isfinite(val) ? Float64(val) : 1e30
+        end)
+
+        out_con = zeros(Float64, q)
+        res_con = ForwardDiff.DiffResults.JacobianResult(out_con, zeros(Float64, n_angles))
+        cfg_con = ForwardDiff.JacobianConfig(con_fn, zeros(Float64, n_angles))
+        NLopt.equality_constraint!(opt, (res, x, g) -> begin
+            k = x[1:n_angles]
+            if length(g) > 0
+                ForwardDiff.jacobian!(res_con, con_fn, k, cfg_con)
+                copyto!(res, ForwardDiff.DiffResults.value(res_con))
+                J = ForwardDiff.DiffResults.jacobian(res_con)
+                fill!(g, 0.0)
+                @inbounds for c in 1:q, a in 1:n_angles
+                    g[a, c] = J[c, a]
+                end
+            else
+                copyto!(res, con_fn(k))
+            end
+            nothing
+        end, tol_vec)
+
+        NLopt.xtol_rel!(opt, 1e-12)
+        NLopt.ftol_rel!(opt, 1e-12)
+        NLopt.maxeval!(opt, 400)
+
+        p0 = vcat(zeros(Float64, n_angles), dp_cur)
+        minx = try
+            _, xopt, _ = NLopt.optimize(opt, p0)
+            Vector{Float64}(xopt)
+        catch
+            break
+        end
+
+        k_star = minx[1:n_angles]
+        dp_cur = minx[(n_angles + 1):n_p]
+        Q_cand = _project_so(Q_base * _cayley_orthogonal(k_star, n))
+        B_cand = L64 * Q_cand
+        cmax = maximum(abs(B_cand[i, j]) for (i, j) in zeros_ij)
+        if cmax > 1e-7
+            Q_proj, _ = _solve_cayley_for_zeros(L64, mask, Q_cand; max_recenter=4, tol=1e-24)
+            B_proj = L64 * Q_proj
+            cmax_proj = maximum(abs(B_proj[i, j]) for (i, j) in zeros_ij)
+            if cmax_proj < cmax
+                Q_cand = Q_proj
+                cmax = cmax_proj
+            end
+        end
+        Q_cur = Q_cand
+
+        if cmax <= 1e-5
+            QT = Matrix{T}(Q_cur)
+            dpT = Vector{T}(dp_cur)
+            ll_cur = T(_nongaussian_loglik_from_Q(QT, dpT, Z_chol, logdet_inv, n, dist))
+            if isfinite(ll_cur) && ll_cur > best_ll
+                best_ll = ll_cur
+                best_Q = QT
+                best_dp = dpT
+                best_cmax = T(cmax)
+            end
+        end
+        (maximum(abs, k_star) <= 0.20 && cmax <= 1e-8) && break
+    end
+    (best_ll, best_Q, best_dp, best_cmax)
+end
+
+"""Re-centered Cayley Augmented Lagrangian fallback for rank-deficient (`rk < q`) masks."""
+function _nongaussian_auglag_zeros(Z_chol::Matrix{T}, logdet_inv::T,
+                                   Lmat::Matrix{T}, n::Int, dist::Symbol,
+                                   mask::BitMatrix, Q0_in::Matrix{T},
+                                   dp0_in::Vector{T}) where {T<:AbstractFloat}
+    n_angles = n * (n - 1) ÷ 2
+    n_dp = length(dp0_in)
+    n_p = n_angles + n_dp
+    zeros_ij = Tuple{Int,Int}[(i, j) for j in 1:n for i in 1:n if mask[i, j]]
+    q = length(zeros_ij)
+    (q == 0 || n_angles == 0) && return (T(-Inf), copy(Q0_in), copy(dp0_in), T(Inf))
+
+    Z64 = Matrix{Float64}(Z_chol)
+    L64 = Matrix{Float64}(Lmat)
+    ld64 = Float64(logdet_inv)
+    Q_cur = Matrix{Float64}(_project_so(Q0_in))
+    dp_cur = Float64.(dp0_in)
+    λ = zeros(Float64, q)
+    ρ = 100.0
+    best_ll = T(-Inf)
+    best_Q = copy(Q0_in)
+    best_dp = copy(dp0_in)
+    best_cmax = T(Inf)
+
+    for _ in 1:6
+        Q_base = Q_cur
+        obj_aug = x -> begin
+            Tx = eltype(x)
+            k = view(x, 1:n_angles)
+            dp = view(x, (n_angles + 1):n_p)
+            Q = Q_base * _cayley_orthogonal(k, n)
+            nll = -_nongaussian_loglik_from_Q(Q, dp, Z64, ld64, n, dist)
+            B0 = L64 * Q
+            aug = zero(Tx)
+            @inbounds for c in 1:q
+                i, j = zeros_ij[c]
+                cij = B0[i, j]
+                aug += Tx(λ[c]) * cij + Tx(0.5 * ρ) * abs2(cij)
+            end
+            nll + aug
+        end
+        p0 = vcat(zeros(Float64, n_angles), dp_cur)
+        res = try
+            cfg = ForwardDiff.GradientConfig(obj_aug, p0)
+            g! = (G, x) -> ForwardDiff.gradient!(G, obj_aug, x, cfg)
+            Optim.optimize(obj_aug, g!, p0, Optim.LBFGS(),
+                           Optim.Options(iterations=250, g_tol=1e-9,
+                                         f_reltol=0.0, allow_f_increases=true))
+        catch
+            nothing
+        end
+        res === nothing && break
+        xstar = Vector{Float64}(Optim.minimizer(res))
+        k_star = xstar[1:n_angles]
+        dp_cur = xstar[(n_angles + 1):n_p]
+        Q_cur = _project_so(Q_base * _cayley_orthogonal(k_star, n))
+        B_cur = L64 * Q_cur
+        cvec = Float64[B_cur[i, j] for (i, j) in zeros_ij]
+        cmax = maximum(abs, cvec)
+        λ .+= ρ .* cvec
+        ρ = min(ρ * 10.0, 1e8)
+
+        Q_eval = Q_cur
+        cmax_eval = cmax
+        if cmax_eval > 1e-7
+            Q_proj, _ = _solve_cayley_for_zeros(L64, mask, Q_cur; max_recenter=4, tol=1e-24)
+            B_proj = L64 * Q_proj
+            cmax_proj = maximum(abs(B_proj[i, j]) for (i, j) in zeros_ij)
+            if cmax_proj < cmax_eval
+                Q_eval = Q_proj
+                cmax_eval = cmax_proj
+            end
+        end
+        if cmax_eval <= 1e-5
+            QT = Matrix{T}(Q_eval)
+            dpT = Vector{T}(dp_cur)
+            ll_cur = T(_nongaussian_loglik_from_Q(QT, dpT, Z_chol, logdet_inv, n, dist))
+            if isfinite(ll_cur) && ll_cur > best_ll
+                best_ll = ll_cur
+                best_Q = QT
+                best_dp = dpT
+                best_cmax = T(cmax_eval)
+            end
+        end
+        (cmax <= 1e-8 && maximum(abs, k_star) <= 0.15) && break
+    end
+    (best_ll, best_Q, best_dp, best_cmax)
 end
 
 """Restricted non-Gaussian ML: nested LR with zeros imposed on ``B_0 = LQ``."""
 function _nongaussian_restricted_lr(model::VARModel{T}, result::NonGaussianMLResult{T},
                                     mask::BitMatrix) where {T<:AbstractFloat}
     n = nvars(model)
-    Lchol = safe_cholesky(model.Sigma)
-    Lmat = Matrix{T}(Lchol)
-    perm, signs = _align_to_zeros(result.B0, mask)
-    Q_al = result.Q[:, perm] .* signs'
-    if det(Q_al) < 0
-        Q_al = copy(Q_al)
-        Q_al[:, n] .*= -one(T)
-    end
-    θ0 = n == 1 ? T[] : _orthogonal_to_givens(Q_al, n)
-    dp0 = _ml_dist_init(result, perm)
-    dist = result.distribution
     n_angles = n * (n - 1) ÷ 2
     q = count(mask)
-    θ_star, resid = _solve_givens_for_zeros(Lmat, mask, θ0)
-    pinned = resid <= T(1e-12) && n_angles <= q
+    if q == 0
+        lr0 = _restriction_lr(result.loglik, result.loglik, 0)
+        return merge(lr0, (zero_residual=zero(T), givens_dropped=0))
+    end
+
+    Lchol = safe_cholesky(model.Sigma)
+    Lmat = Matrix{T}(Lchol)
+    Z_chol = Matrix{T}(transpose(Lchol \ transpose(model.U)))
+    logdet_inv = -sum(i -> log(max(abs(Lchol[i, i]), eps(T))), 1:n)
+    dist = result.distribution
+
+    π_mask = sortperm(1:n; by=j -> Tuple(@view(mask[:, j])))
+    mask_can = mask[:, π_mask]
+
+    Q_al, orig_idx = _canonical_align_to_mask(result.B0, result.Q, mask_can)
+    dp0_warm = _ml_dist_init(result, orig_idx)
+    _align_dp_signs!(dp0_warm, Q_al, result.Q[:, orig_idx], dist, n)
+
+    if n_angles == 0
+        Q1 = Matrix{T}(I, 1, 1)
+        resid1 = _mask_zero_residual(Lmat, Q1, mask_can)
+        if resid1 > T(1e-10)
+            lr_unfeas = _restriction_lr(result.loglik, T(-Inf), q)
+            return merge(lr_unfeas, (zero_residual=resid1, givens_dropped=0))
+        end
+        ll1, _ = _optimize_dp_fixed_Q(Z_chol, logdet_inv, n, dist, Q1, dp0_warm)
+        lr1 = _restriction_lr(result.loglik, T(ll1), q)
+        return merge(lr1, (zero_residual=resid1, givens_dropped=0))
+    end
+
+    rng_det = Xoshiro(901_000 + n)
+    raw_starts = Matrix{T}[Q_al, Matrix{T}(I, n, n)]
+    for _ in 1:8
+        push!(raw_starts, _project_so(generate_Q(n, T; rng=rng_det)))
+    end
+
+    tol_feas = T === Float32 ? T(1e-8) : T(1e-10)
+    feasible_Qs = Matrix{T}[]
+    feasible_resids = T[]
+    best_unfeas_f = T(Inf)
+
+    for Qs in raw_starts
+        Qp, fp = _solve_cayley_for_zeros(Lmat, mask_can, Qs)
+        best_unfeas_f = min(best_unfeas_f, fp)
+        fp <= tol_feas || continue
+        _canonical_col_signs!(Lmat * Qp, Qp)
+        is_dup = false
+        for Qe in feasible_Qs
+            if maximum(abs.(abs.(Qe' * Qp) .- Matrix{T}(I, n, n))) < T(1e-3)
+                is_dup = true
+                break
+            end
+        end
+        is_dup && continue
+        push!(feasible_Qs, Qp)
+        push!(feasible_resids, fp)
+    end
+
+    if isempty(feasible_Qs)
+        lr_unfeas = _restriction_lr(result.loglik, T(-Inf), q)
+        return merge(lr_unfeas, (zero_residual=best_unfeas_f, givens_dropped=min(q, n_angles)))
+    end
+
+    zeros_ij = Tuple{Int,Int}[(i, j) for j in 1:n for i in 1:n if mask_can[i, j]]
+    L64 = Matrix{Float64}(Lmat)
     ℓ_r = T(-Inf)
-    if pinned || n_angles == 0
-        obj = dp -> -_nongaussian_loglik(θ_star, dp, model.U, Lchol, n;
-                                         distribution=dist)
-        res = Optim.optimize(obj, dp0, Optim.NelderMead(),
-                             Optim.Options(iterations=400, g_tol=T(1e-8),
-                                           allow_f_increases=true))
-        dp_star = Vector{T}(Optim.minimizer(res))
-        ℓ_r = _nongaussian_loglik(θ_star, dp_star, model.U, Lchol, n;
-                                  distribution=dist)
+    min_resid = minimum(feasible_resids)
+    opt_candidates = Tuple{T, Matrix{T}, Vector{T}, T}[]
+
+    for (idx_q, Q0) in enumerate(feasible_Qs)
+        Q0_64 = Matrix{Float64}(Q0)
+        con_fn0 = k -> begin
+            B0 = L64 * (Q0_64 * _cayley_orthogonal(k, n))
+            [B0[i, j] for (i, j) in zeros_ij]
+        end
+        Jc = ForwardDiff.jacobian(con_fn0, zeros(Float64, n_angles))
+        sv = svdvals(Jc)
+        sv_max = isempty(sv) ? 0.0 : sv[1]
+        rk = count(>(1e-7 * max(1.0, sv_max)), sv)
+
+        dp0_q = copy(dp0_warm)
+        _align_dp_signs!(dp0_q, Q0, Q_al, dist, n)
+
+        if rk >= n_angles
+            ll_pin, _ = _optimize_dp_fixed_Q(Z_chol, logdet_inv, n, dist, Q0, dp0_q)
+            if isfinite(ll_pin) && ll_pin > ℓ_r
+                ℓ_r = T(ll_pin)
+            end
+            min_resid = min(min_resid, feasible_resids[idx_q])
+            continue
+        end
+
+        ll_q0, dp_q0 = _optimize_dp_fixed_Q(Z_chol, logdet_inv, n, dist, Q0, dp0_q)
+        if isfinite(ll_q0)
+            push!(opt_candidates, (T(ll_q0), Q0, dp_q0, feasible_resids[idx_q]))
+        end
+
+        dp_cands = Vector{T}[dp_q0]
+        if maximum(abs.(dp0_q - dp_q0)) > T(1e-3)
+            push!(dp_cands, dp0_q)
+        end
+        n_extra_dp = dist === :mixture_normal_asym ? 3 : 2
+        for s in 1:n_extra_dp
+            ds = _default_dist_start(T, n, dist, s)
+            if all(c -> maximum(abs.(ds - c)) > T(1e-3), dp_cands)
+                push!(dp_cands, ds)
+            end
+        end
+
+        for dp_start in dp_cands
+            ll_s, Q_s, dp_s, cmax_s = _nongaussian_cayley_slsqp_zeros(
+                Z_chol, logdet_inv, Lmat, n, dist, mask_can, Q0, dp_start)
+            if rk < q || !isfinite(ll_s)
+                ll_a, Q_a, dp_a, cmax_a = _nongaussian_auglag_zeros(
+                    Z_chol, logdet_inv, Lmat, n, dist, mask_can, Q0, dp_start)
+                if isfinite(ll_a) && (!isfinite(ll_s) || ll_a > ll_s)
+                    ll_s, Q_s, dp_s, cmax_s = ll_a, Q_a, dp_a, cmax_a
+                end
+            end
+            if isfinite(ll_s)
+                _canonical_col_signs!(Lmat * Q_s, Q_s)
+                push!(opt_candidates, (T(ll_s), Q_s, dp_s, T(cmax_s)))
+            end
+        end
     end
-    if !pinned && n_angles > 0
-        ℓ_s = _nongaussian_slsqp_zeros(model.U, Lchol, Lmat, n, dist, mask,
-                                       θ_star, dp0)
-        ℓ_r = max(ℓ_r, ℓ_s)
+
+    if !isempty(opt_candidates)
+        sort!(opt_candidates; by=x -> x[1], rev=true)
+        polished_Qs = Matrix{T}[]
+        for (ll_c, Q_c, dp_c, cmax_c) in opt_candidates
+            is_dup = false
+            for Qp in polished_Qs
+                if maximum(abs.(abs.(Qp' * Q_c) .- Matrix{T}(I, n, n))) < T(1e-3)
+                    is_dup = true
+                    break
+                end
+            end
+            is_dup && continue
+            push!(polished_Qs, Q_c)
+            dp_pol_in = copy(dp_c)
+            _align_dp_signs!(dp_pol_in, Q_c, Q_c, dist, n)
+            ll_pol, _ = _optimize_dp_fixed_Q(Z_chol, logdet_inv, n, dist, Q_c, dp_pol_in)
+            ll_best_c = max(ll_c, T(ll_pol))
+            if isfinite(ll_best_c) && ll_best_c > ℓ_r
+                ℓ_r = T(ll_best_c)
+            end
+            min_resid = min(min_resid, _mask_zero_residual(Lmat, Q_c, mask_can))
+            length(polished_Qs) >= 2 && break
+        end
     end
-    lr = _restriction_lr(result.loglik, ℓ_r, q)
-    merge(lr, (zero_residual=resid, givens_dropped=min(q, n_angles)))
+
+    lr = _restriction_lr(result.loglik, T(ℓ_r), q)
+    merge(lr, (zero_residual=min_resid, givens_dropped=min(q, n_angles)))
 end
 
 """
@@ -1077,6 +1627,30 @@ function test_overidentification(model::VARModel{T}, result::NonGaussianGMMResul
     mask = _zero_mask(restrictions, n)
     wald, _, _, _, _ = _aligned_overid_wald(result, model, result.B0, result.se, mask)
     wald === nothing && return _just_id_overid(T; note="GMM result has no usable SEs or vcov for a Wald test of B₀")
+    extra = Dict{Symbol, Any}(:method => :wald, :df => wald.df, :just_identified => false)
+    _with_wald!(extra, wald)
+    IdentifiabilityTestResult{T}(:overidentification, wald.statistic, wald.pvalue,
+                                  wald.pvalue >= T(0.05), extra)
+end
+
+function test_overidentification(model::VARModel{T}, result::LewisTVVResult{T};
+                                  restrictions=nothing,
+                                  n_bootstrap::Int=999,
+                                  seed::Union{Integer,Nothing}=nothing,
+                                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    rng = _resolve_repro_rng(rng, seed)
+    if restrictions === nothing
+        identified = isnan(result.J_pvalue) ? true : result.J_pvalue >= T(0.05)
+        return IdentifiabilityTestResult{T}(:overidentification, result.J, result.J_pvalue,
+                                            identified,
+                                            Dict{Symbol, Any}(:method => :hansen_j,
+                                                               :lags => result.lags,
+                                                               :just_identified => false))
+    end
+    n = size(result.B0, 1)
+    mask = _zero_mask(restrictions, n)
+    wald, _, _, _, _ = _aligned_overid_wald(result, model, result.B0, result.se, mask)
+    wald === nothing && return _just_id_overid(T; note="Lewis TVV result has no usable SEs or vcov for a Wald test of B₀")
     extra = Dict{Symbol, Any}(:method => :wald, :df => wald.df, :just_identified => false)
     _with_wald!(extra, wald)
     IdentifiabilityTestResult{T}(:overidentification, wald.statistic, wald.pvalue,
@@ -1430,4 +2004,198 @@ function test_restrictions(result::GARCHSVARResult{T}, restrictions) where {T<:A
                                        allow_f_increases=true))
     ℓ_r = -T(Optim.minimum(res))
     _restriction_lr(result.loglik, ℓ_r, count(mask))
+end
+
+# =============================================================================
+# Parameter-space covariance transformation under label_shocks
+# =============================================================================
+
+function _givens_chart_M(Q_old::AbstractMatrix{T}, Q_new::AbstractMatrix{T},
+                         perm::Vector{Int}, signs::Vector{Int}, n::Int) where {T<:AbstractFloat}
+    P_signed = zeros(T, n, n)
+    @inbounds for j in 1:n
+        P_signed[perm[j], j] = T(signs[j])
+    end
+    S_old = det(Q_old) < zero(T) ? Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n]) : I
+    S_new = det(Q_new) < zero(T) ? Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n]) : I
+    Matrix{T}(S_old * P_signed * S_new)
+end
+
+function _givens_chart_jacobian(θ_old::AbstractVector{<:Real}, M::AbstractMatrix{T},
+                                θ_new::AbstractVector{<:Real}, n::Int) where {T<:AbstractFloat}
+    n_angles = n * (n - 1) ÷ 2
+    n_angles == 0 && return Matrix{T}(I, 0, 0)
+    J = try
+        ForwardDiff.jacobian(
+            θ -> _orthogonal_to_givens(_givens_to_orthogonal(θ, n) * M, n),
+            Vector{T}(θ_old))
+    catch
+        fill(T(NaN), n_angles, n_angles)
+    end
+    if size(J) == (n_angles, n_angles) && all(isfinite, J)
+        return Matrix{T}(J)
+    end
+    J_new = ForwardDiff.jacobian(θ -> vec(_givens_to_orthogonal(θ, n)), Vector{T}(θ_new))
+    J_old = ForwardDiff.jacobian(θ -> vec(_givens_to_orthogonal(θ, n) * M), Vector{T}(θ_old))
+    Matrix{T}(pinv(J_new) * J_old)
+end
+
+function _transform_statid_vcov(result::NonGaussianMLResult{T}, perm::Vector{Int},
+                                signs::Vector{Int}, n::Int, Q_new) where {T<:AbstractFloat}
+    V = result.vcov
+    (perm == 1:n && all(==(1), signs)) && return V
+    (isempty(V) || Q_new === nothing) && return V
+    n_angles = n * (n - 1) ÷ 2
+    k_dp = try
+        _n_dist_params(result.distribution)
+    catch
+        return V
+    end
+    n_total = n_angles + n * k_dp
+    size(V) == (n_total, n_total) || return V
+    B = zeros(T, n_total, n_total)
+    if n_angles > 0
+        θ_old = _Q_givens_angles(result.Q, n)
+        M = _givens_chart_M(result.Q, Q_new, perm, signs, n)
+        θ_new = _Q_givens_angles(Q_new, n)
+        B[1:n_angles, 1:n_angles] .= _givens_chart_jacobian(θ_old, M, θ_new, n)
+    end
+    dist = result.distribution
+    @inbounds for j_new in 1:n
+        j_old = perm[j_new]
+        flip = signs[j_new] < 0
+        for r in 1:k_dp
+            sgn = one(T)
+            if flip && ((dist === :skew_normal && r == 1) ||
+                        (dist === :pml && r == 1) ||
+                        (dist === :mixture_normal_asym && r == 2))
+                sgn = -one(T)
+            end
+            B[n_angles + (j_new - 1) * k_dp + r,
+              n_angles + (j_old - 1) * k_dp + r] = sgn
+        end
+    end
+    Vn = B * V * B'
+    Matrix{T}((Vn + Vn') / 2)
+end
+
+function _transform_statid_vcov(result::GARCHSVARResult{T}, perm::Vector{Int},
+                                signs::Vector{Int}, n::Int, Q_new) where {T<:AbstractFloat}
+    V = result.vcov
+    (perm == 1:n && all(==(1), signs)) && return V
+    (isempty(V) || Q_new === nothing) && return V
+    n_angles = n * (n - 1) ÷ 2
+    n_total = n_angles + 3 * n
+    if size(V) == (n_total, n_total)
+        B = zeros(T, n_total, n_total)
+        if n_angles > 0
+            θ_old = _Q_givens_angles(result.Q, n)
+            M = _givens_chart_M(result.Q, Q_new, perm, signs, n)
+            θ_new = _Q_givens_angles(Q_new, n)
+            B[1:n_angles, 1:n_angles] .= _givens_chart_jacobian(θ_old, M, θ_new, n)
+        end
+        @inbounds for j_new in 1:n
+            j_old = perm[j_new]
+            for r in 1:3
+                B[n_angles + (j_new - 1) * 3 + r,
+                  n_angles + (j_old - 1) * 3 + r] = one(T)
+            end
+        end
+        Vn = B * V * B'
+        return Matrix{T}((Vn + Vn') / 2)
+    elseif n_angles > 0 && size(V) == (n_angles, n_angles)
+        θ_old = _Q_givens_angles(result.Q, n)
+        M = _givens_chart_M(result.Q, Q_new, perm, signs, n)
+        θ_new = _Q_givens_angles(Q_new, n)
+        J = _givens_chart_jacobian(θ_old, M, θ_new, n)
+        Vn = J * V * J'
+        return Matrix{T}((Vn + Vn') / 2)
+    end
+    V
+end
+
+function _transform_statid_vcov(result::Union{NonGaussianGMMResult{T}, LewisTVVResult{T}},
+                                perm::Vector{Int}, signs::Vector{Int}, n::Int,
+                                Q_new) where {T<:AbstractFloat}
+    V = result.vcov
+    (isempty(V) || Q_new === nothing) && return V
+    n_angles = n * (n - 1) ÷ 2
+    (n_angles > 0 && size(V) == (n_angles, n_angles)) || return V
+    Q_old = result.Q
+    has_raw_theta = length(result.theta) == n_angles && all(isfinite, result.theta)
+    if perm == 1:n && all(==(1), signs)
+        has_raw_theta || return V
+        Q_raw_id = _givens_to_orthogonal(Vector{T}(result.theta), n)
+        maximum(abs.(Q_raw_id - Q_new)) <= T(1e-10) && return V
+    end
+    θ_old, M = if has_raw_theta
+        Q_raw = _givens_to_orthogonal(Vector{T}(result.theta), n)
+        S_new = det(Q_new) < zero(T) ? Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n]) : I
+        Vector{T}(result.theta), Matrix{T}(Q_raw' * (Q_new * S_new))
+    else
+        _Q_givens_angles(Q_old, n), _givens_chart_M(Q_old, Q_new, perm, signs, n)
+    end
+    θ_new = _Q_givens_angles(Q_new, n)
+    J = _givens_chart_jacobian(θ_old, M, θ_new, n)
+    Vn = J * V * J'
+    Matrix{T}((Vn + Vn') / 2)
+end
+
+function _transform_statid_vcov(result::SmoothTransitionSVARResult{T}, perm::Vector{Int},
+                                signs::Vector{Int}, n::Int, Q_new) where {T<:AbstractFloat}
+    V = result.vcov
+    (perm == 1:n && all(==(1), signs)) && return V
+    (isempty(V) || Q_new === nothing) && return V
+    n_L = n * (n + 1) ÷ 2
+    n_angles = n * (n - 1) ÷ 2
+    pdim = n_L + n_angles + n + 2
+    size(V) == (pdim, pdim) || return V
+    B = zeros(T, pdim, pdim)
+    @inbounds for k in 1:n_L
+        B[k, k] = one(T)
+    end
+    if n_angles > 0
+        θ_old = _Q_givens_angles(result.Q, n)
+        M = _givens_chart_M(result.Q, Q_new, perm, signs, n)
+        θ_new = _Q_givens_angles(Q_new, n)
+        B[(n_L + 1):(n_L + n_angles), (n_L + 1):(n_L + n_angles)] .=
+            _givens_chart_jacobian(θ_old, M, θ_new, n)
+    end
+    off_lam = n_L + n_angles
+    @inbounds for j_new in 1:n
+        B[off_lam + j_new, off_lam + perm[j_new]] = one(T)
+    end
+    B[pdim - 1, pdim - 1] = one(T)
+    B[pdim, pdim] = one(T)
+    Vn = B * V * B'
+    Matrix{T}((Vn + Vn') / 2)
+end
+
+function _transform_statid_vcov(result::Union{MarkovSwitchingSVARResult{T},
+                                              ExternalVolatilitySVARResult{T}},
+                                perm::Vector{Int}, signs::Vector{Int}, n::Int,
+                                ::Any) where {T<:AbstractFloat}
+    V = result.vcov
+    (perm == 1:n && all(==(1), signs)) && return V
+    isempty(V) && return V
+    nn = n * n
+    pdim = size(V, 1)
+    (pdim == size(V, 2) && pdim >= nn && (pdim - nn) % n == 0) || return V
+    K_blocks = (pdim - nn) ÷ n
+    B = zeros(T, pdim, pdim)
+    @inbounds for j_new in 1:n
+        j_old = perm[j_new]
+        s = T(signs[j_new])
+        for i in 1:n
+            B[i + (j_new - 1) * n, i + (j_old - 1) * n] = s
+        end
+    end
+    @inbounds for k in 1:K_blocks
+        off = nn + (k - 1) * n
+        for j_new in 1:n
+            B[off + j_new, off + perm[j_new]] = one(T)
+        end
+    end
+    Vn = B * V * B'
+    Matrix{T}((Vn + Vn') / 2)
 end

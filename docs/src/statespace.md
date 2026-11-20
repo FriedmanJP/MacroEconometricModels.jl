@@ -4,9 +4,9 @@ The state-space module provides a general, user-specified linear-Gaussian state-
 
 The univariate siblings are [ARIMA Models](@ref arima_page), whose exact MLE runs through the same kernel, and [Volatility Models](@ref volatility_page).
 
-- **General system** — any single-block observation/state pair via [`StateSpaceModel`](@ref) and [`estimate_statespace`](@ref).
+- **General system** — any single-block observation/state pair via [`StateSpaceModel`](@ref) and [`estimate_statespace`](@ref), with optional state-observation noise cross-covariance `G`.
 - **Convenience wrappers** — [`local_level`](@ref), [`local_linear_trend`](@ref), [`estimate_tvp_reg`](@ref).
-- **Diagnostics & forecasting** — standardized one-step residuals, filtered/smoothed states with variances, and multi-step [`forecast`](@ref).
+- **Steady-state & forecasting** — generalized Schur Riccati solver via [`steady_state_kalman`](@ref) / [`SteadyStateKalman`](@ref), standardized one-step residuals, filtered/smoothed states with variances, and multi-step [`forecast`](@ref).
 
 ## Quick Start
 
@@ -57,8 +57,8 @@ Every model in this module is a single-block linear-Gaussian system:
 
 ```math
 \begin{aligned}
-y_t &= Z \, \alpha_t + d + \varepsilon_t, \qquad \varepsilon_t \sim N(0, H) \\
-\alpha_{t+1} &= T \, \alpha_t + c + R \, \eta_t, \qquad \eta_t \sim N(0, Q)
+y_t &= Z \, \alpha_t + d + \varepsilon_t \\
+\alpha_{t+1} &= T \, \alpha_t + c + R \, \eta_t, \qquad \operatorname{Cov}\begin{pmatrix} \eta_t \\ \varepsilon_t \end{pmatrix} = \begin{pmatrix} Q & G \\ G' & H \end{pmatrix}
 \end{aligned}
 ```
 
@@ -72,6 +72,7 @@ where:
 - ``c`` is the ``n_x \times 1`` state intercept vector
 - ``R`` is the ``n_x \times n_\eta`` state innovation selection matrix
 - ``\eta_t \sim N(0, Q)`` is the ``n_\eta \times 1`` state disturbance vector with ``n_\eta \times n_\eta`` covariance ``Q``
+- ``G`` is the optional ``n_\eta \times n_\text{obs}`` cross-covariance ``\operatorname{Cov}(\eta_t, \varepsilon_t)`` (`nothing` when disturbances are uncorrelated)
 
 Filtering and smoothing run through the shared kernel `_kalman_filter!` / `_rts_smoother`; the estimator maximizes the prediction-error-decomposition log-likelihood ``\sum_t \log p(y_t \mid y_{1:t-1})``.
 
@@ -241,7 +242,162 @@ round(tanh(m_ar.theta[1]), digits=2)   # recovered persistence φ
 
 The builder returns ``\hat\varphi = 0.75`` against the simulated 0.7, with ``\hat\sigma^2_\eta = 0.84`` and ``\hat\sigma^2_\varepsilon = 0.29`` against the true 1.0 and 0.25 — the usual trade-off in an unobserved-components model, where a slightly overstated persistence buys a slightly understated state variance. `theta` holds the raw ``\hat\theta`` here, not natural variances, because the default `theta_transform=identity` applies; the wrappers pass `exp` instead, which is why their `theta` is directly readable as variances.
 
-A fixed-matrix `StateSpaceModel(Z, H, T, Q; ...)` builds an unfitted spec that `estimate_statespace(ss, y)` filters and smooths without optimization.
+A fixed-matrix `StateSpaceModel(Z, H, T, Q; G=nothing, ...)` builds an unfitted spec that `estimate_statespace(ss, y)` filters and smooths without optimization; parametric builders also accept `G` in the returned `NamedTuple`.
+
+---
+
+## Steady-State Kalman Filter
+
+For time-invariant observable systems, [`steady_state_kalman`](@ref) computes the asymptotic one-step-ahead predicted covariance, filtered covariance, Kalman gain, innovation covariance, and closed-loop eigenvalues without iterating over a sample. Following Anderson & Moore (1979, §5.5) and Durbin & Koopman (2012, §4.11), the asymptotic predicted covariance solves the discrete-time algebraic Riccati equation (DARE):
+
+```math
+\begin{aligned}
+P_\text{pred} &= T \, P_\text{pred} \, T' + R Q R' - \bigl(T P_\text{pred} Z' + R G\bigr) \, F_\text{innov}^{-1} \, \bigl(T P_\text{pred} Z' + R G\bigr)' \\
+F_\text{innov} &= Z \, P_\text{pred} \, Z' + H, \qquad K_\text{gain} = P_\text{pred} \, Z' \, F_\text{innov}^{-1}
+\end{aligned}
+```
+
+where:
+- ``P_\text{pred}`` is the ``n_x \times n_x`` steady-state predicted state covariance
+- ``T`` is the ``n_x \times n_x`` state transition matrix
+- ``R`` is the ``n_x \times n_\eta`` state innovation selection matrix
+- ``Q`` is the ``n_\eta \times n_\eta`` state disturbance covariance
+- ``Z`` is the ``n_\text{obs} \times n_x`` observation matrix
+- ``G`` is the ``n_\eta \times n_\text{obs}`` cross-covariance ``\operatorname{Cov}(\eta_t, \varepsilon_t)`` (zero when `G === nothing`)
+- ``H`` is the ``n_\text{obs} \times n_\text{obs}`` observation noise covariance
+- ``F_\text{innov}`` is the ``n_\text{obs} \times n_\text{obs}`` steady-state innovation covariance
+- ``K_\text{gain}`` is the ``n_x \times n_\text{obs}`` steady-state filtered Kalman gain
+
+!!! note "Technical Note"
+    The internal solver computes the ``2n_x \times 2n_x`` symplectic pencil generalized real Schur decomposition (Pappas, Laub & Sandell 1980), switches to a Van Dooren (1981) QR-compressed extended pencil when ``H`` is singular or zero, falls back to the Structure-Preserving Doubling Algorithm if needed, and applies Newton–Kleinman Lyapunov polishing. Closed-loop eigenvalues use ``T - K_\text{dare} Z`` with ``K_\text{dare} = (T P_\text{pred} Z' + R G) F_\text{innov}^{-1}``.
+
+```@example ss
+ssk = steady_state_kalman(m)
+(P_pred = round.(ssk.P_pred, digits=2),
+ P_filt = round.(ssk.P_filt, digits=2),
+ K_gain = round.(ssk.K_gain, digits=4),
+ eigs = round.(abs.(ssk.closed_loop_eigs), digits=4))
+```
+
+On the Nile local-level fit, the steady-state predicted variance equals ``5490.62`` and the steady-state filtered variance equals ``4027.16``, matching the terminal filtered covariance ``m.\text{filtered\_cov}[:, :, \text{end}]`` directly. The steady-state Kalman gain ``0.2665`` places roughly one quarter of each new innovation into the level update, while the closed-loop eigenvalue modulus ``0.7335`` confirms exponential stability of the filter recursion.
+
+For a system with correlated state and observation disturbances, pass `G` to [`StateSpaceModel`](@ref) or directly to `steady_state_kalman(Z, H, Tt, RQR; G=G)`:
+
+```@example ss
+Z_c = [1.0 0.0]; H_c = reshape([0.5], 1, 1)
+T_c = [0.8 0.1; 0.0 0.5]; Q_c = [0.6 0.0; 0.0 0.3]
+G_c = reshape([0.3, 0.1], 2, 1)
+ssk_c = steady_state_kalman(Z_c, H_c, T_c, Q_c; G=G_c)
+round.(ssk_c.K_gain, digits=4)
+```
+
+With positive cross-covariance ``G_c = [0.3, 0.1]'``, the steady-state filtered gain shifts to ``[0.4635, -0.0558]'`` and both closed-loop eigenvalues remain inside the unit circle (``0.1346`` and ``0.4783``).
+
+| Field | Type | Description |
+|---|---|---|
+| `P_pred` | `Matrix{T}` | ``n_x \times n_x`` steady-state predicted state covariance |
+| `P_filt` | `Matrix{T}` | ``n_x \times n_x`` steady-state filtered state covariance |
+| `K_gain` | `Matrix{T}` | ``n_x \times n_\text{obs}`` steady-state filtered Kalman gain |
+| `F_innov` | `Matrix{T}` | ``n_\text{obs} \times n_\text{obs}`` steady-state innovation covariance |
+| `closed_loop_eigs` | `Vector{Complex{T}}` | Closed-loop filter transition eigenvalues |
+
+---
+
+## Steady-State LQG Rational Inattention
+
+Sims (2003) models an agent tracking an evolving linear-Gaussian state who chooses an endogenous signal distribution subject to a Shannon mutual-information constraint. In steady state, the joint tracking and filtering problem is a Linear-Quadratic-Gaussian (LQG) **Rational Inattention** problem (Sims 2003; Afrouzi & Yang 2021):
+
+```math
+\min_{\{\Sigma_{\text{post}}, Y\}} \operatorname{tr}\!\left(\Omega_{\text{benefit}} \, \Sigma_{\text{post}}\right) + \omega \cdot \frac{1}{2}\log\det\!\left(\Sigma_{\text{prior}} \Sigma_{\text{post}}^{-1}\right)
+\qquad \text{s.t.} \qquad 0 \preceq \Sigma_{\text{post}} \preceq \Sigma_{\text{prior}}, \quad \Sigma_{\text{prior}} = A \Sigma_{\text{post}} A' + B B'
+```
+
+where:
+- ``(A, B)`` govern state transitions ``x_{t+1} = A x_t + B \varepsilon_{t+1}`` with tracking target matrix ``H`` and quadratic action weight ``M`` (`\Omega_{\text{benefit}}` derived from `H`, `M`, discount ``\beta``, and feedback `B_u`),
+- ``\omega > 0`` is the shadow cost per nat of mutual information (or supplied indirectly via Shannon channel capacity `capacity` in `:bits` or `:nats`),
+- ``\Sigma_{\text{prior}}`` and ``\Sigma_{\text{post}}`` are the steady-state prior and posterior error covariance matrices linked by a water-filling eigenvalue floor,
+- ``Y`` is the low-rank endogenous signal extraction matrix giving steady-state Kalman gain ``K_{\text{gain}}``.
+
+[`RationalInattentionProblem`](@ref) specifies the LQG tracking problem and [`solve_ri_kalman`](@ref) returns a [`SimsKalmanSolution`](@ref) using either inverse-free whitened water-filling (`method=:water_filling`) or a Woodbury log-det barrier L-BFGS solver (`method=:logdet_barrier`).
+
+```@example ss
+prob_ri = RationalInattentionProblem([0.85 0.1; 0.0 0.6], [0.5 0.0; 0.0 0.4],
+                                     [1.0 0.0; 0.0 0.5]; beta=0.99, capacity=1.0, units=:bits)
+ri_sol = solve_ri_kalman(prob_ri)
+report(ri_sol)
+(capacity_bits = round(ri_sol.capacity_bits, digits=4),
+ signal_rank = ri_sol.signal_rank,
+ loss = round(ri_sol.expected_loss, digits=4))
+```
+
+### Dynamic Transition Path and Joint State-Space Dynamics
+
+When initial uncertainty ``\Sigma_{1|0} = \Sigma_{\text{init}}`` sits away from the steady state (for instance after a regime shift or uncertainty shock), [`solve_ri_transition`](@ref) solves Afrouzi & Yang's (2021) dynamic forward–backward Information Euler system anchored at the terminal steady state, returning [`DynamicRISolution`](@ref). From the steady-state [`SimsKalmanSolution`](@ref), [`to_statespace`](@ref) and [`to_abcd`](@ref) build the joint ``2n``-dimensional state-space law of motion over true states ``x_t`` and rational expectations ``\hat{x}_{t|t}`` driven by orthogonal fundamental shocks ``w_t`` and endogenous processing noise ``\tilde{\psi}_t``, while [`irf`](@ref), [`fevd`](@ref), and [`simulate`](@ref) compute sluggish inertial action responses and the processing-noise variance share (Luo 2008).
+
+```@example ss
+dyn_ri = solve_ri_transition(prob_ri, [0.8 0.0; 0.0 0.5]; T_path=40)
+report(dyn_ri)
+irf_ri = irf(ri_sol, 16; observables=:actions)
+fevd_ri = fevd(ri_sol, 16; observables=:actions)
+sim_ri = simulate(ri_sol, 120; seed=42)
+m_shocks = size(prob_ri.B, 2)
+(init_bits = round(dyn_ri.capacity_bits_path[1]; digits=4),
+ term_bits = round(dyn_ri.capacity_bits_path[end]; digits=4),
+ ri_noise_share_h1 = round(sum(fevd_ri.proportions[1, (m_shocks + 1):end, 1]); digits=4),
+ sim_T = size(sim_ri.actions, 1))
+```
+
+### Empirical Estimation and Coibion–Gorodnichenko Diagnostics
+
+Given observed actions, states, or noisy survey aggregates, [`estimate_ri`](@ref) estimates Shannon channel capacity ``\kappa`` (or shadow cost ``\omega``) jointly with structural state-space parameters via state-space MLE (`method=:mle`, returning Hessian or sandwich standard errors and an exact FIRE likelihood-ratio test) or adaptive RWMH (`method=:bayes`), returning an [`RIEstimationResult`](@ref). To test rational-inattention information rigidity directly from forecast errors and revisions (Coibion & Gorodnichenko 2015), [`implied_cg_slope`](@ref) derives the population Kalman predictability slope and [`coibion_gorodnichenko_test`](@ref) runs the Newey–West HAC regression returning [`CGTestResult`](@ref):
+
+```math
+y_{t+h} - \bar{F}_t y_{t+h} = \alpha + \beta_{\text{CG}} \bigl(\bar{F}_t y_{t+h} - \bar{F}_{t-1} y_{t+h}\bigr) + \varepsilon_{t+h}, \qquad \beta_{\text{CG}}^{\text{AR(1)}} = \frac{1 - G}{G}
+```
+
+where:
+- ``y_{t+h} - \bar{F}_t y_{t+h}`` is the consensus forecast error at horizon ``h``,
+- ``\bar{F}_t y_{t+h} - \bar{F}_{t-1} y_{t+h}`` is the consensus forecast revision,
+- ``G = 1 - 2^{-2\kappa}`` is the scalar AR(1) steady-state Kalman gain implied by Shannon capacity ``\kappa`` bits.
+
+```@example ss
+using Random
+prob_1d = RationalInattentionProblem(0.8, 1.0, 1.0; capacity=0.75)
+sol_1d = solve_ri_kalman(prob_1d)
+sim_1d = simulate(sol_1d, 100; burn=40, seed=42)
+ri_est = estimate_ri(prob_1d, hcat(sim_1d.states, sim_1d.actions); method=:mle)
+cg_pop = implied_cg_slope(sol_1d)
+rng_cg = Random.Xoshiro(920)
+rev_cg = randn(rng_cg, 80)
+fe_cg = cg_pop .* rev_cg .+ 0.3 .* randn(rng_cg, 80)
+cg_res = coibion_gorodnichenko_test(fe_cg .+ rev_cg, rev_cg, zeros(80))
+report(ri_est)
+(kappa_hat = round(ri_est.capacity; digits=3),
+ cg_implied = round(cg_pop; digits=3),
+ cg_ols = round(cg_res.beta_cg; digits=3))
+```
+
+### Multi-Block Price-Setting Attention Allocation
+
+Maćkowiak & Wiederholt (2009, 2015) endogenize how a decision maker splits scarce total attention ``\kappa_{\text{total}} = \kappa_{\text{agg}} + \kappa_{\text{idio}}`` across independent aggregate and idiosyncratic fundamentals under strategic complementarity ``r \in [0, 1)``:
+
+```math
+\max_{\kappa_{\text{agg}},\, \kappa_{\text{idio}} \ge 0} \; -L_{\text{agg}}(\kappa_{\text{agg}}) - L_{\text{idio}}(\kappa_{\text{idio}}) \qquad \text{s.t.} \qquad \kappa_{\text{agg}} + \kappa_{\text{idio}} \le \kappa_{\text{total}}
+```
+
+where:
+- ``L_{\text{agg}}(\kappa_{\text{agg}})`` and ``L_{\text{idio}}(\kappa_{\text{idio}})`` are block LQG tracking losses solved to common marginal shadow cost ``\omega``,
+- ``r \in [0, 1)`` amplifies aggregate sluggishness via the fixed-point best-response pricing multiplier ``p_t = (1 - r) E_t[\Delta_t + \dots]``.
+
+[`solve_mw_attention`](@ref) computes exact water-filling capacity shares and equilibrium impulse responses in [`MWAttentionResult`](@ref).
+
+```@example ss
+agg_blk = (; rho=0.88, sigma=0.02, weight=1.0, beta=0.99)
+idio_blk = (; rho=0.75, sigma=0.10, weight=1.0, beta=0.99)
+mw_res = solve_mw_attention(agg_blk, idio_blk; capacity=2.0, strategic_complementarity=0.7, horizon=20)
+report(mw_res)
+(kappa_agg = round(mw_res.kappa_agg; digits=3), kappa_idio = round(mw_res.kappa_idio; digits=3))
+```
 
 ---
 
@@ -292,5 +448,14 @@ refs(m)
 
 ## References
 
+- Afrouzi, H., & Yang, C. (2021). Dynamic Rational Inattention and the Phillips Curve. CESifo Working Paper No. 8840.
+- Anderson, B. D. O., & Moore, J. B. (1979). *Optimal Filtering*. Prentice-Hall. ISBN 978-0136381224.
 - Durbin, J. and Koopman, S. J. (2012). *Time Series Analysis by State Space Methods*, 2nd ed. Oxford University Press. [doi:10.1093/acprof:oso/9780199641178.001.0001](https://doi.org/10.1093/acprof:oso/9780199641178.001.0001)
 - Harvey, A. C. (1989). *Forecasting, Structural Time Series Models and the Kalman Filter*. Cambridge University Press. [doi:10.1017/CBO9781107049994](https://doi.org/10.1017/CBO9781107049994)
+- Luo, Y. (2008). Consumption Dynamics under Information Processing Constraints. *Review of Economic Dynamics*, 11(2), 366--385. [doi:10.1016/j.red.2007.07.003](https://doi.org/10.1016/j.red.2007.07.003)
+- Pappas, T., Laub, A. J., & Sandell, N. R. (1980). On the Numerical Solution of the Discrete-Time Algebraic Riccati Equation. *IEEE Transactions on Automatic Control*, 25(4), 631–641. [doi:10.1109/TAC.1980.1102434](https://doi.org/10.1109/TAC.1980.1102434)
+- Sims, C. A. (2003). Implications of Rational Inattention. *Journal of Monetary Economics*, 50(3), 665–690. [doi:10.1016/S0304-3932(03)00029-1](https://doi.org/10.1016/S0304-3932(03)00029-1)
+- Van Dooren, P. (1981). A Generalized Eigenvalue Approach for Solving Riccati Equations. *SIAM Journal on Scientific and Statistical Computing*, 2(2), 121–135. [doi:10.1137/0902010](https://doi.org/10.1137/0902010)
+- Coibion, O., & Gorodnichenko, Y. (2015). Information Rigidity and the Expectations Formation Process: A Simple Framework and New Facts. *American Economic Review*, 105(8), 2644–2678. [doi:10.1257/aer.20110306](https://doi.org/10.1257/aer.20110306)
+- Maćkowiak, B., & Wiederholt, M. (2009). Optimal Sticky Prices under Rational Inattention. *American Economic Review*, 99(3), 769–803. [doi:10.1257/aer.99.3.769](https://doi.org/10.1257/aer.99.3.769)
+- Maćkowiak, B., & Wiederholt, M. (2015). Business Cycle Dynamics under Rational Inattention. *Review of Economic Studies*, 82(4), 1502–1532. [doi:10.1093/restud/rdv027](https://doi.org/10.1093/restud/rdv027)

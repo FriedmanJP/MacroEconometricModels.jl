@@ -526,3 +526,133 @@ function plot_result(m::PanelCointRegModel{T}; title::String="",
     save_path !== nothing && save_plot(p, save_path)
     p
 end
+
+# =============================================================================
+# Discrete-Choice Rational Inattention (#923)
+# =============================================================================
+
+# Panel of state-contingent conditional choice probabilities P(j | s) over integer states.
+function _ri_dc_cond_panel(sol::RIDiscreteChoiceSolution{T}) where {T}
+    J, S = size(sol.cond_probs)
+    states = collect(1:S)
+    alt_names = String["Alt $j" for j in 1:J]
+    keys = String["a$j" for j in 1:J]
+    cols = Pair{String,Vector{T}}[keys[j] => vec(sol.cond_probs[j, :]) for j in 1:J]
+    data_json = _keyed_rows_json(states, cols)
+    s_json = _series_json(alt_names, _colors_for(alt_names); keys=keys)
+    refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}," *
+           "{\"value\":1,\"color\":\"#999\",\"dash\":\"4,3\"}]"
+    id = _next_plot_id("ridc_cond")
+    js = _render_line_js(id, data_json, s_json; ref_lines_json=refs, integer_x=true,
+                         xlabel="State s", ylabel="P(j | s)")
+    ptitle = "State-Contingent Choice Probabilities (I = $(_fmt(sol.mutual_info_bits; digits=3)) bits)"
+    _PanelSpec(id, ptitle, js)
+end
+
+# Horizontal KKT certificate & unconditional probability chart with threshold line at 1.0.
+function _ri_dc_kkt_panel(sol::RIDiscreteChoiceSolution{T}) where {T}
+    J = length(sol.kkt_multipliers)
+    active = Set(sol.consideration_set)
+    rows = Vector{Pair{String,String}}[]
+    for j in 1:J
+        p_str = _fmt(sol.uncond_probs[j]; digits=3)
+        lbl = (j in active) ? "Alt $j ★ (P=$(p_str))" : "Alt $j (P=$(p_str))"
+        z_j = sol.kkt_multipliers[j]
+        push!(rows, [
+            "name"   => _json(lbl),
+            "effect" => _json(z_j),
+            "ci_lo"  => _json(z_j),
+            "ci_hi"  => _json(z_j),
+        ])
+    end
+    id = _next_plot_id("ridc_kkt")
+    js = _render_coef_plot_js(id, _json_array_of_objects(rows);
+                              color=_PLOT_SERIES[1], ref_value=1.0,
+                              xlabel="KKT Multiplier ζ_j (threshold = 1.0)", ylabel="")
+    ptitle = "KKT Certificate & Consideration Set ($(length(sol.consideration_set)) of $(J) active, ω = $(_fmt(sol.omega; digits=4)))"
+    _PanelSpec(id, ptitle, js)
+end
+
+"""
+    plot_result(sol::RIDiscreteChoiceSolution; view=:choice_curves, title="", save_path=nothing)
+
+Visualize a discrete-choice Rational Inattention solution (`RIDiscreteChoiceSolution`):
+
+- `:choice_curves` (default) — 2-panel figure showing (1) state-contingent conditional
+  choice probabilities `cond_probs` across integer states `1:S` and (2) the horizontal KKT
+  multiplier & unconditional probability `uncond_probs` certificate with a vertical
+  threshold reference line at `1.0` highlighting active `consideration_set` alternatives (`★`).
+- `:kkt` — horizontal KKT multiplier & consideration-set certificate panel alone.
+
+Unknown `view` throws `ArgumentError`.
+"""
+function plot_result(sol::RIDiscreteChoiceSolution{T};
+                     view::Symbol=:choice_curves,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    if view === :choice_curves
+        panels = [_ri_dc_cond_panel(sol), _ri_dc_kkt_panel(sol)]
+        ftitle = isempty(title) ? "RI Discrete-Choice Policy & Consideration Set" : title
+    elseif view === :kkt
+        panels = [_ri_dc_kkt_panel(sol)]
+        ftitle = isempty(title) ? "RI Discrete-Choice KKT Certificate" : title
+    else
+        throw(ArgumentError("Unknown view :$view. Valid views: :choice_curves, :kkt"))
+    end
+    p = _make_plot(panels; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(d::RIIIADiagnostic; title="", save_path=nothing)
+
+Grouped bar chart comparing unconditional choice probabilities `base_solution.uncond_probs`
+against `expanded_solution.uncond_probs` across all shared alternatives `1:J`, highlighting
+IIA violations under menu expansion.
+"""
+function plot_result(d::RIIIADiagnostic{T};
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    J = length(d.base_solution.uncond_probs)
+    alt_names = String["Alt $j" for j in 1:J]
+    p_base = d.base_solution.uncond_probs[1:J]
+    p_exp = d.expanded_solution.uncond_probs[1:J]
+
+    id = _next_plot_id("ri_iia")
+    data_json = _keyed_rows_json(alt_names, ["base" => p_base, "exp" => p_exp])
+    s_json = _series_json(["Base menu", "Expanded menu"],
+                          [_PLOT_SERIES[1], _PLOT_SERIES[2]]; keys=["base", "exp"])
+    js = _render_bar_js(id, data_json, s_json; mode="grouped", orientation="v",
+                        xlabel="Shared Alternative", ylabel="Unconditional Probability P(j)")
+    new_p = length(d.expanded_solution.uncond_probs) > J ?
+        _fmt(d.expanded_solution.uncond_probs[end]; digits=3) : "0.000"
+    ptitle = "Unconditional Shares Across Shared Alternatives (New Alt $(J + 1) P = $(new_p), max IIA = $(_fmt(d.max_iia_violation; digits=3)))"
+    ftitle = isempty(title) ? "RI IIA Breakdown Diagnostic" : title
+    p = _make_plot([_PanelSpec(id, ptitle, js)]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end
+
+"""
+    plot_result(m::RILogitModel; conf_level=0.95, title="", save_path=nothing)
+
+Horizontal dot-and-whisker coefficient plot (`_coef_panel`) of `[beta; omega]` with
+normal confidence intervals `± z * SE` at confidence level `conf_level` (default `0.95`)
+and a zero reference line.
+"""
+function plot_result(m::RILogitModel{T};
+                     conf_level::Real=0.95,
+                     title::String="",
+                     save_path::Union{String,Nothing}=nothing) where {T}
+    z = _conf_z(conf_level)
+    names = vcat(m.varnames, ["omega"])
+    est = vcat(m.beta, [m.omega])
+    se = _diag_se(m.vcov_mat)
+    ptitle = "Preferences & Attention Cost ($(m.normalize), $(_ci_pct(conf_level))% CI; ω = $(_fmt(m.omega; digits=3)))"
+    panel = _coef_panel("rilogit_coef", names, est, se; z=z, xlabel="Estimate", ptitle=ptitle)
+    ftitle = isempty(title) ? "Rational Inattention Logit Coefficients" : title
+    p = _make_plot([panel]; title=ftitle, ncols=1)
+    save_path !== nothing && save_plot(p, save_path)
+    p
+end

@@ -94,6 +94,115 @@ estimate_dynamic_factors(d::TimeSeriesData, r::Int, p::Int; kwargs...) =
 estimate_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
     estimate_gdfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
 
+estimate_qfm(d::TimeSeriesData, r::Int, tau::Real=0.5; kwargs...) =
+    estimate_qfm(to_matrix(d), r, tau; varnames=d.varnames, kwargs...)
+
+estimate_qfm(d::TimeSeriesData, r::Symbol, tau::Real=0.5; kwargs...) =
+    estimate_qfm(to_matrix(d), r, tau; varnames=d.varnames, kwargs...)
+
+ic_criteria_qfm(d::TimeSeriesData, r_max::Int, tau::Real=0.5; kwargs...) =
+    ic_criteria_qfm(to_matrix(d), r_max, tau; kwargs...)
+
+onatski_q_test(d::TimeSeriesData, k0::Int, k1::Int; kwargs...) =
+    onatski_q_test(to_matrix(d), k0, k1; kwargs...)
+
+onatski_q_select(d::TimeSeriesData; kwargs...) =
+    onatski_q_select(to_matrix(d); kwargs...)
+
+onatski_q_select(d::TimeSeriesData, k_max::Int; kwargs...) =
+    onatski_q_select(to_matrix(d), k_max; kwargs...)
+
+ahn_horenstein(d::TimeSeriesData,
+               k_max::Int=min(10, min(d.T_obs, d.n_vars) - 2); kwargs...) =
+    ahn_horenstein(to_matrix(d), k_max; kwargs...)
+
+onatski_ed(d::TimeSeriesData,
+           k_max::Int=min(10, min(d.T_obs, d.n_vars) - 2); kwargs...) =
+    onatski_ed(to_matrix(d), k_max; kwargs...)
+
+estimate_gdfm_fhlz(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_gdfm_fhlz(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+estimate_lms_svar(d::TimeSeriesData, p::Int; kwargs...) =
+    estimate_lms_svar(to_matrix(d), p; varnames=d.varnames, kwargs...)
+
+# --- Wave-4 v1.1.0 (#887, #896, #897, #904, #906, #907, #920) ---
+estimate_qfm(d::TimeSeriesData, r_or_auto::Union{Int,Symbol,AbstractVector{<:Integer}},
+             taus::AbstractVector{<:Real}; kwargs...) =
+    estimate_qfm(to_matrix(d), r_or_auto, taus; varnames=d.varnames, kwargs...)
+
+estimate_gdfm_i1(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_gdfm_i1(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+eurocoin_indicator(d::TimeSeriesData, target_obs::AbstractVector{<:Real}, q::Int; kwargs...) =
+    eurocoin_indicator(to_matrix(d), target_obs, q; kwargs...)
+
+select_gmm_moments(d::TimeSeriesData, p::Union{Int,Nothing}=nothing; kwargs...) =
+    select_gmm_moments(to_matrix(d), p; varnames=Vector{String}(d.varnames), kwargs...)
+
+estimate_lanne_luoto_gmm(d::TimeSeriesData, p::Union{Int,Nothing}=nothing; kwargs...) =
+    estimate_lanne_luoto_gmm(to_matrix(d), p; varnames=Vector{String}(d.varnames), kwargs...)
+
+estimate_ssvarma(d::TimeSeriesData, p::Int, q::Int=1; kwargs...) =
+    estimate_ssvarma(to_matrix(d), p, q; varnames=d.varnames, kwargs...)
+
+test_sufficient_information(
+    first_arg::Union{VARModel,AbstractMatrix,AbstractNonGaussianSVAR,SVARMAModel,AbstractVector},
+    d::TimeSeriesData; kwargs...,
+) = test_sufficient_information(first_arg, to_matrix(d); kwargs...)
+
+test_sufficient_information(s::TimeSeriesData, x::Union{AbstractMatrix,FactorModel}; kwargs...) =
+    test_sufficient_information(to_matrix(s), x; kwargs...)
+
+test_sufficient_information(s::TimeSeriesData, d::TimeSeriesData; kwargs...) =
+    test_sufficient_information(to_matrix(s), to_matrix(d); kwargs...)
+
+estimate_ri(build_or_prob, d::TimeSeriesData; kwargs...) =
+    estimate_ri(build_or_prob, to_matrix(d); kwargs...)
+
+# --- Wave-5 v1.1.0 (#889, #890, #898, #899, #914) ---
+growth_at_risk(d::TimeSeriesData,
+               target_col::Union{Int,AbstractString,Symbol,AbstractVector{<:Real}},
+               h::Int=1; kwargs...) =
+    growth_at_risk(to_matrix(d), target_col, h; varnames=d.varnames, kwargs...)
+
+estimate_qvar(d::TimeSeriesData, p::Int,
+              taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qvar(to_matrix(d), p, taus; varnames=d.varnames, kwargs...)
+
+estimate_qfavar(d::TimeSeriesData,
+                Y_key::Union{AbstractMatrix,AbstractVector{<:Integer}},
+                r::Int, p::Int,
+                taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qfavar(to_matrix(d), Y_key, r, p, taus; panel_varnames=d.varnames, kwargs...)
+
+estimate_qfavar(d::TimeSeriesData, y_key::TimeSeriesData,
+                r::Int, p::Int,
+                taus::AbstractVector{<:Real}=Float64[0.10, 0.50, 0.90]; kwargs...) =
+    estimate_qfavar(to_matrix(d), to_matrix(y_key), r, p, taus;
+                    panel_varnames=d.varnames, key_names=y_key.varnames, kwargs...)
+
+estimate_tv_gdfm(d::TimeSeriesData, q::Int; kwargs...) =
+    estimate_tv_gdfm(to_matrix(d), q; varnames=d.varnames, kwargs...)
+
+nowcast_gdfm(gdfm::GeneralizedDynamicFactorModel, d::TimeSeriesData, h::Int=0; kwargs...) =
+    nowcast_gdfm(gdfm, to_matrix(d), h; kwargs...)
+
+dsge_var_logml(prior::DSGEVARPrior, d::TimeSeriesData) =
+    dsge_var_logml(prior, to_matrix(d))
+
+dsge_var_logml(sys_or_sol::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+               d::TimeSeriesData, p::Int, lambda::Real; kwargs...) =
+    dsge_var_logml(sys_or_sol, to_matrix(d), p, lambda; kwargs...)
+
+select_dsge_var_lambda(sol_or_sys::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+                       d::TimeSeriesData, p::Int; kwargs...) =
+    select_dsge_var_lambda(sol_or_sys, to_matrix(d), p; kwargs...)
+
+estimate_dsge_var(sol_or_sys::Union{ABCDSystem,DSGESolution,PerturbationSolution,HADSGESolution,StateSpaceModel,ModelSpec},
+                  d::TimeSeriesData, p::Int; kwargs...) =
+    estimate_dsge_var(sol_or_sys, to_matrix(d), p; kwargs...)
+
 hallin_liska(d::TimeSeriesData, q_max::Int; kwargs...) =
     hallin_liska(to_matrix(d), q_max; kwargs...)
 

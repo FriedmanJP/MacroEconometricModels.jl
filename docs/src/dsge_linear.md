@@ -575,6 +575,72 @@ With ``k = 4`` variables and two lags that is ``10 + 4 + 4 = 18`` moments. With 
 
 ---
 
+## Canonical ABCD State-Space Representation
+
+Evaluating whether a VAR can recover the structural shocks of a DSGE model — and extracting exact analytical state-space objects without re-deriving model equations — relies on the canonical ``(A, B, C, D)`` representation of Fernández-Villaverde, Rubio-Ramírez, Sargent & Watson (2007):
+
+```math
+x_t = c_{\text{state}} + A \, x_{t-1} + B \, w_t, \qquad y_t = d_{\text{obs}} + C \, x_{t-1} + D \, w_t
+```
+
+where:
+- ``x_t \in \mathbb{R}^n`` is the state vector (reduced by default via `reduction=:predetermined` to predetermined variables or via `reduction=:minimal` Kalman staircase deflation to a controllable and observable realization),
+- ``y_t \in \mathbb{R}^k`` selects the observed variables (supporting optional measurement error augmentation),
+- ``w_t \in \mathbb{R}^m`` are the structural shocks (`nshocks`),
+- ``(A, B, C, D)`` determine the exact impact response ``D``, horizon-``h`` response ``C A^{h-2} B``, and invertibility (poor man's invertibility when ``A - B D^{-1} C`` has eigenvalues strictly inside the unit circle for a square system).
+
+[`abcd_representation`](@ref) builds an [`ABCDSystem`](@ref) uniformly across [`DSGESolution`](@ref), first-order [`PerturbationSolution`](@ref), [`HADSGESolution`](@ref), and [`StateSpaceModel`](@ref), providing unified [`nstates`](@ref), [`nobservables`](@ref), [`is_square`](@ref), [`is_stable`](@ref), [`irf`](@ref), [`fevd`](@ref), [`analytical_moments`](@ref), and [`report`](@ref).
+
+```@example dsge_linear
+sys = abcd_representation(sol, [:Y, :C]; reduction=:minimal)
+report(sys)
+(n_states = nstates(sys),
+ n_obs = nobservables(sys),
+ square = is_square(sys),
+ irf_agree = maximum(abs, irf(sys, 10).values[:, :, :] .- irf(sol, 10).values[:, 1:2, :]))
+```
+
+To test whether a VAR in ``y_t`` recovers the underlying structural shocks ``w_t``, [`poor_mans_invertibility`](@ref) evaluates the Fernández-Villaverde, Rubio-Ramírez, Sargent & Watson (2007) condition ``\max_i |\lambda_i(A - B D^{-1} C)| < 1`` for square systems (and Komunjer & Ng 2011 Rosenbrock transmission zeros when ``k > m`` or ``D`` is rank-deficient). When invertibility fails, [`innovations_representation`](@ref) solves the discrete algebraic Riccati equation (`_solve_dare`) for the Wold fundamental innovations system ``(\hat A = A, K, C, \Sigma_u)``, which converts directly back to a fundamental [`ABCDSystem`](@ref) via [`to_abcd`](@ref).
+
+```@example dsge_linear
+inv_res = poor_mans_invertibility(sys)
+report(inv_res)
+innov = innovations_representation(sys)
+report(innov)
+sys_wold = to_abcd(innov)
+(invertible = is_invertible(sys),
+ max_modulus = round(inv_res.max_modulus; digits=4),
+ dare_resid = round(innov.dare_residual; digits=12),
+ wold_invertible = is_invertible(sys_wold))
+```
+
+### Shock Recoverability, Finite-Order VAR Audit, and Observable Search
+
+Even when invertibility fails in a tall or non-fundamental ``(A, B, C, D)`` system, current and past observables may still linearly recover the structural shock vector **asymptotically** up to Forni & Gambetti's (2014) projection condition [`shock_recoverability`](@ref) ([`ShockRecoverabilityResult`](@ref)). Complementarily, [`population_var`](@ref) constructs the exact analytical population VAR(``p``) implied by the DSGE autocovariances via Yule–Walker, [`compare_dsge_svar_irf`](@ref) quantifies non-fundamentalness and finite-``p`` VAR(``p``) truncation error against the true DSGE impulse responses (Ravenna 2007; Sims 2012) returning a [`DSGEVARIRFAudit`](@ref), and [`search_invertible_observables`](@ref) searches candidate ``k``-observable subsets (Giannone & Reichlin 2006) returning [`ObservableSearchResult`](@ref):
+
+```math
+R_j^2 = \frac{\operatorname{Var}(\hat{w}_{j,t \mid y^{\infty}})}{\operatorname{Var}(w_{j,t})}, \qquad
+\text{RMSPE}_{\text{VAR}(p) \text{ vs DSGE}} = \sqrt{\frac{1}{H k m}\sum_{h=1}^{H} \left\|\hat{\Theta}_h^{\text{VAR}(p)} - \Theta_h^{\text{DSGE}}\right\|_F^2}
+```
+
+where:
+- ``R_j^2 \in [0, 1]`` is the theoretical recoverability ``R^2`` of shock ``j`` from the two-sided/infinite history of ``y_t`` computed via [`ShockRecoverabilityResult`](@ref),
+- ``\Theta_h^{\text{DSGE}}`` and ``\hat{\Theta}_h^{\text{VAR}(p)}`` are the population DSGE and rotated population VAR(``p``) impulse response matrices across horizon ``h = 1, \dots, H``.
+
+```@example dsge_linear
+sys_nf = ABCDSystem([0.5;;], [1.0;;], [2.0;;], [1.0;;])
+rec_res = shock_recoverability(sys_nf)
+audit = compare_dsge_svar_irf(sys_nf, 2, 8)
+obs_search = search_invertible_observables(sol, 1)
+report(rec_res)
+report(obs_search)
+(shock_r2 = round.(rec_res.r2_contemp; digits=4),
+ var_rmse = round(audit.total_rmse; digits=4),
+ n_invertible_subsets = sum(obs_search.is_invertible))
+```
+
+---
+
 ## Complete Example
 
 This example combines all the linear solution tools: specification, solving with three methods, simulation, IRFs, FEVD, and unconditional moments.
@@ -640,8 +706,14 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 - Blanchard, O. J., & Kahn, C. M. (1980). The Solution of Linear Difference Models under Rational Expectations.
   *Econometrica*, 48(5), 1305--1311. [DOI](https://doi.org/10.2307/1912186)
 
+- Fernández-Villaverde, J., Rubio-Ramírez, J. F., Sargent, T. J., & Watson, M. W. (2007). ABCs (and Ds) of Understanding VARs.
+  *American Economic Review*, 97(3), 1021--1026. [DOI](https://doi.org/10.1257/aer.97.3.1021)
+
 - Klein, P. (2000). Using the Generalized Schur Form to Solve a Multivariate Linear Rational Expectations Model.
   *Journal of Economic Dynamics and Control*, 24(10), 1405--1423. [DOI](https://doi.org/10.1016/S0165-1889(99)00045-7)
+
+- Komunjer, I., & Ng, S. (2011). Dynamic Identification of Dynamic Stochastic General Equilibrium Models.
+  *Econometrica*, 79(6), 1995--2032. [DOI](https://doi.org/10.3982/ECTA8916)
 
 - Lubik, T. A., & Schorfheide, F. (2004). Testing for Indeterminacy: An Application to U.S. Monetary Policy.
   *American Economic Review*, 94(1), 190--217. [DOI](https://doi.org/10.1257/000282804322970760)
@@ -651,3 +723,15 @@ The three solvers agree to ``1.2 \times 10^{-12}``, the model is determinate, an
 
 - Smets, F., & Wouters, R. (2007). Shocks and Frictions in US Business Cycles: A Bayesian DSGE Approach.
   *American Economic Review*, 97(3), 586--606. [DOI](https://doi.org/10.1257/aer.97.3.586)
+
+- Forni, M., & Gambetti, L. (2014). Sufficient Information in Structural VARs.
+  *Journal of Monetary Economics*, 66, 124--136. [DOI](https://doi.org/10.1016/j.jmoneco.2014.04.005)
+
+- Giannone, D., & Reichlin, L. (2006). Does Information Help Recovering Structural Shocks from Past Observations?
+  *Journal of the European Economic Association*, 4(2--3), 455--465. [DOI](https://doi.org/10.1162/jeea.2006.4.2-3.455)
+
+- Ravenna, F. (2007). Vector Autoregressions and Reduced Form Representations of DSGE Models.
+  *Journal of Monetary Economics*, 54(7), 2048--2064. [DOI](https://doi.org/10.1016/j.jmoneco.2006.09.002)
+
+- Sims, E. R. (2012). News, Non-Invertibility, and Structural VARs.
+  *Advances in Econometrics*, 28, 81--135. [DOI](https://doi.org/10.1108/S0731-9053(2012)0000028006)

@@ -208,6 +208,25 @@ end
         _cover(estimate_gdfm(X, 2))
         _cover(estimate_favar(X, [1, 2], 2, 2))            # nested FactorModel
         _cover(estimate_structural_dfm(X, 2; p=1, H=10))   # nested GDFM + VARModel
+        qfm = estimate_qfm(X, 2, 0.5; max_iter=10, n_starts=1, seed=1)
+        @test qfm isa QuantileFactorModel
+        _cover(qfm)
+        fhlz = estimate_gdfm_fhlz(randn(Xoshiro(902), 80, 12), 2; n_perm=5, p_max=2, seed=1)
+        @test fhlz isa FHLZModel
+        _cover(fhlz)
+        qfm_ic = ic_criteria_qfm(X, 2, 0.5; max_iter=5, n_starts=1, seed=1)
+        @test qfm_ic isa QFMICResult
+        _cover(qfm_ic)
+        X_sel = randn(Xoshiro(895), 80, 10)
+        oq = onatski_q_test(X_sel, 0, 2)
+        @test oq isa OnatskiQTestResult
+        _cover(oq)
+        ah = ahn_horenstein(X_sel, 3)
+        @test ah isa AhnHorensteinResult
+        _cover(ah)
+        oed = onatski_ed(X_sel, 3)
+        @test oed isa OnatskiEDResult
+        _cover(oed)
     end
 
     @testset "ARIMA / ARDL / nonlinear / MIDAS / state space" begin
@@ -246,6 +265,64 @@ end
         @test ssm.builder isa Function      # original carried a builder…
         @test ssm2.builder === nothing       # …reload drops it
         _assert_report_equal(ssm, ssm2)
+
+        # v1 StateSpaceModel payloads written before `G` was added reload with G === nothing
+        let c = _MEM._build_container(ssm)
+            delete!(c["payload"], "G")
+            old_ssm = _MEM._reconstruct_from_container(c)
+            @test old_ssm isa StateSpaceModel
+            @test old_ssm.G === nothing
+            @test old_ssm.filtered_state == ssm.filtered_state
+            @test old_ssm.loglik == ssm.loglik
+        end
+        # Missing a required field on StateSpaceModel still throws SerializationError
+        let c_bad = _MEM._build_container(ssm)
+            delete!(c_bad["payload"], "Z")
+            @test_throws _MEM.SerializationError _MEM._reconstruct_from_container(c_bad)
+        end
+
+        # Correlated-noise StateSpaceModel (G !== nothing) round-trips
+        spec_g = StateSpaceModel(reshape([1.0], 1, 1), reshape([0.5], 1, 1),
+                                 reshape([0.7], 1, 1), reshape([0.8], 1, 1);
+                                 G=reshape([0.3], 1, 1), init_mode=:stationary)
+        ssm_g = estimate_statespace(spec_g, yss)
+        ssm_g2 = _cover(ssm_g; skip=[:builder])
+        @test ssm_g2.G == ssm_g.G
+        _assert_report_equal(ssm_g, ssm_g2)
+
+        # RationalInattentionProblem / SimsKalmanSolution (#917)
+        prob_ri = RationalInattentionProblem([0.7;;], [0.5;;], [1.0;;]; M=[1.0;;], beta=0.99, omega=0.2)
+        @test prob_ri isa RationalInattentionProblem
+        prob_ri2 = _assert_roundtrip(prob_ri)
+        _assert_report_equal(prob_ri, prob_ri2)
+        sol_ri = solve_ri_kalman(prob_ri)
+        @test sol_ri isa SimsKalmanSolution
+        sol_ri2 = _assert_roundtrip(sol_ri)
+        _assert_report_equal(sol_ri, sol_ri2)
+        dyn_ri = solve_ri_transition(prob_ri, [0.4;;]; T_path=12)
+        @test dyn_ri isa DynamicRISolution
+        dyn_ri2 = _cover(dyn_ri)
+        @test dyn_ri2.T_path == dyn_ri.T_path
+        @test dyn_ri2.Sigma_post_path == dyn_ri.Sigma_post_path
+    end
+
+    @testset "SteadyStateKalman" begin
+        ssk = steady_state_kalman(reshape([1.0], 1, 1), reshape([0.5], 1, 1),
+                                  reshape([0.7], 1, 1), reshape([0.8], 1, 1);
+                                  G=reshape([0.3], 1, 1))
+        @test _from_serializable_is_generic(SteadyStateKalman)
+        ssk2 = _cover(ssk)
+        _assert_plot_equal(ssk, ssk2)
+        let pth = joinpath(mktempdir(), "ssk.jld2")
+            save_model(ssk, pth)
+            ssk3 = load_model(pth)
+            @test ssk3 isa SteadyStateKalman{Float64}
+            @test ssk3.P_pred == ssk.P_pred
+            @test ssk3.P_filt == ssk.P_filt
+            @test ssk3.K_gain == ssk.K_gain
+            @test ssk3.F_innov == ssk.F_innov
+            @test ssk3.closed_loop_eigs == ssk.closed_loop_eigs
+        end
     end
 
     @testset "discrete / limited-dependent choice" begin
@@ -256,6 +333,27 @@ end
         Xm = hcat(ones(200), randn(Xoshiro(15), 200, 2))
         ym = rand(Xoshiro(16), 1:3, 200)
         _cover(estimate_mlogit(ym, Xm; varnames=["c", "x1", "x2"]))
+
+        # Rational Inattention discrete choice (#922)
+        U_ri = [1.0 0.0; 0.0 1.0]
+        mu_ri = [0.5, 0.5]
+        sol_dc = solve_ri_discrete(U_ri, mu_ri; omega=0.4)
+        @test sol_dc isa RIDiscreteChoiceSolution
+        sol_dc2 = _assert_roundtrip(sol_dc)
+        _assert_report_equal(sol_dc, sol_dc2)
+
+        iia_ri = ri_iia_diagnostic(U_ri, mu_ri, [0.99, 0.01]; omega=0.4)
+        @test iia_ri isa RIIIADiagnostic
+        iia_ri2 = _assert_roundtrip(iia_ri)
+        _assert_report_equal(iia_ri, iia_ri2)
+
+        menu_ri = randn(Xoshiro(922), 3, 2, 2, 4)
+        choices_ri = rand(Xoshiro(923), 1:3, 40)
+        env_ri = repeat(1:4, inner=10)
+        state_ri = repeat(1:2, outer=20)
+        m_ri = estimate_ri_logit(choices_ri, menu_ri, env_ri; state_id=state_ri, max_iter=30)
+        @test m_ri isa RILogitModel
+        _cover(m_ri)
     end
 
     @testset "local-projection variants" begin
@@ -1005,6 +1103,234 @@ end
         @test r3 isa IdentifiabilityTestResult
         @test isnan(r3.pvalue)
         _assert_report_equal(r, r3)
+    end
+end
+
+@testset "NGID-02 LMSSVARResult serialization (#902)" begin
+    Y_lms = randn(Xoshiro(902), 80, 2)
+    res_lms = estimate_lms_svar(Y_lms, 1; distributions=:student_t, method=:three_step, n_starts=2, seed=1)
+    @test res_lms isa LMSSVARResult
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "LMSSVARResult")
+    res_lms2 = _cover(res_lms)
+    @test res_lms2.B0 == res_lms.B0
+    @test res_lms2.distributions == res_lms.distributions
+    mktempdir() do d
+        p = joinpath(d, "lms.jld2")
+        save_model(res_lms, p)
+        loaded = load_model(p)
+        @test loaded isa LMSSVARResult
+        @test loaded.loglik == res_lms.loglik
+    end
+
+    hyp_lms = recursiveness_hypothesis(2)
+    ht_lms = test_svar_hypothesis(res_lms, hyp_lms; method=:wald)
+    @test ht_lms isa SVARHypothesisTest
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "SVARHypothesisTest")
+    ht_lms2 = _cover(ht_lms)
+    @test ht_lms2.statistic == ht_lms.statistic
+
+    diag_lms = diagnose_nongaussian_svar(res_lms; lags=2)
+    @test diag_lms isa NonGaussianDiagnostics
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "NonGaussianDiagnostics")
+    diag_lms2 = _cover(diag_lms)
+    @test diag_lms2.jb_stats == diag_lms.jb_stats
+
+    sim_ma = dgp_ssvarma(Xoshiro(905); T=80)
+    m_svarma = SVARMAModel(sim_ma.Y, sim_ma.Phi, sim_ma.Theta, sim_ma.C)
+    @test m_svarma isa SVARMAModel
+    @test haskey(_MEM._SERIALIZABLE_TYPES, "SVARMAModel")
+    m_svarma2 = _cover(m_svarma)
+    @test m_svarma2.shocks == m_svarma.shocks
+    @test m_svarma2.regime === m_svarma.regime
+end
+
+@testset "Wave-4 serialization coverage (#887,#888,#896,#897,#904,#906,#907,#920,#921)" begin
+    # QFM-05: QuantileFactorGrid, QFMSpanningResult, QFMLoadingConstancyTest
+    X_qfm = randn(Xoshiro(887), 60, 12)
+    qgrid = estimate_qfm(X_qfm, 2, [0.25, 0.75]; max_iter=20, seed=1)
+    @test qgrid isa QuantileFactorGrid
+    qgrid2 = _cover(qgrid)
+    @test qgrid2.taus == qgrid.taus && qgrid2.r_by_tau == qgrid.r_by_tau
+
+    qsp = test_qfm_spanning(qgrid, X_qfm)
+    @test qsp isa QFMSpanningResult
+    qsp2 = _cover(qsp)
+    @test qsp2.ols_r2 == qsp.ols_r2 && qsp2.cancor == qsp.cancor
+
+    qct = test_qfm_loading_constancy(qgrid, 0.25, 0.75; n_boot=19, max_iter=20, seed=2)
+    @test qct isa QFMLoadingConstancyTest
+    qct2 = _cover(qct)
+    @test qct2.statistic == qct.statistic && qct2.pvalue == qct.pvalue
+
+    # QFM-06: QuantileFactorPanelModel
+    Y_qp = randn(Xoshiro(888), 15, 25)
+    W_qp = randn(Xoshiro(8881), 15, 25, 2)
+    m_qp = estimate_xtqreg_factors(Y_qp, W_qp, 1, 0.5; maxiter=20, seed=3)
+    @test m_qp isa QuantileFactorPanelModel
+    m_qp2 = _cover(m_qp)
+    @test m_qp2.beta == m_qp.beta && m_qp2.tau == m_qp.tau
+
+    # GDFM-04: CointegratedGDFM
+    X_i1 = cumsum(randn(Xoshiro(896), 80, 10); dims=1)
+    m_i1 = estimate_gdfm_i1(X_i1, 2; n_perm=5, max_draws=20, p_max=2, seed=4)
+    @test m_i1 isa CointegratedGDFM
+    m_i1_2 = _cover(m_i1)
+    @test m_i1_2.q == m_i1.q && m_i1_2.n_permanent == m_i1.n_permanent
+
+    # GDFM-05: BandPassGDFMResult, EurocoinResult, SpectralFEVDResult
+    X_bp = randn(Xoshiro(897), 80, 12)
+    gdfm_bp = estimate_gdfm(X_bp, 2; r=3, spectral=:lag_window, bandwidth=6)
+    bp_r = bandpass_gdfm(gdfm_bp, (0.0, Float64(pi / 4)))
+    @test bp_r isa BandPassGDFMResult
+    bp_r2 = _cover(bp_r)
+    @test bp_r2.variance_share == bp_r.variance_share
+
+    ec_r = eurocoin_indicator(X_bp, randn(Xoshiro(8971), 80), 2; r=3)
+    @test ec_r isa EurocoinResult
+    ec_r2 = _cover(ec_r)
+    @test ec_r2.indicator == ec_r.indicator && ec_r2.r2 == ec_r.r2
+
+    sdfm_bp = estimate_structural_dfm(gdfm_bp; method=:fglr, r=3, p=2, H=12)
+    sfevd_r = spectral_fevd(sdfm_bp)
+    @test sfevd_r isa SpectralFEVDResult
+    sfevd_r2 = _cover(sfevd_r)
+    @test sfevd_r2.shares == sfevd_r.shares
+
+    # NGID-04, NGID-06, NGID-07: Lanne-Luoto GMM, SSVARMA estimation, tests, CvM
+    sim_ng = dgp_ssvarma(Xoshiro(904); Phi=[0.4 0.1; -0.1 0.3], Theta=zeros(2, 2, 0),
+                         dist=:mixture_normal_asym, T=150)
+    m_ng = estimate_var(sim_ng.Y, 1)
+    ms_ng = select_gmm_moments(m_ng)
+    @test ms_ng isa GMMMomentSelectionResult
+    ms_ng2 = _cover(ms_ng)
+    @test ms_ng2.asym_pairs == ms_ng.asym_pairs && ms_ng2.sym_pairs == ms_ng.sym_pairs
+
+    ll_ng = estimate_lanne_luoto_gmm(m_ng; max_iter=30, n_starts=2, seed=5)
+    @test ll_ng isa LanneLuotoGMMResult
+    ll_ng2 = _cover(ll_ng)
+    @test ll_ng2.B0 == ll_ng.B0 && ll_ng2.J_stat == ll_ng.J_stat
+
+    sim_sv = dgp_ssvarma(Xoshiro(906); T=120)
+    m_sv = _MEM._suppress_warnings() do
+        estimate_ssvarma(sim_sv.Y, 0, 1; method=:pml, n_starts=1, max_iter=80, seed=6)
+    end
+    @test m_sv isa SVARMAModel
+    m_sv2 = _cover(m_sv)
+    @test m_sv2.Theta == m_sv.Theta && m_sv2.shocks == m_sv.shocks
+
+    cvm_r = identify_cvm(m_ng; max_iter=30, n_starts=2, seed=7)
+    @test cvm_r isa ICASVARResult
+    cvm_r2 = _cover(cvm_r)
+    @test cvm_r2.W == cvm_r.W && cvm_r2.method === :cvm
+
+    ft_r = test_fundamentalness(m_ng; max_lag=2, n_boot=19, seed=8)
+    @test ft_r isa FundamentalnessTestResult
+    ft_r2 = _cover(ft_r)
+    @test ft_r2.statistic == ft_r.statistic && ft_r2.pvalue == ft_r.pvalue
+
+    X_pan = randn(Xoshiro(907), size(sim_ng.Y, 1), 6)
+    si_r = test_sufficient_information(m_ng, X_pan; r_max=2, p_f=2)
+    @test si_r isa SufficientInformationTestResult
+    si_r2 = _cover(si_r)
+    @test si_r2.pvalue == si_r.pvalue
+
+    # RI-05 & RI-06: RIEstimationResult, CGTestResult, MWAttentionResult
+    prob_ri = RationalInattentionProblem(0.8, 1.0, 1.0; capacity=0.75)
+    sol_ri = solve_ri_kalman(prob_ri)
+    sim_ri = simulate(sol_ri, 50; burn=20, seed=920)
+    data_ri = hcat(sim_ri.states, sim_ri.actions)
+    ri_est = estimate_ri(prob_ri, data_ri; method=:mle)
+    @test ri_est isa RIEstimationResult
+    ri_est2 = _cover(ri_est)
+    @test ri_est2.params == ri_est.params
+
+    cg_r = coibion_gorodnichenko_test(randn(Xoshiro(9201), 40), randn(Xoshiro(9202), 40), randn(Xoshiro(9203), 40))
+    @test cg_r isa CGTestResult
+    cg_r2 = _cover(cg_r)
+    @test cg_r2.beta_cg == cg_r.beta_cg && cg_r2.se_cg == cg_r.se_cg
+
+    mw_r = solve_mw_attention((; rho=0.85, sigma=0.01, weight=1.0, beta=0.99),
+                              (; rho=0.80, sigma=0.10, weight=1.0, beta=0.99);
+                              capacity=2.0, horizon=15)
+    @test mw_r isa MWAttentionResult
+    mw_r2 = _cover(mw_r)
+    @test mw_r2.kappa_agg == mw_r.kappa_agg && mw_r2.omega == mw_r.omega
+
+    mktempdir() do d
+        for (idx, obj) in enumerate((qgrid, qsp, qct, m_qp, m_i1, bp_r, ec_r, sfevd_r,
+                                     ms_ng, ll_ng, m_sv, cvm_r, ft_r, si_r, ri_est, cg_r, mw_r))
+            p = joinpath(d, "w4_$(idx).jld2")
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
+    end
+end
+
+@testset "Wave-5 serialization coverage (#889,#890,#898,#899)" begin
+    # QFM-07 (#889): GrowthAtRiskResult & QFM FactorForecast
+    X_gar = randn(Xoshiro(889), 60, 8)
+    gar_r = growth_at_risk(X_gar, 1, 1; r=2, taus=[0.05, 0.25, 0.50, 0.75, 0.95],
+                           density=:skewed_t, oos_split=40, seed=1)
+    @test gar_r isa GrowthAtRiskResult
+    gar_r2 = _cover(gar_r)
+    @test gar_r2.gar == gar_r.gar && gar_r2.fitted_quantiles == gar_r.fitted_quantiles
+    @test gar_r2.target_name == gar_r.target_name
+
+    qfm_fc = forecast(estimate_qfm(X_gar, 2, 0.5; max_iter=20, seed=1), 3; p=1, ci_method=:none)
+    @test qfm_fc isa FactorForecast
+    qfm_fc2 = _cover(qfm_fc)
+    @test qfm_fc2.observables == qfm_fc.observables
+
+    # QFM-08 (#890): QuantileVARModel, QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR
+    Y_qv = randn(Xoshiro(890), 80, 2)
+    qv_r = estimate_qvar(Y_qv, 1, [0.10, 0.50, 0.90]; se=:none, seed=2)
+    @test qv_r isa QuantileVARModel
+    qv_r2 = _cover(qv_r)
+    @test qv_r2.taus == qv_r.taus && qv_r2.B_list == qv_r.B_list
+
+    qirf_r = qirf(qv_r, 6; tau_profile=0.10, baseline_tau=0.50)
+    @test qirf_r isa QuantileImpulseResponse
+    qirf_r2 = _cover(qirf_r)
+    @test qirf_r2.values == qirf_r.values && qirf_r2.tau_profile == qirf_r.tau_profile
+
+    X_qf = randn(Xoshiro(8901), 70, 10)
+    qf_2s = estimate_qfavar(X_qf, [10], 1, 1, [0.10, 0.50, 0.90]; method=:twostep, seed=3)
+    @test qf_2s isa QuantileFAVAR
+    qf_2s2 = _cover(qf_2s)
+    @test qf_2s2.taus == qf_2s.taus && qf_2s2.Y_key_indices == qf_2s.Y_key_indices
+
+    qf_vb = estimate_qfavar(X_qf, [10], 1, 1, [0.10, 0.50, 0.90];
+                            method=:vb, vb_maxiter=25, n_draws=30, seed=4)
+    @test qf_vb isa VBQuantileFAVAR
+    qf_vb2 = _cover(qf_vb)
+    @test qf_vb2.vb_iterations == qf_vb.vb_iterations && qf_vb2.A0_draws == qf_vb.A0_draws
+
+    # GDFM-06 (#898): TimeVaryingGDFM
+    X_tv = randn(Xoshiro(898), 80, 10)
+    tv_r = estimate_tv_gdfm(X_tv, 2; n_grid=8)
+    @test tv_r isa TimeVaryingGDFM
+    tv_r2 = _cover(tv_r)
+    @test tv_r2.common_component == tv_r.common_component && tv_r2.variance_share_path == tv_r.variance_share_path
+
+    # GDFM-07 (#899): GDFMNowcastResult
+    gdfm_c = estimate_gdfm(X_tv, 2; r=3, spectral=:lag_window, bandwidth=6)
+    X_rag = copy(X_tv)
+    X_rag[end, 1:3] .= NaN
+    nc_r = nowcast_gdfm(gdfm_c, X_rag, 0; n_lags=2)
+    @test nc_r isa GDFMNowcastResult
+    nc_r2 = _cover(nc_r)
+    @test nc_r2.nowcast == nc_r.nowcast && nc_r2.observed_mask == nc_r.observed_mask
+
+    mktempdir() do d
+        for (idx, obj) in enumerate((gar_r, qv_r, qirf_r, qf_2s, qf_vb, tv_r, nc_r))
+            p = joinpath(d, "w5_$(idx).jld2")
+            save_model(obj, p)
+            loaded = load_model(p)
+            @test typeof(loaded).name === typeof(obj).name
+            _assert_report_equal(obj, loaded)
+        end
     end
 end
 

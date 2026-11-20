@@ -93,28 +93,56 @@ GeneralizedDynamicFactorModel{T}(X, factors, common_component, idiosyncratic, lo
 # =============================================================================
 
 """
-    estimate_gdfm(X, q; standardize=true, bandwidth=0, kernel=:bartlett, r=0, spectral=:lag_window) -> GeneralizedDynamicFactorModel
+    estimate_gdfm(X, q; standardize=true, bandwidth=0, kernel=:bartlett, r=0,
+                  varnames=nothing, spectral=:lag_window,
+                  allow_missing=false, em_max_iter=50, em_tol=1e-4,
+                  n_lags_proj=0) -> GeneralizedDynamicFactorModel
 
-Estimate Generalized Dynamic Factor Model using spectral methods.
+Estimate a Generalized Dynamic Factor Model using spectral principal components
+(Forni, Hallin, Lippi & Reichlin, 2000, 2005), with optional EM-spectral imputation
+for missing or ragged-edge observations and multi-lag stacked one-sided projection:
+
+```math
+X_t = \\chi_t + \\xi_t, \\qquad F_t^{(s)} = Z^{\\top} X_t^{(s)}, \\qquad X_t^{(s)} = [X_t^{\\top}, X_{t-1}^{\\top}, \\dots, X_{t-s}^{\\top}]^{\\top}
+```
+
+where:
+- ``X_t`` is the ``N \\times 1`` observed panel vector at time ``t``
+- ``\\chi_t`` is the ``N \\times 1`` common component driven by ``q`` dynamic shocks
+- ``\\xi_t`` is the ``N \\times 1`` weakly correlated idiosyncratic component
+- ``s`` is the stacked projection lag depth (`n_lags_proj`)
+- ``X_t^{(s)}`` is the ``N(s + 1) \\times 1`` stacked panel vector
+- ``Z`` is the ``N(s + 1) \\times r`` one-sided generalized eigenvector weight matrix
+- ``F_t^{(s)}`` is the ``r \\times 1`` one-sided static factor vector
 
 # Arguments
-- `X`: Data matrix (T × N)
-- `q`: Number of dynamic factors
+- `X`: Data matrix (`T_obs × N`)
+- `q`: Number of dynamic factors (`1 ≤ q ≤ min(T_obs, N)`)
 
 # Keyword Arguments
-- `standardize::Bool=true`: Standardize data
+- `standardize::Bool=true`: Standardize data prior to spectral estimation
 - `bandwidth::Int=0`: Lag truncation `M` under `:lag_window` (default `max(3, round(0.5√T))`),
-  or frequency-ordinate bandwidth under `:smoothed_periodogram` (default `max(3, round(T^{1/3}))`).
-- `kernel::Symbol=:bartlett`: Kernel (`:bartlett`, `:parzen`, `:tukey`)
-- `r::Int=0`: Number of static factors (0 = same as q)
+  or frequency-ordinate bandwidth under `:smoothed_periodogram` (default `max(3, round(T^{1/3}))`)
+- `kernel::Symbol=:bartlett`: Spectral kernel (`:bartlett`, `:parzen`, or `:tukey`)
+- `r::Int=0`: Number of static factors (`0` defaults to `q`)
+- `varnames::Union{Nothing,Vector{String}}=nothing`: Names for the `N` panel variables
+  (defaults to `"Var 1"`, …). Forwarded by the `TimeSeriesData` dispatch
 - `spectral::Symbol=:lag_window`: `:lag_window` (FHLR 2000/2005) or `:smoothed_periodogram` (legacy)
-- `varnames::Union{Nothing,Vector{String}}=nothing`: Names for the N panel variables
-  (defaults to `"Var 1"`, …). Forwarded by the `TimeSeriesData` dispatch.
+- `allow_missing::Bool=false`: Allow `NaN` entries (interior or ragged-edge) and impute via
+  cross-sectional EM-PCA warm-start followed by EM-spectral iteration (`Inf`/`-Inf` and
+  all-`NaN` rows or columns are rejected)
+- `em_max_iter::Int=50`: Maximum EM iterations when `allow_missing=true` and `X` contains `NaN`
+- `em_tol::Real=1e-4`: Relative convergence tolerance on missing-cell updates
+  ``\\max |\\Delta \\hat{\\chi}_{\\text{missing}}|``
+- `n_lags_proj::Int=0`: Number of past lags `s` included in the stacked FHLR one-sided
+  projection (`0` uses contemporaneous weights only)
 
 # Returns
-`GeneralizedDynamicFactorModel` with two-sided common/idiosyncratic components
+[`GeneralizedDynamicFactorModel`](@ref) with two-sided common/idiosyncratic components
 (in-sample FHLR 2000) and one-sided weights `Z`, `factors_onesided`,
-`common_component_onesided` (FHLR 2005). Use `forecast(gdfm, h; method=:one_sided)`
+`common_component_onesided` (FHLR 2005). When `allow_missing=true`, `model.X` stores
+the converged finite EM-imputed panel so downstream `forecast`, `bandpass_gdfm`, and
+`historical_decomposition` remain finite. Use `forecast(gdfm, h; method=:one_sided)`
 for the projection forecast.
 
 # Example
@@ -127,37 +155,62 @@ function estimate_gdfm(X::AbstractMatrix{T}, q::Int;
     standardize::Bool=true, bandwidth::Int=0, kernel::Symbol=:bartlett, r::Int=0,
     varnames::Union{Nothing,Vector{String}}=nothing,
     spectral::Symbol=:lag_window,
+    allow_missing::Bool=false,
+    em_max_iter::Int=50,
+    em_tol::Real=1e-4,
+    n_lags_proj::Int=0,
 ) where {T<:AbstractFloat}
-    _validate_data(X, "X")
     T_obs, N = size(X)
+    if allow_missing
+        _gdfm_validate_missing_data(X, "X")
+    else
+        _validate_data(X, "X")
+    end
     validate_factor_inputs(T_obs, N, q; context="dynamic factors")
     validate_option(kernel, "kernel", (:bartlett, :parzen, :tukey))
     validate_option(spectral, "spectral", (:lag_window, :smoothed_periodogram))
+    em_max_iter >= 1 || throw(ArgumentError("em_max_iter must be >= 1, got $em_max_iter"))
+    em_tol > 0 || throw(ArgumentError("em_tol must be > 0, got $em_tol"))
+    n_lags_proj >= 0 || throw(ArgumentError("n_lags_proj must be >= 0, got $n_lags_proj"))
+    n_lags_proj < T_obs || throw(ArgumentError("n_lags_proj must be < T_obs ($T_obs), got $n_lags_proj"))
+
     vn = something(varnames, ["Var $i" for i in 1:N])
     length(vn) == N || throw(ArgumentError(
         "varnames has $(length(vn)) entries but X has $N columns"))
 
     r_static = r == 0 ? q : r
     r_static < q && throw(ArgumentError("r must be >= q"))
+    max_r_proj = N * (n_lags_proj + 1)
+    r_static <= max_r_proj || throw(ArgumentError("r must be <= $max_r_proj, got $r_static"))
     if bandwidth <= 0
         bandwidth = spectral === :lag_window ? _select_lag_window(T_obs) : _select_bandwidth(T_obs)
     end
 
-    X_original = copy(X)
-    X_proc = standardize ? _standardize(X) : X
+    has_missing = allow_missing && any(isnan, X)
+    X_cur = if has_missing
+        _gdfm_em_spectral_impute(
+            X, q, r_static, standardize, bandwidth, kernel, spectral,
+            em_max_iter, T(em_tol), n_lags_proj)
+    else
+        Matrix{T}(X)
+    end
+
+    X_original = copy(X_cur)
+    X_proc = standardize ? _standardize(X_original) : X_original
 
     # Spectral analysis
     frequencies, spectral_X = _estimate_spectrum(X_proc, bandwidth, kernel, spectral)
     eigenvalues, eigenvectors = _spectral_eigendecomposition(spectral_X)
     loadings = eigenvectors[:, 1:q, :]
     spectral_chi = _compute_common_spectral_density(loadings, eigenvalues[1:q, :])
-    loadings_td = spectral === :lag_window ?
-        _interp_loadings_to_fft_grid(loadings, frequencies, T_obs) : loadings
-    common = _reconstruct_time_domain(loadings_td, X_proc)
-    factors = _extract_time_domain_factors(X_proc, loadings_td, frequencies)
+    common = _reconstruct_time_domain(loadings, X_proc, frequencies;
+        spectral=spectral, bandwidth=bandwidth)
+    factors = _extract_time_domain_factors(X_proc, loadings, frequencies;
+        spectral=spectral, bandwidth=bandwidth)
     var_explained = _compute_variance_explained(eigenvalues, q)
 
-    Z, F_os, chi_os = _gdfm_onesided(X_proc, spectral_X, spectral_chi, frequencies, r_static)
+    Z, F_os, chi_os = _gdfm_onesided_stacked(
+        X_proc, spectral_X, spectral_chi, frequencies, spectral, r_static, n_lags_proj)
 
     # Unstandardize common component if needed
     if standardize
@@ -272,33 +325,6 @@ function _estimate_spectral_density_lagwindow(X::AbstractMatrix{T}, M::Int, kern
     frequencies, spectral
 end
 
-"""Linear interpolation of spectral loadings onto the T/2+1 FFT ordinates."""
-function _interp_loadings_to_fft_grid(loadings::Array{Complex{T},3}, src_freq::Vector{T}, T_obs::Int) where {T<:AbstractFloat}
-    N, q, n_src = size(loadings)
-    n_fft = div(T_obs, 2) + 1
-    dest_freq = [T(2π * (j - 1) / T_obs) for j in 1:n_fft]
-    L = _align_eigenvector_phases(loadings)
-    L_out = Array{Complex{T},3}(undef, N, q, n_fft)
-    src = copy(src_freq)
-    # FFT grid lives in [0, π]; lag-window grid is already [0, π]
-    @inbounds for j in 1:n_fft
-        ω = dest_freq[j]
-        if ω <= src[1]
-            L_out[:, :, j] = L[:, :, 1]
-        elseif ω >= src[end]
-            L_out[:, :, j] = L[:, :, n_src]
-        else
-            i2 = searchsortedfirst(src, ω)
-            i1 = max(i2 - 1, 1)
-            i2 = min(i2, n_src)
-            Δ = src[i2] - src[i1]
-            t = Δ > 0 ? (ω - src[i1]) / Δ : zero(T)
-            L_out[:, :, j] = (1 - t) .* L[:, :, i1] .+ t .* L[:, :, i2]
-        end
-    end
-    L_out
-end
-
 """Align eigenvector signs/phases across adjacent frequencies before interpolation."""
 function _align_eigenvector_phases(loadings::Array{Complex{T},3}) where {T<:AbstractFloat}
     L = copy(loadings)
@@ -306,8 +332,9 @@ function _align_eigenvector_phases(loadings::Array{Complex{T},3}) where {T<:Abst
     @inbounds for j in 2:n_freq
         for k in 1:q
             overlap = dot(L[:, k, j - 1], L[:, k, j])
-            if overlap != 0
-                L[:, k, j] .*= conj(overlap) / abs(overlap)
+            a = abs(overlap)
+            if a > eps(T)
+                L[:, k, j] .*= conj(overlap) / a
             end
         end
     end
@@ -385,37 +412,222 @@ function _compute_common_spectral_density(loadings::Array{Complex{T},3}, eigenva
     spectral_chi
 end
 
-"""Reconstruct common component in time domain via inverse FFT."""
-function _reconstruct_time_domain(loadings::Array{Complex{T},3}, X::AbstractMatrix{T}) where {T}
-    T_obs, N = size(X)
-    n_freq = size(loadings, 3)
-    X_fft = FFTW.fft(X, 1)
-    chi_fft = zeros(Complex{T}, T_obs, N)
-
-    @inbounds for j in 1:n_freq
-        # Forni idempotent dynamic-principal-component projector on the leading-q eigenvectors of
-        # the SMOOTHED spectrum: χ(ω_j) = (Σ_k v_k v_k^H) X_fft(ω_j) = L Lᴴ X_fft(ω_j). The old
-        # code inverted the raw rank-1 periodogram X_fft·X_fftᴴ/T — a degenerate/noisy filter.
-        L = @view loadings[:, :, j]        # N × q, columns orthonormal (LᴴL ≈ I_q)
-        chi_fft[j, :] = L * (L' * @view(X_fft[j, :]))
-        j > 1 && j < n_freq && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
+"""Reflect out-of-range sample index `s` symmetrically into `1:T_obs`."""
+function _reflect_index(s::Int, T_obs::Int)
+    T_obs <= 1 && return 1
+    while s < 1 || s > T_obs
+        s = s < 1 ? 2 - s : 2 * T_obs - s
     end
-    real(FFTW.ifft(chi_fft, 1))
+    s
 end
 
-"""Extract time-domain factors via frequency-domain projection."""
-function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Complex{T},3}, frequencies::Vector{T}) where {T}
+"""Symmetric reflection padding of `X` (`T_obs × N`) by `M` lags/leads (`(T_obs + 2M) × N`)."""
+function _reflect_pad(X::AbstractMatrix{T}, M::Int) where {T<:AbstractFloat}
     T_obs, N = size(X)
-    _, q, n_freq = size(loadings)
-    X_fft, F_fft = FFTW.fft(X, 1), zeros(Complex{T}, T_obs, q)
+    M <= 0 && return Matrix{T}(X)
+    X_pad = Matrix{T}(undef, T_obs + 2 * M, N)
+    @inbounds for s in (1 - M):(T_obs + M)
+        idx = _reflect_index(s, T_obs)
+        X_pad[s + M, :] .= @view(X[idx, :])
+    end
+    X_pad
+end
 
+"""Finite half-width `M` for symmetric two-sided time-domain GDFM filtering."""
+function _gdfm_filter_halfwidth(T_obs::Int, n_freq::Int, spectral::Symbol, bandwidth::Int)
+    T_obs <= 1 && return 0
+    if spectral === :lag_window
+        return min(max(n_freq - 1, 0), T_obs - 1)
+    end
+    M = bandwidth > 0 ? bandwidth : _select_lag_window(T_obs)
+    min(max(M, 0), div(T_obs - 1, 2))
+end
+
+"""Invert `P(θ) = L(θ) L(θ)ᴴ` to real lag-`k` filter matrices `K_0, ..., K_M` (`K_{-k} = K_kᵀ`)."""
+function _projector_filter_kernels(loadings::AbstractArray{Complex{T},3}, T_obs::Int,
+    spectral::Symbol, M::Int) where {T<:AbstractFloat}
+    N, _, n_freq = size(loadings)
+    R_list = Vector{Matrix{T}}(undef, n_freq)
+    I_list = Vector{Matrix{T}}(undef, n_freq)
     @inbounds for j in 1:n_freq
-        L = loadings[:, :, j]
-        F_fft[j, :] = (L' * L + T(1e-10) * I) \ (L' * X_fft[j, :])
-        j > 1 && j < n_freq && (F_fft[T_obs - j + 2, :] = conj(F_fft[j, :]))
+        Lj = @view loadings[:, :, j]
+        Pj = Lj * Lj'
+        R_list[j] = real.(Pj)
+        I_list[j] = imag.(Pj)
+    end
+    K_list = Vector{Matrix{T}}(undef, M + 1)
+    if n_freq == 1
+        K_list[1] = R_list[1]
+        @inbounds for k in 1:M
+            K_list[k + 1] = zeros(T, N, N)
+        end
+        return K_list
+    end
+    if spectral === :lag_window
+        M_grid = n_freq - 1
+        inv_n = one(T) / T(2 * M_grid)
+        @inbounds for k in 0:M
+            K = copy(R_list[1])
+            isodd(k) ? (K .-= R_list[n_freq]) : (K .+= R_list[n_freq])
+            for j in 2:(n_freq - 1)
+                θ = T(π * (j - 1) / M_grid)
+                c, s = cos(k * θ), sin(k * θ)
+                K .+= (2 * c) .* R_list[j] .+ (2 * s) .* I_list[j]
+            end
+            w_k = k == M_grid ? T(0.5) : one(T)
+            K .*= w_k * inv_n
+            K_list[k + 1] = K
+        end
+    else
+        inv_T = one(T) / T(T_obs)
+        has_nyquist = iseven(T_obs)
+        j_hi = has_nyquist ? n_freq - 1 : n_freq
+        @inbounds for k in 0:M
+            K = copy(R_list[1])
+            if has_nyquist
+                isodd(k) ? (K .-= R_list[n_freq]) : (K .+= R_list[n_freq])
+            end
+            for j in 2:j_hi
+                ω = T(2π * (j - 1) / T_obs)
+                c, s = cos(k * ω), sin(k * ω)
+                K .+= (2 * c) .* R_list[j] .- (2 * s) .* I_list[j]
+            end
+            K .*= inv_T
+            K_list[k + 1] = K
+        end
+    end
+    K_list
+end
+
+"""Apply finite-lag symmetric two-sided filter `χ_t = K_0 X_t + Σ_{k=1}^M (K_k X_{t-k} + K_kᵀ X_{t+k})`."""
+function _apply_symmetric_filter(X::AbstractMatrix{T}, X_pad::AbstractMatrix{T},
+    K_list::Vector{Matrix{T}}) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    M = length(K_list) - 1
+    chi = X * transpose(K_list[1])
+    @inbounds for k in 1:M
+        Kk = K_list[k + 1]
+        X_lag = @view X_pad[(M + 1 - k):(M + T_obs - k), :]
+        X_lead = @view X_pad[(M + 1 + k):(M + T_obs + k), :]
+        mul!(chi, X_lag, transpose(Kk), one(T), one(T))
+        mul!(chi, X_lead, Kk, one(T), one(T))
+    end
+    chi
+end
+
+"""Invert `B(θ) = (L(θ)ᴴ L(θ) + 1e-10 I)⁻¹ L(θ)ᴴ` to real lag filters `B_0`, `B_pos`, `B_neg`."""
+function _factor_filter_kernels(loadings::Array{Complex{T},3}, T_obs::Int,
+    spectral::Symbol, M::Int) where {T<:AbstractFloat}
+    N, q, n_freq = size(loadings)
+    L_al = _align_eigenvector_phases(loadings)
+    BR_list = Vector{Matrix{T}}(undef, n_freq)
+    BI_list = Vector{Matrix{T}}(undef, n_freq)
+    reg = T(1e-10) * I
+    @inbounds for j in 1:n_freq
+        Lj = @view L_al[:, :, j]
+        Bj = (Lj' * Lj + reg) \ Lj'
+        BR_list[j] = real.(Bj)
+        BI_list[j] = imag.(Bj)
+    end
+    B0 = zeros(T, q, N)
+    B_pos = Vector{Matrix{T}}(undef, M)
+    B_neg = Vector{Matrix{T}}(undef, M)
+    if n_freq == 1
+        B0 .= BR_list[1]
+        @inbounds for k in 1:M
+            B_pos[k] = zeros(T, q, N)
+            B_neg[k] = zeros(T, q, N)
+        end
+        return B0, B_pos, B_neg
+    end
+    if spectral === :lag_window
+        M_grid = n_freq - 1
+        inv_n = one(T) / T(2 * M_grid)
+        @inbounds for k in 0:M
+            Ck = copy(BR_list[1])
+            isodd(k) ? (Ck .-= BR_list[n_freq]) : (Ck .+= BR_list[n_freq])
+            Sk = zeros(T, q, N)
+            for j in 2:(n_freq - 1)
+                θ = T(π * (j - 1) / M_grid)
+                c, s = cos(k * θ), sin(k * θ)
+                Ck .+= (2 * c) .* BR_list[j]
+                Sk .+= (2 * s) .* BI_list[j]
+            end
+            w_k = k == M_grid ? T(0.5) : one(T)
+            scale = w_k * inv_n
+            if k == 0
+                B0 .= scale .* Ck
+            else
+                B_pos[k] = scale .* (Ck .+ Sk)
+                B_neg[k] = scale .* (Ck .- Sk)
+            end
+        end
+    else
+        inv_T = one(T) / T(T_obs)
+        has_nyquist = iseven(T_obs)
+        j_hi = has_nyquist ? n_freq - 1 : n_freq
+        @inbounds for k in 0:M
+            Ck = copy(BR_list[1])
+            if has_nyquist
+                isodd(k) ? (Ck .-= BR_list[n_freq]) : (Ck .+= BR_list[n_freq])
+            end
+            Sk = zeros(T, q, N)
+            for j in 2:j_hi
+                ω = T(2π * (j - 1) / T_obs)
+                c, s = cos(k * ω), sin(k * ω)
+                Ck .+= (2 * c) .* BR_list[j]
+                Sk .+= (2 * s) .* BI_list[j]
+            end
+            if k == 0
+                B0 .= inv_T .* Ck
+            else
+                B_pos[k] = inv_T .* (Ck .- Sk)
+                B_neg[k] = inv_T .* (Ck .+ Sk)
+            end
+        end
+    end
+    B0, B_pos, B_neg
+end
+
+"""Reconstruct common component in time domain via finite-lag symmetric filtering."""
+function _reconstruct_time_domain(loadings::Array{Complex{T},3}, X::AbstractMatrix{T},
+    frequencies::Vector{T}=T[]; spectral::Symbol=:auto, bandwidth::Int=0) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    n_freq = size(loadings, 3)
+    spec = if spectral === :auto
+        (n_freq == div(T_obs, 2) + 1 && !isempty(frequencies) && n_freq > 1 &&
+         abs(frequencies[2] - T(2π / T_obs)) < T(1e-6)) ? :smoothed_periodogram : :lag_window
+    else
+        spectral
+    end
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, spec, bandwidth)
+    X_pad = _reflect_pad(X, M)
+    K_list = _projector_filter_kernels(loadings, T_obs, spec, M)
+    _apply_symmetric_filter(X, X_pad, K_list)
+end
+
+"""Extract time-domain factors via finite-lag symmetric projection."""
+function _extract_time_domain_factors(X::AbstractMatrix{T}, loadings::Array{Complex{T},3},
+    frequencies::Vector{T}; spectral::Symbol=:auto, bandwidth::Int=0) where {T<:AbstractFloat}
+    T_obs, _ = size(X)
+    _, q, n_freq = size(loadings)
+    spec = if spectral === :auto
+        (n_freq == div(T_obs, 2) + 1 && !isempty(frequencies) && n_freq > 1 &&
+         abs(frequencies[2] - T(2π / T_obs)) < T(1e-6)) ? :smoothed_periodogram : :lag_window
+    else
+        spectral
+    end
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, spec, bandwidth)
+    X_pad = _reflect_pad(X, M)
+    B0, B_pos, B_neg = _factor_filter_kernels(loadings, T_obs, spec, M)
+    factors = X * transpose(B0)
+    @inbounds for k in 1:M
+        X_lag = @view X_pad[(M + 1 - k):(M + T_obs - k), :]
+        X_lead = @view X_pad[(M + 1 + k):(M + T_obs + k), :]
+        mul!(factors, X_lag, transpose(B_pos[k]), one(T), one(T))
+        mul!(factors, X_lead, transpose(B_neg[k]), one(T), one(T))
     end
 
-    factors = real(FFTW.ifft(F_fft, 1))
     # Normalize factors to unit variance
     for i in 1:q
         σ = std(factors[:, i])
@@ -428,9 +640,10 @@ end
     historical_decomposition(gdfm::GeneralizedDynamicFactorModel; by=:dynamic_pc) -> HistoricalDecomposition
 
 Decompose each series into the `q` dynamic principal-component paths plus the
-idiosyncratic remainder. `χ^{(j)}(ω) = L_{:j}(ω) L_{:j}(ω)ᴴ X(ω)`, inverted
-by IFFT. The `q` paths reconstruct `gdfm.common_component` (including the
-series mean under `standardize=true`, matching `estimate_gdfm`).
+idiosyncratic remainder via finite-lag symmetric time-domain filtering
+``\\hat{\\chi}_t^{(j)} = \\sum_{k=-M}^{M} K_k^{(j)} X_{t-k}`` with reflection boundary
+padding. The `q` paths reconstruct `gdfm.common_component` (including the series
+mean under `standardize=true`, matching `estimate_gdfm`).
 """
 function historical_decomposition(gdfm::GeneralizedDynamicFactorModel{T};
     by::Symbol=:dynamic_pc) where {T<:AbstractFloat}
@@ -440,20 +653,15 @@ function historical_decomposition(gdfm::GeneralizedDynamicFactorModel{T};
     q = gdfm.q
     X_proc = gdfm.standardized ? _standardize(X) : X
     L = gdfm.loadings_spectral
-    n_fft = div(T_obs, 2) + 1
-    L_td = size(L, 3) == n_fft ? L : _interp_loadings_to_fft_grid(L, gdfm.frequencies, T_obs)
-    X_fft = FFTW.fft(X_proc, 1)
+    n_freq = size(L, 3)
+    M = _gdfm_filter_halfwidth(T_obs, n_freq, gdfm.spectral, gdfm.bandwidth)
+    X_pad = _reflect_pad(X_proc, M)
+    σ = gdfm.standardized ? max.(vec(std(X; dims=1)), T(1e-10)) : ones(T, N)
     contrib = zeros(T, T_obs, N, q + 1)
     @inbounds for k in 1:q
-        chi_fft = zeros(Complex{T}, T_obs, N)
-        for j in 1:n_fft
-            lk = @view L_td[:, k, j]
-            chi_fft[j, :] = lk .* (lk' * @view(X_fft[j, :]))
-            j > 1 && j < n_fft && (chi_fft[T_obs - j + 2, :] = conj(chi_fft[j, :]))
-        end
-        chi = real(FFTW.ifft(chi_fft, 1))
+        K_list = _projector_filter_kernels(@view(L[:, k:k, :]), T_obs, gdfm.spectral, M)
+        chi = _apply_symmetric_filter(X_proc, X_pad, K_list)
         if gdfm.standardized
-            σ = max.(vec(std(X; dims=1)), T(1e-10))
             chi .*= σ'
         end
         contrib[:, :, k] = chi
@@ -560,6 +768,533 @@ function _fhlr_projection_weights(gdfm::GeneralizedDynamicFactorModel{T}, h::Int
     ΓX0 = _gamma_from_spectrum(gdfm.spectral_density_X, gdfm.frequencies, 0)
     Gz = Z' * ΓX0 * Z
     Γχh * Z / Symmetric((Gz + Gz') / 2)
+end
+
+# =============================================================================
+# Missing-Data Validation, EM-PCA Warm-Start, Wiener–Kolmogorov & Stacked FHLR
+# =============================================================================
+
+"""Validate missing-data matrix when `allow_missing=true`: allow NaN, reject Inf and all-NaN rows/columns."""
+function _gdfm_validate_missing_data(X::AbstractMatrix, name::String="X")
+    any(isinf, X) && throw(ArgumentError(
+        "$name contains Inf/-Inf values; only finite observations and NaN are permitted when allow_missing=true"))
+    T_obs, N = size(X)
+    @inbounds for t in 1:T_obs
+        all(isnan, @view(X[t, :])) && throw(ArgumentError(
+            "$name has an all-NaN row at row $t; cannot impute an entirely unobserved period"))
+    end
+    @inbounds for j in 1:N
+        all(isnan, @view(X[:, j])) && throw(ArgumentError(
+            "$name has an all-NaN column at column $j; cannot impute an entirely unobserved series"))
+    end
+    nothing
+end
+
+"""Column-median initialization followed by cross-sectional EM-PCA warm-start (Stock & Watson 2002)."""
+function _gdfm_init_em_pca(
+    X::AbstractMatrix{T},
+    r_init::Int,
+    standardize::Bool;
+    max_iter::Int=20,
+    tol::T=T(1e-4),
+) where {T<:AbstractFloat}
+    T_obs, N = size(X)
+    obs_mask = BitMatrix(.!isnan.(X))
+    miss_mask = .!obs_mask
+    X_cur = Matrix{T}(X)
+
+    @inbounds for j in 1:N
+        vals = T[]
+        for t in 1:T_obs
+            obs_mask[t, j] && push!(vals, X_cur[t, j])
+        end
+        med_j = T(median(vals))
+        for t in 1:T_obs
+            obs_mask[t, j] || (X_cur[t, j] = med_j)
+        end
+    end
+
+    obs_vals = X_cur[obs_mask]
+    scale_obs = max(T(std(obs_vals)), T(1e-10))
+
+    r_warm = min(r_init, max(1, N - 1), max(1, T_obs - 1))
+    if any(miss_mask) && r_warm >= 1 && N > 1 && T_obs > 1
+        for _ in 1:max_iter
+            prev_miss = X_cur[miss_mask]
+            μ = mean(X_cur; dims=1)
+            σ = standardize ? max.(std(X_cur; dims=1), T(1e-10)) : ones(T, 1, N)
+            Z = (X_cur .- μ) ./ σ
+            sv = svd(Z)
+            k_use = min(r_warm, length(sv.S))
+            Z_hat = sv.U[:, 1:k_use] * Diagonal(sv.S[1:k_use]) * sv.Vt[1:k_use, :]
+            X_hat = Z_hat .* σ .+ μ
+            X_cur[miss_mask] .= X_hat[miss_mask]
+            new_miss = X_cur[miss_mask]
+            denom = max(maximum(abs, new_miss), scale_obs, T(1e-10))
+            maximum(abs.(new_miss .- prev_miss)) / denom < tol && break
+        end
+    end
+
+    X_cur, obs_mask, miss_mask, scale_obs
+end
+
+"""Linearly interpolate a [0, π] Hermitian spectral density tensor onto `M_fine + 1` uniform ordinates."""
+function _interp_spectrum_grid(S::Array{Complex{T},3}, src_freq::Vector{T}, M_fine::Int) where {T<:AbstractFloat}
+    N, _, n_src = size(S)
+    n_out = M_fine + 1
+    out_freq = [T(π * j / M_fine) for j in 0:M_fine]
+    S_out = Array{Complex{T},3}(undef, N, N, n_out)
+    @inbounds for j in 1:n_out
+        ω = out_freq[j]
+        if n_src == 1 || ω <= src_freq[1]
+            Sj = @view S[:, :, 1]
+            S_out[:, :, j] = (Sj + Sj') / T(2)
+        elseif ω >= src_freq[end]
+            Sj = @view S[:, :, n_src]
+            S_out[:, :, j] = (Sj + Sj') / T(2)
+        else
+            i2 = searchsortedfirst(src_freq, ω)
+            i1 = max(i2 - 1, 1)
+            i2 = min(i2, n_src)
+            Δ = src_freq[i2] - src_freq[i1]
+            t = Δ > zero(T) ? (ω - src_freq[i1]) / Δ : zero(T)
+            Sj = (one(T) - t) .* @view(S[:, :, i1]) .+ t .* @view(S[:, :, i2])
+            S_out[:, :, j] = (Sj + Sj') / T(2)
+        end
+    end
+    out_freq, S_out
+end
+
+"""Sample-scale spectral autocovariances `Γ_X(k), Γ_χ(k)` for `k = 0..k_max`, avoiding DFT lag aliasing."""
+function _gdfm_spectral_autocovariances(
+    Sx::Array{Complex{T},3},
+    Schi::Array{Complex{T},3},
+    frequencies::Vector{T},
+    spectral::Symbol,
+    T_orig::Int,
+    k_max::Int,
+) where {T<:AbstractFloat}
+    N, _, n_freq = size(Sx)
+    k_use = max(k_max, 0)
+    Γ_X = Vector{Matrix{T}}(undef, k_use + 1)
+    Γ_chi = Vector{Matrix{T}}(undef, k_use + 1)
+
+    if spectral === :lag_window
+        M = max(n_freq - 1, 1)
+        if n_freq == 1 || k_use < M
+            freq_use, Sx_use, Schi_use = frequencies, Sx, Schi
+        else
+            M_fine = max(M, k_use + 2)
+            freq_use, Sx_use = _interp_spectrum_grid(Sx, frequencies, M_fine)
+            _, Schi_use = _interp_spectrum_grid(Schi, frequencies, M_fine)
+        end
+        @inbounds for k in 0:k_use
+            Γ_X[k + 1] = _gamma_from_spectrum(Sx_use, freq_use, k)
+            Γ_chi[k + 1] = _gamma_from_spectrum(Schi_use, freq_use, k)
+        end
+    else
+        # Smoothed periodogram omits 1/(2π); exact T_orig-point IDFT when k_use < T_orig ÷ 2
+        if k_use < div(T_orig, 2) && n_freq == div(T_orig, 2) + 1
+            twoπ = T(2π)
+            inv_T = one(T) / T(T_orig)
+            @inbounds for k in 0:k_use
+                GX = zeros(Complex{T}, N, N)
+                Gchi = zeros(Complex{T}, N, N)
+                for j in 0:(T_orig - 1)
+                    phase = cis(-k * twoπ * j / T_orig)
+                    if j < n_freq
+                        GX .+= @view(Sx[:, :, j + 1]) .* phase
+                        Gchi .+= @view(Schi[:, :, j + 1]) .* phase
+                    else
+                        j_pos = T_orig - j
+                        GX .+= transpose(@view(Sx[:, :, j_pos + 1])) .* phase
+                        Gchi .+= transpose(@view(Schi[:, :, j_pos + 1])) .* phase
+                    end
+                end
+                Γ_X[k + 1] = real.(GX .* inv_T)
+                Γ_chi[k + 1] = real.(Gchi .* inv_T)
+            end
+        else
+            M_fine = max(n_freq - 1, k_use + 2)
+            freq_use, Sx_use = _interp_spectrum_grid(Sx, frequencies, M_fine)
+            _, Schi_use = _interp_spectrum_grid(Schi, frequencies, M_fine)
+            inv_2π = one(T) / T(2π)
+            @inbounds for k in 0:k_use
+                Γ_X[k + 1] = _gamma_from_spectrum(Sx_use, freq_use, k) .* inv_2π
+                Γ_chi[k + 1] = _gamma_from_spectrum(Schi_use, freq_use, k) .* inv_2π
+            end
+        end
+    end
+    Γ_X[1] = Matrix{T}((Γ_X[1] + Γ_X[1]') / T(2))
+    Γ_chi[1] = Matrix{T}((Γ_chi[1] + Γ_chi[1]') / T(2))
+    Γ_X, Γ_chi
+end
+
+"""Exact linear MMSE Wiener–Kolmogorov projection `E[χ_{t_target} | X_{obs in t_lo:t_hi}]` and `diag(C Σ⁻¹ C')`."""
+function _gdfm_wk_project(
+    X_obs_mat::AbstractMatrix{T},
+    obs_mask::AbstractMatrix{Bool},
+    Γ_X_pos::Vector{Matrix{T}},
+    Γ_chi_pos::Vector{Matrix{T}},
+    t_lo::Int,
+    t_hi::Int,
+    t_target::Int,
+) where {T<:AbstractFloat}
+    N = size(X_obs_mat, 2)
+    obs_t = Int[]
+    obs_i = Int[]
+    y_obs = T[]
+    @inbounds for t in t_lo:t_hi, i in 1:N
+        if obs_mask[t, i]
+            push!(obs_t, t)
+            push!(obs_i, i)
+            push!(y_obs, X_obs_mat[t, i])
+        end
+    end
+    m_obs = length(obs_t)
+    m_obs == 0 && return zeros(T, N), zeros(T, N)
+
+    Σ_obs = Matrix{T}(undef, m_obs, m_obs)
+    C_chi_obs = Matrix{T}(undef, N, m_obs)
+    for b in 1:m_obs
+        tb = obs_t[b]
+        ib = obs_i[b]
+        dt_t = t_target - tb
+        if dt_t >= 0
+            G_ct = Γ_chi_pos[dt_t + 1]
+            @inbounds for row in 1:N
+                C_chi_obs[row, b] = G_ct[row, ib]
+            end
+        else
+            G_ct = Γ_chi_pos[-dt_t + 1]
+            @inbounds for row in 1:N
+                C_chi_obs[row, b] = G_ct[ib, row]
+            end
+        end
+        for a in 1:b
+            ta = obs_t[a]
+            ia = obs_i[a]
+            dt = ta - tb
+            val = dt >= 0 ? Γ_X_pos[dt + 1][ia, ib] : Γ_X_pos[-dt + 1][ib, ia]
+            @inbounds begin
+                Σ_obs[a, b] = val
+                Σ_obs[b, a] = val
+            end
+        end
+    end
+
+    Σ_sym = Matrix{T}((Σ_obs + Σ_obs') / T(2))
+    L_cov = try
+        safe_cholesky(Σ_sym; silent=true)
+    catch
+        nothing
+    end
+    if L_cov !== nothing
+        v = L_cov' \ (L_cov \ y_obs)
+        chi_hat = Vector{T}(C_chi_obs * v)
+        M_half = L_cov \ Matrix{T}(C_chi_obs')
+        proj_var = Vector{T}(vec(sum(abs2, M_half; dims=1)))
+    else
+        Σ_inv = robust_inv(Σ_sym; silent=true)
+        chi_hat = Vector{T}(C_chi_obs * (Σ_inv * y_obs))
+        proj_var = Vector{T}(vec(sum(C_chi_obs .* (C_chi_obs * Σ_inv); dims=2)))
+    end
+    chi_hat, proj_var
+end
+
+"""EM-spectral missing-data imputation for `estimate_gdfm(..., allow_missing=true)`."""
+function _gdfm_em_spectral_impute(
+    X::AbstractMatrix{T},
+    q::Int,
+    r_static::Int,
+    standardize::Bool,
+    bandwidth::Int,
+    kernel::Symbol,
+    spectral::Symbol,
+    em_max_iter::Int,
+    em_tol::T,
+    n_lags_proj::Int,
+) where {T<:AbstractFloat}
+    T_obs, N = size(X)
+    X_cur, obs_mask, miss_mask, scale_obs = _gdfm_init_em_pca(
+        X, max(q, r_static), standardize; tol=min(em_tol, T(1e-4)))
+    X_raw = Matrix{T}(X)
+    L_em = min(max(2, n_lags_proj), max(T_obs - 1, 0))
+    t_bnd_start = max(1, T_obs - 2)
+    tail_missing_rows = [t for t in t_bnd_start:T_obs if any(!, @view(obs_mask[t, :]))]
+
+    for _ in 1:em_max_iter
+        prev_miss = X_cur[miss_mask]
+        μ = vec(mean(X_cur; dims=1))
+        σ = standardize ? max.(vec(std(X_cur; dims=1)), T(1e-10)) : ones(T, N)
+        X_proc = standardize ? (X_cur .- μ') ./ σ' : copy(X_cur)
+
+        frequencies, spectral_X = _estimate_spectrum(X_proc, bandwidth, kernel, spectral)
+        eigenvalues, eigenvectors = _spectral_eigendecomposition(spectral_X)
+        loadings = eigenvectors[:, 1:q, :]
+        common_proc = _reconstruct_time_domain(loadings, X_proc, frequencies;
+            spectral=spectral, bandwidth=bandwidth)
+
+        if !isempty(tail_missing_rows)
+            evals_q = max.(eigenvalues[1:q, :], zero(T))
+            spectral_chi = _compute_common_spectral_density(loadings, evals_q)
+            k_max_wk = min(max(T_obs - 1, 0), 2 * L_em)
+            Γ_X_pos, Γ_chi_pos = _gdfm_spectral_autocovariances(
+                spectral_X, spectral_chi, frequencies, spectral, T_obs, k_max_wk)
+            X_obs_proc = (X_raw .- μ') ./ σ'
+            for t in tail_missing_rows
+                t_lo = max(1, t - L_em)
+                t_hi = min(T_obs, t + L_em)
+                chi_bnd, _ = _gdfm_wk_project(
+                    X_obs_proc, obs_mask, Γ_X_pos, Γ_chi_pos, t_lo, t_hi, t)
+                if standardize
+                    common_proc[t, :] .= chi_bnd
+                else
+                    common_proc[t, :] .= chi_bnd .+ μ
+                end
+            end
+        end
+
+        common_unstd = standardize ? (common_proc .* σ' .+ μ') : common_proc
+        X_cur[miss_mask] .= common_unstd[miss_mask]
+
+        new_miss = X_cur[miss_mask]
+        denom = max(maximum(abs, new_miss), scale_obs, T(1e-10))
+        maximum(abs.(new_miss .- prev_miss)) / denom < em_tol && break
+    end
+    X_cur
+end
+
+"""Construct causal stacked lag matrix `[X_t, X_{t-1}, ..., X_{t-s}]` (`T_obs × N*(s+1)`)."""
+function _gdfm_stacked_matrix(X::AbstractMatrix{T}, s::Int) where {T<:AbstractFloat}
+    s == 0 && return Matrix{T}(X)
+    T_obs, N = size(X)
+    X_s = zeros(T, T_obs, N * (s + 1))
+    @inbounds for lag in 0:s
+        cols = (lag * N + 1):((lag + 1) * N)
+        if lag == 0
+            X_s[:, cols] .= X
+        else
+            X_s[(lag + 1):T_obs, cols] .= @view X[1:(T_obs - lag), :]
+        end
+    end
+    X_s
+end
+
+"""Construct symmetric block-Toeplitz covariance `Γ^{(s)}` (`N*(s+1) × N*(s+1)`) from `Γ_pos[1:(s+1)]`."""
+function _gdfm_block_toeplitz(Γ_pos::Vector{Matrix{T}}, s::Int) where {T<:AbstractFloat}
+    N = size(Γ_pos[1], 1)
+    dim_s = N * (s + 1)
+    G = Matrix{T}(undef, dim_s, dim_s)
+    @inbounds for j in 1:(s + 1), i in 1:(s + 1)
+        ri = ((i - 1) * N + 1):(i * N)
+        cj = ((j - 1) * N + 1):(j * N)
+        k = j - i
+        if k >= 0
+            G[ri, cj] .= Γ_pos[k + 1]
+        else
+            G[ri, cj] .= transpose(Γ_pos[-k + 1])
+        end
+    end
+    Matrix{T}((G + G') / T(2))
+end
+
+"""Stacked multi-lag FHLR (2005) factors `F_t = Z' X_t^{(s)}` and common component."""
+function _gdfm_onesided_stacked(
+    X::AbstractMatrix{T},
+    Sx::Array{Complex{T},3},
+    Schi::Array{Complex{T},3},
+    frequencies::Vector{T},
+    spectral::Symbol,
+    r::Int,
+    s::Int,
+) where {T<:AbstractFloat}
+    s == 0 && return _gdfm_onesided(X, Sx, Schi, frequencies, r)
+    T_obs, _ = size(X)
+    Γ_X_pos, Γ_chi_pos = _gdfm_spectral_autocovariances(Sx, Schi, frequencies, spectral, T_obs, s)
+    ΓX_s = _gdfm_block_toeplitz(Γ_X_pos, s)
+    Γχ_s = _gdfm_block_toeplitz(Γ_chi_pos, s)
+    Γξ_s = Matrix{T}((ΓX_s - Γχ_s + (ΓX_s - Γχ_s)') / T(2))
+    Z = _onesided_Z(Γχ_s, Γξ_s, r)
+    Gz = Matrix{T}((Z' * ΓX_s * Z + (Z' * ΓX_s * Z)') / T(2))
+    C_chi0 = hcat([Γ_chi_pos[lag + 1] for lag in 0:s]...)
+    W0 = C_chi0 * Z * robust_inv(Symmetric(Gz); silent=true)
+    X_s = _gdfm_stacked_matrix(X, s)
+    F = X_s * Z
+    chi = F * transpose(W0)
+    Z, F, chi
+end
+
+# =============================================================================
+# Ragged-Edge Wiener–Kolmogorov Nowcasting (`nowcast_gdfm`)
+# =============================================================================
+
+"""
+    GDFMNowcastResult{T<:AbstractFloat}
+
+Result of ragged-edge Wiener–Kolmogorov nowcasting and missing-data imputation from an
+estimated [`GeneralizedDynamicFactorModel`](@ref):
+
+```math
+\\hat{\\chi}_{T_r + h \\mid T_r} = C_{\\chi, \\text{obs}} \\Sigma_{\\text{obs}, \\text{obs}}^{-1} X_{\\text{obs}}, \\qquad
+\\text{MSE}_i = \\left(\\hat{\\Gamma}_{\\chi}(0) - C_{\\chi, \\text{obs}} \\Sigma_{\\text{obs}, \\text{obs}}^{-1} C_{\\text{obs}, \\chi}\\right)_{ii} + \\max\\left(\\hat{\\Gamma}_{\\xi}(0)_{ii},\\, 0\\right)
+```
+
+where:
+- ``\\hat{\\chi}_{T_r + h \\mid T_r}`` is the conditional expectation of the ``N \\times 1`` common component at horizon ``T_r + h``
+- ``X_{\\text{obs}}`` stacks all finite entries in the ragged-edge window ``X_{\\text{ragged}}[\\max(1, T_r - \\text{n\\_lags}):T_r, :]``
+- ``\\Sigma_{\\text{obs}, \\text{obs}}`` is the spectral autocovariance matrix of ``X_{\\text{obs}}``
+- ``C_{\\chi, \\text{obs}} = C_{\\text{obs}, \\chi}^{\\top}`` is the cross-covariance between ``\\chi_{T_r + h}`` and ``X_{\\text{obs}}``
+- ``\\hat{\\Gamma}_{\\chi}(0)`` and ``\\hat{\\Gamma}_{\\xi}(0)`` are the lag-0 common and idiosyncratic covariance matrices
+- ``\\text{MSE}_i`` is the theoretical predictive mean squared error for variable ``i`` prior to unstandardization
+
+# Fields
+- `nowcast::Vector{T}`: Unstandardized target common-component nowcast/forecast at ``T_r + h`` (length `N`)
+- `se::Vector{T}`: Unstandardized conditional predictive standard errors (length `N`)
+- `panel_imputed::Matrix{T}`: Unstandardized panel (`T_r × N`) with missing entries imputed by row-wise conditional expectation and observed entries preserved
+- `horizon::Int`: Nowcast/forecast horizon `h` relative to `T_r`
+- `n_lags::Int`: Lag window depth `n_lags` used in conditioning
+- `observed_mask::BitMatrix`: Observation mask (`T_r × N`, `true` where `X_ragged` is finite)
+- `varnames::Vector{String}`: Variable names inherited from the GDFM (length `N`)
+"""
+struct GDFMNowcastResult{T<:AbstractFloat}
+    nowcast::Vector{T}
+    se::Vector{T}
+    panel_imputed::Matrix{T}
+    horizon::Int
+    n_lags::Int
+    observed_mask::BitMatrix
+    varnames::Vector{String}
+end
+
+function Base.show(io::IO, res::GDFMNowcastResult{T}) where {T}
+    T_r, N = size(res.panel_imputed)
+    n_obs = count(res.observed_mask)
+    n_miss = length(res.observed_mask) - n_obs
+    n_tail_miss = count(!, @view(res.observed_mask[end, :]))
+    spec = Any[
+        "Variables (N)"       N;
+        "Sample rows (T_r)"   T_r;
+        "Horizon (h)"         res.horizon;
+        "Lag window (n_lags)" res.n_lags;
+        "Missing cells"       "$n_miss / $(length(res.observed_mask))";
+        "Tail missing (T_r)"  "$n_tail_miss / $N"
+    ]
+    _pretty_table(io, spec;
+        title = "GDFM Ragged-Edge Nowcast (h=$(res.horizon), n_lags=$(res.n_lags))",
+        column_labels = ["Specification", ""],
+        alignment = [:l, :r],
+    )
+    n_show = min(N, 10)
+    vdata = Matrix{Any}(undef, n_show, 4)
+    for i in 1:n_show
+        vdata[i, 1] = res.varnames[i]
+        vdata[i, 2] = res.observed_mask[end, i] ? "Observed" : "Missing"
+        vdata[i, 3] = _fmt(res.nowcast[i]; digits=4)
+        vdata[i, 4] = _fmt(res.se[i]; digits=4)
+    end
+    _pretty_table(io, vdata;
+        title = "Nowcast Estimates" * (N > n_show ? " (first $n_show of $N)" : ""),
+        column_labels = ["Variable", "T_r Status", "Nowcast", "SE"],
+        alignment = [:l, :l, :r, :r],
+    )
+end
+
+report(io::IO, res::GDFMNowcastResult) = (show(io, res); nothing)
+report(res::GDFMNowcastResult) = report(stdout, res)
+
+"""
+    nowcast_gdfm(gdfm::GeneralizedDynamicFactorModel{T}, X_ragged::AbstractMatrix{<:Real},
+                 h::Int=0; n_lags::Int=2) where {T<:AbstractFloat} -> GDFMNowcastResult{T}
+
+Compute exact minimum-MSE linear Wiener–Kolmogorov nowcasts (`h = 0`), backcasts (`h < 0`),
+or short-horizon forecasts (`h > 0`) on a ragged-edge panel `X_ragged` (`T_r × N`) using
+spectral autocovariances from a fitted [`GeneralizedDynamicFactorModel`](@ref):
+
+```math
+\\hat{\\chi}_{T_r + h \\mid T_r} = C_{\\chi, \\text{obs}} \\Sigma_{\\text{obs}, \\text{obs}}^{-1} X_{\\text{obs}}, \\qquad
+\\text{SE}_i = \\sigma_i \\sqrt{\\max\\!\\left(\\left(\\hat{\\Gamma}_{\\chi}(0) - C_{\\chi, \\text{obs}} \\Sigma_{\\text{obs}, \\text{obs}}^{-1} C_{\\text{obs}, \\chi}\\right)_{ii},\\, 0\\right) + \\max\\!\\left(\\hat{\\Gamma}_{\\xi}(0)_{ii},\\, 0\\right)}
+```
+
+where:
+- ``\\hat{\\chi}_{T_r + h \\mid T_r}`` is the conditional expectation of the common component at ``T_r + h`` in standardized space
+- ``X_{\\text{obs}}`` collects all finite entries in ``X_{\\text{ragged}}[\\max(1, T_r - \\text{n\\_lags}):T_r, :]`` after applying `gdfm` standardization
+- ``\\Sigma_{\\text{obs}, \\text{obs}}`` is the spectral autocovariance matrix of ``X_{\\text{obs}}`` built from ``\\hat{\\Gamma}_X(k)``
+- ``C_{\\chi, \\text{obs}} = C_{\\text{obs}, \\chi}^{\\top}`` is the cross-covariance between ``\\chi_{T_r + h}`` and ``X_{\\text{obs}}`` built from ``\\hat{\\Gamma}_{\\chi}(k)``
+- ``\\hat{\\Gamma}_{\\chi}(0)`` and ``\\hat{\\Gamma}_{\\xi}(0) = \\hat{\\Gamma}_X(0) - \\hat{\\Gamma}_{\\chi}(0)`` are the lag-0 common and idiosyncratic covariance matrices
+- ``\\sigma_i`` is the series scaling factor (`std(gdfm.X[:, i])` if `gdfm.standardized`, else `1`)
+
+# Arguments
+- `gdfm::GeneralizedDynamicFactorModel{T}`: Pre-estimated GDFM supplying spectral densities and scaling
+- `X_ragged::AbstractMatrix{<:Real}`: Ragged-edge panel (`T_r × N`) where `NaN` marks missing observations (`Inf`/`-Inf` rejected)
+- `h::Int=0`: Horizon relative to `T_r` (`0` = nowcast, `h > 0` = forecast, `h < 0` = backcast)
+
+# Keyword Arguments
+- `n_lags::Int=2`: Number of past lags included in the conditioning window `[max(1, T_r - n_lags), T_r]` (`≥ 0`)
+
+# Returns
+[`GDFMNowcastResult`](@ref) storing unstandardized `nowcast`, `se`, conditional-expectation
+`panel_imputed`, `horizon`, `n_lags`, `observed_mask`, and `varnames`.
+"""
+function nowcast_gdfm(
+    gdfm::GeneralizedDynamicFactorModel{T},
+    X_ragged::AbstractMatrix{<:Real},
+    h::Int=0;
+    n_lags::Int=2,
+) where {T<:AbstractFloat}
+    n_lags >= 0 || throw(ArgumentError("n_lags must be >= 0, got $n_lags"))
+    T_r, N_r = size(X_ragged)
+    T_r >= 1 || throw(ArgumentError("X_ragged must have at least 1 row, got $T_r"))
+    N = length(gdfm.varnames)
+    N_r == N || throw(ArgumentError(
+        "X_ragged has $N_r columns, expected $N matching gdfm.varnames"))
+    any(isinf, X_ragged) && throw(ArgumentError(
+        "X_ragged contains Inf/-Inf values; only finite values and NaN are permitted"))
+
+    X_mat = Matrix{T}(X_ragged)
+    obs_mask = BitMatrix(.!isnan.(X_mat))
+
+    if gdfm.standardized
+        μ = vec(mean(gdfm.X; dims=1))
+        σ = max.(vec(std(gdfm.X; dims=1)), T(1e-10))
+        X_proc = (X_mat .- μ') ./ σ'
+    else
+        μ = zeros(T, N)
+        σ = ones(T, N)
+        X_proc = copy(X_mat)
+    end
+
+    k_max = max(2 * n_lags, abs(h), abs(h + n_lags))
+    Γ_X_pos, Γ_chi_pos = _gdfm_spectral_autocovariances(
+        gdfm.spectral_density_X, gdfm.spectral_density_chi,
+        gdfm.frequencies, gdfm.spectral, size(gdfm.X, 1), k_max)
+
+    t_lo_now = max(1, T_r - n_lags)
+    chi_proc, proj_var = _gdfm_wk_project(
+        X_proc, obs_mask, Γ_X_pos, Γ_chi_pos, t_lo_now, T_r, T_r + h)
+
+    Γ_xi0 = Γ_X_pos[1] - Γ_chi_pos[1]
+    common_err_var = max.(diag(Γ_chi_pos[1]) .- proj_var, zero(T))
+    idio_var_pos = max.(diag(Γ_xi0), zero(T))
+    se_proc = sqrt.(common_err_var .+ idio_var_pos)
+
+    nowcast_vec = Vector{T}(chi_proc .* σ .+ μ)
+    se_vec = Vector{T}(se_proc .* σ)
+
+    panel_imputed = copy(X_mat)
+    @inbounds for t in 1:T_r
+        any(!, @view(obs_mask[t, :])) || continue
+        t_lo_row = max(1, t - n_lags)
+        t_hi_row = min(T_r, t + n_lags)
+        chi_row_proc, _ = _gdfm_wk_project(
+            X_proc, obs_mask, Γ_X_pos, Γ_chi_pos, t_lo_row, t_hi_row, t)
+        for i in 1:N
+            obs_mask[t, i] || (panel_imputed[t, i] = chi_row_proc[i] * σ[i] + μ[i])
+        end
+    end
+
+    GDFMNowcastResult{T}(
+        nowcast_vec, se_vec, panel_imputed, h, n_lags, obs_mask, copy(gdfm.varnames))
 end
 
 # =============================================================================
@@ -970,37 +1705,69 @@ end
 # =============================================================================
 
 """
-    forecast(model::GeneralizedDynamicFactorModel, h; method=:ar, ci_method=:theoretical, conf_level=0.95, n_boot=1000)
+    forecast(model::GeneralizedDynamicFactorModel, h; method=:ar, ci_method=:theoretical,
+             conf_level=0.95, n_boot=1000, rng=Random.default_rng(), seed=nothing,
+             n_lags_proj=nothing)
 
-Forecast `h` steps ahead from a GDFM.
+Forecast `h` steps ahead from an estimated [`GeneralizedDynamicFactorModel`](@ref).
+
+Under `method=:one_sided` or `method=:spectral`, forecasts follow the FHLR (2005)
+projection onto the stacked one-sided generalized static factors:
+
+```math
+\\hat{\\chi}_{T+1 \\mid T} = C_{\\chi, 1}^{(s)} Z \\left(Z^{\\top} \\hat{\\Gamma}_X^{(s)} Z\\right)^{-1} Z^{\\top} X_T^{(s)}, \\qquad
+\\hat{\\chi}_{T+h \\mid T} = W_1 \\Phi_F^{h-1} F_T^{(s)}
+```
+
+where:
+- ``\\hat{\\chi}_{T+h \\mid T}`` is the ``h``-step-ahead projected common component
+- ``s`` is the stacked projection lag depth (`n_lags_proj`, defaulting to the lag depth in `model.Z`)
+- ``X_T^{(s)} = [X_T^{\\top}, X_{T-1}^{\\top}, \\dots, X_{T-s}^{\\top}]^{\\top}`` is the stacked panel at the forecast origin
+- ``Z`` is the ``N(s + 1) \\times r`` one-sided generalized eigenvector weight matrix
+- ``F_T^{(s)} = Z^{\\top} X_T^{(s)}`` is the ``r \\times 1`` contemporaneous stacked static factor vector
+- ``\\hat{\\Gamma}_X^{(s)}`` is the ``N(s + 1) \\times N(s + 1)`` block-Toeplitz panel autocovariance
+- ``C_{\\chi, 1}^{(s)} = [\\hat{\\Gamma}_{\\chi}(1), \\dots, \\hat{\\Gamma}_{\\chi}(s + 1)]`` is the one-step common cross-covariance
+- ``W_1 = C_{\\chi, 1}^{(s)} Z (Z^{\\top} \\hat{\\Gamma}_X^{(s)} Z)^{-1}`` is the one-step projection loading matrix
+- ``\\Phi_F`` is the stationary VAR(1) transition matrix estimated on centered one-sided factors
 
 # Arguments
-- `model`: Estimated GDFM
-- `h`: Forecast horizon
+- `model`: Estimated [`GeneralizedDynamicFactorModel`](@ref)
+- `h`: Forecast horizon (`≥ 1`)
 
 # Keyword Arguments
 - `method::Symbol=:ar`: `:ar` fits an AR(1) on each **two-sided** factor; `:one_sided`
-  and `:spectral` are the FHLR (2005) projection
-  ``\\hat\\chi_{T+h|T} = \\hat\\Gamma_\\chi(h) Z (Z'\\hat\\Gamma_X(0) Z)^{-1} Z' X_T``.
-  `:spectral` is **not** an alias for `:ar`.
-- `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, or `:bootstrap`
+  and `:spectral` compute the FHLR (2005) projection (`:spectral` is **not** an alias for `:ar`)
+- `ci_method::Symbol=:theoretical`: Confidence interval method — `:none`, `:theoretical`, or `:bootstrap`.
+  Under `:one_sided`/`:spectral`, `:theoretical` combines common-component projection
+  error ``\\hat{\\Gamma}_\\chi(0) - W_h G_z W_h^{\\top}`` with idiosyncratic variance (and
+  ``h``-step factor projection error for `factors_se`), and `:bootstrap` simulates
+  factor VAR(1) innovations alongside resampled idiosyncratic residuals
 - `conf_level::Real=0.95`: Confidence level for intervals
 - `n_boot::Int=1000`: Bootstrap replications (for `:bootstrap`)
+- `rng::AbstractRNG=Random.default_rng()`: Random number generator for bootstrap draws
+- `seed::Union{Integer,Nothing}=nothing`: Optional integer seed overriding `rng` via `Xoshiro(seed)`
+- `n_lags_proj::Union{Nothing,Int}=nothing`: Lag depth `s` for stacked FHLR `:one_sided`/`:spectral`
+  projection (`nothing` uses the lag depth stored in `model.Z`, which is `0` by default)
 
 # Returns
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbol=:ar,
     ci_method::Symbol=:theoretical, conf_level::Real=0.95, n_boot::Int=1000,
-    rng::AbstractRNG=Random.default_rng()) where {T}
+    rng::AbstractRNG=Random.default_rng(),
+    seed::Union{Integer,Nothing}=nothing,
+    n_lags_proj::Union{Nothing,Int}=nothing) where {T}
 
     h < 1 && throw(ArgumentError("h must be positive"))
     method ∈ (:ar, :one_sided, :spectral) || throw(ArgumentError(
         "method must be :ar, :one_sided, or :spectral, got :$method"))
     ci_method ∈ (:none, :theoretical, :bootstrap) || throw(ArgumentError("ci_method must be :none, :theoretical, or :bootstrap"))
+    n_lags_proj === nothing || n_lags_proj >= 0 || throw(ArgumentError(
+        "n_lags_proj must be >= 0, got $n_lags_proj"))
+    rng = _resolve_repro_rng(rng, seed)
     if method === :one_sided || method === :spectral
         return _forecast_gdfm_fhlr(model, h; ci_method=ci_method, conf_level=conf_level,
-            n_boot=n_boot, rng=rng)
+            n_boot=n_boot, rng=rng, n_lags_proj=n_lags_proj)
     end
 
     q = model.q
@@ -1112,32 +1879,109 @@ function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbo
     _build_factor_forecast(F_fc, X_fc, f_lo, f_hi, o_lo, o_hi, f_se, o_se, h, conf_T, :bootstrap)
 end
 
-"""FHLR (2005) projection forecast from one-sided weights `Z`."""
+"""FHLR (2005) projection forecast from one-sided weights `Z` (supporting stacked `n_lags_proj`)."""
 function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
     ci_method::Symbol, conf_level::Real, n_boot::Int,
-    rng::AbstractRNG) where {T<:AbstractFloat}
+    rng::AbstractRNG,
+    n_lags_proj::Union{Nothing,Int}=nothing) where {T<:AbstractFloat}
 
     X = model.X
     T_obs, N = size(X)
     r = size(model.Z, 2)
     r < 1 && throw(ArgumentError("one-sided weights Z are empty; re-estimate the GDFM"))
+    s_model = div(size(model.Z, 1), N) - 1
+    (s_model >= 0 && size(model.Z, 1) == N * (s_model + 1)) || throw(ArgumentError(
+        "one-sided weights Z have incompatible row dimension $(size(model.Z, 1)) for N=$N; re-estimate the GDFM"))
+    s_use = n_lags_proj === nothing ? s_model : Int(n_lags_proj)
+    s_use >= 0 || throw(ArgumentError("n_lags_proj must be >= 0, got $s_use"))
+    s_use < T_obs || throw(ArgumentError("n_lags_proj must be < T_obs ($T_obs), got $s_use"))
+
     X_proc = model.standardized ? _standardize(X) : X
-    xT = vec(X_proc[end, :])
-    F_now = model.Z' * xT
-    F_fc = repeat(F_now', h, 1)
+
+    if s_use == 0 && s_model == 0
+        Z = model.Z
+        xT = vec(X_proc[end, :])
+        F_now = Z' * xT
+        F_fc = repeat(F_now', h, 1)
+
+        # Put Γχ(0) and ΓX(0) on the sample-variance scale (smoothed periodogram omits 1/(2π))
+        scale_spec = model.spectral === :smoothed_periodogram ? T(2π) : one(T)
+        Γχ0 = _gamma_from_spectrum(model.spectral_density_chi, model.frequencies, 0) ./ scale_spec
+        ΓX0 = _gamma_from_spectrum(model.spectral_density_X, model.frequencies, 0) ./ scale_spec
+        Gz_raw = Z' * ΓX0 * Z
+        Gz = Symmetric((Gz_raw + Gz_raw') / 2)
+
+        # Estimate stationary VAR(1) transition Φ_F on centered one-sided factors F_os = X_proc * Z
+        F_os = X_proc * Z
+        Fc = F_os .- mean(F_os; dims=1)
+        Φ_F = _fhlr_factor_var1(Fc, T_obs, r)
+
+        W_list = Vector{Matrix{T}}(undef, h)
+        W_list[1] = _fhlr_projection_weights(model, 1)
+        @inbounds for hh in 2:h
+            W_list[hh] = W_list[hh - 1] * Φ_F
+        end
+
+        W0 = (Γχ0 * Z) * robust_inv(Gz; silent=true)
+        chi_os_proc = if model.standardized
+            μ = mean(X; dims=1)
+            σ = max.(std(X; dims=1), T(1e-10))
+            (model.common_component_onesided .- μ) ./ σ
+        else
+            model.common_component_onesided
+        end
+    else
+        Γ_X_pos, Γ_chi_pos = _gdfm_spectral_autocovariances(
+            model.spectral_density_X, model.spectral_density_chi,
+            model.frequencies, model.spectral, T_obs, s_use + 1)
+        ΓX_s = _gdfm_block_toeplitz(Γ_X_pos[1:(s_use + 1)], s_use)
+        if s_use == s_model
+            Z = model.Z
+        else
+            Γχ_s = _gdfm_block_toeplitz(Γ_chi_pos[1:(s_use + 1)], s_use)
+            Γξ_s = Matrix{T}((ΓX_s - Γχ_s + (ΓX_s - Γχ_s)') / T(2))
+            Z = _onesided_Z(Γχ_s, Γξ_s, r)
+        end
+        X_s = _gdfm_stacked_matrix(X_proc, s_use)
+        xT_s = vec(X_s[end, :])
+        F_now = Z' * xT_s
+        F_fc = repeat(F_now', h, 1)
+
+        Gz_raw = Z' * ΓX_s * Z
+        Gz = Symmetric((Gz_raw + Gz_raw') / T(2))
+        Gz_inv = robust_inv(Gz; silent=true)
+
+        F_os = X_s * Z
+        Fc = F_os .- mean(F_os; dims=1)
+        Φ_F = _fhlr_factor_var1(Fc, T_obs, r)
+
+        C_chi0 = hcat([Γ_chi_pos[lag + 1] for lag in 0:s_use]...)
+        C_chi1 = hcat([Γ_chi_pos[lag + 2] for lag in 0:s_use]...)
+        W0 = C_chi0 * Z * Gz_inv
+        W_list = Vector{Matrix{T}}(undef, h)
+        W_list[1] = C_chi1 * Z * Gz_inv
+        @inbounds for hh in 2:h
+            W_list[hh] = W_list[hh - 1] * Φ_F
+        end
+        Γχ0 = Γ_chi_pos[1]
+        chi_os_proc = if s_use == s_model
+            if model.standardized
+                μ = mean(X; dims=1)
+                σ = max.(std(X; dims=1), T(1e-10))
+                (model.common_component_onesided .- μ) ./ σ
+            else
+                model.common_component_onesided
+            end
+        else
+            F_os * transpose(W0)
+        end
+    end
+
     X_fc = Matrix{T}(undef, h, N)
     @inbounds for hh in 1:h
-        W = _fhlr_projection_weights(model, hh)
-        X_fc[hh, :] = W * F_now
+        X_fc[hh, :] = W_list[hh] * F_now
     end
     conf_T = T(conf_level)
-    chi_os_proc = if model.standardized
-        μ = mean(X; dims=1)
-        σ = max.(std(X; dims=1), T(1e-10))
-        (model.common_component_onesided .- μ) ./ σ
-    else
-        model.common_component_onesided
-    end
     idio_proc = X_proc - chi_os_proc
     idio_var = vec(var(idio_proc; dims=1))
 
@@ -1150,8 +1994,17 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
 
     if ci_method === :theoretical
         z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
-        X_se = repeat(sqrt.(max.(idio_var, zero(T)))', h, 1)
-        F_se = zeros(T, h, r)
+        X_se = Matrix{T}(undef, h, N)
+        F_se = Matrix{T}(undef, h, r)
+        C_F = Matrix{T}(I, r, r)
+        idio_var_pos = max.(idio_var, zero(T))
+        @inbounds for hh in 1:h
+            C_F = C_F * Φ_F
+            Wh = W_list[hh]
+            common_err_var = max.(diag(Γχ0 - Wh * Gz * Wh'), zero(T))
+            X_se[hh, :] = sqrt.(common_err_var .+ idio_var_pos)
+            F_se[hh, :] = sqrt.(max.(diag(Gz - C_F * Gz * C_F'), zero(T)))
+        end
         F_lo, F_hi = F_fc .- z_val .* F_se, F_fc .+ z_val .* F_se
         X_lo, X_hi = X_fc .- z_val .* X_se, X_fc .+ z_val .* X_se
         if model.standardized
@@ -1160,15 +2013,21 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
         return _build_factor_forecast(F_fc, X_fc, F_lo, F_hi, X_lo, X_hi, F_se, X_se, h, conf_T, :theoretical)
     end
 
-    # Bootstrap: resample idiosyncratic rows and add to the projection
+    # Bootstrap: propagate VAR(1) factor innovations alongside resampled idiosyncratic rows
     n_idio = size(idio_proc, 1)
+    idio_c = idio_proc .- mean(idio_proc; dims=1)
+    U_F = T_obs >= 3 ? (Fc[2:end, :] - Fc[1:end-1, :] * Φ_F') : zeros(T, 1, r)
+    U_F .-= mean(U_F; dims=1)
+    n_u = size(U_F, 1)
     X_boot = zeros(T, n_boot, h, N)
     F_boot = zeros(T, n_boot, h, r)
     @inbounds for b in 1:n_boot
+        δF = zeros(T, r)
         for hh in 1:h
-            row = idio_proc[rand(rng, 1:n_idio), :]
-            X_boot[b, hh, :] = X_fc[hh, :] .+ row
-            F_boot[b, hh, :] = F_now
+            δF = Φ_F * δF .+ U_F[rand(rng, 1:n_u), :]
+            F_boot[b, hh, :] = F_fc[hh, :] .+ δF
+            row = idio_c[rand(rng, 1:n_idio), :]
+            X_boot[b, hh, :] = X_fc[hh, :] .+ W0 * δF .+ row
         end
     end
     if model.standardized
@@ -1188,6 +2047,28 @@ function _forecast_gdfm_fhlr(model::GeneralizedDynamicFactorModel{T}, h::Int;
     f_se = T[std(F_boot[:, hh, j]) for hh in 1:h, j in 1:r]
     o_se = T[std(X_boot[:, hh, j]) for hh in 1:h, j in 1:N]
     _build_factor_forecast(F_fc, X_fc, f_lo, f_hi, o_lo, o_hi, f_se, o_se, h, conf_T, :bootstrap)
+end
+
+"""Estimate stationary VAR(1) transition matrix on centered one-sided factors."""
+function _fhlr_factor_var1(Fc::AbstractMatrix{T}, T_obs::Int, r::Int) where {T<:AbstractFloat}
+    Φ_F = zeros(T, r, r)
+    if T_obs >= 3
+        Fc_lag = @view Fc[1:end-1, :]
+        Fc_lead = @view Fc[2:end, :]
+        S_lag = Fc_lag' * Fc_lag
+        Φ_F = (Fc_lead' * Fc_lag) * robust_inv(Symmetric((S_lag + S_lag') / 2); silent=true)
+        if any(!isfinite, Φ_F)
+            Φ_F .= zero(T)
+        else
+            ρ = maximum(abs, eigvals(Φ_F))
+            if !isfinite(ρ)
+                Φ_F .= zero(T)
+            elseif ρ >= T(0.995)
+                Φ_F .*= T(0.995) / ρ
+            end
+        end
+    end
+    Φ_F
 end
 
 """AR(1) forecast for each factor series."""

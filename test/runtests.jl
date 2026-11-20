@@ -11,7 +11,7 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
-# CI job split: "dsge" | "empirical" | "serialization" | "" (local full suite).
+# CI job split: "dsge" | "empirical" | "empirical2" | "serialization" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)
@@ -76,23 +76,35 @@ const TEST_GROUPS = [
         "vecm/test_vecm_restrictions.jl", # EV-38 (#446)
         "preg/test_panel_iv.jl",          # moved from the ceiling ARIMA group to rebalance (#127)
     ]),
-    # Group 4: LP & Factor Models & Nowcasting & DiD
-    ("LP & Factor & Nowcast" => [
+    # Group 4: LP/DiD/Nowcasting and Factor/GDFM (split for macOS balance)
+    ("LP & DiD & Nowcast" => [
         "lp/test_lp.jl",
         "lp/test_lp_structural.jl",
         "lp/test_lp_forecast.jl",
         "lp/test_lp_fevd.jl",
         "lp/test_lp_weak_iv.jl",   # T245 (#344): MOP effective F + LP-IV AR bands
+        "nowcast/test_nowcast.jl",
+        "did/test_did.jl",
+        "did/test_lpdid.jl",
+    ]),
+    ("Factor & GDFM" => [
         "factor/test_factormodel.jl",
         "factor/test_dynamicfactormodel.jl",
         "factor/test_gdfm.jl",
+        "factor/test_gdfm_i1.jl",          # GDFM-04 (#896): Cointegrated I(1) GDFM & BLL (2021) structural IRFs
+        "factor/test_tv_gdfm.jl",          # GDFM-06 (#898): Locally stationary time-varying spectral GDFM
+        "factor/test_fhlz.jl",
+        "factor/test_factor_selection.jl",   # GDFM-03 (#895): Onatski (2009/2010) & Ahn-Horenstein (2013)
         "factor/test_factor_forecast.jl",
         "factor/test_restricted.jl",
         "factor/test_favar.jl",
         "factor/test_structural_dfm.jl",
-        "nowcast/test_nowcast.jl",
-        "did/test_did.jl",
-        "did/test_lpdid.jl",
+    ]),
+    ("Quantile Factor & FAVAR" => [
+        "factor/test_qfm.jl",
+        "factor/test_qfm_panel.jl",        # QFM-06 (#888): Quantile factor panel regression (Ando-Bai 2020)
+        "factor/test_qfm_forecast.jl",     # QFM-07 (#889): QFM distributional forecasting & Growth-at-Risk
+        "favar/test_qfavar.jl",            # QFM-08 (#890): Quantile VAR & Quantile FAVAR
     ]),
     # Group 5: ARIMA & Statistical Tests & Data & PVAR & Reg
     ("ARIMA & Tests & Data & Reg" => [
@@ -111,6 +123,8 @@ const TEST_GROUPS = [
         "arima/test_arfima.jl",   # EV-13 (#421): ARFIMA + GPH + local Whittle
         "arima/test_sarima.jl",   # T242 (#341): multiplicative seasonal ARIMA
         "statespace/test_statespace.jl",   # EV-37 (#445): public state-space Kalman MLE + TVP regression
+    ]),
+    ("Tests & GMM & Data & PVAR" => [
         "teststat/test_granger.jl",
         "teststat/test_dumitrescu_hurlin.jl",   # EV-24 (#432): DH panel Granger non-causality
         "teststat/test_equality.jl",   # EV-34 (#442): equality-of-distribution + rank correlations
@@ -124,6 +138,8 @@ const TEST_GROUPS = [
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
+    ]),
+    ("Reg & Panel & ARDL" => [
         "reg/test_reg.jl",
         "reg/test_ivkclass.jl",    # EV-36 (#444): IV k-class — LIML / Fuller / generic k-class
         "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
@@ -152,9 +168,11 @@ const TEST_GROUPS = [
         "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
     ]),
-    # Group 6: Volatility & Non-Gaussian & Filters & Spectral.
+    # Group 6: Volatility & Filters & Spectral.
     # Ranked just under ARIMA so macOS empirical (3-wide + coverage) does not
     # start this sequential GARCH/MCEM group after the first wave (#828).
+    # Non-Gaussian SVAR & Internals live in dedicated sibling groups so they
+    # run in parallel across workers instead of forming a 45-min single-worker tail.
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
@@ -162,15 +180,34 @@ const TEST_GROUPS = [
         "volatility/test_figarch.jl",       # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
         "volatility/test_garch_family.jl",  # EV-15 (#423): IGARCH/Component-GARCH/APARCH + sign-bias/Nyblom tests
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
-        "nongaussian/test_nongaussian_svar.jl",
-        "nongaussian/test_nongaussian_internals.jl",
-        "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
-        "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
-        "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
         "filters/test_filters.jl",
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+    ]),
+    ("Non-Gaussian SVAR" => [
+        "nongaussian/test_nongaussian_svar.jl",
+        "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
+        "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
+        "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
+    ]),
+    ("Non-Gaussian Internals" => [
+        "nongaussian/test_nongaussian_internals.jl",
+    ]),
+    ("Non-Gaussian & SVARMA" => [
+        "nongaussian/test_lms_svar.jl",       # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML
+        "nongaussian/test_lms_hypothesis.jl", # NGID-03 (#903): LMS structural hypothesis testing suite & diagnostics
+        "nongaussian/test_lanne_luoto_gmm.jl", # NGID-04 (#904): Lanne-Luoto (2021) full-system GMM + MSC/RMSC + CUE
+        "svarma/test_ssvarma_core.jl",        # NGID-05 (#905): GMR (2020) non-fundamental SSVARMA core & Schur filter
+        "svarma/test_ssvarma_estimation.jl",  # NGID-06 (#906): SSVARMA(p,q) PML/ML/GMM estimation & II-2SLS
+        "svarma/test_fundamentalness.jl",     # NGID-07 (#907): Fundamentalness & sufficient information tests
+    ]),
+    ("Rational Inattention" => [
+        "ri/test_ri_kalman.jl",               # RI-02 (#917), RI-04 (#919): Sims steady-state LQG rational inattention & joint state space
+        "ri/test_ri_dynamic.jl",              # RI-03 (#918): Afrouzi-Yang dynamic RI transition path
+        "ri/test_ri_estimation.jl",           # RI-05 (#920): Empirical RI estimation & Coibion-Gorodnichenko tests
+        "ri/test_ri_mw.jl",                   # RI-06 (#921): Maćkowiak-Wiederholt multivariate RI pricing
+        "ri/test_ri_discrete.jl",             # RI-07 (#922): Matejka-McKay & CDL discrete-choice RI
     ]),
     # Plotting — consolidated plot_result harness (PLT-39). Split from the old
     # monolith (test_plot_result.jl) into per-domain lanes + the Wave-2 dispatch
@@ -191,6 +228,11 @@ const TEST_GROUPS = [
         "plotting/test_plot_wave2_laneE.jl",
         "plotting/test_plot_wave2_laneF.jl",
         "plotting/test_plotting_grid.jl",   # v1.0.3 (#880, #881): grid layout & CSS scoping
+        "plotting/test_plot_qfm.jl",        # v1.1.0 (#891, #892): QFM, QVAR, QFAVAR & GaR
+        "plotting/test_plot_gdfm.jl",       # v1.1.0 (#900): GDFM, FHLZ, BandPass, TV & Rank Tests
+        "plotting/test_plot_ngid.jl",       # v1.1.0 (#908): NGID, LL-GMM, Hypothesis & SSVARMA
+        "plotting/test_plot_abcd.jl",       # v1.1.0 (#915): ABCD, Invertibility & DSGE-VAR
+        "plotting/test_plot_ri.jl",         # v1.1.0 (#923): Rational Inattention & Discrete Choice
         "dsge/test_dcegm_plot.jl",
     ]),
     # Nonlinear time series (EV-05 threshold/SETAR; EV-06 STAR & EV-07 Markov
@@ -206,6 +248,7 @@ const TEST_GROUPS = [
     ("DSGE Core" => [
         "dsge/test_dsge.jl",
         "dsge/test_dsge_gmm.jl",          # v1.0.3 (#874, #876): GMM & Reiter IRF
+        "dsge/test_abcd.jl",              # ABCD-01 (#909): canonical ABCD representation
         "dsge/test_perfect_foresight_sparse.jl",
         "dsge/test_dcegm_spec.jl",
         "dsge/test_modelspec_kinds.jl",
@@ -215,6 +258,7 @@ const TEST_GROUPS = [
     ]),
     ("DSGE Bayesian & HD" => [
         "dsge/test_bayesian_dsge.jl",
+        "dsge/test_dsge_var.jl",           # ABCD-06 (#914): Del Negro-Schorfheide Bayesian DSGE-VAR(λ)
         "dsge/test_dsge_hd.jl",
     ]),
     ("HA-DSGE" => [
@@ -254,6 +298,7 @@ const TEST_GROUPS = [
         "coverage/test_vecm_teststat_coverage.jl",
         "coverage/test_misc_coverage.jl",
         "coverage/test_codecov_gaps.jl",
+        "coverage/test_v110_coverage.jl",
     ]),
     # Group 10b: IO. Sub-second files; stay in empirical (not a coverage harness).
     ("IO" => [

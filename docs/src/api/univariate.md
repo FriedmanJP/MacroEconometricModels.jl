@@ -112,10 +112,25 @@ See [State-Space Models](@ref statespace_page) for theory and examples.
 
 ```@docs
 StateSpaceModel
+SteadyStateKalman
+steady_state_kalman
 estimate_statespace
 local_level
 local_linear_trend
 estimate_tvp_reg
+RationalInattentionProblem
+SimsKalmanSolution
+DynamicRISolution
+RIEstimationResult
+CGTestResult
+MWAttentionResult
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["ri/types.jl", "ri/steady_state.jl", "ri/dynamic.jl", "ri/state_space.jl", "ri/analysis.jl", "ri/estimation.jl", "ri/mackowiak_wiederholt.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---

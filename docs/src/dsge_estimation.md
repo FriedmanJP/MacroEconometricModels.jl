@@ -1073,6 +1073,39 @@ The SMM point estimate and the SMC posterior mean both sit near the data-generat
 
 ---
 
+## Bayesian DSGE-VAR (``\lambda``)
+
+Del Negro & Schorfheide (2004) and Del Negro, Schorfheide, Smets & Wouters (2007) bridge pure structural DSGE models and unrestricted vector autoregressions by centering a conjugate Normal–Inverse-Wishart VAR(``p``) prior on the DSGE model's population autocovariances scaled by a misspecification weight ``\lambda \in [\lambda_{\min}, \infty]``:
+
+```math
+\hat{\Phi}(\lambda) = \left(\lambda T \Gamma_{XX}(\theta) + X'X\right)^{-1}\!\left(\lambda T \Gamma_{XY}(\theta) + X'Y\right), \qquad
+S(\lambda) = \left(\lambda T \Gamma_{YY}(\theta) + Y'Y\right) - \hat{\Phi}(\lambda)' \left(\lambda T \Gamma_{XX}(\theta) + X'X\right) \hat{\Phi}(\lambda)
+```
+
+where:
+- ``\theta`` is the vector of structural DSGE parameters solving into the state-space representation ``(A, B, C, D)``,
+- ``\Gamma_{YY}(\theta), \Gamma_{XY}(\theta), \Gamma_{XX}(\theta)`` are the exact population second-moment matrices of an approximating VAR(``p``) computed by [`dsge_var_prior`](@ref) and stored in [`DSGEVARPrior`](@ref),
+- ``\lambda \ge \lambda_{\min}`` controls the dummy-observation sample size ``\lambda T`` assigned to the DSGE prior (`lambda = Inf` imposes the dogmatic DSGE restriction exactly, whereas smaller ``\lambda`` relaxes cross-equation restrictions toward the unrestricted data VAR),
+- ``(Y, X)`` are the actual estimation sample matrices of length ``T`` constructed with lag order ``p``.
+
+[`dsge_var_logml`](@ref) evaluates the exact closed-form Normal–Inverse-Wishart marginal data density ``p(Y \mid \theta, \lambda)``, while [`select_dsge_var_lambda`](@ref) traces the marginal-likelihood profile over ``\lambda`` in [`DSGEVARLambdaProfile`](@ref) and locates the Bayes-optimal weight ``\hat{\lambda}``. Calling [`estimate_dsge_var`](@ref) with a fixed solution draws conditional posteriors ``p(\Phi, \Sigma_u \mid Y, \theta, \lambda)`` directly into [`DSGEVARPosterior`](@ref), while passing a `ModelSpec` alongside parameter priors runs joint hierarchical ``(\theta, \Phi, \Sigma_u)`` sampling (`method=:rwmh` or `method=:smc`) and supports structural QR rotation via `irf(post, H; method=:dsge_qr)`.
+
+```@example dsge_estimation
+dv_prior = dsge_var_prior(sol, 2, 1.5, size(Y_data, 1) - 2; observables=[:y, :i])
+dv_prof = select_dsge_var_lambda(sol, Y_data, 2; observables=[:y, :i])
+dv_post = estimate_dsge_var(spec, Y_data, 2;
+                            priors=Dict(:rho => Beta(5, 2)),
+                            lambda=:auto, method=:rwmh, observables=[:y, :i],
+                            n_draws=80, burnin=40, step_scale=0.05, seed=42)
+dv_irf = irf(dv_post, 12; method=:dsge_qr)
+report(dv_prof)
+(lambda_hat = round(dv_prof.lambda_hat; digits=3),
+ logml = round(dv_post.log_marginal_likelihood; digits=2),
+ irf_shape = size(dv_irf.point_estimate))
+```
+
+---
+
 ## Saving and Reloading
 
 `save_model` persists a `DSGEEstimation` or `BayesianDSGE` result, including the nested `ModelSpec`, the solution, priors, and posterior draws. Pass `seed=N` to `estimate_dsge_bayes` (and to `posterior_predictive` / `prior_predictive` / `simulate`) so the result carries a `ReproManifest`; `reproduce` on the reloaded object re-runs from that seed. `seed` wins when both `seed` and `rng` are passed. See [Data Management](@ref data_page) for the executed-code caveat and the compression size table --- 20k MH draws shrink about fourfold with `compress=true`.
@@ -1161,3 +1194,7 @@ reproduce(load_model("bayes.jld2"))
 - Tierney, L., & Kadane, J. B. (1986). Accurate Approximations for Posterior Moments and Marginal Densities. *Journal of the American Statistical Association*, 81(393), 82-86. [DOI](https://doi.org/10.1080/01621459.1986.10478240)
 
 - Vehtari, A., Gelman, A., Simpson, D., Carpenter, B., & Bürkner, P.-C. (2021). Rank-Normalization, Folding, and Localization: An Improved ``\hat{R}`` for Assessing Convergence of MCMC. *Bayesian Analysis*, 16(2), 667-718. [DOI](https://doi.org/10.1214/20-BA1221)
+
+- Del Negro, M., & Schorfheide, F. (2004). Priors from General Equilibrium Models for VARs. *International Economic Review*, 45(2), 643-673. [DOI](https://doi.org/10.1111/j.1468-2354.2004.00294.x)
+
+- Del Negro, M., Schorfheide, F., Smets, F., & Wouters, R. (2007). On the Fit of New Keynesian Models. *Journal of Business & Economic Statistics*, 25(2), 123-143. [DOI](https://doi.org/10.1198/073500107000000016)

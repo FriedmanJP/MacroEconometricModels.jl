@@ -158,17 +158,34 @@ function _resolve_factor_lag(F::AbstractMatrix, p::Symbol, p_max::Int)
     select_lag_order(F, p_max; criterion=crit), crit
 end
 
+"""Resolve `p` and `p_max` for `method=:fhlz` (`:auto` → `p_max=5, :bic`)."""
+function _resolve_fhlz_lag(p::Union{Int,Symbol}, p_max::Union{Nothing,Int})
+    if p_max !== nothing && p_max < 1
+        throw(ArgumentError("p_max must be >= 1"))
+    end
+    if p === :auto
+        return something(p_max, 5), :bic
+    elseif p isa Symbol
+        p in (:bic, :aic) || throw(ArgumentError(
+            "for method=:fhlz, p must be a positive integer or :bic/:aic, got :$p"))
+        return something(p_max, 5), p
+    else
+        p < 1 && throw(ArgumentError("VAR lag order p must be >= 1"))
+        return (p_max === nothing ? Int(p) : p_max), :bic
+    end
+end
+
 const _SDFM_ID_METHODS = (
-    :cholesky, :sign, :narrative, :long_run, :proxy,
+    :cholesky, :sign, :narrative, :long_run, :proxy, :max_share,
     :fastica, :jade, :sobi, :dcov, :hsic,
-    :student_t, :mixture_normal, :pml, :skew_normal, :nongaussian_ml,
+    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml, :lms,
     :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
     :arias, :uhlig,
 )
 const _SDFM_COMPUTE_Q_METHODS = (
     :narrative, :fastica, :jade, :sobi, :dcov, :hsic,
-    :student_t, :mixture_normal, :pml, :skew_normal, :nongaussian_ml,
+    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal, :nongaussian_ml, :lms,
     :gmm_moments, :lewis_tvv, :sv_em,
     :markov_switching, :garch, :smooth_transition, :external_volatility,
 )
@@ -234,12 +251,13 @@ irf_result = irf(sdfm, 20)  # panel-wide structural IRFs
 """
 function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     identification::Symbol=:cholesky,
-    p::Union{Int,Symbol}=1,
-    p_max::Int=8,
+    p::Union{Int,Symbol}=:auto,
+    p_max::Union{Nothing,Int}=nothing,
     check_stability::Bool=true,
     H::Int=40,
     r::Int=0,
     method::Symbol=:fglr,
+    n_perm::Int=30,
     order::Union{Nothing,Vector{Int}}=nothing,
     units::Symbol=:raw,
     sign_check::Union{Nothing,Function}=nothing,
@@ -249,6 +267,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
     max_draws::Int=1000,
     narrative_check::Union{Nothing,Function}=nothing,
     target_vars::Union{Nothing,Vector{Int},Vector{<:AbstractString}}=nothing,
+    target::Union{Nothing,Int,AbstractString}=nothing,
     restrictions::Union{Nothing,SVARRestrictions}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
@@ -275,12 +294,12 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Int;
 
     estimate_structural_dfm(gdfm;
         identification=identification, p=p, p_max=p_max, check_stability=check_stability,
-        H=H, r=r_use, method=method, instrument=instrument, normalize=normalize,
+        H=H, r=r_use, method=method, n_perm=n_perm, instrument=instrument, normalize=normalize,
         order=order, units=units,
         sign_check=sign_check, sign_restrictions=sign_restrictions,
         restriction_space=restriction_space, store_all=store_all,
         max_draws=max_draws, narrative_check=narrative_check,
-        target_vars=target_vars, restrictions=restrictions,
+        target_vars=target_vars, target=target, restrictions=restrictions,
         transition_var=transition_var, regime_indicator=regime_indicator,
         varnames=varnames, shock_names=shock_names, rng=rng, seed=seed,
         standardize=standardize, id_kwargs=id_kwargs)
@@ -299,7 +318,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Symbol;
     q_method::Symbol=:hallin_liska,
     q_max::Int=8,
     r::Int=0,
-    p::Union{Int,Symbol}=1,
+    p::Union{Int,Symbol}=:auto,
     standardize::Bool=true,
     bandwidth::Int=0,
     kernel::Symbol=:bartlett,
@@ -329,7 +348,7 @@ function estimate_structural_dfm(X::AbstractMatrix{T}, q::Symbol;
 end
 
 function bai_ng_q(sdfm::StructuralDFM{T}; p::Int=sdfm.p_var, δ::Real=0.1, m::Real=1) where {T<:AbstractFloat}
-    F = sdfm.method === :fglr ? sdfm.static_factors : sdfm.gdfm.factors
+    F = (sdfm.method === :fglr || sdfm.method === :fhlz) ? sdfm.static_factors : sdfm.gdfm.factors
     N = size(sdfm.gdfm.X, 2)
     T_obs = size(F, 1)
     bai_ng_q(F, N, T_obs; p=p, δ=δ, m=m)
@@ -349,13 +368,14 @@ Estimate a Structural DFM from an existing GDFM estimation.
 
 # Keyword Arguments
 - `identification::Symbol=:cholesky`: Identification method (:cholesky or :sign)
-- `p::Union{Int,Symbol}=1`: VAR lag order, or `:aic`/`:bic`/`:hq` over `1:p_max`
-- `p_max::Int=8`: Grid upper bound when `p` is a criterion
+- `p::Union{Int,Symbol}=:auto`: VAR lag order (defaults to `1` for `:fglr`/`:gdfm_var`, `:bic` with `p_max=5` for `:fhlz`), or `:aic`/`:bic`/`:hq` over `1:p_max`
+- `p_max::Union{Nothing,Int}=nothing`: Grid upper bound (`8` for `:fglr`/`:gdfm_var`, `5` for `:fhlz`)
 - `check_stability::Bool=true`: Warn when the factor-VAR companion modulus is ≥ 1
 - `H::Int=40`: IRF horizon
 - `r::Int=0`: Static factors (0 = `gdfm.r`; must satisfy `r ≥ q`)
-- `method::Symbol=:fglr`: `:fglr` or `:gdfm_var`
-- `order`: Observable indices for Cholesky under `:fglr`
+- `method::Symbol=:fglr`: `:fglr`, `:fhlz`, or `:gdfm_var`
+- `n_perm::Int=30`: Number of cross-sectional permutations when `method=:fhlz`
+- `order`: Observable indices for Cholesky under `:fglr` / `:fhlz`
 - `sign_check::Union{Nothing,Function}=nothing`: Predicate on the IRF array (`H×N×q` under `:panel`, `H×r×q` under `:factor`)
 - `sign_restrictions=nothing`: Declarative restrictions (`SVARRestrictions` or `(variable, shock, horizons, sign)` tuples). `SVARRestrictions` keep only `SignRestriction`s with 0-based `horizon`; tuples use 1-based IRF indices.
 - `restriction_space::Symbol=:panel`: `:panel` or `:factor`
@@ -367,12 +387,13 @@ Estimate a Structural DFM from an existing GDFM estimation.
 """
 function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     identification::Symbol=:cholesky,
-    p::Union{Int,Symbol}=1,
-    p_max::Int=8,
+    p::Union{Int,Symbol}=:auto,
+    p_max::Union{Nothing,Int}=nothing,
     check_stability::Bool=true,
     H::Int=40,
     r::Int=0,
     method::Symbol=:fglr,
+    n_perm::Int=30,
     order::Union{Nothing,Vector{Int}}=nothing,
     units::Symbol=:raw,
     sign_check::Union{Nothing,Function}=nothing,
@@ -382,6 +403,7 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     max_draws::Int=1000,
     narrative_check::Union{Nothing,Function}=nothing,
     target_vars::Union{Nothing,Vector{Int},Vector{<:AbstractString}}=nothing,
+    target::Union{Nothing,Int,AbstractString}=nothing,
     restrictions::Union{Nothing,SVARRestrictions}=nothing,
     transition_var::Union{Nothing,AbstractVector}=nothing,
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
@@ -389,7 +411,7 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     shock_names::Union{Nothing,Vector{String}}=nothing,
     rng::AbstractRNG=Random.default_rng(),
     seed::Union{Integer,Nothing}=nothing,
-    standardize::Bool=true,
+    standardize::Union{Nothing,Bool}=nothing,
     instrument::Union{Nothing,AbstractVector}=nothing,
     normalize::Union{Nothing,Tuple}=nothing,
     id_kwargs::NamedTuple=NamedTuple(),
@@ -398,8 +420,8 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
 
     identification in _SDFM_ID_METHODS || throw(ArgumentError(
         "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
-    method in (:fglr, :gdfm_var) || throw(ArgumentError(
-        "method must be :fglr or :gdfm_var, got :$method"))
+    method in (:fglr, :gdfm_var, :fhlz) || throw(ArgumentError(
+        "method must be :fglr, :gdfm_var, or :fhlz, got :$method"))
     units in (:raw, :standardized) || throw(ArgumentError(
         "units must be :raw or :standardized, got :$units"))
     restriction_space in (:panel, :factor) || throw(ArgumentError(
@@ -425,6 +447,7 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     r_use < q && throw(ArgumentError("r must be >= q, got r=$r_use, q=$q"))
     validate_factor_inputs(T_obs, N, r_use)
 
+    std_use = something(standardize, gdfm.standardized)
     vn = something(varnames, gdfm.varnames)
     length(vn) == N || throw(ArgumentError(
         "varnames has $(length(vn)) entries but panel has $N columns"))
@@ -435,15 +458,26 @@ function estimate_structural_dfm(gdfm::GeneralizedDynamicFactorModel{T};
     length(sn) == q || throw(ArgumentError(
         "shock_names has $(length(sn)) entries but q=$q"))
 
-    result = if method === :fglr
-        _estimate_sdfm_fglr(gdfm, q, r_use, p, p_max, check_stability, H, identification, order, units,
+    result = if method === :fhlz
+        p_fhlz, lag_crit_fhlz = _resolve_fhlz_lag(p, p_max)
+        _estimate_sdfm_fhlz(gdfm, q, p_fhlz, lag_crit_fhlz, H, identification, order, units,
+            n_perm, sign_check, sign_restrictions, restriction_space, store_all,
+            max_draws, narrative_check, target_vars, target, restrictions,
+            transition_var, regime_indicator, vn, sn, rng, std_use,
+            instrument, normalize, id_kwargs)
+    elseif method === :fglr
+        p_in = p === :auto ? 1 : p
+        p_max_in = something(p_max, 8)
+        _estimate_sdfm_fglr(gdfm, q, r_use, p_in, p_max_in, check_stability, H, identification, order, units,
             sign_check, sign_restrictions, restriction_space, store_all,
-            max_draws, narrative_check, target_vars, restrictions,
-            transition_var, regime_indicator, vn, sn, rng, standardize,
+            max_draws, narrative_check, target_vars, target, restrictions,
+            transition_var, regime_indicator, vn, sn, rng, std_use,
             instrument, normalize, id_kwargs)
     else
-        _estimate_sdfm_gdfm_var(gdfm, q, p, p_max, check_stability, H, identification, sign_check, sign_restrictions,
-            restriction_space, store_all, max_draws, narrative_check, target_vars,
+        p_in = p === :auto ? 1 : p
+        p_max_in = something(p_max, 8)
+        _estimate_sdfm_gdfm_var(gdfm, q, p_in, p_max_in, check_stability, H, identification, sign_check, sign_restrictions,
+            restriction_space, store_all, max_draws, narrative_check, target_vars, target,
             restrictions, transition_var, regime_indicator, vn, sn, rng,
             instrument, normalize, id_kwargs)
     end
@@ -460,7 +494,7 @@ end
 function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::Int,
     p, p_max::Int, check_stability::Bool, H::Int, identification::Symbol, order, units::Symbol,
     sign_check, sign_restrictions, restriction_space::Symbol, store_all::Bool,
-    max_draws::Int, narrative_check, target_vars, restrictions,
+    max_draws::Int, narrative_check, target_vars, target, restrictions,
     transition_var, regime_indicator, vn::Vector{String}, sn::Vector{String},
     rng::AbstractRNG, standardize::Bool,
     instrument, normalize, id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
@@ -487,7 +521,7 @@ function _estimate_sdfm_fglr(gdfm::GeneralizedDynamicFactorModel{T}, q::Int, r::
     K, share = _rank_q_reduction(factor_var.Sigma, q)
     H_id, idset, rate, from_var_Q, z_store, Fstat = _fglr_identify_H(Lambda, K, factor_var, identification, ord, H,
                             sign_check, sign_restrictions, restriction_space, store_all,
-                            max_draws, narrative_check, target_vars, restrictions,
+                            max_draws, narrative_check, target_vars, target, restrictions,
                             transition_var, regime_indicator,
                             rng, vn, sn, X, standardize, units, instrument, normalize,
                             id_kwargs)
@@ -523,7 +557,7 @@ Fourth return is `true` when `H` is a VAR-space `compute_Q` rotation (`B0 = chol
 function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
     factor_var::VARModel{T}, identification::Symbol, order::Vector{Int},
     H_irf::Int, sign_check, sign_restrictions, restriction_space::Symbol,
-    store_all::Bool, max_draws::Int, narrative_check, target_vars, restrictions,
+    store_all::Bool, max_draws::Int, narrative_check, target_vars, target, restrictions,
     transition_var, regime_indicator, rng::AbstractRNG,
     vn::Vector{String}, sn::Vector{String}, X, standardize::Bool,
     units::Symbol, instrument=nothing, normalize=nothing,
@@ -549,6 +583,15 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
     if identification === :proxy
         Hpr, z_store, Fstat = _sdfm_proxy_H(Lambda, K, factor_var, instrument, normalize, vn)
         return Hpr, nothing, one(T), false, z_store, Fstat
+    end
+
+    if identification === :max_share
+        horizons_kw = get(id_kwargs, :horizons, nothing)
+        H_ms = horizons_kw !== nothing && !isempty(horizons_kw) ? max(H_irf, maximum(horizons_kw) + 1) : max(H_irf, 21)
+        B_panel = _fglr_panel_irf(factor_var, Lambda, K, H_ms; X=X, standardized=standardize, units=units)
+        tgt_spec = something(target, get(id_kwargs, :target, (target_vars !== nothing && !isempty(target_vars)) ? target_vars[1] : 1))
+        Hms = _sdfm_panel_max_share_H(B_panel, vn, tgt_spec, id_kwargs, T)
+        return Hms, nothing, one(T), false, nothing, nanF
     end
 
     if identification === :sign
@@ -577,7 +620,7 @@ function _fglr_identify_H(Lambda::AbstractMatrix{T}, K::AbstractMatrix{T},
     end
 
     r == q || throw(ArgumentError(
-        "identification :$identification requires r==q, got r=$r, q=$q; use :cholesky, :sign, :long_run, or :proxy when r>q"))
+        "identification :$identification requires r==q, got r=$r, q=$q; use :cholesky, :sign, :long_run, :proxy, or :max_share when r>q"))
 
     rest = restrictions === nothing ? sign_restrictions : restrictions
     if identification === :arias
@@ -891,13 +934,249 @@ function _fglr_panel_irf(factor_var::VARModel{T}, Lambda::AbstractMatrix{T},
 end
 
 # =============================================================================
+# FHLZ path — infinite-r one-sided GDFM via blockwise VARs
+# =============================================================================
+
+"""Max-share rotation on a panel MA array `B_panel` (`H_avail × N × q`)."""
+function _sdfm_panel_max_share_H(B_panel::AbstractArray{T,3}, vn::Vector{String},
+    tgt_spec, id_kwargs::NamedTuple, ::Type{T}) where {T<:AbstractFloat}
+    H_avail, N, q = size(B_panel)
+    tgt = _maxshare_resolve_target(tgt_spec, vn, N)
+    band = get(id_kwargs, :band, nothing)
+    horizons_kw = get(id_kwargs, :horizons, nothing)
+    cumulative = get(id_kwargs, :cumulative, false)
+    n_shocks = get(id_kwargs, :n_shocks, 1)
+    previous = get(id_kwargs, :previous, nothing)
+    n_quad = get(id_kwargs, :n_quad, 32)
+
+    1 <= n_shocks <= q || throw(ArgumentError("n_shocks must be in 1:$q, got $n_shocks"))
+    n_quad >= 1 || throw(ArgumentError("n_quad must be >= 1"))
+    (band !== nothing && horizons_kw !== nothing) && throw(ArgumentError(
+        "specify either horizons or band, not both"))
+
+    Qprev = previous === nothing ? nothing : _maxshare_orthonormal_previous(previous, q, T)
+    kprev = Qprev === nothing ? 0 : size(Qprev, 2)
+    n_shocks + kprev <= q || throw(ArgumentError(
+        "n_shocks=$n_shocks plus $kprev previous columns exceeds q=$q"))
+
+    S = zeros(T, q, q)
+    if band !== nothing
+        ω1, ω2 = T(band[1]), T(band[2])
+        ω2 > ω1 || throw(ArgumentError("band requires ω₂ > ω₁, got ($ω1, $ω2)"))
+        nodes, weights = _gauss_legendre_interval(n_quad, ω1, ω2)
+        r_ω = zeros(Complex{T}, q)
+        @inbounds for i in eachindex(nodes)
+            ω = nodes[i]
+            w = weights[i]
+            fill!(r_ω, zero(Complex{T}))
+            for h in 0:(H_avail - 1)
+                r_ω .+= @view(B_panel[h + 1, tgt, :]) .* cis(-h * ω)
+            end
+            S .+= w .* real.(r_ω * r_ω')
+        end
+    else
+        hs = horizons_kw === nothing ? (0:min(20, H_avail - 1)) : _maxshare_horizons(horizons_kw)
+        maximum(hs) + 1 <= H_avail || throw(ArgumentError(
+            "max-share horizon $(maximum(hs)) exceeds stored panel IRF horizon $(H_avail - 1)"))
+        if cumulative
+            acc = zeros(T, q)
+            @inbounds for h in 0:maximum(hs)
+                acc .+= @view(B_panel[h + 1, tgt, :])
+                if h in hs
+                    S .+= acc * acc'
+                end
+            end
+        else
+            @inbounds for h in hs
+                v = @view B_panel[h + 1, tgt, :]
+                S .+= v * v'
+            end
+        end
+    end
+
+    S = Matrix{T}((S + S') / T(2))
+    if Qprev !== nothing
+        P_proj = Matrix{T}(I, q, q) - Qprev * Qprev'
+        S = Matrix{T}((P_proj * S * P_proj + (P_proj * S * P_proj)') / T(2))
+    end
+    tr(S) > T(1e-14) || throw(IdentificationError(
+        "max-share criterion matrix S is numerically zero for the chosen window"))
+
+    _, evecs = _maxshare_leading(S, n_shocks, T)
+    B0_panel = @view B_panel[1, :, :]
+    for j in 1:n_shocks
+        _maxshare_sign_normalize!(view(evecs, :, j), B0_panel, tgt)
+    end
+    _complete_maxshare_Q(evecs, q)
+end
+
+function _estimate_sdfm_fhlz(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
+    p_max_fhlz::Int, lag_crit::Symbol, H::Int, identification::Symbol, order, units::Symbol,
+    n_perm::Int, sign_check, sign_restrictions, restriction_space::Symbol, store_all::Bool,
+    max_draws::Int, narrative_check, target_vars, target, restrictions,
+    transition_var, regime_indicator, vn::Vector{String}, sn::Vector{String},
+    rng::AbstractRNG, standardize::Bool,
+    instrument, normalize, id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
+
+    X = gdfm.X
+    T_obs, N = size(X)
+
+    ord = something(order, collect(1:q))
+    length(ord) == q || throw(ArgumentError(
+        "order has $(length(ord)) entries but q=$q"))
+    all(1 .<= ord .<= N) || throw(ArgumentError(
+        "order indices must be in 1:$N"))
+
+    horizons_kw = get(id_kwargs, :horizons, nothing)
+    h_ms_max = (identification === :max_share && horizons_kw !== nothing && !isempty(horizons_kw)) ?
+        max(0, Int(maximum(horizons_kw)) + 1) : 0
+    H_store = max(H, 60, h_ms_max)
+
+    fhlz = estimate_gdfm_fhlz(X, q;
+        bandwidth=gdfm.bandwidth, kernel=gdfm.kernel,
+        p_max=p_max_fhlz, lag_criterion=lag_crit,
+        n_perm=n_perm, irf_horizon=H_store,
+        standardize=standardize, threaded=true,
+        varnames=vn, rng=rng)
+
+    B_panel = if standardize && units === :standardized
+        σ = max.(vec(std(X; dims=1)), T(1e-10))
+        fhlz.impulse_filters ./ reshape(σ, 1, N, 1)
+    else
+        copy(fhlz.impulse_filters)
+    end
+    B0_panel = Matrix{T}(B_panel[1, :, :])
+
+    U = fhlz.innovations
+    T_eff = size(U, 1)
+    p_eff = T_obs - T_eff
+    Y_u = vcat(zeros(T, p_eff, q), U)
+    B_u = zeros(T, 1 + q * p_eff, q)
+    Sigma_u = Matrix{T}((U' * U) / T(T_eff))
+    Sigma_u = Matrix{T}((Sigma_u + Sigma_u') / T(2))
+    log_det_u = logdet_safe(Sigma_u)
+    k_sys_u = q * (1 + q * p_eff)
+    aic_u = log_det_u + T(2 * k_sys_u) / T(T_eff)
+    bic_u = log_det_u + T(k_sys_u) * log(T(T_eff)) / T(T_eff)
+    hqic_u = log_det_u + T(2 * k_sys_u) * log(log(max(T(T_eff), T(3)))) / T(T_eff)
+    u_varnames = ["Dynamic innovation $i" for i in 1:q]
+    u_var = VARModel(Y_u, p_eff, B_u, U, Sigma_u, aic_u, bic_u, hqic_u, u_varnames)
+
+    idset = nothing
+    rate = one(T)
+    z_store = nothing
+    Fstat = T(NaN)
+
+    if identification === :cholesky
+        P = B0_panel[ord, :]
+        L = safe_cholesky(P * P')
+        H_id = Matrix{T}(P \ L)
+    elseif identification === :long_run
+        C_lr = dropdims(sum(B_panel; dims=1); dims=1)
+        idx = _sdfm_resolve_targets(target_vars, vn, N, q)
+        P = C_lr[idx, :]
+        L = safe_cholesky(P * P')
+        H_id = Matrix{T}(P \ L)
+        Clr = C_lr * H_id
+        Clr[idx[1], 1] < zero(T) && (H_id[:, 1] .*= -one(T))
+    elseif identification === :proxy
+        H_id, z_store, Fstat = _sdfm_proxy_H(
+            B0_panel, Matrix{T}(I, q, q), u_var, instrument, normalize, vn)
+    elseif identification === :max_share
+        tgt_spec = something(target, get(id_kwargs, :target,
+            (target_vars !== nothing && !isempty(target_vars)) ? target_vars[1] : 1))
+        H_id = _sdfm_panel_max_share_H(B_panel, vn, tgt_spec, id_kwargs, T)
+    elseif identification === :sign
+        if restriction_space === :panel
+            rules = _sdfm_parse_sign_rules(sign_restrictions, vn, N, q, H)
+            panel_buf = zeros(T, H, N, q)
+            function irf_from_Q_fhlz_panel(Htry)
+                @inbounds for h in 1:H
+                    panel_buf[h, :, :] = @view(B_panel[h, :, :]) * Htry
+                end
+                panel_buf
+            end
+            H_id, idset, rate = _sdfm_sign_search(
+                irf_from_Q_fhlz_panel, q, H, N, T, sign_check, rules,
+                store_all, max_draws, rng, vn, sn)
+        else
+            rules = _sdfm_parse_sign_rules(sign_restrictions, u_varnames, q, q, H)
+            fac_buf = zeros(T, H, q, q)
+            function irf_from_Q_fhlz_fac(Htry)
+                fac_buf[1, :, :] .= Htry
+                fac_buf
+            end
+            H_id, idset, rate = _sdfm_sign_search(
+                irf_from_Q_fhlz_fac, q, H, q, T, sign_check, rules,
+                store_all, max_draws, rng, u_varnames, sn)
+        end
+    elseif identification === :narrative
+        panel_buf = zeros(T, H, N, q)
+        fac_buf = zeros(T, H, q, q)
+        found = false
+        H_id = Matrix{T}(I, q, q)
+        for d in 1:max_draws
+            Htry = generate_Q(q, T; rng=rng)
+            if restriction_space === :panel
+                @inbounds for h in 1:H
+                    panel_buf[h, :, :] = @view(B_panel[h, :, :]) * Htry
+                end
+                sign_check(panel_buf) || continue
+            else
+                fac_buf[1, :, :] .= Htry
+                sign_check(fac_buf) || continue
+            end
+            shocks_try = U * Htry
+            narrative_check(shocks_try) || continue
+            H_id = Matrix{T}(Htry)
+            rate = one(T) / T(d)
+            found = true
+            break
+        end
+        found || throw(IdentificationError(
+            "No rotation satisfied the narrative restrictions in $max_draws draws"))
+    elseif identification === :arias
+        rest = something(restrictions, sign_restrictions)
+        rest isa SVARRestrictions || throw(ArgumentError(":arias requires restrictions::SVARRestrictions"))
+        res = identify_arias(u_var, rest, H; n_draws=1, n_rotations=max_draws, rng=rng)
+        H_id = Matrix{T}(res.Q_draws[1])
+        rate = T(res.acceptance_rate)
+    elseif identification === :uhlig
+        rest = something(restrictions, sign_restrictions)
+        rest isa SVARRestrictions || throw(ArgumentError(":uhlig requires restrictions::SVARRestrictions"))
+        H_id = Matrix{T}(identify_uhlig(u_var, rest, H; rng=rng).Q)
+    else
+        identification in _SDFM_COMPUTE_Q_METHODS || throw(ArgumentError(
+            "identification must be one of $(_SDFM_ID_METHODS), got :$identification"))
+        H_id = Matrix{T}(compute_Q(u_var, identification; horizon=H, check_func=sign_check,
+            narrative_check=narrative_check, max_draws=max_draws,
+            transition_var=transition_var, regime_indicator=regime_indicator, rng=rng,
+            id_kwargs...))
+    end
+
+    C_irf = Array{T,3}(undef, H_store, N, q)
+    @inbounds for h in 1:H_store
+        C_irf[h, :, :] = @view(B_panel[h, :, :]) * H_id
+    end
+    impact_td = Matrix{T}(fhlz.impulse_filters[1, :, :])
+
+    StructuralDFM{T}(
+        gdfm, u_var, Matrix{T}(H_id), Matrix{T}(H_id), identification,
+        C_irf, impact_td, p_eff, sn, vn,
+        Matrix{T}(I, q, q), q, :fhlz, Matrix{T}(U), impact_td,
+        one(T), units, idset, rate,
+        collect(Int, ord), lag_crit, zero(T), z_store, Fstat,
+    )
+end
+
+# =============================================================================
 # Legacy two-sided GDFM-factor VAR
 # =============================================================================
 
 function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
     p, p_max::Int, check_stability::Bool, H::Int, identification::Symbol, sign_check, sign_restrictions,
     restriction_space::Symbol, store_all::Bool, max_draws::Int,
-    narrative_check, target_vars, restrictions, transition_var, regime_indicator,
+    narrative_check, target_vars, target, restrictions, transition_var, regime_indicator,
     vn::Vector{String}, sn::Vector{String}, rng::AbstractRNG,
     instrument=nothing, normalize=nothing,
     id_kwargs::NamedTuple=NamedTuple()) where {T<:AbstractFloat}
@@ -926,6 +1205,13 @@ function _estimate_sdfm_gdfm_var(gdfm::GeneralizedDynamicFactorModel{T}, q::Int,
         Q = Matrix{T}(safe_cholesky(factor_var.Sigma) \ Hpr)
     elseif identification === :long_run
         Q = identify_long_run(factor_var)
+    elseif identification === :max_share
+        horizons_kw = get(id_kwargs, :horizons, nothing)
+        H_ms = horizons_kw !== nothing && !isempty(horizons_kw) ? max(H, maximum(horizons_kw) + 1) : max(H, 21)
+        B_panel = _fglr_panel_irf(factor_var, Lambda, safe_cholesky(factor_var.Sigma), H_ms)
+        tgt_spec = something(target, get(id_kwargs, :target,
+            (target_vars !== nothing && !isempty(target_vars)) ? target_vars[1] : 1))
+        Q = _sdfm_panel_max_share_H(B_panel, vn, tgt_spec, id_kwargs, T)
     elseif identification === :sign
         if restriction_space === :factor && !store_all && sign_restrictions === nothing
             Q, _ = identify_sign(factor_var, H, sign_check; max_draws=max_draws, rng=rng)
@@ -1009,8 +1295,8 @@ StatsAPI.residuals(m::StructuralDFM) = residuals(m.gdfm)
 """Loadings used for panel projection (`N×r` FGLR, `N×q` legacy)."""
 loadings(m::StructuralDFM) = m.method === :fglr ? m.loadings_static : m.loadings_td
 
-"""Factors feeding the factor VAR (`T×r` FGLR static PCA, `T×q` GDFM)."""
-factors(m::StructuralDFM) = m.method === :fglr ? m.static_factors : m.gdfm.factors
+"""Factors feeding the factor VAR (`T×r` FGLR static PCA, `T_eff×q` FHLZ innovations, `T×q` GDFM)."""
+factors(m::StructuralDFM) = (m.method === :fglr || m.method === :fhlz) ? m.static_factors : m.gdfm.factors
 
 """Factor-VAR coefficient matrix."""
 StatsAPI.coef(m::StructuralDFM) = coef(m.factor_var)
@@ -1115,7 +1401,7 @@ function Base.show(io::IO, m::StructuralDFM{T}) where {T}
     qshow = size(m.B0, 2)
     if rshow <= 8 && qshow <= 6
         b0_data = Matrix{Any}(undef, rshow, qshow + 1)
-        rowlab = m.method === :fglr ? "Static factor" : "Factor"
+        rowlab = m.method === :fglr ? "Static factor" : m.method === :fhlz ? "Innovation" : "Factor"
         for i in 1:rshow
             b0_data[i, 1] = "$rowlab $i"
             for j in 1:qshow
@@ -1132,4 +1418,4 @@ end
 
 """Label for identification method in display."""
 _id_label(s::Symbol) = s == :cholesky ? "Cholesky" : s == :sign ? "Sign" :
-    s == :proxy ? "Proxy / IV" : string(s)
+    s == :proxy ? "Proxy / IV" : s == :max_share ? "Max-Share" : string(s)

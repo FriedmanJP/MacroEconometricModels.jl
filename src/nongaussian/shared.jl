@@ -61,24 +61,68 @@ function _givens_to_orthogonal(angles::AbstractVector{T}, n::Int) where {T<:Real
     Q
 end
 
-"""Extract n(n-1)/2 Givens angles from orthogonal matrix (approximate)."""
-function _orthogonal_to_givens(Q::AbstractMatrix{T}, n::Int) where {T<:AbstractFloat}
+"""Extract n(n-1)/2 Givens angles from orthogonal matrix Q ∈ SO(n)."""
+function _orthogonal_to_givens(Q::AbstractMatrix{T}, n::Int) where {T<:Real}
+    Tf = float(T)
     n_angles = n * (n - 1) ÷ 2
-    angles = zeros(T, n_angles)
-    R = copy(Q)
-    idx = n_angles
-    for i in (n-1):-1:1
-        for j in n:-1:(i+1)
-            angles[idx] = atan(R[j, i], R[i, i])
-            c, s = cos(angles[idx]), sin(angles[idx])
-            G = Matrix{T}(I, n, n)
-            G[i, i], G[j, j] = c, c
-            G[i, j], G[j, i] = s, -s
-            R = G * R
-            idx -= 1
+    angles = zeros(Tf, n_angles)
+    n <= 1 && return angles
+    R = Matrix{Tf}(Q)
+    idx = 1
+    for i in 1:(n-1)
+        for j in (i+1):n
+            θ = atan(R[j, i], R[i, i])
+            angles[idx] = θ
+            c, s = cos(θ), sin(θ)
+            @inbounds for k in 1:n
+                a, b = R[i, k], R[j, k]
+                R[i, k] = c * a + s * b
+                R[j, k] = -s * a + c * b
+            end
+            idx += 1
         end
     end
     angles
+end
+
+# =============================================================================
+# Shared Covariance & Delta-Method SE Helpers
+# =============================================================================
+
+function _finite_se!(se::AbstractMatrix{T}) where {T<:AbstractFloat}
+    @inbounds for i in eachindex(se)
+        v = se[i]
+        se[i] = isfinite(v) && v >= zero(T) ? v : T(NaN)
+    end
+    se
+end
+
+function _spd_inv(H::AbstractMatrix{T}) where {T<:AbstractFloat}
+    Hs = Matrix{T}((H + H') / 2)
+    λmin = try
+        eigmin(Symmetric(Hs))
+    catch
+        T(-1)
+    end
+    if !isfinite(λmin) || λmin <= T(1e-10)
+        jitter = T(1e-8)
+        if isfinite(λmin) && λmin < zero(T)
+            jitter += -λmin
+        end
+        Hs = Hs + jitter * I
+    end
+    Matrix{T}(robust_inv(Hs; silent=true))
+end
+
+function _delta_B0_se(params::AbstractVector{T}, V::AbstractMatrix{T}, B0_fn, n::Int) where {T<:AbstractFloat}
+    if isempty(params) || size(V, 1) == 0 || size(V, 2) == 0 || all(x -> !isfinite(x) || iszero(x), V)
+        return fill(T(NaN), n, n), zeros(T, 0, 0)
+    end
+    J = ForwardDiff.jacobian(p -> vec(B0_fn(p)), Vector{T}(params))
+    VB = J * V * J'
+    se = reshape(sqrt.(max.(diag(VB), zero(T))), n, n)
+    _finite_se!(se)
+    se, Matrix{T}(VB)
 end
 """Convert ICA unmixing matrix to SVAR representation: B₀, Q, shocks."""
 function _ica_to_svar(W_ica::Matrix{T}, model::VARModel{T}) where {T<:AbstractFloat}

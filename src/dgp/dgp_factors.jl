@@ -167,3 +167,423 @@ function dgp_mixed_frequency_panel(rng::AbstractRNG;
     return (Y=Y[keep, :], is_quarterly=isq, F=F[keep, :], Lambda_M=LM,
             Lambda_Q=LQ, A=A1, agg_weights=agg_w, withheld=withheld)
 end
+
+"""
+    dgp_quantile_factors(rng::AbstractRNG=Random.default_rng();
+                         T_obs::Int=200, N::Int=80,
+                         location_factors::Int=1, scale_factors::Int=1,
+                         asym_factors::Int=0, df_idio::Real=2.0,
+                         idio_scale::Real=1.0, loadings_scale::Real=1.0,
+                         r::Union{Int,Nothing}=nothing,
+                         seed::Union{Integer,Nothing}=nothing) -> NamedTuple
+
+Generate a Chen–Dolado–Gonzalo (2021) quantile factor panel with location,
+scale, and optional asymmetry factors:
+
+```math
+X_{it} = \\sum_{k=1}^{r_{\\text{loc}}} f_{t,k}^{\\text{loc}} \\lambda_{i,k}^{\\text{loc}}
++ \\sigma_0 \\left(\\sum_{k=1}^{r_{\\text{scale}}} f_{t,k}^{\\text{scale}} \\lambda_{i,k}^{\\text{scale}}\\right) e_{it}
++ \\sigma_0 \\left(\\sum_{m=1}^{r_{\\text{asym}}} f_{t,m}^{\\text{asym}} \\lambda_{i,m}^{\\text{asym}}\\right) \\psi(e_{it})
+```
+
+where ``e_{it} \\stackrel{\\text{iid}}{\\sim} t_{\\nu}`` (or ``\\mathcal{N}(0, 1)``
+when `df_idio == Inf`), ``\\sigma_0`` is `idio_scale`, and
+``\\psi(u) = \\min(u, 0) + 0.4 \\max(u, 0)``. Because the conditional quantile map
+is strictly increasing in ``e_{it}`` with ``Q_{0.5}(e) = 0``, only location
+factors carry nonzero loadings at the symmetric median (``\\tau = 0.5``), whereas
+at tail quantiles (``\\tau \\neq 0.5``) the scale and asymmetry factors become
+active.
+
+# Keyword Arguments
+- `T_obs::Int = 200` — number of time-series observations
+- `N::Int = 80` — cross-sectional panel dimension
+- `location_factors::Int = 1` — number of location (mean-shifting) factors
+- `scale_factors::Int = 1` — number of positive scale (volatility) factors
+- `asym_factors::Int = 0` — number of tail-asymmetry factors
+- `df_idio::Real = 2.0` — Student-`t` degrees of freedom for idiosyncratic shocks (`Inf` for Gaussian)
+- `idio_scale::Real = 1.0` — baseline idiosyncratic shock multiplier
+- `loadings_scale::Real = 1.0` — scaling factor for factor loadings
+- `r::Union{Int,Nothing} = nothing` — optional total factor count override across location/scale/asymmetry blocks
+- `seed::Union{Integer,Nothing} = nothing` — optional seed overriding `rng` via `Xoshiro(seed)`
+
+# Returns
+A `NamedTuple` with fields `(X, F_loc, F_scale, F_asym, Lambda_loc, Lambda_scale,
+Lambda_asym, true_factors, true_loadings, true_r, tau_grid, df_idio, idio_scale,
+loadings_scale, r, location_factors, scale_factors, asym_factors, seed)`.
+"""
+function dgp_quantile_factors(rng::AbstractRNG=Random.default_rng();
+                              T_obs::Int=200, N::Int=80,
+                              location_factors::Int=1,
+                              scale_factors::Int=1,
+                              asym_factors::Int=0,
+                              df_idio::Real=2.0,
+                              idio_scale::Real=1.0,
+                              loadings_scale::Real=1.0,
+                              r::Union{Int,Nothing}=nothing,
+                              seed::Union{Integer,Nothing}=nothing)
+    T_obs >= 2 || throw(ArgumentError("T_obs must be >= 2, got $T_obs"))
+    N >= 2 || throw(ArgumentError("N must be >= 2, got $N"))
+    location_factors >= 0 || throw(ArgumentError("location_factors must be >= 0, got $location_factors"))
+    scale_factors >= 0 || throw(ArgumentError("scale_factors must be >= 0, got $scale_factors"))
+    asym_factors >= 0 || throw(ArgumentError("asym_factors must be >= 0, got $asym_factors"))
+    (!(df_idio isa Bool) && !isnan(df_idio) && df_idio > 0) ||
+        throw(ArgumentError("df_idio must be > 0, got $df_idio"))
+    (!(idio_scale isa Bool) && isfinite(idio_scale) && idio_scale > 0) ||
+        throw(ArgumentError("idio_scale must be positive and finite, got $idio_scale"))
+    (!(loadings_scale isa Bool) && isfinite(loadings_scale) && loadings_scale > 0) ||
+        throw(ArgumentError("loadings_scale must be positive and finite, got $loadings_scale"))
+
+    n_loc, n_scale, n_asym = if r === nothing
+        (location_factors, scale_factors, asym_factors)
+    else
+        r >= 1 || throw(ArgumentError("r must be >= 1, got $r"))
+        if r == location_factors + scale_factors + asym_factors
+            (location_factors, scale_factors, asym_factors)
+        else
+            nl = min(location_factors, r)
+            na = min(asym_factors, r - nl)
+            ns = r - nl - na
+            (nl, ns, na)
+        end
+    end
+    (n_loc + n_scale + n_asym) >= 1 ||
+        throw(ArgumentError("Total number of factors must be >= 1"))
+
+    rng_use = _resolve_repro_rng(rng, seed)
+    df_f = Float64(df_idio)
+    sig0 = Float64(idio_scale)
+    lscale = Float64(loadings_scale)
+
+    F_loc = n_loc > 0 ? randn(rng_use, T_obs, n_loc) : zeros(T_obs, 0)
+    Lambda_loc = n_loc > 0 ? (1.6 * lscale) .* randn(rng_use, N, n_loc) : zeros(N, 0)
+
+    F_scale = n_scale > 0 ? (exp.(0.65 .* randn(rng_use, T_obs, n_scale)) .+ 0.3) : zeros(T_obs, 0)
+    Lambda_scale = n_scale > 0 ? (0.45 * lscale) .* (0.7 .+ 0.8 .* rand(rng_use, N, n_scale)) : zeros(N, 0)
+
+    F_asym = n_asym > 0 ? (exp.(0.60 .* randn(rng_use, T_obs, n_asym)) .+ 0.3) : zeros(T_obs, 0)
+    Lambda_asym = n_asym > 0 ? (0.45 * lscale) .* (0.7 .+ 0.8 .* rand(rng_use, N, n_asym)) : zeros(N, 0)
+
+    innov = isinf(df_f) ? randn(rng_use, T_obs, N) :
+            rand(rng_use, Distributions.TDist(df_f), T_obs, N)
+
+    X = zeros(T_obs, N)
+    if n_loc > 0
+        X .+= F_loc * Lambda_loc'
+    end
+    if n_scale > 0
+        X .+= sig0 .* (F_scale * Lambda_scale') .* innov
+    end
+    if n_asym > 0
+        psi_innov = @. min(innov, 0.0) + 0.4 * max(innov, 0.0)
+        X .+= sig0 .* (F_asym * Lambda_asym') .* psi_innov
+    end
+    if n_scale == 0 && n_asym == 0
+        X .+= sig0 .* innov
+    end
+
+    _q_innov(tau::Real) = begin
+        tf = Float64(tau)
+        (!(tau isa Bool) && isfinite(tf) && 0.0 < tf < 1.0) ||
+            throw(ArgumentError("tau must lie strictly in (0, 1), got $tau"))
+        isinf(df_f) ? Float64(Distributions.quantile(Distributions.Normal(), tf)) :
+                      Float64(Distributions.quantile(Distributions.TDist(df_f), tf))
+    end
+
+    true_r(tau::Real) = begin
+        qt = _q_innov(tau)
+        sw = sig0 * qt
+        aw = sig0 * (min(qt, 0.0) + 0.4 * max(qt, 0.0))
+        nr = n_loc
+        n_scale > 0 && abs(sw) > 1e-12 && (nr += n_scale)
+        n_asym > 0 && abs(aw) > 1e-12 && (nr += n_asym)
+        nr
+    end
+
+    true_factors(tau::Real) = begin
+        qt = _q_innov(tau)
+        sw = sig0 * qt
+        aw = sig0 * (min(qt, 0.0) + 0.4 * max(qt, 0.0))
+        cols = Matrix{Float64}[]
+        n_loc > 0 && push!(cols, F_loc)
+        (n_scale > 0 && abs(sw) > 1e-12) && push!(cols, F_scale)
+        (n_asym > 0 && abs(aw) > 1e-12) && push!(cols, F_asym)
+        isempty(cols) ? zeros(T_obs, 0) : hcat(cols...)
+    end
+
+    true_loadings(tau::Real) = begin
+        qt = _q_innov(tau)
+        sw = sig0 * qt
+        aw = sig0 * (min(qt, 0.0) + 0.4 * max(qt, 0.0))
+        cols = Matrix{Float64}[]
+        n_loc > 0 && push!(cols, Lambda_loc)
+        (n_scale > 0 && abs(sw) > 1e-12) && push!(cols, sw .* Lambda_scale)
+        (n_asym > 0 && abs(aw) > 1e-12) && push!(cols, aw .* Lambda_asym)
+        isempty(cols) ? zeros(N, 0) : hcat(cols...)
+    end
+
+    return (
+        X=X,
+        F_loc=F_loc,
+        F_scale=F_scale,
+        F_asym=F_asym,
+        Lambda_loc=Lambda_loc,
+        Lambda_scale=Lambda_scale,
+        Lambda_asym=Lambda_asym,
+        true_factors=true_factors,
+        true_loadings=true_loadings,
+        true_r=true_r,
+        tau_grid=[0.1, 0.25, 0.5, 0.75, 0.9],
+        df_idio=df_f,
+        idio_scale=sig0,
+        loadings_scale=lscale,
+        r=n_loc + n_scale + n_asym,
+        location_factors=n_loc,
+        scale_factors=n_scale,
+        asym_factors=n_asym,
+        seed=seed === nothing ? nothing : Int(seed),
+    )
+end
+
+"""
+    dgp_qfavar(rng::AbstractRNG=Random.default_rng();
+               T_obs::Int=250, N::Int=40, r::Int=2, p::Int=1, n_key::Int=1,
+               df_idio::Real=4.0, tail_amplification::Real=1.5, burn::Int=100,
+               seed::Union{Integer,Nothing}=nothing) -> NamedTuple
+
+Generate a Quantile Factor-Augmented VAR (Korobilis & Schröder 2025) panel and
+key observed series ``(X_{\\text{panel}}, Y_{\\text{key}})`` with tail-amplifying
+quantile-dependent autoregressive transmission:
+
+```math
+A_0 Z_t = c(\\tau) + \\sum_{\\ell=1}^{p} A_{\\ell}(\\tau) Z_{t-\\ell} + u_t(\\tau),
+\\qquad
+Z_t = [F_t';\\, Y_{\\text{key}, t}']'
+```
+
+where ``A_0`` is unit lower-triangular (slow latent factors precede fast key
+variables), lower-tail transmission from ``Y_{\\text{key}, t-1}`` to ``F_t``
+is scaled up by `tail_amplification` for ``\\tau \\le 0.10`` relative to the
+median and upper tail, and the first `n_key` columns of `X_panel` equal `Y_key`.
+
+# Keyword Arguments
+- `T_obs::Int = 250` — post-burn-in sample length
+- `N::Int = 40` — total number of panel variables (including `n_key` key variables)
+- `r::Int = 2` — number of latent slow-moving factors
+- `p::Int = 1` — VAR lag order (`>= 1`)
+- `n_key::Int = 1` — number of observed key variables placed in columns `1:n_key` of `X_panel`
+- `df_idio::Real = 4.0` — Student-`t` degrees of freedom for factor/panel innovations (`Inf` for Gaussian)
+- `tail_amplification::Real = 1.5` — lower-tail multiplier (`>= 1.0`) on lag-1 `Y_key` transmission to factors
+- `burn::Int = 100` — burn-in periods discarded before returning `T_obs` observations
+- `seed::Union{Integer,Nothing} = nothing` — optional seed overriding `rng` via `Xoshiro(seed)`
+
+# Returns
+A `NamedTuple` containing `(X_panel, X, Y_key, Y_key_indices, true_factors, F,
+loadings, Lambda, Lambda_y, A0, B_median, B_lower, B_upper, B_by_tau, true_B,
+taus, true_qirf_impact, true_qirf, r, p, n_key, df_idio, tail_amplification,
+seed)`.
+"""
+function dgp_qfavar(rng::AbstractRNG=Random.default_rng();
+                    T_obs::Int=250, N::Int=40, r::Int=2, p::Int=1, n_key::Int=1,
+                    df_idio::Real=4.0, tail_amplification::Real=1.5,
+                    burn::Int=100, seed::Union{Integer,Nothing}=nothing)
+    T_obs >= p + 5 || throw(ArgumentError("T_obs must be >= p + 5, got $T_obs"))
+    r >= 1 || throw(ArgumentError("r must be >= 1, got $r"))
+    p >= 1 || throw(ArgumentError("p must be >= 1, got $p"))
+    n_key >= 1 || throw(ArgumentError("n_key must be >= 1, got $n_key"))
+    N >= r + n_key + 1 || throw(ArgumentError("N must be >= r + n_key + 1 = $(r + n_key + 1), got $N"))
+    (!(df_idio isa Bool) && !isnan(df_idio) && df_idio > 0) ||
+        throw(ArgumentError("df_idio must be > 0, got $df_idio"))
+    (!(tail_amplification isa Bool) && isfinite(tail_amplification) && tail_amplification > 0) ||
+        throw(ArgumentError("tail_amplification must be positive and finite, got $tail_amplification"))
+    burn >= 0 || throw(ArgumentError("burn must be >= 0, got $burn"))
+
+    rng_use = _resolve_repro_rng(rng, seed)
+    df_f = Float64(df_idio)
+    amp = Float64(tail_amplification)
+    n_aug = r + n_key
+    k_lag = 1 + n_aug * p
+    sig_f = 0.65
+    sig_y = 0.55
+    c_shift = 6.0
+
+    A0 = Matrix{Float64}(I, n_aug, n_aug)
+    for k in 1:n_key, j in 1:r
+        A0[r + k, j] = -0.25 / r
+    end
+    A0_inv = inv(A0)
+
+    _q_f(tau::Float64) = isinf(df_f) ? Float64(Distributions.quantile(Distributions.Normal(), tau)) :
+                                       Float64(Distributions.quantile(Distributions.TDist(df_f), tau))
+    _q_y(tau::Float64) = Float64(Distributions.quantile(Distributions.Normal(), tau))
+    delta_f = 0.14 * max(amp - 1.0, 0.0) / n_key
+    delta_y = 0.10 * max(amp - 1.0, 0.0) / n_key
+
+    # Zero-threshold one-sided left-tail scale gives strictly monotone conditional quantiles
+    # (no Koenker-Xiao crossing) while preserving identical slopes for τ ≥ 0.50.
+    function _build_lag_mats(tau::Float64)
+        As = [zeros(n_aug, n_aug) for _ in 1:p]
+        q_f_neg = tau < 0.50 ? 1.45 * _q_f(tau) : 0.0
+        q_y_neg = tau < 0.50 ? 1.25 * _q_y(tau) : 0.0
+        for j in 1:r
+            As[1][j, j] = 0.45
+            if r > 1
+                for j2 in 1:r
+                    j2 != j && (As[1][j, j2] = 0.05 / (r - 1))
+                end
+            end
+        end
+        fy_coef = clamp(-0.38 / n_key + delta_f * q_f_neg, -0.78 / n_key, -0.10 / n_key)
+        for j in 1:r, k in 1:n_key
+            As[1][j, r + k] = fy_coef
+        end
+        y_diag = clamp(0.45 - delta_y * q_y_neg, 0.10, 0.82)
+        for k in 1:n_key
+            As[1][r + k, r + k] = y_diag
+        end
+        for lag in 2:p
+            scale_l = 0.08 / (lag^2)
+            for idx in 1:n_aug
+                As[lag][idx, idx] = scale_l
+            end
+        end
+        return As
+    end
+
+    A_med = _build_lag_mats(0.50)
+
+    true_B(tau::Real) = begin
+        tf = Float64(tau)
+        (!(tau isa Bool) && isfinite(tf) && 0.0 < tf < 1.0) ||
+            throw(ArgumentError("tau must lie strictly in (0, 1), got $tau"))
+        B = zeros(k_lag, n_aug)
+        qf_int = tf < 0.50 ? (sig_f + n_key * delta_f * c_shift) * 1.45 * _q_f(tf) : sig_f * _q_f(tf)
+        qy_int = tf < 0.50 ? (sig_y + delta_y * c_shift) * 1.25 * _q_y(tf) : sig_y * _q_y(tf)
+        for j in 1:r
+            B[1, j] = qf_int
+        end
+        for k in 1:n_key
+            B[1, r + k] = qy_int
+        end
+        As = _build_lag_mats(tf)
+        for lag in 1:p
+            row_rng = (1 + (lag - 1) * n_aug + 1):(1 + lag * n_aug)
+            B[row_rng, :] .= As[lag]'
+        end
+        B
+    end
+
+    N_tot = T_obs + burn + p
+    Z = zeros(N_tot, n_aug)
+    for t in (p + 1):N_tot
+        key_pos = zero(Float64)
+        @inbounds for k in 1:n_key
+            key_pos += max(Z[t - 1, r + k] + c_shift, 0.05)
+        end
+        # Slow factors first
+        for j in 1:r
+            u = clamp(rand(rng_use), 1e-6, 1.0 - 1e-6)
+            val = zero(Float64)
+            for lag in 1:p, col in 1:n_aug
+                val += A_med[lag][j, col] * Z[t - lag, col]
+            end
+            qf = _q_f(u)
+            eps_f = u < 0.50 ? (sig_f + delta_f * key_pos) * 1.45 * qf : sig_f * qf
+            Z[t, j] = val + eps_f
+        end
+        # Fast key variables react contemporaneously via A0
+        for k in 1:n_key
+            eq = r + k
+            u = clamp(rand(rng_use), 1e-6, 1.0 - 1e-6)
+            val = zero(Float64)
+            for j in 1:r
+                val -= A0[eq, j] * Z[t, j]
+            end
+            for lag in 1:p, col in 1:n_aug
+                val += A_med[lag][eq, col] * Z[t - lag, col]
+            end
+            qy = _q_y(u)
+            key_neg = max(c_shift - Z[t - 1, eq], 0.05)
+            eps_y = u < 0.50 ? (sig_y + delta_y * key_neg) * 1.25 * qy : sig_y * qy
+            Z[t, eq] = val + eps_y
+        end
+    end
+
+    keep = (N_tot - T_obs + 1):N_tot
+    F_true = Z[keep, 1:r]
+    Y_key = Z[keep, (r + 1):n_aug]
+
+    # Panel loadings with #528 key-variable identity in columns 1:n_key
+    Lambda = zeros(N, r)
+    # Non-singular leading r×r block in non-key rows for clean BBE identification
+    Lambda[(n_key + 1):(n_key + r), :] .= Matrix{Float64}(I, r, r) .+ 0.2 .* randn(rng_use, r, r)
+    if N > n_key + r
+        Lambda[(n_key + r + 1):N, :] .= 0.9 .* randn(rng_use, N - n_key - r, r)
+    end
+
+    Lambda_y = zeros(N, n_key)
+    Lambda_y[1:n_key, 1:n_key] .= Matrix{Float64}(I, n_key, n_key)
+    Lambda_y[(n_key + 1):N, :] .= 0.08 .* randn(rng_use, N - n_key, n_key)
+
+    n_nonkey = N - n_key
+    idio_nonkey = 0.15 .* (isinf(df_f) ? randn(rng_use, T_obs, n_nonkey) :
+                                        rand(rng_use, Distributions.TDist(df_f), T_obs, n_nonkey))
+    X_nonkey = F_true * @view(Lambda[(n_key + 1):N, :])' .+
+               Y_key * @view(Lambda_y[(n_key + 1):N, :])' .+
+               idio_nonkey
+    X_panel = hcat(Y_key, X_nonkey)
+
+    taus = [0.10, 0.50, 0.90]
+    B_lower = true_B(0.10)
+    B_median = true_B(0.50)
+    B_upper = true_B(0.90)
+    B_by_tau = Dict{Float64,Matrix{Float64}}(
+        0.10 => B_lower,
+        0.50 => B_median,
+        0.90 => B_upper,
+    )
+
+    true_qirf(tau::Real, H::Int) = begin
+        H >= 1 || throw(ArgumentError("H must be >= 1, got $H"))
+        tf = Float64(tau)
+        (!(tau isa Bool) && isfinite(tf) && 0.0 < tf < 1.0) ||
+            throw(ArgumentError("tau must lie strictly in (0, 1), got $tau"))
+        As = _build_lag_mats(tf)
+        vals = zeros(H, n_aug, n_aug)
+        vals[1, :, :] .= A0_inv
+        for h in 2:H
+            acc = zeros(n_aug, n_aug)
+            for lag in 1:min(p, h - 1)
+                acc .+= (A0_inv * As[lag]) * @view(vals[h - lag, :, :])
+            end
+            vals[h, :, :] .= acc
+        end
+        vals
+    end
+
+    return (
+        X_panel=X_panel,
+        X=X_panel,
+        Y_key=Y_key,
+        Y_key_indices=collect(1:n_key),
+        true_factors=F_true,
+        F=F_true,
+        loadings=Lambda,
+        Lambda=Lambda,
+        Lambda_y=Lambda_y,
+        A0=A0,
+        B_median=B_median,
+        B_lower=B_lower,
+        B_upper=B_upper,
+        B_by_tau=B_by_tau,
+        true_B=true_B,
+        taus=taus,
+        true_qirf_impact=A0_inv,
+        true_qirf=true_qirf,
+        r=r,
+        p=p,
+        n_key=n_key,
+        df_idio=df_f,
+        tail_amplification=amp,
+        seed=seed === nothing ? nothing : Int(seed),
+    )
+end

@@ -21,6 +21,7 @@ PanelRegModel
 PanelIVModel
 PanelLogitModel
 PanelProbitModel
+QuantileFactorPanelModel
 ```
 
 ---
@@ -40,6 +41,7 @@ report(::PanelIVModel)
 report(::PanelLogitModel)
 report(::PanelProbitModel)
 report(::PanelTestResult)
+report(::QuantileFactorPanelModel)
 ```
 
 ---
@@ -122,6 +124,12 @@ estimate_xtiv
 ```@docs
 estimate_xtlogit
 estimate_xtprobit
+```
+
+### Panel Quantile Factors
+
+```@docs
+estimate_xtqreg_factors
 ```
 
 ### Panel Specification Tests

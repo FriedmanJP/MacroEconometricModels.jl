@@ -429,41 +429,7 @@ function _st_gamma_threshold_se(r::SmoothTransitionSVARResult{T}) where {T<:Abst
     se_γ, se_c
 end
 
-function _finite_se!(se::AbstractMatrix{T}) where {T<:AbstractFloat}
-    @inbounds for i in eachindex(se)
-        v = se[i]
-        se[i] = isfinite(v) && v >= zero(T) ? v : T(NaN)
-    end
-    se
-end
-
-function _spd_inv(H::AbstractMatrix{T}) where {T<:AbstractFloat}
-    Hs = Matrix{T}((H + H') / 2)
-    λmin = try
-        eigmin(Symmetric(Hs))
-    catch
-        T(-1)
-    end
-    if !isfinite(λmin) || λmin <= T(1e-10)
-        jitter = T(1e-8)
-        if isfinite(λmin) && λmin < zero(T)
-            jitter += -λmin
-        end
-        Hs = Hs + jitter * I
-    end
-    Matrix{T}(robust_inv(Hs; silent=true))
-end
-
-function _delta_B0_se(params::Vector{T}, V::AbstractMatrix{T}, B0_fn, n::Int) where {T<:AbstractFloat}
-    if size(V, 1) == 0 || size(V, 2) == 0 || all(x -> !isfinite(x) || iszero(x), V)
-        return fill(T(NaN), n, n), zeros(T, 0, 0)
-    end
-    J = ForwardDiff.jacobian(p -> vec(B0_fn(p)), params)
-    VB = J * V * J'
-    se = reshape(sqrt.(max.(diag(VB), zero(T))), n, n)
-    _finite_se!(se)
-    se, Matrix{T}(VB)
-end
+# (_finite_se!, _spd_inv, _delta_B0_se are defined in src/nongaussian/shared.jl)
 
 # =============================================================================
 # K-regime joint ML kernel (Lanne–Lütkepohl–Maciejowska 2010)
@@ -1359,7 +1325,11 @@ function identify_garch(model::VARModel{T}; max_iter::Int=500,
     B0_inv = robust_inv(B0)
     shocks = (B0_inv * model.U')'
 
-    p_garch = Vector{T}(angles)
+    Qp = copy(Q)
+    flip_last = n > 1 && det(Qp) < zero(T)
+    flip_last && (Qp[:, n] .*= -one(T))
+    angles_vcov = n <= 1 ? angles : _orthogonal_to_givens(Qp, n)
+    p_garch = Vector{T}(angles_vcov)
     for j in 1:n
         append!(p_garch, _garch_pack_shock(garch_params[j, 1], garch_params[j, 2],
                                             garch_params[j, 3]))
@@ -1369,10 +1339,11 @@ function identify_garch(model::VARModel{T}; max_iter::Int=500,
     try
         nll = θ -> _garch_svar_nll(θ, model.U, L_mat, n)
         V = _spd_inv(Matrix{T}(ForwardDiff.hessian(nll, p_garch)))
+        S_last = flip_last ? Diagonal(T[j < n ? one(T) : -one(T) for j in 1:n]) : I
         se, _ = _delta_B0_se(p_garch, V, θ -> begin
             n_angles = n * (n - 1) ÷ 2
             Qθ = n_angles == 0 ? Matrix{eltype(θ)}(I, n, n) :
-                 _givens_to_orthogonal(θ[1:n_angles], n)
+                 _givens_to_orthogonal(θ[1:n_angles], n) * S_last
             L_mat * Qθ
         end, n)
     catch

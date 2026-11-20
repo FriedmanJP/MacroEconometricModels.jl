@@ -463,6 +463,40 @@ end
     @test _pd(r.B0, _B_rec) < 0.20
 end
 
+@testset "identify_mixture_normal asymmetric skewed bimodal recovery (GMR 2020 fn. 33)" begin
+    # GMR (2020) fn. 33: p=0.1, μ₁=2.12, μ₂=-0.24, σ₁=1.41, σ₂=0.58 (κ_3≈2.0, κ_4≈6.0 excess)
+    p_dgp = 0.1
+    mu1_dgp = 2.12
+    mu2_dgp = -p_dgp * mu1_dgp / (1.0 - p_dgp)
+    s1_dgp = 1.41
+    s2_dgp = sqrt((1.0 - p_dgp * (mu1_dgp^2 + s1_dgp^2) - (1.0 - p_dgp) * mu2_dgp^2) / (1.0 - p_dgp))
+    B_asym = [1.0 0.3; -0.4 1.0]
+    A_asym = [0.4 * Matrix{Float64}(I, 2, 2)]
+    Tobs = FAST ? 1200 : 1500
+    rng = Xoshiro(9013)
+    ntot = Tobs + 51
+    eps_gm = Matrix{Float64}(undef, ntot, 2)
+    for t in 1:ntot, j in 1:2
+        if rand(rng) < p_dgp
+            eps_gm[t, j] = mu1_dgp + s1_dgp * randn(rng)
+        else
+            eps_gm[t, j] = mu2_dgp + s2_dgp * randn(rng)
+        end
+    end
+    u_gm = eps_gm * B_asym'
+    Y_gm = zeros(ntot, 2)
+    for t in 2:ntot
+        Y_gm[t, :] = u_gm[t, :] + A_asym[1] * Y_gm[t - 1, :]
+    end
+    Y_gm = Y_gm[(end - Tobs + 1):end, :]
+    r = identify_mixture_normal(estimate_var(Y_gm, 1); asymmetric=true, seed=9013)
+    @test r.distribution == :mixture_normal_asym
+    @test haskey(r.dist_params, :mu1)
+    @test haskey(r.dist_params, :mu2)
+    @test haskey(r.dist_params, :sigma2)
+    @test _pd(r.B0, B_asym) < 0.08
+end
+
 @testset "identify_pml recovery" begin
     Tobs = FAST ? 600 : 1500
     rng = Xoshiro(30)

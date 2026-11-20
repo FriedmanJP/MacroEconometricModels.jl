@@ -8,8 +8,20 @@ Multi-equation models: VAR, VECM, BVAR (including time-varying-parameter and mix
 
 ```@docs
 VARModel
+SVARMAModel
+QuantileVARModel
+QuantileImpulseResponse
 AbstractVARModel
 effective_nobs(::VARModel)
+```
+
+### Non-Fundamental SSVARMA
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["svarma/types.jl", "svarma/schur_filter.jl", "svarma/blaschke.jl", "svarma/gmm_2sls.jl", "svarma/ml.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---
@@ -68,6 +80,19 @@ AbstractHistoricalDecomposition
 FactorModel
 DynamicFactorModel
 GeneralizedDynamicFactorModel
+QuantileFactorModel
+QFMICResult
+QuantileFactorGrid
+QFMSpanningResult
+QFMLoadingConstancyTest
+GrowthAtRiskResult
+CointegratedGDFM
+BandPassGDFMResult
+EurocoinResult
+SpectralFEVDResult
+TimeVaryingGDFM
+GDFMNowcastResult
+FHLZModel
 FactorForecast
 AbstractFactorModel
 ```
@@ -157,6 +182,8 @@ forecast_condition
 ```@docs
 FAVARModel
 BayesianFAVAR
+QuantileFAVAR
+VBQuantileFAVAR
 ```
 
 ---
@@ -376,11 +403,23 @@ Private = false
 HallinLiskaResult
 BaiNgQResult
 AmengualWatsonResult
+OnatskiQTestResult
+AhnHorensteinResult
+OnatskiEDResult
 ```
 
 ```@autodocs
 Modules = [MacroEconometricModels]
-Pages   = ["factor/generalized.jl"]
+Pages   = ["factor/generalized.jl", "factor/fhlz.jl", "factor/selection.jl", "factor/gdfm_i1.jl", "factor/bandpass.jl", "factor/tv_gdfm.jl"]
+Order   = [:function]
+Private = false
+```
+
+### Quantile Factor Model
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["factor/quantile.jl", "factor/quantile_forecast.jl"]
 Order   = [:function]
 Private = false
 ```
@@ -407,6 +446,15 @@ fevd(::StructuralDFM{T}, ::Int) where {T}
 historical_decomposition(::StructuralDFM{T}) where {T}
 historical_decomposition(::GeneralizedDynamicFactorModel{T}) where {T}
 forecast(::FAVARModel{T}, ::Int) where {T}
+```
+
+### Quantile VAR and Quantile FAVAR
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["var/qvar.jl", "favar/qfavar.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---

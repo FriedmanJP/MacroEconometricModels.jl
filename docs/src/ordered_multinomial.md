@@ -13,7 +13,7 @@
 - **StatsAPI interface**: `coef`, `vcov`, `predict`, `confint`, `stderror`, `nobs`, `loglikelihood`, `residuals`
 
 ```@setup ordmult
-using MacroEconometricModels, Statistics
+using MacroEconometricModels, Statistics, Random
 mroz = load_example(:mroz)
 ```
 
@@ -469,6 +469,52 @@ The ordered logit buys its parsimony with the proportional-odds restriction, and
 
 ---
 
+## Rational Inattention Discrete Choice
+
+Standard multinomial logit imposes Independence of Irrelevant Alternatives (IIA): adding a duplicate alternative leaves relative odds across existing options unchanged. Matějka & McKay (2015) prove that when a decision maker chooses a conditional choice rule ``P(j \mid s)`` over ``J`` alternatives across ``S`` payoff states with prior ``\mu_s`` under a Shannon mutual-information cost ``\omega > 0``, the optimal policy follows a generalized multinomial logit weighted by endogenous unconditional choice shares ``\mathcal{P}_j = \sum_s \mu_s P(j \mid s)``:
+
+```math
+P(j \mid s) = \frac{\mathcal{P}_j \, \exp(U_{j,s} / \omega)}{\sum_{k=1}^{J} \mathcal{P}_k \, \exp(U_{k,s} / \omega)}, \qquad \sum_{s=1}^{S} \mu_s \frac{\exp(U_{j,s} / \omega)}{\sum_{k=1}^{J} \mathcal{P}_k \, \exp(U_{k,s} / \omega)} \le 1 \quad \forall j \quad (= 1 \text{ if } \mathcal{P}_j > 0)
+```
+
+where:
+- ``U_{j,s}`` is the state-contingent payoff of alternative ``j`` in state ``s``,
+- ``\omega > 0`` is the marginal cost of information per nat (or pinned by a capacity target),
+- ``\mathcal{P}_j`` acts as an endogenous attention-driven intercept that shrinks to zero on inactive alternatives outside the optimal consideration set (Caplin, Dean & Leahy 2019), systematically breaking IIA.
+
+[`solve_ri_discrete`](@ref) solves the KKT fixed point globally using safeguarded SQUAREM Blahut–Arimoto updates polished with active-set Newton steps, [`ri_iia_diagnostic`](@ref) measures IIA breakdown under a menu expansion, and [`estimate_ri_logit`](@ref) fits ``(\beta, \omega)`` across ``M`` choice environments via maximum likelihood.
+
+```@example ordmult
+# Classic red-bus / blue-bus menu expansion violating IIA
+U_base = [1.0 0.0; 0.0 1.0]
+mu_ri = [0.5, 0.5]
+iia_ri = ri_iia_diagnostic(U_base, mu_ri, [0.0, 1.0]; omega=0.4)
+report(iia_ri)
+```
+
+```@example ordmult
+# Maximum likelihood estimation across choice environments
+rng_ri = Random.Xoshiro(922)
+J_ri, S_ri, K_ri, M_ri, N_ri = 3, 3, 2, 10, 600
+menu_ri = randn(rng_ri, J_ri, S_ri, K_ri, M_ri)
+base_ri = randn(rng_ri, J_ri, S_ri, M_ri)
+beta_true, omega_true = [1.0, -0.7], 0.5
+sols_ri = [solve_ri_discrete(base_ri[:, :, m] .+
+           sum(menu_ri[:, :, k, m] .* beta_true[k] for k in 1:K_ri),
+           fill(1.0 / S_ri, S_ri); omega=omega_true) for m in 1:M_ri]
+ch_ri = Int[]; env_ri = Int[]; st_ri = Int[]
+for i in 1:N_ri
+    m = rand(rng_ri, 1:M_ri); s = rand(rng_ri, 1:S_ri)
+    probs = sols_ri[m].cond_probs[:, s]
+    u = rand(rng_ri); c = findfirst(k -> u <= sum(probs[1:k]), 1:J_ri)
+    push!(ch_ri, c === nothing ? J_ri : c); push!(env_ri, m); push!(st_ri, s)
+end
+m_ri = estimate_ri_logit(ch_ri, menu_ri, env_ri; state_id=st_ri, base_payoff=base_ri)
+report(m_ri)
+```
+
+---
+
 ## Common Pitfalls
 
 1. **Putting an intercept in an ordered model's `X`.** The cutpoints already play that role. A constant column leaves the index unidentified, and the Newton step works against a singular Hessian. The multinomial logit is the opposite case — it needs an explicit intercept column, as `Xm` above supplies.
@@ -495,6 +541,9 @@ The ordered logit buys its parsimony with the proportional-odds restriction, and
 - Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression.
   *Biometrics*, 46(4), 1171--1178. [DOI](https://doi.org/10.2307/2532457)
 
+- Caplin, A., Dean, M., & Leahy, J. (2019). Rational Inattention, Optimal Consideration Sets, and Stochastic Choice.
+  *The Review of Economic Studies*, 86(3), 1061--1094. [DOI](https://doi.org/10.1093/restud/rdy037)
+
 - Cameron, A. C., & Trivedi, P. K. (2005). *Microeconometrics: Methods and Applications*.
   Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.
 
@@ -509,6 +558,9 @@ The ordered logit buys its parsimony with the proportional-odds restriction, and
 
 - Hausman, J. A., & McFadden, D. (1984). Specification Tests for the Multinomial Logit Model.
   *Econometrica*, 52(5), 1219--1240. [DOI](https://doi.org/10.2307/1910997)
+
+- Matějka, F., & McKay, A. (2015). Rational Inattention to Discrete Choices: A New Foundation for the Multinomial Logit Model.
+  *American Economic Review*, 105(1), 272--298. [DOI](https://doi.org/10.1257/aer.20130047)
 
 - McCullagh, P. (1980). Regression Models for Ordinal Data.
   *Journal of the Royal Statistical Society: Series B*, 42(2), 109--127. [DOI](https://doi.org/10.1111/j.2517-6161.1980.tb01109.x)

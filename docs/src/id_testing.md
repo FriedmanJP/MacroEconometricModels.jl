@@ -2,7 +2,7 @@
 
 Statistical identification buys freedom from economic restrictions at the price of distributional assumptions, and those assumptions are testable. This page documents the diagnostics that decide whether non-Gaussian or heteroskedasticity-based identification is admissible on a given sample: multivariate normality tests on the reduced-form residuals, Gaussianity and independence tests on the recovered structural shocks, a likelihood-ratio test against the Gaussian benchmark, Wald tests of distinct relative variances, a residual-bootstrap label-stability diagnostic, and likelihood-ratio / Wald overidentification tests of extra zeros on ``B_0``.
 
-For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For the non-Gaussian estimators these tests validate, see [Non-Gaussian Methods](@ref id_nongaussian_page); for the volatility-based ones, see [Heteroskedasticity](@ref id_heteroskedastic_page).
+For an overview and method comparison, see [Statistical Identification](@ref nongaussian_page). For the non-Gaussian estimators these tests validate (including [`test_svar_hypothesis`](@ref), [`diagnose_nongaussian_svar`](@ref), [`test_fundamentalness`](@ref), and [`test_sufficient_information`](@ref)), see [Non-Gaussian Methods](@ref id_nongaussian_page); for the volatility-based ones, see [Heteroskedasticity](@ref id_heteroskedastic_page).
 
 ```@setup id_test
 using MacroEconometricModels, Random

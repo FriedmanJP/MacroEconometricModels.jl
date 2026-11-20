@@ -72,3 +72,58 @@ end
         end
     end
 end
+
+@testset "v1.1.0 display, report & refs invariants" begin
+    rng = Xoshiro(9911)
+    sim_q = dgp_quantile_factors(rng; T_obs=80, N=12)
+    qfm = estimate_qfm(sim_q.X, 2, 0.25; se=:none, seed=11)
+    qfm_ic = ic_criteria_qfm(sim_q.X, 4, 0.25)
+    gar = growth_at_risk(sim_q.X, 1, 1; r=2, taus=[0.1, 0.5, 0.9], density=:normal, seed=11)
+    Y_qv = randn(rng, 80, 2)
+    qvar = estimate_qvar(Y_qv, 1, [0.25, 0.75]; se=:asymptotic)
+
+    sim_g = dgp_infinite_gdfm(rng; T_obs=100, N=12, q=2)
+    fhlz = estimate_gdfm_fhlz(sim_g.X, 2; p_max=2, n_perm=4, bandwidth=3, seed=11)
+    gdfm_base = estimate_gdfm(sim_g.X, 2; r=3)
+    bp = bandpass_gdfm(gdfm_base, (0.0, π / 4))
+    ah = ahn_horenstein(sim_g.X, 4)
+
+    sim_sv = dgp_ssvarma(rng; T=120, Phi=[0.35 0.0; 0.0 0.3], Theta=zeros(2, 2, 0),
+                         C=[1.0 0.2; -0.15 0.9], dist=:student_t, nu=5.0)
+    var_sv = estimate_var(sim_sv.Y, 1)
+    lms = estimate_lms_svar(var_sv; distributions=[:student_t, :student_t],
+                            method=:three_step, n_starts=1, max_iter=50, seed=11)
+    ht = test_svar_hypothesis(lms, recursiveness_hypothesis(2); method=:wald)
+
+    sys_ab = ABCDSystem([0.7 0.0; 0.0 0.5], [1.0 0.0; 0.0 1.0],
+                        [1.0 0.3; 0.0 0.8], [1.0 0.1; 0.0 1.0])
+    inv_res = poor_mans_invertibility(sys_ab)
+    Y_dv = randn(rng, 60, 2)
+    dv_prof = select_dsge_var_lambda(sys_ab, Y_dv, 1; lambda_grid=[0.5, 2.0, Inf])
+
+    prob_ri = RationalInattentionProblem([0.85;;], [1.0;;], [1.0;;]; capacity=1.0)
+    sol_ri = solve_ri_kalman(prob_ri)
+    ssk_ri = MacroEconometricModels.SteadyStateKalman(
+        sol_ri.Sigma_prior, sol_ri.Sigma_post, sol_ri.K_gain,
+        [0.85;;] - sol_ri.K_gain * [1.0;;], ComplexF64[0.3 + 0.0im])
+    U_dc = randn(rng, 3, 2)
+    dc_ri = solve_ri_discrete(U_dc, [0.4, 0.6]; omega=1.0)
+
+    objs = (qfm, qfm_ic, gar, qvar, fhlz, bp, ah, lms, ht, sys_ab, inv_res, dv_prof, prob_ri, sol_ri, ssk_ri, dc_ri)
+    for obj in objs
+        txt = _render(obj)
+        @test !isempty(strip(txt))
+        @test _no_crop(txt)
+        @test _no_blank_band(txt)
+        for b in (:text, :latex, :html)
+            rtxt = with_display_backend(b) do
+                sprint(io -> report(io, obj))
+            end
+            @test !isempty(strip(rtxt))
+        end
+        for f in (:text, :latex, :html, :bibtex)
+            reftxt = sprint(io -> refs(io, obj; format=f))
+            @test !isempty(strip(reftxt))
+        end
+    end
+end

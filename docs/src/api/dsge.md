@@ -73,6 +73,24 @@ evaluate_policy
 max_euler_error
 ```
 
+### Canonical ABCD Representation
+
+```@docs
+ABCDSystem
+InvertibilityResult
+InnovationsRepresentation
+ShockRecoverabilityResult
+DSGEVARIRFAudit
+ObservableSearchResult
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/abcd.jl", "dsge/abcd_riccati.jl", "dsge/abcd_var.jl", "dsge/abcd_search.jl"]
+Order   = [:function]
+Private = false
+```
+
 ### Global Solution Methods
 
 ```@docs
@@ -187,6 +205,21 @@ PrefilterSpec
 observation_trends
 ObservationTrends
 detect_trend
+```
+
+### Bayesian DSGE-VAR (``\lambda``)
+
+```@docs
+DSGEVARPrior
+DSGEVARLambdaProfile
+DSGEVARPosterior
+```
+
+```@autodocs
+Modules = [MacroEconometricModels]
+Pages   = ["dsge/dsge_var.jl"]
+Order   = [:function]
+Private = false
 ```
 
 ---

@@ -680,6 +680,11 @@ report(x::MultinomialMarginalEffects) = show(stdout, x)
 report(x::NowcastForecast) = show(stdout, x)
 report(x::PanelUnitRootSummary) = show(stdout, x)
 
+# --- Wave-6 v1.1.0 report() IO fallbacks ---
+report(io::IO, r::LMSSVARResult; repro::Bool=false) = (show(IOContext(io, :repro => repro), r); nothing)
+report(io::IO, ssk::SteadyStateKalman) = (show(io, ssk); nothing)
+report(ssk::SteadyStateKalman) = report(stdout, ssk)
+
 # =============================================================================
 # Split Files (table extraction, display, references, nowcasting)
 # =============================================================================

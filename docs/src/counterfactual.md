@@ -67,6 +67,7 @@ Each additional capability costs one additional assumption. Climb only as far as
 - [Rule Counterfactuals (McKay–Wolf)](@ref counterfactual_rules_page) — rule templates, `policy_counterfactual`, `optimal_policy`, second moments
 - [Optimal Policy Perturbations (Barnichon–Mesters)](@ref counterfactual_opp_page) — the OPP statistic, inference, ZLB constraints, decision-date sequences
 - [Model Bank & Diagnostics (Caravello–McKay–Wolf)](@ref counterfactual_bank_page) — model menus, IRF matching, model averaging, historical counterfactuals, spanning and invertibility diagnostics
+- [Rational Inattention](@ref rational_inattention_page) — Sims LQG Kalman filtering, Afrouzi–Yang dynamic attention transitions, Coibion–Gorodnichenko regressions, Maćkowiak–Wiederholt pricing, and Matějka–McKay discrete choice
 
 ---
 
@@ -76,6 +77,29 @@ Each additional capability costs one additional assumption. Climb only as far as
 - **Lucas-robustness boundary.** Rule counterfactuals are Lucas-robust because only the date-0 policy-shock composition changes; validity requires the rule coefficients not to feed the non-policy block (regime-switching credibility models break this). The *detection* of non-optimality by the OPP is robust more broadly than the *improvement* claim.
 - **Approximation quality is measurable.** With thin empirical containers the projection is least squares; `rel_residual` and the [`spanning_diagnostic`](@ref) quantify how much of the desired policy change lives outside the identified span. The module surfaces these numbers everywhere rather than hiding them.
 - **Not a replication.** Menus, forecasts, and posteriors are whatever the user estimates; the module contributes projection algebra plus honesty diagnostics, validated by exact linear-world identities.
+
+---
+
+## Rational-Inattention Sequence-Space Jacobians
+
+When embedding cognitive frictions into sequence-space counterfactuals (Auclert, Rognlie & Straub 2020; Sims 2003), [`rational_inattention_jacobian`](@ref) transforms a full-information rational-expectations Jacobian matrix ``J`` into its rationally inattentive counterpart ``J_{\text{RI}}`` parameterized by either a scalar Kalman gain ``G \in [0, 1]`` (`mode=:gain`) or Shannon channel capacity ``\kappa \ge 0`` bits (`mode=:capacity`, ``G = 1 - 2^{-2\kappa}``):
+
+```math
+J_{\text{RI}}(G, \rho_{\text{news}}) = \sum_{k=0}^{T-1} w_k \, \mathcal{S}_k(J; G, \rho_{\text{news}})
+```
+
+where:
+- ``J \in \mathbb{R}^{T \times T}`` is the rational-expectations sequence-space Jacobian with rows indexed by outcome date ``t`` and columns by news shock date ``s``,
+- ``G`` controls immediate belief updating while ``\rho_{\text{news}} \in [0, 1]`` scales anticipatory reaction to future news (`rho_news = 1.0` nests sticky-expectations attenuation ``\theta = 1 - G``).
+
+```@example cfhub
+J_re = [s <= t ? 0.9^(t - s) : 0.0 for t in 1:H, s in 1:H]
+J_gain = rational_inattention_jacobian(J_re, 0.35; mode=:gain)
+J_cap = rational_inattention_jacobian(J_re, 0.5; mode=:capacity, rho_news=0.8)
+(impact_full = round(J_re[1, 1]; digits=3),
+ impact_gain = round(J_gain[1, 1]; digits=3),
+ impact_cap = round(J_cap[1, 1]; digits=3))
+```
 
 ---
 
@@ -98,3 +122,5 @@ typeof(pc2)
 - Caravello, T. E., A. McKay, and C. K. Wolf (2025). "Evaluating Policy Counterfactuals: A VAR-Plus Approach." Working Paper, MIT.
 - McKay, A., and C. K. Wolf (2023). "What Can Time-Series Regressions Tell Us About Policy Counterfactuals?" *Econometrica* 91(5), 1695–1725. doi:10.3982/ECTA21045
 - Sims, C. A., and T. Zha (1998). "Bayesian Methods for Dynamic Multivariate Models." *International Economic Review* 39(4), 949–968. doi:10.2307/2527347
+- Auclert, A., B. Rognlie, and L. Straub (2020). "Micro Jumps, Macro Humps: Monetary Policy and Business Cycles in an Estimated HANK Model." NBER Working Paper 26647. doi:10.3386/w26647
+- Sims, C. A. (2003). "Implications of Rational Inattention." *Journal of Monetary Economics* 50(3), 665–690. doi:10.1016/S0304-3932(03)00029-1

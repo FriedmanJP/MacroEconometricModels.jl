@@ -36,7 +36,7 @@ All 15 methods return a rotation matrix ``Q`` and structural impact matrix ``B_0
 | Serially correlated shocks | `identify_sobi` | Autocovariance-based separation |
 | Independence beyond fourth moments | `identify_dcov`, `identify_hsic` | Nonparametric and kernel criteria |
 | Heavy tails | `identify_student_t` | Parametric ML on fat tails |
-| Bimodal shocks | `identify_mixture_normal` | Two-component Gaussian mixture |
+| Bimodal or skewed mixture shocks | `identify_mixture_normal` | Two-component Gaussian mixture (`asymmetric=true` for skewed) |
 | Skewness and kurtosis jointly | `identify_pml` | Pearson Type IV ML on both moments |
 | Asymmetric shocks | `identify_skew_normal` | Azzalini skew-normal likelihood |
 | Independence via higher moments | `identify_gmm_moments` | Coskewness / cokurtosis GMM |
@@ -104,7 +104,7 @@ decomp  = fevd(model, 20; method=:jade)
 nothing # hide
 ```
 
-Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:pml`, `:skew_normal`, `:nongaussian_ml`, `:gmm_moments`, `:markov_switching`, and `:garch`. The heteroskedasticity schemes `:smooth_transition` and `:external_volatility` are also accepted but require an additional keyword argument (`transition_var` and `regime_indicator`, respectively).
+Supported symbols: `:fastica`, `:jade`, `:sobi`, `:dcov`, `:hsic`, `:student_t`, `:mixture_normal`, `:mixture_normal_asym`, `:pml`, `:skew_normal`, `:nongaussian_ml`, `:gmm_moments`, `:markov_switching`, and `:garch`. The heteroskedasticity schemes `:smooth_transition` and `:external_volatility` are also accepted but require an additional keyword argument (`transition_var` and `regime_indicator`, respectively).
 
 ---
 
@@ -160,6 +160,7 @@ labeled.shock_names
 
 - Lanne, M., Meitz, M. & Saikkonen, P. (2017). Identification and Estimation of Non-Gaussian SVARs. *Journal of Econometrics*, 196(2), 288--304. [DOI: 10.1016/j.jeconom.2016.06.002](https://doi.org/10.1016/j.jeconom.2016.06.002)
 - Gourieroux, C., Monfort, A. & Renne, J.-P. (2017). Statistical Inference for ICA: Application to Structural VAR Models. *Journal of Econometrics*, 196(1), 111--126. [DOI: 10.1016/j.jeconom.2016.09.007](https://doi.org/10.1016/j.jeconom.2016.09.007)
+- Gourieroux, C., Monfort, A. & Renne, J.-P. (2020). Identification and Estimation in Non-Fundamental Structural VARMA Models. *Review of Economic Studies*, 87(4), 1915--1953. [DOI: 10.1093/restud/rdz028](https://doi.org/10.1093/restud/rdz028)
 - Lanne, M. & Lutkepohl, H. (2010). SVARs with Nonnormal Residuals. *Journal of Business & Economic Statistics*, 28(1), 159--168. [DOI: 10.1198/jbes.2009.06003](https://doi.org/10.1198/jbes.2009.06003)
 - Herwartz, H. (2018). Hodges-Lehmann Detection of Structural Shocks. *Oxford Bulletin of Economics and Statistics*, 80(4), 736--754. [DOI: 10.1111/obes.12234](https://doi.org/10.1111/obes.12234)
 - Azzalini, A. (1985). A Class of Distributions Which Includes the Normal Ones. *Scandinavian Journal of Statistics*, 12(2), 171--178. [https://www.jstor.org/stable/4615982](https://www.jstor.org/stable/4615982)

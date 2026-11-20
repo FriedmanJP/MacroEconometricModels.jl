@@ -115,6 +115,7 @@ include("dgp/dgp_univariate.jl")
 include("dgp/dgp_cointegration.jl")
 include("dgp/dgp_volatility.jl")
 include("dgp/dgp_factors.jl")
+include("dgp/dgp_gdfm.jl")
 include("dgp/dgp_lp.jl")
 include("dgp/dgp_micro.jl")
 include("dgp/dgp_regime.jl")
@@ -168,6 +169,7 @@ include("reg/stability.jl")     # EV-32 (#440): recursive residuals / CUSUM(SQ) 
 include("reg/predict.jl")
 include("reg/ordered.jl")
 include("reg/multinomial.jl")
+include("ri/discrete_choice.jl")
 
 # Systems estimation — SUR / 3SLS (EV-35, #443) — after reg/ (reuses robust_inv,
 # _coef_table, _pretty_table, _sig_legend). Greenfield src/system/ module.
@@ -251,6 +253,8 @@ include("core/uhlig.jl")
 include("nongaussian/shared.jl")
 include("nongaussian/ica.jl")
 include("nongaussian/ml.jl")
+include("nongaussian/lms.jl")
+include("nongaussian/hypothesis.jl")
 include("nongaussian/heteroskedastic.jl")
 include("nongaussian/gmm.jl")
 include("nongaussian/tvv_common.jl")
@@ -272,6 +276,7 @@ include("factor/kalman.jl")
 include("factor/static.jl")
 include("factor/dynamic.jl")
 include("factor/generalized.jl")
+include("factor/quantile.jl")
 
 # Spectral analysis and ACF/PACF
 include("spectral/types.jl")
@@ -283,6 +288,9 @@ include("spectral/diagnostics.jl")
 include("spectral/filtering.jl")
 include("spectral/show.jl")
 
+include("factor/fhlz.jl")
+include("factor/selection.jl")
+include("factor/tv_gdfm.jl")
 include("factor/structural.jl")
 
 # FAVAR types and estimation (after factor models, before nowcast)
@@ -490,6 +498,12 @@ include("reg/anderson_rubin.jl")   # T244 (#343): weak-IV-robust AR test + confi
 # _hausman_quadratic_form) and after ardl/estimation.jl (reuses estimate_ardl for MG).
 include("ardl/pmg.jl")
 
+# Panel Quantile Regression with Interactive Quantile Factor Effects (QFM-06, #888)
+include("factor/quantile_panel.jl")
+
+# QFM Distributional Forecasting & Growth-at-Risk (QFM-07, #889)
+include("factor/quantile_forecast.jl")
+
 # Covariance estimators
 include("core/covariance.jl")
 
@@ -544,6 +558,15 @@ include("core/bootstrap_schemes.jl")   # T271 (#370): wild/block resampling + Ki
 include("core/irf.jl")
 include("core/fevd.jl")
 include("core/hd.jl")
+include("nongaussian/lanne_luoto_gmm.jl")
+
+# Non-fundamental Strong SVARMA core (NGID-05, #905; after irf + fevd + hd)
+include("svarma/types.jl")
+include("svarma/schur_filter.jl")
+include("svarma/blaschke.jl")
+include("svarma/gmm_2sls.jl")
+include("svarma/ml.jl")
+include("svarma/tests.jl")
 
 # VECM analysis and forecasting (after irf + fevd + hd)
 include("vecm/forecast.jl")
@@ -553,6 +576,10 @@ include("vecm/granger.jl")
 # FAVAR analysis and forecast (after irf + fevd + hd)
 include("favar/analysis.jl")
 include("favar/forecast.jl")
+include("var/qvar.jl")
+include("favar/qfavar.jl")
+include("factor/gdfm_i1.jl")
+include("factor/bandpass.jl")
 
 # LP-FEVD (after irf + fevd)
 include("lp/fevd.jl")
@@ -609,6 +636,18 @@ include("ct/continuous_aiyagari.jl")
 include("ct/two_asset.jl")
 include("dsge/family_facades.jl")   # G-14 irf/fevd/simulate after family types
 include("dsge/heterogeneous/intermediary.jl")  # G-19 Bewley Banks (after _path_to_irf)
+include("dsge/abcd.jl")                         # ABCD-01 (#909): canonical ABCD representation
+include("dsge/abcd_riccati.jl")                 # ABCD-03 (#911): Hansen-Sargent DARE innovations representation
+include("dsge/abcd_var.jl")                     # ABCD-04 (#912): shock recoverability, population VAR, 3-way IRF audit
+include("dsge/abcd_search.jl")                  # ABCD-05 (#913): observable-set invertibility search
+include("dsge/dsge_var.jl")                     # ABCD-06 (#914): Del Negro-Schorfheide Bayesian DSGE-VAR(λ)
+include("ri/types.jl")
+include("ri/steady_state.jl")
+include("ri/dynamic.jl")
+include("ri/state_space.jl")
+include("ri/analysis.jl")
+include("ri/estimation.jl")
+include("ri/mackowiak_wiederholt.jl")
 
 # Policy counterfactuals (Barnichon-Mesters OPP, McKay-Wolf, CMW model bank)
 include("counterfactual/types.jl")
@@ -815,7 +854,13 @@ export determinacy_region, determinacy_boundary, determinacy_label, DETERMINACY_
 export pruned_state_space
 export evaluate_policy, evaluate_value, physical_nodes, max_euler_error, vfi_solver
 
-# Accessors
+# Accessors & ABCD representation
+export ABCDSystem, abcd_representation
+export InvertibilityResult, poor_mans_invertibility, is_invertible
+export InnovationsRepresentation, innovations_representation, to_abcd
+export ShockRecoverabilityResult, DSGEVARIRFAudit, shock_recoverability, population_var, compare_dsge_svar_irf
+export ObservableSearchResult, search_invertible_observables
+export nstates, nobservables
 export nshocks, is_determined, is_stable
 
 # OccBin types and functions
@@ -911,6 +956,13 @@ export CounterfactualHistory, counterfactual_forecast, counterfactual_history
 # Spanning + forecast-sufficiency diagnostics (CF-19, #399)
 export SpanningDiagnostic, ForecastSufficiency
 export spanning_diagnostic, forecast_sufficiency
+
+# Rational Inattention (Sims 2003 steady-state & Afrouzi-Yang 2021 dynamic LQG Kalman filter)
+export RationalInattentionProblem, SimsKalmanSolution, solve_ri_kalman
+export DynamicRISolution, solve_ri_transition
+export to_statespace
+export RIEstimationResult, CGTestResult, estimate_ri, coibion_gorodnichenko_test, implied_cg_slope
+export MWAttentionResult, solve_mw_attention, rational_inattention_jacobian
 
 # Local Projection types
 export AbstractLPModel, AbstractLPImpulseResponse, AbstractCovarianceEstimator
@@ -1025,6 +1077,7 @@ export optimize_hyperparameters_glp, GLPHyperparameters
 export estimate_bvar
 export posterior_mean_model
 export posterior_median_model
+export DSGEVARPrior, DSGEVARLambdaProfile, DSGEVARPosterior, dsge_var_prior, dsge_var_logml, select_dsge_var_lambda, estimate_dsge_var
 
 # =============================================================================
 # Exports - Prior Functions
@@ -1126,12 +1179,20 @@ export is_stationary
 
 # Generalized Dynamic Factor Model functions
 export estimate_gdfm
+export GDFMNowcastResult, nowcast_gdfm
+export FHLZModel, estimate_gdfm_fhlz
+export CointegratedGDFM, estimate_gdfm_i1
+export BandPassGDFMResult, EurocoinResult, SpectralFEVDResult
+export bandpass_gdfm, eurocoin_indicator, spectral_fevd
 export ic_criteria_gdfm
 export hallin_liska, HallinLiskaResult
 export bai_ng_q, BaiNgQResult
 export amengual_watson_q, AmengualWatsonResult
+export OnatskiQTestResult, AhnHorensteinResult, OnatskiEDResult
+export onatski_q_test, onatski_q_select, ahn_horenstein, onatski_ed
 export common_variance_share
 export spectral_eigenvalue_plot_data
+export TimeVaryingGDFM, estimate_tv_gdfm
 
 # Structural DFM types and estimation
 export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
@@ -1140,6 +1201,14 @@ export StructuralDFM, estimate_structural_dfm, varindex, structural_shocks
 export FAVARModel, BayesianFAVAR
 export estimate_favar
 export favar_panel_irf, favar_panel_forecast, sdfm_panel_irf
+export QuantileVARModel, QuantileImpulseResponse, QuantileFAVAR, VBQuantileFAVAR
+export estimate_qvar, qirf, estimate_qfavar, qfavar_panel_irf, qfavar_panel_forecast
+
+# Quantile Factor Model types and estimation
+export QuantileFactorModel, QFMICResult, estimate_qfm, ic_criteria_qfm
+export QuantileFactorGrid, QFMSpanningResult, QFMLoadingConstancyTest
+export test_qfm_spanning, test_qfm_loading_constancy
+export QuantileFactorPanelModel, estimate_xtqreg_factors
 
 # =============================================================================
 # Exports - Utility Functions
@@ -1287,7 +1356,8 @@ export estimate_arfima, ARFIMAModel
 export gph_test, local_whittle, GPHResult, LocalWhittleResult
 
 # State-space module (EV-37, #445): public Kalman MLE + TVP regression
-export StateSpaceModel, estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
+export StateSpaceModel, SteadyStateKalman, steady_state_kalman
+export estimate_statespace, estimate_tvp_reg, local_level, local_linear_trend
 
 # =============================================================================
 # Exports - Non-Gaussian VAR Identification
@@ -1311,14 +1381,21 @@ export henze_zirkler_test, normality_test_suite
 
 # ICA-based SVAR identification
 export identify_fastica, identify_jade, identify_sobi
-export identify_dcov, identify_hsic
+export identify_dcov, identify_hsic, identify_cvm
 
 # Non-Gaussian ML SVAR
 export identify_student_t, identify_mixture_normal
 export identify_pml, identify_skew_normal, identify_nongaussian_ml
+export LMSSVARResult, estimate_lms_svar, lms_project_B
+export SVARHypothesisTest, NonGaussianDiagnostics
+export recursiveness_hypothesis, impact_zero_hypothesis, impact_linear_hypothesis
+export long_run_hypothesis, horizon_irf_hypothesis, mixed_svar_hypothesis
+export nonlinear_svar_hypothesis, test_svar_hypothesis, diagnose_nongaussian_svar
 
 # Moment-based GMM SVAR
 export identify_gmm_moments
+export LanneLuotoGMMResult, GMMMomentSelectionResult,
+       estimate_lanne_luoto_gmm, select_gmm_moments
 
 # Time-varying-volatility SVAR (Lewis 2021)
 export identify_lewis_tvv
@@ -1336,6 +1413,12 @@ export test_gaussian_vs_nongaussian, test_shock_independence
 export test_overidentification, test_label_stability
 export test_lambda_distinct, test_restrictions
 export test_gaussian_shock_count
+
+# Non-fundamental Strong SVARMA core & estimation (NGID-05 #905, NGID-06 #906, NGID-07 #907)
+export SVARMAModel, ssvarma_filter_shocks, fundamentalness_regime, blaschke_representations
+export estimate_ssvarma
+export FundamentalnessTestResult, SufficientInformationTestResult
+export test_fundamentalness, test_sufficient_information
 
 # =============================================================================
 # Exports - Volatility Models (ARCH/GARCH/SV)
@@ -1479,11 +1562,12 @@ export load_example
 
 # Simulation DGPs (public simulators, ex-test/dgp)
 export dgp_var, lyapunov_gamma0, var_irf, var_fevd, var_hd
-export dgp_nongaussian_var, dgp_heteroskedastic_var
+export dgp_nongaussian_var, dgp_heteroskedastic_var, dgp_ssvarma
 export dgp_arima, dgp_trend_cycle, dgp_ar2_peak, dgp_lagged_pair, dgp_state_space, dgp_unit_root_pair
 export dgp_vecm, dgp_cointreg, dgp_panel_var, dgp_ardl, dgp_nardl, dgp_pmg
 export dgp_garch_family, dgp_sv, dgp_mgarch, dgp_midas
-export dgp_dynamic_factors, dgp_mixed_frequency_panel
+export dgp_dynamic_factors, dgp_mixed_frequency_panel, dgp_quantile_factors, dgp_qfavar
+export dgp_infinite_gdfm
 export dgp_lp_iv, dgp_state_dependent_var, dgp_propensity, dgp_hac
 export dgp_cross_section, dgp_panel, dgp_staggered_did
 export dgp_regime_switching
@@ -1499,6 +1583,7 @@ export RegModel, LogitModel, ProbitModel, MarginalEffects
 export OrderedLogitModel, OrderedProbitModel, estimate_ologit, estimate_oprobit
 export generalized_residuals   # #507: ordered-model score residual
 export MultinomialLogitModel, estimate_mlogit
+export RIDiscreteChoiceSolution, RIIIADiagnostic, RILogitModel, solve_ri_discrete, ri_iia_diagnostic, estimate_ri_logit
 
 # Estimation
 export estimate_reg, estimate_iv, estimate_logit, estimate_probit
@@ -1573,6 +1658,9 @@ export forecast_evaluate, diebold_mariano, clark_west, mincer_zarnowitz,
        forecast_encompassing, combine_forecasts,
        ForecastEvaluation, DMTestResult, ClarkWestResult, MincerZarnowitzResult,
        ForecastEncompassingResult, ForecastCombination
+
+# QFM Distributional Forecasting & Growth-at-Risk (QFM-07, #889)
+export GrowthAtRiskResult, growth_at_risk
 
 # =============================================================================
 # Exports - Plotting

@@ -408,4 +408,347 @@ end
             @test isapprox(dvar[i, mid], Ps[i, i, mid]; rtol=0.5)
         end
     end
+
+    @testset "_solve_dare & steady_state_kalman (Issue #916)" begin
+        MEM = MacroEconometricModels
+        rng = Random.Xoshiro(916)
+
+        # 1. Singular transition A = [0 1; 0 0] (uncorrelated and correlated S)
+        A_sing = [0.0 1.0; 0.0 0.0]
+        Q_sing = [0.5 0.1; 0.1 0.3]
+        C_sing = [1.0 0.5]
+        R_sing = reshape([0.2], 1, 1)
+        P_s, K_s, F_s, res_s = MEM._solve_dare(A_sing, Q_sing, C_sing, R_sing)
+        @test res_s < 1e-12
+        @test issymmetric(P_s) || P_s ≈ P_s'
+        @test minimum(eigvals(Symmetric(P_s))) >= -1e-12
+        @test maximum(abs, eigvals(A_sing - K_s * C_sing)) < 1.0
+
+        S_sing = [0.15; 0.05;;]
+        P_sc, K_sc, F_sc, res_sc = MEM._solve_dare(A_sing, Q_sing, C_sing, R_sing; S=S_sing)
+        @test res_sc < 1e-12
+        @test maximum(abs, eigvals(A_sing - K_sc * C_sing)) < 1.0
+
+        # 2. Unit-root A = [1.0] FVRSW (2007) Permanent Income with S = B * D' != 0
+        R_gross = 1.2
+        A_fv = reshape([1.0], 1, 1)
+        B_fv = reshape([1.0 - 1.0 / R_gross], 1, 1)
+        C_fv = reshape([-1.0], 1, 1)
+        D_fv = reshape([1.0 / R_gross], 1, 1)
+        S_fv = B_fv * D_fv'
+        P_fv, K_fv, F_fv, res_fv = MEM._solve_dare(A_fv, B_fv * B_fv', C_fv, D_fv * D_fv'; S=S_fv)
+        @test res_fv < 1e-12
+        @test P_fv[1, 1] ≈ 11.0 / 36.0 atol = 1e-12
+        @test K_fv[1, 1] ≈ -1.0 / 6.0 atol = 1e-12
+        @test F_fv[1, 1] ≈ 1.0 atol = 1e-12
+        @test maximum(abs, eigvals(A_fv - K_fv * C_fv)) < 1.0
+
+        # 3. Singular / zero R via Van Dooren QR-compressed extended pencil
+        P_r0, K_r0, F_r0, res_r0 = MEM._solve_dare(A_sing, Q_sing, C_sing, zeros(1, 1))
+        @test res_r0 < 1e-12
+        @test maximum(abs, eigvals(A_sing - K_r0 * C_sing)) < 1.0
+
+        # 3b. Rank-deficient [C'; -S; R] (< m) adversarial cases (Issue #916)
+        # (a) R = 0 with m = 3 > n = 2
+        A_r3 = [0.5 0.1; 0.0 0.6]
+        Q_r3 = [1.0 0.2; 0.2 1.0]
+        C_r3 = [1.0 0.0; 0.0 1.0; 1.0 1.0]
+        P_r3, K_r3, F_r3, res_r3 = MEM._solve_dare(A_r3, Q_r3, C_r3, zeros(3, 3))
+        @test res_r3 < 1e-12
+        @test minimum(eigvals(Symmetric(P_r3))) >= -1e-12
+        @test maximum(abs, eigvals(A_r3 - K_r3 * C_r3)) < 1.0
+
+        # (b) R = 0 with collinear C
+        C_col = [1.0 0.0; 2.0 0.0]
+        P_col, K_col, F_col, res_col = MEM._solve_dare(A_r3, Q_r3, C_col, zeros(2, 2))
+        @test res_col < 1e-12
+        @test minimum(eigvals(Symmetric(P_col))) >= -1e-12
+        @test maximum(abs, eigvals(A_r3 - K_col * C_col)) < 1.0
+
+        # (c) Rank-1 R = d*d' with rank-2 C (m = n = 3, d in colspace(C))
+        A_dd = [0.5 0.1 0.0; 0.0 0.6 0.1; 0.0 0.0 0.4]
+        Q_dd = Matrix{Float64}(I, 3, 3)
+        C_dd = [1.0 0.0 0.0; 0.0 1.0 0.0; 1.0 1.0 0.0]
+        d_dd = [1.0, 0.0, 1.0]
+        P_dd, K_dd, F_dd, res_dd = MEM._solve_dare(A_dd, Q_dd, C_dd, d_dd * d_dd')
+        @test res_dd < 1e-12
+        @test minimum(eigvals(Symmetric(P_dd))) >= -1e-12
+        @test maximum(abs, eigvals(A_dd - K_dd * C_dd)) < 1.0
+
+        # (d) Rank-0 observation block (C = 0, R = 0)
+        P_z0, K_z0, F_z0, res_z0 = MEM._solve_dare(A_r3, Q_r3, zeros(2, 2), zeros(2, 2))
+        @test res_z0 < 1e-12
+        @test P_z0 ≈ A_r3 * P_z0 * A_r3' + Q_r3 atol = 1e-11
+        @test iszero(K_z0)
+
+        # Unstabilizable / undetectable systems must throw ArgumentError
+        @test_throws ArgumentError MEM._solve_dare([1.2 0.0; 0.0 0.5], Matrix{Float64}(I, 2, 2), zeros(0, 2), zeros(0, 0))
+        @test_throws ArgumentError MEM._solve_dare([2.0 0.0; 0.0 0.5], zeros(2, 2), [0.0 1.0], ones(1, 1))
+        @test_throws ArgumentError MEM._solve_dare([1.5 0.0; 0.0 0.5], Matrix{Float64}(I, 2, 2), [0.0 1.0], ones(1, 1))
+        @test_throws ArgumentError MEM._solve_dare([1.2 0.0; 0.0 0.5], Matrix{Float64}(I, 2, 2), zeros(2, 2), zeros(2, 2))
+
+        # 4. Dense n=20, m=5 correlated system: < 1e-12 residual in < 5 ms (single-thread BLAS)
+        n20, m20 = 20, 5
+        M20 = randn(rng, n20, n20)
+        A20 = 0.8 * M20 / maximum(abs, eigvals(M20))
+        C20 = randn(rng, m20, n20)
+        W20 = randn(rng, n20 + m20, n20 + m20)
+        Jnt20 = W20 * W20' / (n20 + m20) + 0.1 * I
+        Q20 = Jnt20[1:n20, 1:n20]
+        S20 = Jnt20[1:n20, (n20+1):end]
+        R20 = Jnt20[(n20+1):end, (n20+1):end]
+        P20, K20, F20, res20 = MEM._solve_dare(A20, Q20, C20, R20; S=S20)
+        @test res20 < 1e-12
+        @test maximum(abs, eigvals(A20 - K20 * C20)) < 1.0
+        old_blas_threads = BLAS.get_num_threads()
+        t_min_s = try
+            BLAS.set_num_threads(1)
+            MEM._solve_dare(A20, Q20, C20, R20; S=S20)  # single-thread warmup
+            minimum(@elapsed(MEM._solve_dare(A20, Q20, C20, R20; S=S20)) for _ in 1:10)
+        finally
+            BLAS.set_num_threads(old_blas_threads)
+        end
+        @test t_min_s < 0.005
+
+        # Dimension guards
+        @test_throws ArgumentError MEM._solve_dare(ones(2, 3), Q_sing, C_sing, R_sing)
+        @test_throws ArgumentError MEM._solve_dare(A_sing, ones(3, 3), C_sing, R_sing)
+        @test_throws ArgumentError MEM._solve_dare(A_sing, Q_sing, ones(1, 3), R_sing)
+        @test_throws ArgumentError MEM._solve_dare(A_sing, Q_sing, C_sing, ones(2, 2))
+        @test_throws ArgumentError MEM._solve_dare(A_sing, Q_sing, C_sing, R_sing; S=ones(2, 2))
+
+        # 5. steady_state_kalman & T=500 correlated _kalman_filter! convergence
+        Tt = [0.6 0.15 -0.05; 0.1 0.5 0.2; -0.05 0.1 0.4]
+        Z = [1.0 0.2 0.0; 0.0 1.0 -0.3]
+        B_j = randn(rng, 5, 5)
+        Sig_j = B_j * B_j' / 5 + 0.05 * I
+        RQR = Sig_j[1:3, 1:3]; G = Sig_j[1:3, 4:5]; Hobs = Sig_j[4:5, 4:5]
+        ssk = steady_state_kalman(Z, Hobs, Tt, RQR; G=G)
+        @test ssk isa SteadyStateKalman{Float64}
+        @test all(abs.(ssk.closed_loop_eigs) .< 1.0)
+        @test ssk.F_innov ≈ Z * ssk.P_pred * Z' + Hobs atol = 1e-12
+
+        L_j = cholesky(Symmetric(Sig_j)).L
+        T_long = 500
+        y_long = zeros(2, T_long)
+        x_cur = zeros(3)
+        for t in 1:T_long
+            w = L_j * randn(rng, 5)
+            y_long[:, t] = Z * x_cur + w[4:5]
+            x_cur = Tt * x_cur + w[1:3]
+        end
+        st_long = MEM.KalmanFilterStore{Float64}(3, T_long; innovations=true)
+        MEM._kalman_filter!(st_long, y_long, Z, Tt, RQR, Hobs;
+                            a0=zeros(3), P0=Matrix{Float64}(I, 3, 3), G=G)
+        @test norm(st_long.P_pred[:, :, end] - ssk.P_pred) < 1e-10
+        @test norm(st_long.K[end] - ssk.K_gain) < 1e-10
+        @test norm(st_long.P_filt[:, :, end] - ssk.P_filt) < 1e-10
+
+        # Scalar correlated path: T=500 convergence + scalar==multivariate + G=0 equivalence
+        Z1 = [1.0 0.3]
+        Tt1 = [0.65 0.1; -0.05 0.5]
+        B1 = randn(rng, 3, 3); Sig1 = B1 * B1' / 3 + 0.05 * I
+        RQR1 = Sig1[1:2, 1:2]; G1 = Sig1[1:2, 3:3]; H1 = Sig1[3:3, 3:3]
+        ssk1 = steady_state_kalman(Z1, H1, Tt1, RQR1; G=G1)
+        y1 = randn(rng, 1, T_long)
+        st1_sc = MEM.KalmanFilterStore{Float64}(2, T_long; innovations=true)
+        st1_mv = MEM.KalmanFilterStore{Float64}(2, T_long; innovations=true)
+        ll1_sc = MEM._kalman_filter!(st1_sc, y1, Z1, Tt1, RQR1, H1;
+                                     a0=zeros(2), P0=Matrix{Float64}(I, 2, 2), scalar=true, G=G1)
+        ll1_mv = MEM._kalman_filter!(st1_mv, y1, Z1, Tt1, RQR1, H1;
+                                     a0=zeros(2), P0=Matrix{Float64}(I, 2, 2), scalar=false, G=G1)
+        @test ll1_sc ≈ ll1_mv rtol = 1e-12
+        @test norm(st1_sc.P_pred[:, :, end] - ssk1.P_pred) < 1e-10
+        @test norm(st1_sc.K[end] - ssk1.K_gain) < 1e-10
+
+        # G = zeros(...) matches G === nothing
+        st_n = MEM.KalmanFilterStore{Float64}(3, 30; innovations=true)
+        st_z = MEM.KalmanFilterStore{Float64}(3, 30; innovations=true)
+        ll_n = MEM._kalman_filter!(st_n, y_long[:, 1:30], Z, Tt, RQR, Hobs;
+                                   a0=zeros(3), P0=Matrix{Float64}(I, 3, 3))
+        ll_z = MEM._kalman_filter!(st_z, y_long[:, 1:30], Z, Tt, RQR, Hobs;
+                                   a0=zeros(3), P0=Matrix{Float64}(I, 3, 3), G=zeros(3, 2))
+        @test ll_n ≈ ll_z atol = 1e-12
+        @test st_n.a_filt ≈ st_z.a_filt atol = 1e-12
+        @test st_n.P_filt ≈ st_z.P_filt atol = 1e-12
+        as_n, Ps_n, Pl_n = MEM._rts_smoother(st_n, Tt; nlag=1)
+        as_z, Ps_z, Pl_z = MEM._rts_smoother(st_z, Tt; nlag=1, G=zeros(3, 2), y=y_long[:, 1:30])
+        @test as_n ≈ as_z atol = 1e-12
+        @test Ps_n ≈ Ps_z atol = 1e-12
+        @test Pl_n[1] ≈ Pl_z[1] atol = 1e-12
+    end
+
+    @testset "Correlated _rts_smoother (exact GLS oracle) & _simulation_smoother" begin
+        MEM = MacroEconometricModels
+        rng = Random.Xoshiro(1916)
+        T6 = 6; ns = 2; no = 2
+        Tt6 = [0.7 0.1; -0.1 0.6]; Z6 = [1.0 0.3; -0.2 1.0]
+        B6 = randn(rng, ns + no, ns + no); Sig6 = B6 * B6' / 4 + 0.1 * I
+        RQR6 = Sig6[1:ns, 1:ns]; G6 = Sig6[1:ns, (ns+1):end]; H6 = Sig6[(ns+1):end, (ns+1):end]
+        b6 = [0.2, -0.1]; d6 = [0.05, -0.03]; a06 = [0.1, -0.2]; P06 = [0.5 0.1; 0.1 0.4]
+        y6 = randn(rng, no, T6)
+
+        st6 = MEM.KalmanFilterStore{Float64}(ns, T6; innovations=true)
+        ll6 = MEM._kalman_filter!(st6, y6, Z6, Tt6, RQR6, H6; d=d6, b=b6, a0=a06, P0=P06, G=G6)
+        as6, Ps6, Plag6 = MEM._rts_smoother(st6, Tt6; nlag=1, G=G6, y=y6)
+
+        # Build exact stacked Gaussian joint (alpha_{1:T}, y_{1:T}) oracle
+        N_a = ns * T6; N_y = no * T6
+        mu_a = zeros(N_a); mu_y = zeros(N_y)
+        mu_cur = b6 + Tt6 * a06
+        for t in 1:T6
+            mu_a[(t-1)*ns+1:t*ns] = mu_cur
+            mu_y[(t-1)*no+1:t*no] = d6 + Z6 * mu_cur
+            mu_cur = b6 + Tt6 * mu_cur
+        end
+        n_u = ns + ns + (T6 - 1) * (ns + no) + no
+        Sigma_u = zeros(n_u, n_u)
+        Sigma_u[1:ns, 1:ns] = P06
+        Sigma_u[(ns+1):2ns, (ns+1):2ns] = RQR6
+        for t in 1:(T6-1)
+            idx = 2ns + (t - 1) * (ns + no)
+            Sigma_u[(idx+1):(idx+ns+no), (idx+1):(idx+ns+no)] = [RQR6 G6; G6' H6]
+        end
+        idxT = n_u - no
+        Sigma_u[(idxT+1):n_u, (idxT+1):n_u] = H6
+
+        M_a = zeros(N_a, n_u); M_y = zeros(N_y, n_u)
+        M_a[1:ns, 1:ns] = Tt6
+        M_a[1:ns, (ns+1):2ns] = Matrix{Float64}(I, ns, ns)
+        for t in 1:(T6-1)
+            idx = 2ns + (t - 1) * (ns + no)
+            M_y[(t-1)*no+1:t*no, :] = Z6 * M_a[(t-1)*ns+1:t*ns, :]
+            M_y[(t-1)*no+1:t*no, (idx+ns+1):(idx+ns+no)] = Matrix{Float64}(I, no, no)
+            M_a[t*ns+1:(t+1)*ns, :] = Tt6 * M_a[(t-1)*ns+1:t*ns, :]
+            M_a[t*ns+1:(t+1)*ns, (idx+1):(idx+ns)] = Matrix{Float64}(I, ns, ns)
+        end
+        M_y[(T6-1)*no+1:T6*no, :] = Z6 * M_a[(T6-1)*ns+1:T6*ns, :]
+        M_y[(T6-1)*no+1:T6*no, (idxT+1):n_u] = Matrix{Float64}(I, no, no)
+
+        M_z = vcat(M_a, M_y)
+        Sigma_z = M_z * Sigma_u * M_z'
+        Saa = Sigma_z[1:N_a, 1:N_a]
+        Say = Sigma_z[1:N_a, (N_a+1):end]
+        Syy = Sigma_z[(N_a+1):end, (N_a+1):end]
+        mu_cond = mu_a + Say * (Syy \ (vec(y6) - mu_y))
+        P_cond = Saa - Say * (Syy \ Say')
+        Lyy = cholesky(Symmetric(Syy)).L
+        ll_exact = -0.5 * (N_y * log(2π) + 2 * sum(log, diag(Lyy)) + sum(abs2, Lyy \ (vec(y6) - mu_y)))
+
+        @test ll6 ≈ ll_exact atol = 1e-12
+        @test vec(as6) ≈ mu_cond atol = 1e-12
+        for t in 1:T6
+            @test Ps6[:, :, t] ≈ P_cond[(t-1)*ns+1:t*ns, (t-1)*ns+1:t*ns] atol = 1e-12
+        end
+        for t in 2:T6
+            @test Plag6[1][:, :, t] ≈ P_cond[(t-1)*ns+1:t*ns, (t-2)*ns+1:(t-1)*ns] atol = 1e-12
+        end
+
+        # Partial and all-NaN missingness vs marginal Gaussian oracle
+        y_nan = copy(y6); y_nan[1, 2] = NaN; y_nan[:, 4] .= NaN
+        st_nan = MEM.KalmanFilterStore{Float64}(ns, T6; innovations=true)
+        ll_nan = MEM._kalman_filter!(st_nan, y_nan, Z6, Tt6, RQR6, H6; d=d6, b=b6, a0=a06, P0=P06, G=G6)
+        as_nan, Ps_nan, Plag_nan = MEM._rts_smoother(st_nan, Tt6; nlag=1, G=G6, y=y_nan)
+        obs_idx = findall(!isnan, vec(y_nan))
+        Syy_o = Syy[obs_idx, obs_idx]; Say_o = Say[:, obs_idx]
+        mu_cond_nan = mu_a + Say_o * (Syy_o \ (vec(y_nan)[obs_idx] - mu_y[obs_idx]))
+        P_cond_nan = Saa - Say_o * (Syy_o \ Say_o')
+        Lyy_o = cholesky(Symmetric(Syy_o)).L
+        ll_exact_nan = -0.5 * (length(obs_idx) * log(2π) + 2 * sum(log, diag(Lyy_o)) + sum(abs2, Lyy_o \ (vec(y_nan)[obs_idx] - mu_y[obs_idx])))
+        @test ll_nan ≈ ll_exact_nan atol = 1e-12
+        @test vec(as_nan) ≈ mu_cond_nan atol = 1e-12
+        for t in 1:T6
+            @test Ps_nan[:, :, t] ≈ P_cond_nan[(t-1)*ns+1:t*ns, (t-1)*ns+1:t*ns] atol = 1e-12
+        end
+        for t in 2:T6
+            @test Plag_nan[1][:, :, t] ≈ P_cond_nan[(t-1)*ns+1:t*ns, (t-2)*ns+1:(t-1)*ns] atol = 1e-12
+        end
+
+        # Error checks for _rts_smoother with G
+        st_noinnov = MEM.KalmanFilterStore{Float64}(ns, T6; innovations=false)
+        @test_throws ArgumentError MEM._rts_smoother(st_noinnov, Tt6; G=G6)
+        @test_throws ArgumentError MEM._rts_smoother(st_nan, Tt6; G=G6)
+
+        # Correlated _simulation_smoother: sample mean & midpoint variance match RTS smoother
+        S_sim = FAST ? 150 : 600
+        acc = zeros(ns, T6); acc2 = zeros(ns, T6)
+        for _ in 1:S_sim
+            dr = MEM._simulation_smoother(rng, y6, Z6, Tt6, RQR6, H6;
+                                          d=d6, b=b6, a0=a06, P0=P06, G=G6)
+            @test all(isfinite, dr)
+            acc .+= dr; acc2 .+= dr .^ 2
+        end
+        dmean = acc / S_sim
+        dvar = acc2 / S_sim - dmean .^ 2
+        @test maximum(abs, dmean - as6) < (FAST ? 0.25 : 0.12)
+        for i in 1:ns
+            @test isapprox(dvar[i, 3], Ps6[i, i, 3]; rtol=0.45)
+        end
+
+        # _simulation_smoother parity (G === nothing vs G = zeros) & NaN/non-stationary P0 oracle
+        dr_nothing = MEM._simulation_smoother(MersenneTwister(42), y_nan, Z6, Tt6, RQR6, H6;
+                                              d=d6, b=b6, a0=a06, P0=P06, G=nothing)
+        dr_zeros = MEM._simulation_smoother(MersenneTwister(42), y_nan, Z6, Tt6, RQR6, H6;
+                                            d=d6, b=b6, a0=a06, P0=P06, G=zeros(ns, no))
+        @test dr_nothing == dr_zeros
+
+        # G === nothing Monte Carlo vs exact stacked-Gaussian GLS oracle with NaNs, non-stationary P0, rank-def RQR
+        ns3 = 3; no3 = 2; T5 = 5
+        Tt3 = [0.7 0.1 0.0; 0.0 0.5 0.1; 0.0 0.0 0.4]
+        Z3 = [1.0 0.2 0.0; 0.0 1.0 -0.3]
+        R3 = [1.0 0.0; 0.3 1.0; 0.0 0.5]
+        RQR3 = R3 * [0.5 0.1; 0.1 0.4] * R3'  # rank 2 < 3
+        H3 = [0.2 0.0; 0.0 0.15]
+        b3 = [0.1, -0.05, 0.02]; d3 = [0.03, -0.02]
+        a03 = [0.5, -0.3, 0.2]; P03 = [1.2 0.2 0.0; 0.2 0.8 0.1; 0.0 0.1 0.6]  # non-stationary P0
+        y3_nan = randn(rng, no3, T5)
+        y3_nan[:, 3] .= NaN
+        y3_nan[1, 4] = NaN
+
+        # Stacked Gaussian oracle for G=0
+        Na3 = ns3 * T5; Ny3 = no3 * T5
+        mu_a3 = zeros(Na3); mu_y3 = zeros(Ny3)
+        mc3 = b3 + Tt3 * a03
+        for t in 1:T5
+            mu_a3[(t-1)*ns3+1:t*ns3] = mc3
+            mu_y3[(t-1)*no3+1:t*no3] = d3 + Z3 * mc3
+            mc3 = b3 + Tt3 * mc3
+        end
+        nu3 = ns3 + T5 * ns3 + T5 * no3
+        Su3 = zeros(nu3, nu3)
+        Su3[1:ns3, 1:ns3] = P03
+        for t in 1:T5
+            Su3[ns3+(t-1)*ns3+1:ns3+t*ns3, ns3+(t-1)*ns3+1:ns3+t*ns3] = RQR3
+            Su3[ns3+T5*ns3+(t-1)*no3+1:ns3+T5*ns3+t*no3, ns3+T5*ns3+(t-1)*no3+1:ns3+T5*ns3+t*no3] = H3
+        end
+        Ma3 = zeros(Na3, nu3); My3 = zeros(Ny3, nu3)
+        Ma3[1:ns3, 1:ns3] = Tt3
+        Ma3[1:ns3, ns3+1:2ns3] = I(ns3)
+        for t in 2:T5
+            Ma3[(t-1)*ns3+1:t*ns3, :] = Tt3 * Ma3[(t-2)*ns3+1:(t-1)*ns3, :]
+            Ma3[(t-1)*ns3+1:t*ns3, ns3+(t-1)*ns3+1:ns3+t*ns3] = I(ns3)
+        end
+        for t in 1:T5
+            My3[(t-1)*no3+1:t*no3, :] = Z3 * Ma3[(t-1)*ns3+1:t*ns3, :]
+            My3[(t-1)*no3+1:t*no3, ns3+T5*ns3+(t-1)*no3+1:ns3+T5*ns3+t*no3] = I(no3)
+        end
+        Mz3 = vcat(Ma3, My3)
+        Sz3 = Mz3 * Su3 * Mz3'
+        obs3 = findall(!isnan, vec(y3_nan))
+        Saa3 = Sz3[1:Na3, 1:Na3]; Say3 = Sz3[1:Na3, Na3 .+ obs3]; Syy3 = Sz3[Na3 .+ obs3, Na3 .+ obs3]
+        mu_post3 = mu_a3 + Say3 * (Syy3 \ (vec(y3_nan)[obs3] - mu_y3[obs3]))
+        P_post3 = Saa3 - Say3 * (Syy3 \ Say3')
+
+        S_mc = FAST ? 300 : 2000
+        draws3 = zeros(Na3, S_mc)
+        rng_mc = Random.Xoshiro(424242)
+        for s in 1:S_mc
+            draws3[:, s] = vec(MEM._simulation_smoother(rng_mc, y3_nan, Z3, Tt3, RQR3, H3;
+                                                        d=d3, b=b3, a0=a03, P0=P03))
+        end
+        mc_mean3 = vec(mean(draws3; dims=2))
+        mc_cov3 = cov(draws3; dims=2)
+        @test maximum(abs, mc_mean3 - mu_post3) < (FAST ? 0.15 : 0.06)
+        @test maximum(abs, mc_cov3 - P_post3) < (FAST ? 0.18 : 0.07)
+    end
 end
