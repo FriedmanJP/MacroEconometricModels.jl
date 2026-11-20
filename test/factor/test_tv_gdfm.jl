@@ -262,8 +262,10 @@ using StatsAPI
         buf = IOBuffer()
         @test report(buf, tv) === nothing
         @test !isempty(String(take!(buf)))
-        redirect_stdout(devnull) do
-            @test report(tv) === nothing
+        if !Sys.iswindows() || Threads.nthreads() == 1
+            redirect_stdout(devnull) do
+                @test report(tv) === nothing
+            end
         end
         for bk in (:text, :latex, :html)
             s_bk = with_display_backend(bk) do

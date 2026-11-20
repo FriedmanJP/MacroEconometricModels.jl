@@ -11,7 +11,7 @@ using LinearAlgebra
 const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
 # Ubuntu 1.10 Optim-v1 cell: important numerical tests only (see _numerical_groups).
 const NUMERICAL = get(ENV, "MACRO_NUMERICAL_CI", "") == "1"
-# CI job split: "dsge" | "empirical" | "serialization" | "" (local full suite).
+# CI job split: "dsge" | "empirical" | "empirical2" | "serialization" | "" (local full suite).
 const SUITE = get(ENV, "MACRO_CI_SUITE", "")
 
 # Shared test data generators (available to all test files)

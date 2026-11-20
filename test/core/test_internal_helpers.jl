@@ -333,12 +333,16 @@ const MEM_IH = MacroEconometricModels
                   "IO" => ["io/test_io_types.jl"],
                   "Core & VAR" => ["core/test_kalman.jl"],
                   "Plotting" => ["plotting/test_plot_render.jl"],
+                  "Volatility & Filters" => ["volatility/test_volatility.jl"],
+                  "Rational Inattention" => ["ri/test_ri_kalman.jl"],
                   "Serialization" => ["core/test_serialization.jl"],
                   "Serialization DSGE" => ["dsge/test_dsge_serialization.jl"]]
         @test first.(_ci_suite_groups(dummy2, "dsge")) ==
               ["HA-DSGE", "DSGE Core"]
         @test first.(_ci_suite_groups(dummy2, "empirical")) ==
               ["IO", "Core & VAR", "Plotting"]
+        @test first.(_ci_suite_groups(dummy2, "empirical2")) ==
+              ["Volatility & Filters", "Rational Inattention"]
         @test first.(_ci_suite_groups(dummy2, "serialization")) ==
               ["Coverage-A", "Coverage-B", "Coverage-C",
                "Serialization", "Serialization DSGE"]
@@ -353,14 +357,20 @@ const MEM_IH = MacroEconometricModels
             @test "dsge/test_modelspec_kinds.jl" in serial_files
             ser_files = Set(f for (n, fs) in TEST_GROUPS if n in _SERIALIZATION_SUITE_GROUPS for f in fs)
             dsge_files = Set(f for (n, fs) in TEST_GROUPS if n in _DSGE_SUITE_GROUPS for f in fs)
-            emp_files = Set(f for (n, fs) in TEST_GROUPS if n ∉ _DSGE_SUITE_GROUPS && n ∉ _SERIALIZATION_SUITE_GROUPS for f in fs)
+            emp2_files = Set(f for (n, fs) in TEST_GROUPS if n in _EMPIRICAL2_SUITE_GROUPS for f in fs)
+            emp_files = Set(f for (n, fs) in TEST_GROUPS if n ∉ _DSGE_SUITE_GROUPS && n ∉ _SERIALIZATION_SUITE_GROUPS && n ∉ _EMPIRICAL2_SUITE_GROUPS for f in fs)
             @test isempty(ser_files ∩ dsge_files)
+            @test isempty(emp_files ∩ emp2_files)
+            @test isempty(emp2_files ∩ dsge_files)
+            @test isempty(emp2_files ∩ ser_files)
+            @test length(ser_files) + length(dsge_files) + length(emp_files) + length(emp2_files) == length(serial_files)
             @test "core/test_serialization.jl" in ser_files
             @test "core/test_serialization.jl" ∉ emp_files
             @test "coverage/test_dsge_coverage.jl" in ser_files
             @test "coverage/test_dsge_coverage.jl" ∉ dsge_files
             @test "coverage/test_misc_coverage.jl" in ser_files
             @test "io/test_io_types.jl" in emp_files
+            @test "ri/test_ri_kalman.jl" in emp2_files
             if "dsge/test_dsge_serialization.jl" in serial_files
                 @test "dsge/test_dsge_serialization.jl" in ser_files
                 @test "dsge/test_dsge_serialization.jl" ∉ dsge_files

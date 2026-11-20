@@ -623,11 +623,9 @@ function _nongaussian_vcov(params::AbstractVector{T},
     logdet_inv = -sum(i -> log(max(abs(L[i, i]), eps(T))), 1:n)
     neg_ll = p -> -_nongaussian_loglik_from_whitened(p, Z_chol, logdet_inv, n, distribution)
 
-    ch_ng = n_total >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(n_total, 1)}()
     H_inv = if eff_type in (:hessian, :sandwich)
         try
-            h_cfg = ForwardDiff.HessianConfig(neg_ll, p_vec, ch_ng)
-            H_raw = Matrix{T}(ForwardDiff.hessian(neg_ll, p_vec, h_cfg))
+            H_raw = Matrix{T}(ForwardDiff.hessian(neg_ll, p_vec))
             _spd_inv(H_raw)
         catch
             zeros(T, n_total, n_total)
@@ -638,8 +636,7 @@ function _nongaussian_vcov(params::AbstractVector{T},
 
     J_opg = if eff_type in (:sandwich, :opg)
         obs_vec_fn = p -> _nongaussian_obs_loglik_vec(p, Z_chol, logdet_inv, n, distribution)
-        j_cfg = ForwardDiff.JacobianConfig(obs_vec_fn, p_vec, ch_ng)
-        G_t = Matrix{T}(ForwardDiff.jacobian(obs_vec_fn, p_vec, j_cfg))
+        G_t = Matrix{T}(ForwardDiff.jacobian(obs_vec_fn, p_vec))
         J = G_t' * G_t
         Matrix{T}((J + J') / 2)
     else
@@ -786,8 +783,7 @@ function _estimate_nongaussian_ml(model::VARModel{T}, distribution::Symbol;
     for s in 1:n_starts
         p0 = _pack_nongaussian_params(angle_starts[s], dist_starts[s])
         res = try
-            ch_g = length(p0) >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(length(p0), 1)}()
-            cfg = ForwardDiff.GradientConfig(neg_ll, p0, ch_g)
+            cfg = ForwardDiff.GradientConfig(neg_ll, p0)
             g! = (G, x) -> ForwardDiff.gradient!(G, neg_ll, x, cfg)
             opts = Optim.Options(iterations=max_iter, g_tol=tol_T,
                                  f_reltol=(tol_T < T(1e-6) ? zero(T) : T(1e-12)),

@@ -686,8 +686,8 @@ end
         for t in 2:450; Y_t3[t, :] = 0.3 .* Y_t3[t - 1, :] .+ u_t3[t, :]; end
         m_t3 = estimate_var(Y_t3, 1)
 
-        # Asymmetric mixture DGP (for :mixture_normal_asym)
-        d_mix3 = MixtureModel([Normal(1.2, 0.6), Normal(-0.4, 0.8)], [0.25, 0.75])
+        # Asymmetric mixture DGP (for :mixture_normal_asym; well-separated for well-conditioned Hessian)
+        d_mix3 = MixtureModel([Normal(-1.0, 0.5), Normal(2.0, 1.2)], [0.65, 0.35])
         ep_m3 = (rand(Xoshiro(9019), d_mix3, 400, 3) .- mean(d_mix3)) ./ std(d_mix3)
         Y_m3 = zeros(400, 3)
         u_m3 = ep_m3 * B3'

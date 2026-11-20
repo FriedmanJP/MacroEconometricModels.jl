@@ -358,9 +358,11 @@ end
         s_rep_repro = sprint(io -> report(io, m; repro=true))
         @test occursin("Reproducibility: seed=9", s_rep_repro)
 
-        redirect_stdout(devnull) do
-            report(m)
-            report(m; repro=true)
+        if !Sys.iswindows() || Threads.nthreads() == 1
+            redirect_stdout(devnull) do
+                report(m)
+                report(m; repro=true)
+            end
         end
 
         for be in (:latex, :html)

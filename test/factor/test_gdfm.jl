@@ -1510,8 +1510,10 @@ end
         buf = IOBuffer()
         show(buf, nc)
         @test occursin("GDFM Ragged-Edge Nowcast", String(take!(buf)))
-        redirect_stdout(devnull) do
-            report(nc)
+        if !Sys.iswindows() || Threads.nthreads() == 1
+            redirect_stdout(devnull) do
+                report(nc)
+            end
         end
         vals = ntuple(i -> getfield(nc, fieldnames(GDFMNowcastResult)[i]), fieldcount(GDFMNowcastResult))
         @test GDFMNowcastResult{Float64}(vals...).nowcast == nc.nowcast

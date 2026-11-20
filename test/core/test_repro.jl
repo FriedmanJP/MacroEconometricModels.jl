@@ -150,11 +150,13 @@ const _MEM = MacroEconometricModels
         @test occursin("Reproducibility:", s_irf)
         @test occursin("seed=5", s_irf)
 
-        # `report` plumbs the keyword into that same IOContext key.
-        @test (redirect_stdout(devnull) do; report(post; repro=true) end; true)
-        @test (redirect_stdout(devnull) do; report(boot; repro=true) end; true)
-        @test (redirect_stdout(devnull) do; report(post) end; true)
-        @test (redirect_stdout(devnull) do; report(boot) end; true)
+        # `report` plumbs the keyword into that same IOContext key (guard redirect_stdout on threaded Windows).
+        if !Sys.iswindows() || Threads.nthreads() == 1
+            @test (redirect_stdout(devnull) do; report(post; repro=true) end; true)
+            @test (redirect_stdout(devnull) do; report(boot; repro=true) end; true)
+            @test (redirect_stdout(devnull) do; report(post) end; true)
+            @test (redirect_stdout(devnull) do; report(boot) end; true)
+        end
 
         post_ns = estimate_bvar(Y, 2; n_draws=50)
         s_ns = sprint(io -> show(IOContext(io, :repro => true), post_ns))

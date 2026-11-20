@@ -86,9 +86,9 @@ function _numerical_groups(groups, numerical::Bool)
     return out
 end
 
-# CI job split (`MACRO_CI_SUITE=dsge|empirical|serialization`): DSGE/HA vs
-# round-trip files vs the empirical rest. julia-actions/cache@v3 keys on the
-# full matrix (include-matrix), so suite jobs do not share a compiled/ depot.
+# CI job split (`MACRO_CI_SUITE=dsge|empirical|empirical2|serialization`):
+# DSGE/HA vs round-trip files vs balanced empirical halves. julia-actions/cache@v3
+# keys on the full matrix (include-matrix), so suite jobs do not share a compiled/ depot.
 const _DSGE_SUITE_GROUPS = Set([
     "DSGE Core",
     "DSGE Bayesian & HD",
@@ -103,21 +103,32 @@ const _SERIALIZATION_SUITE_GROUPS = Set([
     "Coverage-B",
     "Coverage-C",
 ])
+const _EMPIRICAL2_SUITE_GROUPS = Set([
+    "Volatility & Filters",
+    "Non-Gaussian SVAR",
+    "Non-Gaussian Internals",
+    "Non-Gaussian & SVARMA",
+    "Quantile Factor & FAVAR",
+    "Rational Inattention",
+])
 
 function _ci_suite_groups(groups, suite::AbstractString)
     isempty(suite) && return groups
-    suite in ("dsge", "empirical", "serialization") || throw(ArgumentError(
-        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", \"serialization\", or empty; got $(repr(suite))"))
+    suite in ("dsge", "empirical", "empirical2", "serialization") || throw(ArgumentError(
+        "MACRO_CI_SUITE must be \"dsge\", \"empirical\", \"empirical2\", \"serialization\", or empty; got $(repr(suite))"))
     out = Pair{String, Vector{String}}[]
     for (name, files) in groups
         in_dsge = name in _DSGE_SUITE_GROUPS
         in_ser = name in _SERIALIZATION_SUITE_GROUPS
+        in_emp2 = name in _EMPIRICAL2_SUITE_GROUPS
         keep = if suite == "dsge"
             in_dsge
         elseif suite == "serialization"
             in_ser
+        elseif suite == "empirical2"
+            in_emp2
         else
-            !in_dsge && !in_ser
+            !in_dsge && !in_ser && !in_emp2
         end
         keep && push!(out, String(name) => Vector{String}(files))
     end
