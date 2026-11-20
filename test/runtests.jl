@@ -134,6 +134,8 @@ const TEST_GROUPS = [
         "gmm/test_smm.jl",
         "data/test_data.jl",
         "pvar/test_pvar.jl",
+    ]),
+    ("Reg & Panel & ARDL" => [
         "reg/test_reg.jl",
         "reg/test_ivkclass.jl",    # EV-36 (#444): IV k-class — LIML / Fuller / generic k-class
         "reg/test_penalized.jl",   # EV-03 (#411): ridge / LASSO / elastic net
