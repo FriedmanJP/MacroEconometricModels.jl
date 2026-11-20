@@ -1556,11 +1556,78 @@ function ic_criteria_qfm(X::AbstractMatrix{T}, r_max::Int, tau::Real=0.5;
 
     loss = Vector{T}(undef, r_max + 1)
     loss[1] = _qfm_ic_zero_loss(X_proc, tau_T)
-    for k in 1:(r_max - 1)
-        qfm_k = estimate_qfm(X_orig, k, tau_T; method=method, fit_kw..., se=:none)
-        loss[k + 1] = qfm_k.objective
+    F_prev = nothing
+    L_prev = nothing
+    X_proc_t = nothing
+    max_iter_ic = Int(get(shared_kw, :max_iter, 200))
+    tol_ic = max(T(get(shared_kw, :tol, 1e-7)), T(10) * eps(T))
+    thr_ic = Bool(get(shared_kw, :threaded, true))
+    kern_ic = Symbol(get(shared_kw, :kernel, :gaussian))
+    bw_ic = get(shared_kw, :bandwidth, :auto)
+
+    for k in 1:r_max
+        qfm_k = k < r_max ?
+            estimate_qfm(X_orig, k, tau_T; method=method, fit_kw..., se=:none) :
+            qfm_max
+        best_obj = qfm_k.objective
+        best_F = qfm_k.factors
+        best_L = qfm_k.loadings
+        best_sigma_sq = qfm_k.sigma_sq
+
+        # Nested warm-start safeguard: since k-factor models nest (k-1)-factor models
+        # (and k=1 nests the constant-factor unconditional quantile loss M_NT(0)),
+        # escape any suboptimal local minimum that would violate monotone check loss.
+        if best_obj > loss[k]
+            F_warm = if k == 1
+                ones(T, T_obs, 1)
+            else
+                R_prev = X_proc - F_prev * L_prev'
+                u_new = Vector{T}(svd(R_prev).U[:, 1])
+                u_new .-= F_prev * ((F_prev' * u_new) ./ T(T_obs))
+                unorm = norm(u_new)
+                if !isfinite(unorm) || unorm <= T(1e-12)
+                    for t_idx in 1:T_obs
+                        fill!(u_new, zero(T))
+                        u_new[t_idx] = one(T)
+                        u_new .-= F_prev * (@view(F_prev[t_idx, :]) ./ T(T_obs))
+                        unorm = norm(u_new)
+                        unorm > T(1e-8) && break
+                    end
+                end
+                u_new .*= sqrt(T(T_obs)) / max(unorm, eps(T))
+                hcat(F_prev, u_new)
+            end
+            res_w = if method === :smoothed_iqr
+                h_w = _qfm_smooth_bandwidth(X_proc, F_warm, bw_ic)
+                r_sm = _qfm_smooth_single(X_proc, F_warm, tau_T, h_w, kern_ic, max_iter_ic, tol_ic)
+                if r_sm.objective <= loss[k]
+                    r_sm
+                else
+                    X_proc_t === nothing && (X_proc_t = Matrix{T}(X_proc'))
+                    _qfm_iqr_single(X_proc, X_proc_t, F_warm, tau_T, max_iter_ic, tol_ic, thr_ic)
+                end
+            else
+                X_proc_t === nothing && (X_proc_t = Matrix{T}(X_proc'))
+                _qfm_iqr_single(X_proc, X_proc_t, F_warm, tau_T, max_iter_ic, tol_ic, thr_ic)
+            end
+            if res_w.objective < best_obj
+                best_obj = res_w.objective
+                best_F = res_w.factors
+                best_L = res_w.loadings
+                best_sigma_sq = res_w.sigma_sq
+                if k == r_max
+                    sigma_sq = copy(best_sigma_sq)
+                    threshold_PNT = T(threshold_scale) * sigma_sq[1] *
+                                    L_NT^(-T(2) / T(3)) * log_L2^(one(T) / T(3))
+                    r_rank = count(j -> sigma_sq[j] > zero(T) && sigma_sq[j] >= threshold_PNT, 1:r_max)
+                end
+            end
+        end
+
+        loss[k + 1] = min(best_obj, loss[k])
+        F_prev = best_F
+        L_prev = best_L
     end
-    loss[r_max + 1] = qfm_max.objective
 
     NT = T(N * T_obs)
     N_plus_T = T(N + T_obs)

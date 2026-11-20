@@ -299,44 +299,145 @@ end
     (p_mix, mu1, sigma1, mu2, sigma2)
 end
 
-"""1D shock log-likelihood contribution across all T_obs observations."""
-function _nongaussian_shock_loglik_1d(s::AbstractVector{Ts},
-                                      dp_j::AbstractVector{Tθ},
-                                      distribution::Symbol) where {Ts<:Real, Tθ<:Real}
-    Tacc = promote_type(Ts, Tθ)
+@inline _ng_primal_float(x::AbstractFloat) = x
+@inline _ng_primal_float(x::ForwardDiff.Dual) = _ng_primal_float(ForwardDiff.value(x))
+
+"""Add shock `j`'s log-pdf contributions across all `T_obs` observations into `ell` (or return sum)."""
+function _nongaussian_shock_loglik_1d!(ell::Union{Nothing,AbstractVector},
+                                       s::AbstractVector{Ts},
+                                       dp_j::AbstractVector{Tθ},
+                                       distribution::Symbol) where {Ts<:Real, Tθ<:Real}
+    Tacc = ell === nothing ? float(promote_type(Ts, Tθ)) : eltype(ell)
     T_obs = length(s)
     ll = zero(Tacc)
     if distribution === :student_t
-        nu = Tθ(2.01) + exp(clamp(dp_j[1], Tθ(-30), Tθ(12)))
+        nu_safe = max(Tacc(Tθ(2.01) + exp(clamp(dp_j[1], Tθ(-30), Tθ(12)))), Tacc(2.01))
+        half_nup1 = (nu_safe + one(Tacc)) / Tacc(2)
+        nm2 = nu_safe - Tacc(2)
+        inv_nm2 = one(Tacc) / nm2
+        logc = SpecialFunctions.loggamma(half_nup1) -
+               SpecialFunctions.loggamma(nu_safe / Tacc(2)) -
+               Tacc(0.5) * log(Tacc(pi) * nm2)
         @inbounds for t in 1:T_obs
-            ll += _student_t_logpdf(s[t], nu)
+            xt = Tacc(s[t])
+            v = logc - half_nup1 * log1p(xt * xt * inv_nm2)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
         end
     elseif distribution === :mixture_normal
         p_mix, sigma1, sigma2 = _unpack_shock_mixture(dp_j[1], dp_j[2])
+        p_t = Tacc(p_mix); s1 = Tacc(sigma1); s2 = Tacc(sigma2)
+        half_log2pi = Tacc(0.5) * log(Tacc(2π))
+        c1 = log(p_t) - log(s1) - half_log2pi
+        c2 = log(one(Tacc) - p_t) - log(s2) - half_log2pi
+        inv_2v1 = Tacc(0.5) / (s1 * s1)
+        inv_2v2 = Tacc(0.5) / (s2 * s2)
         @inbounds for t in 1:T_obs
-            ll += _mixture_normal_logpdf(s[t], p_mix, sigma1, sigma2)
+            xt = Tacc(s[t])
+            x2 = xt * xt
+            l1 = c1 - x2 * inv_2v1
+            l2 = c2 - x2 * inv_2v2
+            m = max(l1, l2)
+            v = m + log(exp(l1 - m) + exp(l2 - m))
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
         end
     elseif distribution === :mixture_normal_asym
         p_mix, mu1, sigma1, mu2, sigma2 = _unpack_shock_mixture_asym(
             dp_j[1], dp_j[2], dp_j[3])
+        p_t = Tacc(p_mix); m1 = Tacc(mu1); s1 = Tacc(sigma1); m2 = Tacc(mu2); s2 = Tacc(sigma2)
+        half_log2pi = Tacc(0.5) * log(Tacc(2π))
+        c1 = log(p_t) - log(s1) - half_log2pi
+        c2 = log(one(Tacc) - p_t) - log(s2) - half_log2pi
+        inv_s1 = one(Tacc) / s1
+        inv_s2 = one(Tacc) / s2
         @inbounds for t in 1:T_obs
-            ll += _mixture_normal_logpdf(s[t], p_mix, mu1, sigma1, mu2, sigma2)
+            xt = Tacc(s[t])
+            z1 = (xt - m1) * inv_s1
+            z2 = (xt - m2) * inv_s2
+            l1 = c1 - Tacc(0.5) * z1 * z1
+            l2 = c2 - Tacc(0.5) * z2 * z2
+            m = max(l1, l2)
+            v = m + log(exp(l1 - m) + exp(l2 - m))
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
         end
     elseif distribution === :pml
-        skew = dp_j[1]
-        m = Tθ(2.05) + exp(clamp(dp_j[2], Tθ(-30), Tθ(9.2)))
+        sk = Tacc(dp_j[1])
+        m_safe = max(Tacc(Tθ(2.05) + exp(clamp(dp_j[2], Tθ(-30), Tθ(9.2)))), Tacc(2.05))
+        r = Tacc(2) * (m_safe - one(Tacc))
+        a = r * sqrt((r - one(Tacc)) / (r * r + sk * sk))
+        lam = a * sk / r
+        inv_a = one(Tacc) / a
+        logk = (Tacc(2) * m_safe - Tacc(2)) * log(Tacc(2)) +
+               Tacc(2) * _re_loggamma(m_safe, sk / Tacc(2)) -
+               log(Tacc(pi)) - log(a) - SpecialFunctions.loggamma(Tacc(2) * m_safe - one(Tacc))
         @inbounds for t in 1:T_obs
-            ll += _pearson_iv_logpdf(s[t], skew, m)
+            z = (Tacc(s[t]) - lam) * inv_a
+            v = logk - m_safe * log1p(z * z) - sk * atan(z)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
         end
     elseif distribution === :skew_normal
-        alpha = dp_j[1]
+        alpha = Tacc(dp_j[1])
+        Tf = typeof(_ng_primal_float(zero(Tacc)))
+        d0 = Normal(zero(Tf), one(Tf))
+        c_sn = log(Tacc(2)) - Tacc(0.5) * log(Tacc(2π))
         @inbounds for t in 1:T_obs
-            ll += _skew_normal_logpdf(s[t], alpha)
+            xt = Tacc(s[t])
+            v = c_sn - Tacc(0.5) * xt * xt + logcdf(d0, alpha * xt)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
         end
     else
         throw(ArgumentError("Unknown distribution: $distribution"))
     end
     ll
+end
+
+"""1D shock log-likelihood contribution across all T_obs observations."""
+function _nongaussian_shock_loglik_1d(s::AbstractVector{Ts},
+                                      dp_j::AbstractVector{Tθ},
+                                      distribution::Symbol) where {Ts<:Real, Tθ<:Real}
+    Tacc = float(promote_type(Ts, Tθ))
+    _nongaussian_shock_loglik_1d!(nothing, s, dp_j, distribution)::Tacc
+end
+
+"""Vector of per-observation log-likelihood contributions `[ℓ_1(θ), ..., ℓ_T(θ)]`."""
+function _nongaussian_obs_loglik_vec(params::AbstractVector{Tθ},
+                                     Z_chol::AbstractMatrix{T},
+                                     logdet_inv::T,
+                                     n::Int,
+                                     distribution::Symbol) where {Tθ<:Real, T<:AbstractFloat}
+    angles, dp = _unpack_nongaussian_params(params, n, distribution)
+    Q = n == 1 ? Matrix{Tθ}(I, 1, 1) : _givens_to_orthogonal(angles, n)
+    shocks = Z_chol * Q
+    T_obs = size(Z_chol, 1)
+    k_dp = _n_dist_params(distribution)
+    Tacc = float(promote_type(eltype(shocks), Tθ))
+    ell = fill(Tacc(logdet_inv), T_obs)
+    @inbounds for j in 1:n
+        idx = (j - 1) * k_dp
+        _nongaussian_shock_loglik_1d!(ell, @view(shocks[:, j]),
+                                      @view(dp[(idx + 1):(idx + k_dp)]),
+                                      distribution)
+    end
+    ell
 end
 
 """Log-likelihood evaluated directly from orthogonal rotation Q and distribution params dp."""
@@ -522,9 +623,11 @@ function _nongaussian_vcov(params::AbstractVector{T},
     logdet_inv = -sum(i -> log(max(abs(L[i, i]), eps(T))), 1:n)
     neg_ll = p -> -_nongaussian_loglik_from_whitened(p, Z_chol, logdet_inv, n, distribution)
 
+    ch_ng = n_total >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(n_total, 1)}()
     H_inv = if eff_type in (:hessian, :sandwich)
         try
-            H_raw = Matrix{T}(ForwardDiff.hessian(neg_ll, p_vec))
+            h_cfg = ForwardDiff.HessianConfig(neg_ll, p_vec, ch_ng)
+            H_raw = Matrix{T}(ForwardDiff.hessian(neg_ll, p_vec, h_cfg))
             _spd_inv(H_raw)
         catch
             zeros(T, n_total, n_total)
@@ -534,18 +637,9 @@ function _nongaussian_vcov(params::AbstractVector{T},
     end
 
     J_opg = if eff_type in (:sandwich, :opg)
-        G_t = Matrix{T}(undef, T_obs, n_total)
-        g_buf = Vector{T}(undef, n_total)
-        t_ref = Ref(1)
-        obs_fn = p -> _nongaussian_obs_loglik(p, @view(Z_chol[t_ref[], :]), logdet_inv, n, distribution)
-        cfg = ForwardDiff.GradientConfig(obs_fn, p_vec)
-        @inbounds for t in 1:T_obs
-            t_ref[] = t
-            ForwardDiff.gradient!(g_buf, obs_fn, p_vec, cfg)
-            for k in 1:n_total
-                G_t[t, k] = g_buf[k]
-            end
-        end
+        obs_vec_fn = p -> _nongaussian_obs_loglik_vec(p, Z_chol, logdet_inv, n, distribution)
+        j_cfg = ForwardDiff.JacobianConfig(obs_vec_fn, p_vec, ch_ng)
+        G_t = Matrix{T}(ForwardDiff.jacobian(obs_vec_fn, p_vec, j_cfg))
         J = G_t' * G_t
         Matrix{T}((J + J') / 2)
     else
@@ -692,7 +786,8 @@ function _estimate_nongaussian_ml(model::VARModel{T}, distribution::Symbol;
     for s in 1:n_starts
         p0 = _pack_nongaussian_params(angle_starts[s], dist_starts[s])
         res = try
-            cfg = ForwardDiff.GradientConfig(neg_ll, p0)
+            ch_g = length(p0) >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(length(p0), 1)}()
+            cfg = ForwardDiff.GradientConfig(neg_ll, p0, ch_g)
             g! = (G, x) -> ForwardDiff.gradient!(G, neg_ll, x, cfg)
             opts = Optim.Options(iterations=max_iter, g_tol=tol_T,
                                  f_reltol=(tol_T < T(1e-6) ? zero(T) : T(1e-12)),

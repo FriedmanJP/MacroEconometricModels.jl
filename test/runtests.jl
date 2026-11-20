@@ -162,9 +162,11 @@ const TEST_GROUPS = [
         "preg/test_pcse_prais.jl",   # EV-25 (#433): Beck-Katz PCSE + Prais-Winsten AR(1)
         "preg/test_panel_tests.jl",
     ]),
-    # Group 6: Volatility & Non-Gaussian & Filters & Spectral.
+    # Group 6: Volatility & Filters & Spectral.
     # Ranked just under ARIMA so macOS empirical (3-wide + coverage) does not
     # start this sequential GARCH/MCEM group after the first wave (#828).
+    # Non-Gaussian SVAR & Internals live in dedicated sibling groups so they
+    # run in parallel across workers instead of forming a 45-min single-worker tail.
     ("Volatility & Filters" => [
         "volatility/test_volatility.jl",
         "volatility/test_volatility_coverage.jl",
@@ -172,15 +174,19 @@ const TEST_GROUPS = [
         "volatility/test_figarch.jl",       # EV-14 (#422): FIGARCH/FIEGARCH fractionally-integrated volatility
         "volatility/test_garch_family.jl",  # EV-15 (#423): IGARCH/Component-GARCH/APARCH + sign-bias/Nyblom tests
         "mgarch/test_mgarch.jl",            # EV-16 (#424): multivariate GARCH — CCC/DCC/BEKK
-        "nongaussian/test_nongaussian_svar.jl",
-        "nongaussian/test_nongaussian_internals.jl",
-        "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
-        "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
-        "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
         "filters/test_filters.jl",
         "filters/test_x13.jl",
         "filters/test_x13_coverage.jl",
         "spectral/test_spectral.jl",
+    ]),
+    ("Non-Gaussian SVAR" => [
+        "nongaussian/test_nongaussian_svar.jl",
+        "nongaussian/test_tvv_common.jl",   # v0.9.6 (#823): TVV/SV-ID shared infra
+        "nongaussian/test_lewis_tvv.jl",    # v0.9.6 (#824): Lewis TVV-ID
+        "nongaussian/test_sv_svar.jl",      # v0.9.6 (#825): BB SV-SVAR
+    ]),
+    ("Non-Gaussian Internals" => [
+        "nongaussian/test_nongaussian_internals.jl",
     ]),
     ("Non-Gaussian & SVARMA" => [
         "nongaussian/test_lms_svar.jl",       # NGID-02 (#902): LMS (2017) complete ID & 1/3-step ML

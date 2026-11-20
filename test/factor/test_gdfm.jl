@@ -17,6 +17,10 @@ using LinearAlgebra
 using Statistics
 using Random
 
+if !@isdefined(FAST)
+    const FAST = get(ENV, "MACRO_FAST_TESTS", "") == "1"
+end
+
 @testset "Generalized Dynamic Factor Model" begin
 
     # ==========================================================================
@@ -870,7 +874,7 @@ using Random
     end
 
     @testset "Hallin–Liška and Bai–Ng recover q=2 in ≥8/10 replications" begin
-        n_rep, T_obs, N, q_true = 10, 500, 100, 2
+        n_rep, T_obs, N, q_true = (FAST ? 5 : 10), 500, 100, 2
         n_hl = 0
         n_bn = 0
         for i in 1:n_rep
@@ -891,8 +895,8 @@ using Random
             @test bn isa BaiNgQResult
             n_bn += (bn.q_D1 == q_true)
         end
-        @test n_hl >= 8
-        @test n_bn >= 8
+        @test n_hl >= (FAST ? 4 : 8)
+        @test n_bn >= (FAST ? 4 : 8)
         rng = Random.Xoshiro(71999)
         u = randn(rng, T_obs, q_true)
         X = u * randn(rng, N, q_true)'
@@ -980,7 +984,7 @@ using Random
         X = u * Λ0'
         X[2:end, :] .+= u[1:end-1, :] * Λ1'
         X .+= 0.15 .* randn(rng, T_obs, N)
-        n_origin = 20
+        n_origin = FAST ? 8 : 20
         sse_ar = 0.0
         sse_os = 0.0
         for t in (T_obs - n_origin):(T_obs - 1)

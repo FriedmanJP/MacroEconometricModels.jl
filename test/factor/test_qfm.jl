@@ -142,9 +142,10 @@ end
         lam2_t = rand(rng, Uniform(0.8, 1.5), N)
         X_t2 = f1_t * lam1_t' .+ (g_t * lam2_t') .* (0.3 .* rand(rng, TDist(2), T_obs, N))
 
-        qfm_t_05 = estimate_qfm(X_t2, 1, 0.5; init=:quantile_svd, seed=1)
-        qfm_t_01 = estimate_qfm(X_t2, 2, 0.1; init=:quantile_svd, seed=2)
-        qfm_t_09 = estimate_qfm(X_t2, 2, 0.9; init=:quantile_svd, seed=3)
+        ns_qfm = FAST ? 1 : 2
+        qfm_t_05 = estimate_qfm(X_t2, 1, 0.5; init=:quantile_svd, n_starts=ns_qfm, seed=1)
+        qfm_t_01 = estimate_qfm(X_t2, 2, 0.1; init=:quantile_svd, n_starts=ns_qfm, seed=2)
+        qfm_t_09 = estimate_qfm(X_t2, 2, 0.9; init=:quantile_svd, n_starts=ns_qfm, seed=3)
         @test _qfm_vec_r2(vec(qfm_t_05.factors), f1_t) > 0.90
         @test _qfm_trace_r2(qfm_t_01.factors, hcat(f1_t, g_t)) > 0.90
         @test _qfm_trace_r2(qfm_t_09.factors, hcat(f1_t, g_t)) > 0.90
@@ -160,9 +161,9 @@ end
         lam2_c = rand(rng, Uniform(0.5, 1.5), N)
         X_c = f1_c * lam1_c' .+ (g_c * lam2_c') .* (0.15 .* rand(rng, Cauchy(0, 1), T_obs, N))
 
-        qfm_c_05 = estimate_qfm(X_c, 1, 0.5; init=:quantile_svd, seed=1)
-        qfm_c_01 = estimate_qfm(X_c, 2, 0.1; init=:quantile_svd, seed=1)
-        qfm_c_09 = estimate_qfm(X_c, 2, 0.9; init=:quantile_svd, seed=1)
+        qfm_c_05 = estimate_qfm(X_c, 1, 0.5; init=:quantile_svd, n_starts=ns_qfm, seed=1)
+        qfm_c_01 = estimate_qfm(X_c, 2, 0.1; init=:quantile_svd, n_starts=ns_qfm, seed=1)
+        qfm_c_09 = estimate_qfm(X_c, 2, 0.9; init=:quantile_svd, n_starts=ns_qfm, seed=1)
         pca_c_raw = estimate_factors(X_c, 2; standardize=false)
 
         @test _qfm_vec_r2(vec(qfm_c_05.factors), f1_c) > 0.90
@@ -178,7 +179,7 @@ end
         lam2_ch = rand(rng, Uniform(0.4, 0.8), N)
         X_ch = f1_ch * lam1_ch' .+ (g_ch * lam2_ch') .* rand(rng, Cauchy(0, 1), T_obs, N)
         pca_ch_def = estimate_factors(X_ch, 2)
-        qfm_ch_05 = estimate_qfm(X_ch, 1, 0.5; init=:quantile_svd, seed=1)
+        qfm_ch_05 = estimate_qfm(X_ch, 1, 0.5; init=:quantile_svd, n_starts=ns_qfm, seed=1)
         @test _qfm_trace_r2(pca_ch_def.factors, hcat(f1_ch, g_ch)) < 0.40
         @test _qfm_vec_r2(vec(qfm_ch_05.factors), f1_ch) > 0.90
     end
@@ -485,15 +486,17 @@ end
             e_base = randn(rng, T_obs, N)
 
             # Median with bandwidth=:auto and tail quantiles with small h
-            for tau in (0.2, 0.5, 0.8)
+            ns_sm = FAST ? 1 : 2
+            taus_sm = FAST ? (0.2, 0.5) : (0.2, 0.5, 0.8)
+            for tau in taus_sm
                 e_shifted = 0.5 .* (e_base .- quantile(Normal(), tau))
                 X = F_true * L_true' .+ e_shifted
-                m_iqr = estimate_qfm(X, r, tau; method=:iqr, seed=11)
+                m_iqr = estimate_qfm(X, r, tau; method=:iqr, n_starts=ns_sm, seed=11)
 
                 for kern in (:gaussian, :logistic, :epanechnikov)
                     bw = tau == 0.5 ? :auto : 0.05
                     m_sm = estimate_qfm(X, r, tau; method=:smoothed_iqr, kernel=kern,
-                                        bandwidth=bw, seed=11)
+                                        bandwidth=bw, n_starts=ns_sm, seed=11)
                     @test m_sm.method === :smoothed_iqr
                     @test m_sm.converged
                     _qfm_check_norm_invariants(m_sm; tol=1e-9)
@@ -507,9 +510,9 @@ end
 
             # Convergence as h -> 0+
             X_h = F_true * L_true' .+ 0.5 .* (e_base .- quantile(Normal(), 0.25))
-            m_iqr_h = estimate_qfm(X_h, r, 0.25; method=:iqr, seed=12)
-            m_coarse = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.5, seed=12)
-            m_fine = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.05, seed=12)
+            m_iqr_h = estimate_qfm(X_h, r, 0.25; method=:iqr, n_starts=ns_sm, seed=12)
+            m_coarse = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.5, n_starts=ns_sm, seed=12)
+            m_fine = estimate_qfm(X_h, r, 0.25; method=:smoothed_iqr, bandwidth=0.05, n_starts=ns_sm, seed=12)
             d_coarse, _ = _qfm_chordal_dist(m_iqr_h.factors, m_coarse.factors)
             d_fine, _ = _qfm_chordal_dist(m_iqr_h.factors, m_fine.factors)
             @test d_fine < d_coarse
@@ -520,7 +523,7 @@ end
             T_mc, N_mc, r_mc = 200, 80, 2
             tau = 0.25
             q_shift = quantile(Normal(), tau)
-            n_rep = FAST ? 10 : 20
+            n_rep = FAST ? 8 : 20
             cov_iqr_L = Float64[]
             cov_iqr_F = Float64[]
             cov_sm_L = Float64[]
@@ -580,9 +583,10 @@ end
             end
             X = F0 * L0' .+ 0.5 .* e
 
-            m_white = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=0, seed=1)
-            m_hac_auto = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=:auto, seed=1)
-            m_hac_fixed = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=6, seed=1)
+            ns_hac = FAST ? 1 : 2
+            m_white = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=0, n_starts=ns_hac, seed=1)
+            m_hac_auto = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=:auto, n_starts=ns_hac, seed=1)
+            m_hac_fixed = estimate_qfm(X, r, 0.5; se=:asymptotic, hac_bandwidth=6, n_starts=ns_hac, seed=1)
 
             @test m_white.se_factors == m_hac_auto.se_factors
             @test median(m_hac_fixed.se_loadings) > median(m_white.se_loadings)
@@ -596,17 +600,18 @@ end
             L0 = randn(rng, N, r)
             X = F0 * L0' .+ 0.4 .* (randn(rng, T_obs, N) .- quantile(Normal(), 0.3))
 
-            nb_iqr = FAST ? 20 : 40
-            nb_sm = FAST ? 15 : 30
-            m_asy = estimate_qfm(X, r, 0.3; method=:iqr, se=:asymptotic, hac_bandwidth=0, seed=42)
+            nb_iqr = FAST ? 15 : 40
+            nb_sm = FAST ? 10 : 30
+            ns_bt = FAST ? 1 : 2
+            m_asy = estimate_qfm(X, r, 0.3; method=:iqr, se=:asymptotic, hac_bandwidth=0, n_starts=ns_bt, seed=42)
             m_boot1 = estimate_qfm(X, r, 0.3; method=:iqr, se=:bootstrap, n_boot=nb_iqr,
-                                   threaded=true, seed=42)
+                                   n_starts=ns_bt, threaded=true, seed=42)
             m_boot2 = estimate_qfm(X, r, 0.3; method=:iqr, se=:bootstrap, n_boot=nb_iqr,
-                                   threaded=false, seed=42)
+                                   n_starts=ns_bt, threaded=false, seed=42)
             m_boot2_rep = estimate_qfm(X, r, 0.3; method=:iqr, se=:bootstrap, n_boot=nb_iqr,
-                                       threaded=false, seed=42)
+                                       n_starts=ns_bt, threaded=false, seed=42)
             m_boot_sm = estimate_qfm(X, r, 0.3; method=:smoothed_iqr, se=:bootstrap, n_boot=nb_sm,
-                                     seed=42)
+                                     n_starts=ns_bt, seed=42)
 
             @test m_boot1.factors == m_asy.factors
             @test m_boot1.loadings == m_asy.loadings
@@ -638,12 +643,13 @@ end
             shifts = collect(range(-100.0, 100.0; length=N))
             X_scaled = X_base .* scales' .+ shifts'
 
-            m_std_1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, seed=5)
-            m_std_2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, seed=5)
+            ns_st = FAST ? 1 : 2
+            m_std_1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, n_starts=ns_st, seed=5)
+            m_std_2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, hac_bandwidth=0, n_starts=ns_st, seed=5)
             @test isapprox(m_std_1.se_loadings, m_std_2.se_loadings; rtol=1e-10)
             @test isapprox(m_std_1.se_factors, m_std_2.se_factors; rtol=1e-10)
-            m_std_a1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, seed=5)
-            m_std_a2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, seed=5)
+            m_std_a1 = estimate_qfm(X_base, r, 0.5; standardize=true, se=:asymptotic, n_starts=ns_st, seed=5)
+            m_std_a2 = estimate_qfm(X_scaled, r, 0.5; standardize=true, se=:asymptotic, n_starts=ns_st, seed=5)
             @test isapprox(m_std_a1.se_loadings, m_std_a2.se_loadings; rtol=0.05)
 
             # Display with SEs across backends
@@ -661,7 +667,7 @@ end
             X32 = Float32.(X_base)
             for kern in (:gaussian, :logistic, :epanechnikov)
                 m32_sm = estimate_qfm(X32, r, 0.5f0; method=:smoothed_iqr, kernel=kern,
-                                      se=:asymptotic, seed=8)
+                                      se=:asymptotic, n_starts=ns_st, seed=8)
                 @test m32_sm isa QuantileFactorModel{Float32}
                 @test eltype(m32_sm.se_loadings) === Float32
                 @test eltype(m32_sm.se_factors) === Float32
@@ -670,7 +676,7 @@ end
                 _qfm_check_norm_invariants(m32_sm; tol=1f-4)
             end
             m32_boot = estimate_qfm(X32, r, 0.5f0; method=:smoothed_iqr, se=:bootstrap,
-                                    n_boot=20, seed=8)
+                                    n_boot=(FAST ? 10 : 20), n_starts=ns_st, seed=8)
             @test m32_boot isa QuantileFactorModel{Float32}
             @test eltype(m32_boot.se_loadings) === Float32
             @test eltype(m32_boot.se_factors) === Float32
@@ -707,9 +713,10 @@ end
             lam2 = 0.6 .+ 0.8 .* rand(rng, N)
             X_ls = f1 * lam1' .+ (f2 * lam2') .* e
 
-            ic_low = ic_criteria_qfm(X_ls, 5, 0.1; init=:quantile_svd, n_starts=2, seed=42)
-            ic_med = ic_criteria_qfm(X_ls, 5, 0.5; init=:quantile_svd, n_starts=2, seed=42)
-            ic_high = ic_criteria_qfm(X_ls, 5, 0.9; init=:quantile_svd, n_starts=2, seed=42)
+            ns_ic = FAST ? 1 : 2
+            ic_low = ic_criteria_qfm(X_ls, 5, 0.1; init=:quantile_svd, n_starts=ns_ic, seed=42)
+            ic_med = ic_criteria_qfm(X_ls, 5, 0.5; init=:quantile_svd, n_starts=ns_ic, seed=42)
+            ic_high = ic_criteria_qfm(X_ls, 5, 0.9; init=:quantile_svd, n_starts=ns_ic, seed=42)
 
             @test ic_low isa QFMICResult{Float64}
             @test ic_low.tau == 0.1
@@ -737,9 +744,9 @@ end
             lam2_t = 0.7 .+ 1.1 .* rand(rng, N2)
             X_t3 = f1_t * lam1_t' .+ (f2_t * lam2_t') .* (0.5 .* rand(rng, TDist(3), T2, N2))
 
-            ic_t_low = ic_criteria_qfm(X_t3, 5, 0.1; init=:quantile_svd, n_starts=2, seed=42)
-            ic_t_med = ic_criteria_qfm(X_t3, 5, 0.5; init=:quantile_svd, n_starts=2, seed=42)
-            ic_t_high = ic_criteria_qfm(X_t3, 5, 0.9; init=:quantile_svd, n_starts=2, seed=42)
+            ic_t_low = ic_criteria_qfm(X_t3, 5, 0.1; init=:quantile_svd, n_starts=ns_ic, seed=42)
+            ic_t_med = ic_criteria_qfm(X_t3, 5, 0.5; init=:quantile_svd, n_starts=ns_ic, seed=42)
+            ic_t_high = ic_criteria_qfm(X_t3, 5, 0.9; init=:quantile_svd, n_starts=ns_ic, seed=42)
             @test ic_t_low.r_rank == 2
             @test ic_t_med.r_rank == 1
             @test ic_t_high.r_rank == 2
@@ -752,19 +759,20 @@ end
             L_true = randn(rng, N, 2)
             X_loc = F_true * L_true' .+ 0.35 .* randn(rng, T_obs, N)
 
-            ic_loc = ic_criteria_qfm(X_loc, 5, 0.5; n_starts=2, seed=42)
+            ns_ic = FAST ? 1 : 2
+            ic_loc = ic_criteria_qfm(X_loc, 5, 0.5; n_starts=ns_ic, seed=42)
             @test ic_loc.r_rank == 2
             @test ic_loc.r_IC1 == 2
             @test ic_loc.r_IC2 == 2
             @test ic_loc.r_IC3 == 2
 
-            ic_sm = ic_criteria_qfm(X_loc, 4, 0.5; method=:smoothed_iqr, n_starts=2, seed=42)
+            ic_sm = ic_criteria_qfm(X_loc, 4, 0.5; method=:smoothed_iqr, n_starts=ns_ic, seed=42)
             @test ic_sm.r_rank == 2
             @test ic_sm.r_IC2 == 2
 
             # Pure Gaussian noise: Bai-Ng check-loss IC selects r=0
             X_noise = randn(rng, T_obs, N)
-            ic_noise = ic_criteria_qfm(X_noise, 4, 0.5; warn_boundary=false, n_starts=2, seed=42)
+            ic_noise = ic_criteria_qfm(X_noise, 4, 0.5; warn_boundary=false, n_starts=ns_ic, seed=42)
             @test ic_noise.r_IC1 == 0
             @test ic_noise.r_IC2 == 0
             @test ic_noise.r_IC3 == 0
@@ -778,28 +786,29 @@ end
             L3 = randn(rng, N, 3)
             X3 = F3 * L3' .+ 0.3 .* randn(rng, T_obs, N)
 
+            ns_ic = FAST ? 1 : 2
             # Upper boundary r_max < r_true emits @warn unless warn_boundary=false
-            ic_bnd = @test_logs (:warn, r"boundary|r_max") ic_criteria_qfm(X3, 2, 0.5)
+            ic_bnd = @test_logs (:warn, r"boundary|r_max") ic_criteria_qfm(X3, 2, 0.5; n_starts=ns_ic)
             @test ic_bnd.r_rank == 2 || ic_bnd.r_IC1 == 2
-            ic_nowarn = @test_nowarn ic_criteria_qfm(X3, 2, 0.5; warn_boundary=false)
+            ic_nowarn = @test_nowarn ic_criteria_qfm(X3, 2, 0.5; warn_boundary=false, n_starts=ns_ic)
             @test ic_nowarn.r_rank == ic_bnd.r_rank
 
             # threshold_scale proportionality & monotonicity
-            ic_s1 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=1.0)
-            ic_s2 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=2.0)
-            ic_big = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=100.0)
+            ic_s1 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=1.0, n_starts=ns_ic)
+            ic_s2 = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=2.0, n_starts=ns_ic)
+            ic_big = ic_criteria_qfm(X3, 5, 0.5; threshold_scale=100.0, n_starts=ns_ic)
             @test ic_s2.threshold_PNT ≈ 2.0 * ic_s1.threshold_PNT rtol=1e-12
             @test ic_s2.r_rank <= ic_s1.r_rank
             @test ic_big.r_rank == 0
 
             # estimate_qfm(X, :auto, tau; ...) across criteria and kwarg forwarding
-            qfm_auto_rank = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=:rank)
+            qfm_auto_rank = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=:rank, n_starts=ns_ic)
             @test qfm_auto_rank isa QuantileFactorModel{Float64}
             @test qfm_auto_rank.r == 3
             @test qfm_auto_rank.tau == 0.5
 
             qfm_auto_ic2 = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=:ic2,
-                                        method=:smoothed_iqr, se=:asymptotic)
+                                        method=:smoothed_iqr, se=:asymptotic, n_starts=ns_ic)
             @test qfm_auto_ic2.r == 3
             @test qfm_auto_ic2.method == :smoothed_iqr
             @test !isempty(qfm_auto_ic2.se_loadings)
@@ -808,14 +817,14 @@ end
             @test size(qfm_auto_ic2.se_factors) == (T_obs, 3)
 
             for crit in (:ic1, :ic3)
-                q_c = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=crit)
+                q_c = estimate_qfm(X3, :auto, 0.5; r_max=5, criterion=crit, n_starts=ns_ic)
                 @test q_c.r == 3
             end
 
             # Zero-factor clamp fallback warning on pure noise with criterion=:ic2
             X_noise = randn(rng, 100, 40)
             q_zero = @test_logs (:warn, r"clamping to r=1") estimate_qfm(
-                X_noise, :auto, 0.5; r_max=3, criterion=:ic2, warn_boundary=false,
+                X_noise, :auto, 0.5; r_max=3, criterion=:ic2, warn_boundary=false, n_starts=ns_ic,
             )
             @test q_zero.r == 1
         end
@@ -827,7 +836,8 @@ end
             L2 = randn(rng, N, 2)
             X = F2 * L2' .+ 0.35 .* randn(rng, T_obs, N)
 
-            ic = ic_criteria_qfm(X, 4, 0.25)
+            ns_ic = FAST ? 1 : 2
+            ic = ic_criteria_qfm(X, 4, 0.25; n_starts=ns_ic)
 
             # Default positional constructor QFMICResult{T}(fields...) matching fieldnames order
             ic_copy = QFMICResult{Float64}(
@@ -850,20 +860,20 @@ end
 
             # Float32 precision preservation
             X32 = Float32.(X)
-            ic32 = ic_criteria_qfm(X32, 4, 0.25f0)
+            ic32 = ic_criteria_qfm(X32, 4, 0.25f0; n_starts=ns_ic)
             @test ic32 isa QFMICResult{Float32}
             @test eltype(ic32.sigma_sq) === Float32
             @test eltype(ic32.IC1) === Float32
             @test typeof(ic32.threshold_PNT) === Float32
             @test ic32.r_rank == 2
 
-            qfm32 = estimate_qfm(X32, :auto, 0.25f0; r_max=4)
+            qfm32 = estimate_qfm(X32, :auto, 0.25f0; r_max=4, n_starts=ns_ic)
             @test qfm32 isa QuantileFactorModel{Float32}
             @test qfm32.r == 2
 
             # Integer input @float_fallback
             X_int = round.(Int, 10 .* X)
-            ic_int = ic_criteria_qfm(X_int, 4, 0.5)
+            ic_int = ic_criteria_qfm(X_int, 4, 0.5; n_starts=ns_ic)
             @test ic_int isa QFMICResult{Float64}
 
             # Validation errors
@@ -892,8 +902,9 @@ end
             taus = [0.1, 0.5, 0.9]
             vnames = ["S$i" for i in 1:N]
 
-            grid = estimate_qfm(X_hom, r, taus; varnames=vnames, seed=42, threaded=true)
-            grid_seq = estimate_qfm(X_hom, r, taus; varnames=vnames, seed=42, threaded=false)
+            ns_gr = FAST ? 1 : 2
+            grid = estimate_qfm(X_hom, r, taus; varnames=vnames, n_starts=ns_gr, seed=42, threaded=true)
+            grid_seq = estimate_qfm(X_hom, r, taus; varnames=vnames, n_starts=ns_gr, seed=42, threaded=false)
 
             @test grid isa QuantileFactorGrid{Float64}
             @test length(grid) == 3
@@ -946,8 +957,8 @@ end
             @test span_single.cancor[1] == span_grid.cancor[1]
 
             # Loading constancy test: does not reject at 5% under homoskedastic DGP
-            nb_const = FAST ? 59 : 299
-            nb_wild = FAST ? 39 : 99
+            nb_const = FAST ? 39 : 299
+            nb_wild = FAST ? 29 : 99
             ct_block = test_qfm_loading_constancy(grid, 0.1, 0.5;
                                                   n_boot=nb_const, bootstrap=:block, seed=101)
             @test ct_block isa QFMLoadingConstancyTest{Float64}
@@ -963,11 +974,12 @@ end
             @test StatsAPI.pvalue(ct_wild) >= 0.05
 
             # Threading parity on constancy test
+            nb_par = FAST ? 25 : 49
             ct_seq = test_qfm_loading_constancy(grid, 0.1, 0.5;
-                                                n_boot=49, bootstrap=:block,
+                                                n_boot=nb_par, bootstrap=:block,
                                                 threaded=false, seed=101)
             ct_par = test_qfm_loading_constancy(grid, 0.1, 0.5;
-                                                n_boot=49, bootstrap=:block,
+                                                n_boot=nb_par, bootstrap=:block,
                                                 threaded=true, seed=101)
             @test ct_seq.statistic == ct_par.statistic
             @test ct_seq.boot_stats == ct_par.boot_stats
@@ -989,8 +1001,9 @@ end
             X_tail = f1 * lam1' .+ (g * lam2') .* randn(rng, T_obs, N)
 
             taus = [0.1, 0.5, 0.9]
+            ns_tail = FAST ? 1 : 2
             grid_tail = estimate_qfm(X_tail, :auto, taus; r_max=5,
-                                     init=:quantile_svd, seed=77)
+                                     init=:quantile_svd, n_starts=ns_tail, seed=77)
             @test grid_tail.r_by_tau == [2, 1, 2]
 
             span_tail = test_qfm_spanning(grid_tail, X_tail)
@@ -1008,18 +1021,19 @@ end
             @test span_pca2.unspanned[1][2] == true
 
             # Loading constancy test rejects at < 5% (both forward and reversed tau order)
-            nb_tail = FAST ? 59 : 299
+            nb_tail = FAST ? 39 : 299
+            nb_rev = FAST ? 25 : 49
             ct_tail = test_qfm_loading_constancy(grid_tail, 0.1, 0.5;
                                                  n_boot=nb_tail, bootstrap=:block, seed=77)
             @test StatsAPI.pvalue(ct_tail) < 0.05
 
             ct_rev = test_qfm_loading_constancy(grid_tail, 0.5, 0.1;
-                                                n_boot=49, bootstrap=:block, seed=77)
+                                                n_boot=nb_rev, bootstrap=:block, seed=77)
             @test StatsAPI.pvalue(ct_rev) < 0.05
 
             # Matrix input with fixed r=2 also detects quantile-varying loadings (< 5%)
             ct_mat = test_qfm_loading_constancy(X_tail, 0.1, 0.5; r=2,
-                                                init=:quantile_svd, n_boot=49,
+                                                init=:quantile_svd, n_boot=nb_rev,
                                                 bootstrap=:wild, seed=77)
             @test StatsAPI.pvalue(ct_mat) < 0.05
         end
@@ -1147,13 +1161,14 @@ end
         pca2 = estimate_factors(dq.X, 2)
         r2_pca2 = _qfm_trace_r2(pca2.factors, dq.true_factors(0.10))
 
+        ns_dgp = FAST ? 1 : 2
         rng = Random.Xoshiro(89102)
-        q50 = estimate_qfm(dq.X, 1, 0.50; standardize=false, se=:none, threaded=false, rng=rng)
+        q50 = estimate_qfm(dq.X, 1, 0.50; standardize=false, se=:none, n_starts=ns_dgp, threaded=false, rng=rng)
         r2_q50 = _qfm_trace_r2(q50.factors, dq.true_factors(0.50))
         @test r2_q50 > 0.90
 
         rng = Random.Xoshiro(89103)
-        q10 = estimate_qfm(dq.X, 2, 0.10; standardize=false, se=:none, threaded=false, rng=rng)
+        q10 = estimate_qfm(dq.X, 2, 0.10; standardize=false, se=:none, n_starts=ns_dgp, threaded=false, rng=rng)
         r2_q10 = _qfm_trace_r2(q10.factors, dq.true_factors(0.10))
         @test r2_q10 > 0.85
         @test r2_pca2 < 0.65
@@ -1166,17 +1181,17 @@ end
                                          asym_factors=0, df_idio=1.0)
         pca_c = estimate_factors(dq_cauchy.X, 1; standardize=false)
         rng = Random.Xoshiro(89109)
-        q50_c = estimate_qfm(dq_cauchy.X, 1, 0.50; init=:quantile_svd, se=:none, threaded=false, rng=rng)
+        q50_c = estimate_qfm(dq_cauchy.X, 1, 0.50; init=:quantile_svd, se=:none, n_starts=ns_dgp, threaded=false, rng=rng)
         @test _qfm_trace_r2(pca_c.factors, dq_cauchy.true_factors(0.50)) < 0.60
         @test _qfm_trace_r2(q50_c.factors, dq_cauchy.true_factors(0.50)) > 0.90
 
         # IC rank recovery across quantiles (tail r=2 vs median r=1)
         rng = Random.Xoshiro(89104)
-        ic10 = ic_criteria_qfm(dq.X, 4, 0.10; standardize=false, threaded=false, rng=rng)
+        ic10 = ic_criteria_qfm(dq.X, 4, 0.10; standardize=false, n_starts=ns_dgp, threaded=false, rng=rng)
         rng = Random.Xoshiro(89105)
-        ic50 = ic_criteria_qfm(dq.X, 4, 0.50; standardize=false, threaded=false, rng=rng)
+        ic50 = ic_criteria_qfm(dq.X, 4, 0.50; standardize=false, n_starts=ns_dgp, threaded=false, rng=rng)
         rng = Random.Xoshiro(89106)
-        ic90 = ic_criteria_qfm(dq.X, 4, 0.90; standardize=false, threaded=false, rng=rng)
+        ic90 = ic_criteria_qfm(dq.X, 4, 0.90; standardize=false, n_starts=ns_dgp, threaded=false, rng=rng)
         @test ic10.r_IC1 == 2 || ic10.r_IC2 == 2
         @test ic50.r_IC1 == 1 || ic50.r_IC2 == 1
         @test ic90.r_IC1 == 2 || ic90.r_IC2 == 2

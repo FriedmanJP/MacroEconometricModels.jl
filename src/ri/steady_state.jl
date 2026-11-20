@@ -26,6 +26,15 @@ capacity (`capacity` in `:bits` or `:nats`) via bracketed Brent root-finding.
 
 function _ri_project_psd(M::AbstractMatrix{T}) where {T<:AbstractFloat}
     Ms = _ri_symmetrize(M)
+    if size(Ms, 1) == 1
+        v = Ms[1, 1]
+        v >= zero(T) && return Ms, true
+        return zeros(T, 1, 1), v >= -T(1e-10)
+    end
+    Fc = cholesky(Symmetric(Ms); check=false)
+    if issuccess(Fc)
+        return Ms, true
+    end
     F = eigen(Symmetric(Ms))
     min_ev = minimum(F.values)
     if min_ev >= zero(T)
@@ -119,6 +128,21 @@ end
 
 function _ri_whitened_modes(Sp::Matrix{T}, Oeff::Matrix{T}) where {T<:AbstractFloat}
     n = size(Sp, 1)
+    if n == 1
+        sp = max(Sp[1, 1], zero(T))
+        sh = sqrt(sp)
+        return fill(sh, 1, 1), ones(T, 1, 1), T[sp * Oeff[1, 1]], T[sp]
+    end
+    Fc = cholesky(Symmetric(Sp); check=false)
+    if issuccess(Fc)
+        L = Matrix{T}(Fc.L)
+        M_w = _ri_symmetrize(L' * Oeff * L)
+        Fe = eigen(Symmetric(M_w))
+        perm = n:-1:1
+        d = Fe.values[perm]
+        U = Matrix{T}(Fe.vectors[:, perm])
+        return L, U, d, T[]
+    end
     Fp = eigen(Symmetric(Sp))
     ep = max.(Fp.values, zero(T))
     S_half = _ri_symmetrize(Fp.vectors * Diagonal(sqrt.(ep)) * Fp.vectors')
@@ -137,26 +161,37 @@ end
 
 function _ri_wf_step(Sp::Matrix{T}, Oeff::Matrix{T}, omega::T) where {T<:AbstractFloat}
     n = size(Sp, 1)
-    S_half, U, d, _ = _ri_whitened_modes(Sp, Oeff)
-    Spost_new = copy(Sp)
+    S_fac, U, d, _ = _ri_whitened_modes(Sp, Oeff)
+    if n == 0 || T(2) * d[1] <= omega
+        return copy(Sp), copy(Oeff), zero(T)
+    end
+
+    half_om = omega / T(2)
+    Z = S_fac * U
+    w_sqrt = ones(T, n)
     Xi_new = copy(Oeff)
     Inats = zero(T)
-    half_om = omega / T(2)
 
-    for i in 1:n
+    @inbounds for i in 1:n
         di = d[i]
         if T(2) * di > omega
-            z = S_half * @view U[:, i]
-            Spost_new .-= (one(T) - omega / (T(2) * di)) .* (z * z')
+            w_sqrt[i] = sqrt(omega / (T(2) * di))
+            z = @view Z[:, i]
             v = (Oeff * z) / di
             Xi_new .-= (di - half_om) .* (v * v')
             Inats += T(0.5) * log(T(2) * di / omega)
+        else
+            break
         end
     end
 
-    Spost_psd, _ = _ri_project_psd(Spost_new)
-    Xi_psd, _ = _ri_project_psd(Xi_new)
-    return Spost_psd, Xi_psd, Inats
+    Z_scaled = Z .* transpose(w_sqrt)
+    Spost_psd = _ri_symmetrize(Z_scaled * Z_scaled')
+    Xi_sym = _ri_symmetrize(Xi_new)
+    if any(i -> Xi_sym[i, i] < zero(T), 1:n)
+        Xi_sym, _ = _ri_project_psd(Xi_sym)
+    end
+    return Spost_psd, Xi_sym, Inats
 end
 
 function _ri_lb_step(
@@ -305,6 +340,43 @@ function _ri_solve_fixed_omega(
         end
     end
 
+    # Exact 1D closed-form steady state for :water_filling (quadratic in Σ_prior)
+    if n == 1 && method === :water_filling && Q[1, 1] > T(1e-30) && Obase[1, 1] > T(1e-30)
+        a = A[1, 1]
+        a2 = a * a
+        q = Q[1, 1]
+        h2m = Obase[1, 1]
+        c2 = T(2) * h2m
+        c1 = (beta - one(T)) * a2 * omega - T(2) * q * h2m
+        c0 = -beta * a2 * q * omega
+        disc = c1 * c1 - T(4) * c2 * c0
+        if disc >= zero(T)
+            sqrt_disc = sqrt(disc)
+            sp = c1 < zero(T) ? (-c1 + sqrt_disc) / (T(2) * c2) :
+                 (c0 == zero(T) ? zero(T) : (-T(2) * c0) / (c1 + sqrt_disc))
+            S_lim1 = T(1e18) * max(q, one(T))
+            if isfinite(sp) && sp > zero(T) && sp <= S_lim1
+                oeff = h2m + beta * a2 * omega / (T(2) * sp)
+                ratio = T(2) * sp * oeff / omega
+                if isfinite(ratio) && ratio > one(T)
+                    spost = omega / (T(2) * oeff)
+                    xi = omega / (T(2) * sp)
+                    return (
+                        Sigma_prior = fill(sp, 1, 1),
+                        Sigma_post = fill(spost, 1, 1),
+                        Xi = fill(xi, 1, 1),
+                        Omega_eff = fill(oeff, 1, 1),
+                        Inats = T(0.5) * log(ratio),
+                        L_star = zeros(T, 1, 1),
+                        L_env = zeros(T, 1, 1),
+                        converged = true,
+                        iterations = 1,
+                    )
+                end
+            end
+        end
+    end
+
     # Initialize (Σ_post, Ξ)
     Spost, Xi, L_prev = if warm_state !== nothing
         copy(warm_state[1]), copy(warm_state[2]),
@@ -328,20 +400,28 @@ function _ri_solve_fixed_omega(
     safe_g = nothing
     safe_L = nothing
     safe_rnorm = T(Inf)
+    cached_wf = nothing
 
     S_limit = T(1e18) * max(norm(Q), one(T))
 
     for iter in 1:max_iter
-        Sp = _ri_symmetrize(A * Spost * A' + Q)
-        Oeff = _ri_symmetrize(Obase + beta * (A' * Xi * A))
-
-        if method === :water_filling
-            Sn, Xn, Inats = _ri_wf_step(Sp, Oeff, omega)
+        if cached_wf !== nothing
+            Sp, Oeff, Sn, Xn, Inats = cached_wf
+            cached_wf = nothing
             Lstar = zeros(T, n, n)
             L_env = zeros(T, n, n)
         else
-            Sn, Xn, Inats, Lstar, L_env = _ri_lb_step(Sp, Oeff, omega, L_prev, g_tol_lb)
-            L_prev = Lstar
+            Sp = _ri_symmetrize(A * Spost * A' + Q)
+            Oeff = _ri_symmetrize(Obase + beta * (A' * Xi * A))
+
+            if method === :water_filling
+                Sn, Xn, Inats = _ri_wf_step(Sp, Oeff, omega)
+                Lstar = zeros(T, n, n)
+                L_env = zeros(T, n, n)
+            else
+                Sn, Xn, Inats, Lstar, L_env = _ri_lb_step(Sp, Oeff, omega, L_prev, g_tol_lb)
+                L_prev = Lstar
+            end
         end
 
         if !all(isfinite, Sn) || !all(isfinite, Xn) || norm(Sn) > S_limit
@@ -354,12 +434,13 @@ function _ri_solve_fixed_omega(
         rel_err = max(norm(Sn - Spost) / scale_s, norm(Xn - Xi) / scale_x)
 
         if rel_err < tol
+            Xn_final, _ = _ri_project_psd(Xn)
             Sp_final = _ri_symmetrize(A * Sn * A' + Q)
-            Oeff_final = _ri_symmetrize(Obase + beta * (A' * Xn * A))
+            Oeff_final = _ri_symmetrize(Obase + beta * (A' * Xn_final * A))
             return (
                 Sigma_prior = Sp_final,
                 Sigma_post = Sn,
-                Xi = Xn,
+                Xi = Xn_final,
                 Omega_eff = Oeff_final,
                 Inats = Inats,
                 L_star = Lstar,
@@ -409,11 +490,12 @@ function _ri_solve_fixed_omega(
                 if method === :water_filling
                     Spc = _ri_symmetrize(A * Sc * A' + Q)
                     Oeffc = _ri_symmetrize(Obase + beta * (A' * Xc * A))
-                    Snc, Xnc, _ = _ri_wf_step(Spc, Oeffc, omega)
+                    Snc, Xnc, Inats_c = _ri_wf_step(Spc, Oeffc, omega)
                     rc_norm = norm(_ri_pack_pair(Snc, Xnc) - _ri_pack_pair(Sc, Xc))
                     if isfinite(rc_norm) && rc_norm <= rnorm
                         Spost = Sc
                         Xi = Xc
+                        cached_wf = (Spc, Oeffc, Snc, Xnc, Inats_c)
                         continue
                     end
                 else
@@ -430,19 +512,26 @@ function _ri_solve_fixed_omega(
         Xi = (one(T) - damp) * Xi + damp * Xn
     end
 
-    Sp_last = _ri_symmetrize(A * Spost * A' + Q)
-    Oeff_last = _ri_symmetrize(Obase + beta * (A' * Xi * A))
-    if method === :water_filling
-        Sn, Xn, Inats = _ri_wf_step(Sp_last, Oeff_last, omega)
+    if cached_wf !== nothing
+        Sp_last, Oeff_last, Sn, Xn, Inats = cached_wf
         Lstar = zeros(T, n, n)
         L_env = zeros(T, n, n)
     else
-        Sn, Xn, Inats, Lstar, L_env = _ri_lb_step(Sp_last, Oeff_last, omega, L_prev, g_tol_lb)
+        Sp_last = _ri_symmetrize(A * Spost * A' + Q)
+        Oeff_last = _ri_symmetrize(Obase + beta * (A' * Xi * A))
+        if method === :water_filling
+            Sn, Xn, Inats = _ri_wf_step(Sp_last, Oeff_last, omega)
+            Lstar = zeros(T, n, n)
+            L_env = zeros(T, n, n)
+        else
+            Sn, Xn, Inats, Lstar, L_env = _ri_lb_step(Sp_last, Oeff_last, omega, L_prev, g_tol_lb)
+        end
     end
+    Xn_last, _ = _ri_project_psd(Xn)
     return (
         Sigma_prior = Sp_last,
         Sigma_post = Sn,
-        Xi = Xn,
+        Xi = Xn_last,
         Omega_eff = Oeff_last,
         Inats = Inats,
         L_star = Lstar,
@@ -686,7 +775,8 @@ function _solve_ri_kalman_impl(
     prob::RationalInattentionProblem{T},
     method::Symbol,
     tol_w::TW,
-    max_iter::Int,
+    max_iter::Int;
+    warm_state::Union{Nothing,Tuple{Matrix{TW},Matrix{TW},Union{Nothing,Matrix{TW}}}}=nothing,
 ) where {T<:AbstractFloat, TW<:AbstractFloat}
 
     A = Matrix{TW}(prob.A)
@@ -719,7 +809,7 @@ function _solve_ri_kalman_impl(
         omega_star = TW(prob.omega)
         res_fp = _ri_solve_fixed_omega(
             A, B, Q, Obase, beta, omega_star, method, tol_w, max_iter;
-            Sigma_uncond=Sigma_uncond, Xi_zero=Xi_zero,
+            Sigma_uncond=Sigma_uncond, Xi_zero=Xi_zero, warm_state=warm_state,
         )
         total_iters = res_fp.iterations
     else
@@ -733,6 +823,49 @@ function _solve_ri_kalman_impl(
                 "state transition (minimum required > $(min_rate) nats)."))
         end
 
+        # Exact 1D closed-form steady state in capacity mode for :water_filling
+        solved_1d = false
+        if n == 1 && method === :water_filling
+            if is_stable && (norm(Sigma_uncond) <= TW(1e-30) || norm(Obase) <= TW(1e-30))
+                throw(ArgumentError(
+                    "Cannot allocate positive Shannon capacity κ > 0 when shock covariance Q " *
+                    "or tracking payoff Ω_base is zero."))
+            end
+            q1 = Q[1, 1]
+            h2m1 = Obase[1, 1]
+            if q1 > TW(1e-30) && h2m1 > TW(1e-30) && kappa_nats < TW(150)
+                a1 = A[1, 1]
+                a2 = a1 * a1
+                r_info = exp(TW(2) * kappa_nats)
+                denom_s = one(TW) - a2 / r_info
+                denom_o = one(TW) - beta * a2 / r_info
+                if denom_s > zero(TW) && denom_o > zero(TW)
+                    sp = q1 / denom_s
+                    spost = sp / r_info
+                    oeff = h2m1 / denom_o
+                    xi = oeff / r_info
+                    om_1d = TW(2) * sp * oeff / r_info
+                    if isfinite(sp) && isfinite(om_1d) && om_1d > zero(TW)
+                        omega_star = om_1d
+                        res_fp = (
+                            Sigma_prior = fill(sp, 1, 1),
+                            Sigma_post = fill(spost, 1, 1),
+                            Xi = fill(xi, 1, 1),
+                            Omega_eff = fill(oeff, 1, 1),
+                            Inats = kappa_nats,
+                            L_star = zeros(TW, 1, 1),
+                            L_env = zeros(TW, 1, 1),
+                            converged = true,
+                            iterations = 1,
+                        )
+                        total_iters = 1
+                        solved_1d = true
+                    end
+                end
+            end
+        end
+
+        if !solved_1d
         inner_tol = min(tol_w, TW(1e-12)) * TW(0.05)
         brent_tol = min(tol_w, TW(1e-12))
         warm_ref = Ref{Union{Nothing,Tuple{Matrix{TW},Matrix{TW},Union{Nothing,Matrix{TW}}}}}(nothing)
@@ -833,6 +966,7 @@ function _solve_ri_kalman_impl(
             Sigma_uncond=Sigma_uncond, Xi_zero=Xi_zero, warm_state=warm_ref[],
         )
         total_iters = max(total_iters, res_fp.iterations)
+        end
     end
 
     sig = _ri_extract_signals(

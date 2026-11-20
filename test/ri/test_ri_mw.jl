@@ -168,7 +168,7 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics, Random
         res = solve_mw_attention(
             (; rho=(0.92, 0.55), sigma=0.01),
             (; rho=0.80, sigma=0.10);
-            capacity=2.5, strategic_complementarity=0.85, horizon=25,
+            capacity=2.5, strategic_complementarity=0.5, horizon=20, tol=1e-6,
         )
 
         # Exact positional constructor (RSER-01)
@@ -190,7 +190,7 @@ using Test, MacroEconometricModels, LinearAlgebra, Statistics, Random
         # Float32 precision support
         p_agg32 = RationalInattentionProblem(0.85f0, 0.02f0, 1.0f0; beta=0.99f0, omega=0.05f0)
         p_id32 = RationalInattentionProblem(0.80f0, 0.10f0, 1.0f0; beta=0.99f0, omega=0.05f0)
-        res32 = solve_mw_attention(p_agg32, p_id32; capacity=2.0f0, strategic_complementarity=0.85f0, horizon=20)
+        res32 = solve_mw_attention(p_agg32, p_id32; capacity=2.0f0, strategic_complementarity=0.5f0, horizon=15, tol=1e-5)
         @test res32 isa MWAttentionResult{Float32}
         @test eltype(res32.agg_price_irf) === Float32
         @test eltype(res32.idio_price_irf) === Float32

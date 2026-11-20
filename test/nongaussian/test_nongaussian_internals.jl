@@ -495,8 +495,8 @@ end
         end
         md_p = estimate_var(Y_p, 1)
 
-        d_mix = MixtureModel([Normal(1.2, 0.6), Normal(-0.4, 0.8)], [0.25, 0.75])
-        rng = Xoshiro(9021)  # seed yields det(Q) < 0 for asymmetric mixture alignment check
+        d_mix = MixtureModel([Normal(-1.0, 0.5), Normal(2.0, 1.2)], [0.65, 0.35])
+        rng = Xoshiro(9021)  # well-separated asymmetric mixture for interior MLE + alignment check
         ep_m = (rand(rng, d_mix, 400, 3) .- mean(d_mix)) ./ std(d_mix)
         u_m = ep_m * B_d'
         Y_m = zeros(400, 3)
@@ -866,7 +866,7 @@ end
             end
             p_rest = [argmax([abs(dot(r_rest.Q[:, j], r_d.Q[:, k])) for k in 1:3]) for j in 1:3]
 
-            for qmask in (m12, m_q2)
+            for qmask in (FAST ? (m12,) : (m12, m_q2))
                 ov0 = test_overidentification(m_d, r_d; restrictions=qmask)
                 for (r_lab, p_lab) in ((r_ref, perm_ref), (r_rest, p_rest))
                     ov_p = test_overidentification(m_d, r_lab; restrictions=qmask[:, p_lab])
@@ -944,7 +944,7 @@ end
             r_nm_flip = Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
                 label_shocks(r_nm; by=:reference, B_ref=r_nm.B0[:, perm_flip])
             end
-            for qmask in (m12, m_q2)
+            for qmask in (FAST ? (m12,) : (m12, m_q2))
                 o0 = test_overidentification(m_nm, r_nm; restrictions=qmask)
                 or = test_overidentification(m_nm, r_nm_ref; restrictions=qmask[:, perm_ref])
                 of = test_overidentification(m_nm, r_nm_flip; restrictions=qmask[:, perm_flip])

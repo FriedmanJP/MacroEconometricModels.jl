@@ -286,7 +286,7 @@ end
     @testset "MWAttentionResult" begin
         agg = RationalInattentionProblem(reshape([0.9], 1, 1), reshape([1.0], 1, 1), reshape([1.0], 1, 1); omega=0.2)
         idio = RationalInattentionProblem(reshape([0.7], 1, 1), reshape([1.5], 1, 1), reshape([1.0], 1, 1); omega=0.2)
-        mw = solve_mw_attention(agg, idio; capacity=1.5, horizon=25)
+        mw = solve_mw_attention(agg, idio; capacity=1.5, strategic_complementarity=0.5, horizon=15, tol=1e-5)
 
         p = plot_result(mw)
         check_plot(p)
@@ -302,7 +302,7 @@ end
 
         agg32 = RationalInattentionProblem(reshape([0.9f0], 1, 1), reshape([1.0f0], 1, 1), reshape([1.0f0], 1, 1); omega=0.2f0)
         idio32 = RationalInattentionProblem(reshape([0.7f0], 1, 1), reshape([1.5f0], 1, 1), reshape([1.0f0], 1, 1); omega=0.2f0)
-        mw32 = solve_mw_attention(agg32, idio32; capacity=1.5f0, horizon=20)
+        mw32 = solve_mw_attention(agg32, idio32; capacity=1.5f0, strategic_complementarity=0.5f0, horizon=12, tol=1e-4)
         p32 = plot_result(mw32)
         check_plot(p32)
         assert_all_json_valid(p32)

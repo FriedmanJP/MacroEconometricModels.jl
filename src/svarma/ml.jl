@@ -257,6 +257,115 @@ function _svarma_ml_dist_starts_1d(::Type{T}, dist::Symbol) where {T<:AbstractFl
     throw(ArgumentError("Unknown canonical distribution :$dist"))
 end
 
+function _svarma_ml_add_shock_loglik!(ell::Union{Nothing,AbstractVector},
+                                      s::AbstractVector{Ts},
+                                      dp_j::AbstractVector{Tθ},
+                                      dist::Symbol) where {Ts<:Real,Tθ<:Real}
+    Tacc = ell === nothing ? float(promote_type(Ts, Tθ)) : eltype(ell)
+    T_eff = length(s)
+    ll = zero(Tacc)
+    if dist === :student_t
+        nu_safe = max(Tacc(Tθ(2.01) + exp(clamp(dp_j[1], Tθ(-30), Tθ(12)))), Tacc(2.01))
+        half_nup1 = (nu_safe + one(Tacc)) / Tacc(2)
+        nm2 = nu_safe - Tacc(2)
+        inv_nm2 = one(Tacc) / nm2
+        logc = SpecialFunctions.loggamma(half_nup1) -
+               SpecialFunctions.loggamma(nu_safe / Tacc(2)) -
+               Tacc(0.5) * log(Tacc(pi) * nm2)
+        @inbounds for t in 1:T_eff
+            xt = Tacc(s[t])
+            v = logc - half_nup1 * log1p(xt * xt * inv_nm2)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
+        end
+    elseif dist === :mixture_normal
+        p_mix, sigma1, sigma2 = _unpack_shock_mixture(dp_j[1], dp_j[2])
+        p_t = Tacc(p_mix); s1 = Tacc(sigma1); s2 = Tacc(sigma2)
+        half_log2pi = Tacc(0.5) * log(Tacc(2π))
+        c1 = log(p_t) - log(s1) - half_log2pi
+        c2 = log(one(Tacc) - p_t) - log(s2) - half_log2pi
+        inv_2v1 = Tacc(0.5) / (s1 * s1)
+        inv_2v2 = Tacc(0.5) / (s2 * s2)
+        @inbounds for t in 1:T_eff
+            xt = Tacc(s[t])
+            x2 = xt * xt
+            l1 = c1 - x2 * inv_2v1
+            l2 = c2 - x2 * inv_2v2
+            m = max(l1, l2)
+            v = m + log(exp(l1 - m) + exp(l2 - m))
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
+        end
+    elseif dist === :mixture_normal_asym
+        p_mix, mu1, sigma1, mu2, sigma2 = _unpack_shock_mixture_asym(dp_j[1], dp_j[2], dp_j[3])
+        p_t = Tacc(p_mix); m1 = Tacc(mu1); s1 = Tacc(sigma1); m2 = Tacc(mu2); s2 = Tacc(sigma2)
+        half_log2pi = Tacc(0.5) * log(Tacc(2π))
+        c1 = log(p_t) - log(s1) - half_log2pi
+        c2 = log(one(Tacc) - p_t) - log(s2) - half_log2pi
+        inv_s1 = one(Tacc) / s1
+        inv_s2 = one(Tacc) / s2
+        @inbounds for t in 1:T_eff
+            xt = Tacc(s[t])
+            z1 = (xt - m1) * inv_s1
+            z2 = (xt - m2) * inv_s2
+            l1 = c1 - Tacc(0.5) * z1 * z1
+            l2 = c2 - Tacc(0.5) * z2 * z2
+            m = max(l1, l2)
+            v = m + log(exp(l1 - m) + exp(l2 - m))
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
+        end
+    elseif dist === :pearson_iv
+        sk = Tacc(dp_j[1])
+        m_safe = max(Tacc(Tθ(2.05) + exp(clamp(dp_j[2], Tθ(-30), Tθ(9.2)))), Tacc(2.05))
+        r = Tacc(2) * (m_safe - one(Tacc))
+        a = r * sqrt((r - one(Tacc)) / (r * r + sk * sk))
+        lam = a * sk / r
+        inv_a = one(Tacc) / a
+        logk = (Tacc(2) * m_safe - Tacc(2)) * log(Tacc(2)) +
+               Tacc(2) * _re_loggamma(m_safe, sk / Tacc(2)) -
+               log(Tacc(pi)) - log(a) - SpecialFunctions.loggamma(Tacc(2) * m_safe - one(Tacc))
+        @inbounds for t in 1:T_eff
+            z = (Tacc(s[t]) - lam) * inv_a
+            v = logk - m_safe * log1p(z * z) - sk * atan(z)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
+        end
+    elseif dist === :skew_normal
+        alpha = Tacc(dp_j[1])
+        delta = alpha / sqrt(one(Tacc) + alpha * alpha)
+        mu_z = delta * sqrt(Tacc(2) / Tacc(pi))
+        sd_z = sqrt(one(Tacc) - mu_z * mu_z)
+        Tf = typeof(_svarma_ml_primal(zero(Tacc)))
+        d0 = Normal(zero(Tf), one(Tf))
+        c_sn = log(Tacc(2)) - Tacc(0.5) * log(Tacc(2π)) + log(sd_z)
+        @inbounds for t in 1:T_eff
+            z = mu_z + sd_z * Tacc(s[t])
+            v = c_sn - Tacc(0.5) * z * z + logcdf(d0, alpha * z)
+            if ell === nothing
+                ll += v
+            else
+                ell[t] += v
+            end
+        end
+    else
+        throw(ArgumentError("Unknown canonical distribution :$dist"))
+    end
+    return ll
+end
+
 function _svarma_ml_fit_1d_dist(shocks::AbstractMatrix{T}, dist::Symbol) where {T<:AbstractFloat}
     T_eff, n = size(shocks)
     k_dp = _svarma_ml_n_dp(dist)
@@ -267,11 +376,8 @@ function _svarma_ml_fit_1d_dist(shocks::AbstractMatrix{T}, dist::Symbol) where {
     for j in 1:n
         s_col = Vector{T}(@view shocks[:, j])
         nll_1d = d -> begin
-            acc = zero(eltype(d))
-            @inbounds for t in 1:T_eff
-                acc -= _svarma_ml_logpdf_1d(s_col[t], d, dist)
-            end
-            return acc
+            Tacc = float(promote_type(T, eltype(d)))
+            -_svarma_ml_add_shock_loglik!(nothing, s_col, d, dist)::Tacc
         end
         best_val = T(Inf)
         best_d = copy(starts_1d[1])
@@ -373,14 +479,11 @@ function _svarma_ml_obs_loglik(params::AbstractVector{Tθ}, Y::Matrix{T},
     T_eff = size(shocks, 1)
     log_jac = f_res.log_jacobian
 
-    ell = Vector{Tθ}(undef, T_eff)
-    @inbounds for t in 1:T_eff
-        acc = -Tθ(log_jac)
-        for j in 1:n
-            off = (j - 1) * k_dp
-            acc += _svarma_ml_logpdf_1d(shocks[t, j], @view(dp[(off + 1):(off + k_dp)]), dist)
-        end
-        ell[t] = acc
+    ell = fill(-Tθ(log_jac), T_eff)
+    @inbounds for j in 1:n
+        off = (j - 1) * k_dp
+        _svarma_ml_add_shock_loglik!(ell, @view(shocks[:, j]),
+                                     @view(dp[(off + 1):(off + k_dp)]), dist)
     end
     return ell
 end
@@ -504,10 +607,11 @@ function _svarma_ml_estimate(Y::Matrix{T}, p::Int, q::Int;
                     continue
                 end
             end
-            sig = vcat(vec(Th_r), vec(C_r))
-            if !any(s -> maximum(abs, s .- sig) < T(1e-3), seen_sigs)
+            C_n, Th_n, _, _, _ = _svarma_normalize_a7(C_r, Th_r)
+            sig = vcat(vec(Th_n), vec(C_n))
+            if !any(s -> maximum(abs, s .- sig) < T(1e-2), seen_sigs)
                 push!(seen_sigs, sig)
-                push!(seed_pairs, (Vector{T}(mu_s), Array{T,3}(Phi_s), Th_r, C_r))
+                push!(seed_pairs, (Vector{T}(mu_s), Array{T,3}(Phi_s), Th_n, C_n))
             end
         end
     end
@@ -558,7 +662,8 @@ function _svarma_ml_estimate(Y::Matrix{T}, p::Int, q::Int;
         isfinite(v0) || continue
 
         res = try
-            cfg = ForwardDiff.GradientConfig(neg_ll_fn, p0)
+            ch_g = length(p0) >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(length(p0), 1)}()
+            cfg = ForwardDiff.GradientConfig(neg_ll_fn, p0, ch_g)
             g! = (G, x) -> ForwardDiff.gradient!(G, neg_ll_fn, x, cfg)
             Optim.optimize(neg_ll_fn, g!, p0, Optim.LBFGS(), opts)
         catch
@@ -610,9 +715,12 @@ function _svarma_ml_estimate(Y::Matrix{T}, p::Int, q::Int;
     d_total = length(p_norm)
 
     obs_fn = p_vec -> _svarma_ml_obs_loglik(p_vec, Y, n, p, q, dist_canon)
+    ch_se = d_total >= 4 ? ForwardDiff.Chunk{4}() : ForwardDiff.Chunk{max(d_total, 1)}()
     H_inv = if eff_se in (:hessian, :sandwich)
         H_raw = try
-            ForwardDiff.hessian(p_vec -> -sum(obs_fn(p_vec)), p_norm)
+            neg_sum_fn = p_vec -> -sum(obs_fn(p_vec))
+            h_cfg = ForwardDiff.HessianConfig(neg_sum_fn, p_norm, ch_se)
+            ForwardDiff.hessian(neg_sum_fn, p_norm, h_cfg)
         catch
             zeros(T, d_total, d_total)
         end
@@ -623,7 +731,8 @@ function _svarma_ml_estimate(Y::Matrix{T}, p::Int, q::Int;
 
     J_meat = if eff_se in (:sandwich, :opg)
         G_t = try
-            ForwardDiff.jacobian(obs_fn, p_norm)
+            j_cfg = ForwardDiff.JacobianConfig(obs_fn, p_norm, ch_se)
+            ForwardDiff.jacobian(obs_fn, p_norm, j_cfg)
         catch
             zeros(T, T_eff, d_total)
         end

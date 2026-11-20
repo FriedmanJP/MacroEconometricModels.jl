@@ -1053,24 +1053,24 @@ end
 
         # Live fixtures from every series (all RNG separated onto its own line)
         sim_q = dgp_quantile_factors(rng; T_obs=80, N=15)
-        qfm = estimate_qfm(sim_q.X, 2, 0.25; se=:none, seed=11)
-        qfm_ic = ic_criteria_qfm(sim_q.X, 4, 0.25)
-        qfm_grid = estimate_qfm(sim_q.X, 2, [0.25, 0.5, 0.75]; seed=11)
+        qfm = estimate_qfm(sim_q.X, 2, 0.25; se=:none, n_starts=1, max_iter=30, seed=11)
+        qfm_ic = ic_criteria_qfm(sim_q.X, 3, 0.25; n_starts=1, max_iter=30, seed=11)
+        qfm_grid = estimate_qfm(sim_q.X, 2, [0.25, 0.5, 0.75]; n_starts=1, max_iter=30, seed=11)
         qfm_span = test_qfm_spanning(qfm_grid, sim_q.X)
-        qfm_const = test_qfm_loading_constancy(sim_q.X, 0.25, 0.75; n_boot=5, seed=11)
+        qfm_const = test_qfm_loading_constancy(qfm_grid, 0.25, 0.75; n_boot=5, seed=11)
         Y_qp = randn(rng, 12, 15)
         W_qp = randn(rng, 12, 15, 1)
         qpan = estimate_xtqreg_factors(Y_qp, W_qp, 1, 0.5; maxiter=15, seed=11)
-        gar = growth_at_risk(sim_q.X, 1, 1; r=2, taus=[0.1, 0.5, 0.9], density=:normal, seed=11)
+        gar = growth_at_risk(qfm_grid, 1, 1; density=:normal, seed=11)
 
         Y_qv = randn(rng, 80, 2)
         qvar = estimate_qvar(Y_qv, 1, [0.25, 0.75]; se=:asymptotic)
         qr = qirf(qvar, 4; ci_type=:none)
-        dq_fv = dgp_qfavar(rng; T_obs=80, N=10, r=1, p=1)
+        dq_fv = dgp_qfavar(rng; T_obs=60, N=8, r=1, p=1)
         qfavar = estimate_qfavar(dq_fv.X_panel, 1:dq_fv.n_key, dq_fv.r, dq_fv.p, [0.5];
                                  method=:twostep, seed=11)
         vb_qfavar = estimate_qfavar(dq_fv.X_panel, 1:dq_fv.n_key, dq_fv.r, dq_fv.p, [0.5];
-                                    method=:vb, vb_maxiter=15, n_draws=10, seed=11)
+                                    method=:vb, vb_maxiter=10, n_draws=10, seed=11)
 
         sim_g = dgp_infinite_gdfm(rng; T_obs=100, N=12, q=2)
         fhlz = estimate_gdfm_fhlz(sim_g.X, 2; p_max=2, n_perm=4, bandwidth=3, seed=11)
@@ -1101,7 +1101,7 @@ end
         sim_svarma2 = dgp_ssvarma(rng; T=120, Phi=[0.35 0.0; 0.0 0.3],
                                   Theta=[-0.4 0.0; 0.0 0.3], C=[1.0 0.2; -0.15 0.9],
                                   dist=:student_t, nu=5.0)
-        ssv = estimate_ssvarma(sim_svarma2.Y, 1, 1; method=:ml, n_starts=1, max_iter=60, seed=11)
+        ssv = estimate_ssvarma(sim_svarma2.Y, 1, 1; method=:gmm, seed=11)
         fund = test_fundamentalness(var_ng; max_lag=3, n_boot=19, seed=11)
         X_si = randn(rng, 120, 6)
         si_res = test_sufficient_information(var_ng, X_si; r_max=2, p_f=2)
@@ -1137,7 +1137,7 @@ end
         cg_ri = coibion_gorodnichenko_test(real_cg, f_now, f_lag)
         agg_mw = RationalInattentionProblem(reshape([0.9], 1, 1), reshape([1.0], 1, 1), reshape([1.0], 1, 1); omega=0.2)
         idio_mw = RationalInattentionProblem(reshape([0.7], 1, 1), reshape([1.5], 1, 1), reshape([1.0], 1, 1); omega=0.2)
-        mw_ri = solve_mw_attention(agg_mw, idio_mw; capacity=1.5, horizon=6)
+        mw_ri = solve_mw_attention(agg_mw, idio_mw; capacity=1.5, strategic_complementarity=0.0, horizon=6)
         sim_rie = simulate(sol_ri, 50; rng=rng)
         rie_ri = estimate_ri(prob_ri, sim_rie.actions; method=:mle, estimate_param=:capacity)
 

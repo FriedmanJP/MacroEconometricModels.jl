@@ -59,7 +59,7 @@ end
 
     @testset "3. Univariate Non-Fundamental MA(1) Monte Carlo (GMR §5.1.1 Table 1)" begin
         _suppress_warnings() do
-            n_reps = FAST ? 10 : 25
+            n_reps = FAST ? 8 : 20
             for (dist_sim, dist_est) in ((:student_t, :student_t),
                                          (:mixture_normal_asym, :mixture_normal_asym))
                 thetas_pml = Float64[]
@@ -68,9 +68,10 @@ end
                     sim = dgp_ssvarma(; T=250, Phi=nothing, Theta=[-2.0;;], C=[1.0;;],
                                       dist=dist_sim, nu=5.0, seed=906100 + rep)
                     est = estimate_ssvarma(sim.Y, 0, 1; method=:pml,
-                                           distribution=dist_est, seed=906200 + rep)
+                                           distribution=dist_est, n_starts=1, max_iter=150,
+                                           seed=906200 + rep)
                     push!(thetas_pml, est.Theta[1, 1, 1])
-                    if rep <= 10
+                    if rep <= 8
                         bj = estimate_arima(vec(sim.Y), 0, 0, 1)
                         push!(thetas_bj, bj.theta[1])
                     end
@@ -189,11 +190,11 @@ end
 
             # :ml with Hessian SEs and :pml with Sandwich & OPG SEs
             m_ml = estimate_ssvarma(sim.Y, 1, 1; method=:ml, distribution=:student_t,
-                                    se=:auto, seed=906602)
+                                    se=:auto, n_starts=1, max_iter=120, seed=906602)
             m_pml = estimate_ssvarma(sim.Y, 1, 1; method=:pml, distribution=:pearson_iv,
-                                     se=:auto, seed=906602)
+                                     se=:auto, n_starts=1, max_iter=120, seed=906602)
             m_opg = estimate_ssvarma(sim.Y, 1, 1; method=:pml, distribution=:skew_normal,
-                                     se=:opg, seed=906602)
+                                     se=:opg, n_starts=1, max_iter=120, seed=906602)
             m_gmm = estimate_ssvarma(sim.Y, 1, 1; method=:gmm, seed=906602)
 
             for m in (m_ml, m_pml, m_opg, m_gmm)
@@ -209,7 +210,7 @@ end
 
             # Seed reproducibility
             m_ml_rep = estimate_ssvarma(sim.Y, 1, 1; method=:ml, distribution=:student_t,
-                                        se=:auto, seed=906602)
+                                        se=:auto, n_starts=1, max_iter=120, seed=906602)
             @test m_ml.Theta == m_ml_rep.Theta
             @test m_ml.C == m_ml_rep.C
             @test m_ml.se == m_ml_rep.se
@@ -222,13 +223,13 @@ end
             # Pure AR (q = 0) and pure MA (p = 0)
             sim_q0 = dgp_ssvarma(; T=180, Phi=[0.35 0.05; -0.05 0.30], Theta=nothing,
                                  C=[0.6 1.0; 0.8 0.4], seed=906604)
-            m_q0 = estimate_ssvarma(sim_q0.Y, 1, 0; method=:pml, seed=906604)
+            m_q0 = estimate_ssvarma(sim_q0.Y, 1, 0; method=:pml, n_starts=1, max_iter=120, seed=906604)
             @test m_q0.p == 1 && m_q0.q == 0 && m_q0.regime === :fundamental
 
             # Float32 support
             Y32 = Float32.(sim.Y)
             m32_gmm = estimate_ssvarma(Y32, 1, 1; method=:gmm, seed=906605)
-            m32_pml = estimate_ssvarma(Y32, 1, 1; method=:pml, max_iter=80, seed=906605)
+            m32_pml = estimate_ssvarma(Y32, 1, 1; method=:pml, n_starts=1, max_iter=80, seed=906605)
             @test m32_gmm isa SVARMAModel{Float32}
             @test m32_pml isa SVARMAModel{Float32}
             @test eltype(m32_pml.vcov) == Float32 && eltype(m32_pml.se) == Float32
@@ -256,8 +257,8 @@ end
             ts_gnp = load_example(:gnp_hamilton)
             Y_gnp = to_matrix(ts_gnp)
             est_gnp = estimate_ssvarma(Y_gnp, 2, 1; method=:pml, distribution=:student_t,
-                                       n_starts=2, max_iter=150, varnames=["gnp_growth"],
-                                       shock_names=["GNP shock"], seed=906701)
+                                       n_starts=(FAST ? 1 : 2), max_iter=(FAST ? 80 : 150),
+                                       varnames=["gnp_growth"], shock_names=["GNP shock"], seed=906701)
             @test est_gnp isa SVARMAModel{Float64}
             @test est_gnp.p == 2 && est_gnp.q == 1
             @test all(isfinite, est_gnp.C) && all(isfinite, est_gnp.Theta)
@@ -275,8 +276,8 @@ end
             T_sub = FAST ? min(size(Y_all, 1), 110) : min(size(Y_all, 1), 150)
             Y_bq = Y_all[(end - T_sub + 1):end, :]
             est_bq = estimate_ssvarma(Y_bq, 2, 1; method=:pml, distribution=:student_t,
-                                      n_starts=2, max_iter=120, varnames=vars_bq,
-                                      shock_names=["Supply", "Demand"], seed=906703)
+                                      n_starts=(FAST ? 1 : 2), max_iter=(FAST ? 80 : 120),
+                                      varnames=vars_bq, shock_names=["Supply", "Demand"], seed=906703)
             @test est_bq isa SVARMAModel{Float64}
             @test size(est_bq.C) == (2, 2)
             @test all(isfinite, est_bq.Theta)

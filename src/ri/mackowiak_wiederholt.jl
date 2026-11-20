@@ -781,12 +781,12 @@ function solve_mw_attention(
     converged = pe_res.fp_agg.converged && pe_res.fp_id.converged
     iters = 1
 
+    warm_agg = Ref{Any}(nothing)
     if r > zero(TW)
         B_aug_scaled = static_aug.B_aug .* scale_B
         Q_aug_scaled = _rimw_symmetrize(B_aug_scaled * B_aug_scaled')
         Sigma_uncond_aug = is_stable_agg ?
             _rimw_symmetrize(solve_lyapunov(static_aug.A_aug, B_aug_scaled)) : nothing
-        warm_agg = Ref{Any}(nothing)
 
         p_hist = Vector{TW}[]
         p_resids = Vector{TW}[]
@@ -873,13 +873,34 @@ function solve_mw_attention(
         end
     end
 
-    # Recover unscaled omega and unscaled SimsKalmanSolutions
+    # Recover unscaled omega and unscaled SimsKalmanSolutions (reuse converged warm states)
     omega_true = om_cur / (scale_B^2)
     final_tol = min(TW(tol) * TW(0.05), TW(1e-11))
     agg_prob_final = _rimw_make_agg_prob(
         agg_spec, static_aug, y_cur, r, L_lag; omega=omega_true, scale_B=one(TW),
     )
-    agg_sol_final_w = solve_ri_kalman(agg_prob_final; method=:water_filling, tol=final_tol, max_iter=2000)
+    warm_agg_final = if r > zero(TW) && warm_agg[] !== nothing
+        (warm_agg[][1] ./ (scale_B^2), warm_agg[][2], nothing)
+    elseif r == zero(TW) && warm_pe[] !== nothing
+        (warm_pe[][1] ./ (scale_B^2), warm_pe[][2], nothing)
+    else
+        nothing
+    end
+    warm_id_final = warm_id[] === nothing ? nothing :
+        (warm_id[][1] ./ (scale_B^2), warm_id[][2], nothing)
+
+    agg_prob_out = T === TW ? agg_prob_final : RationalInattentionProblem(
+        Matrix{T}(agg_prob_final.A), Matrix{T}(agg_prob_final.B), Matrix{T}(agg_prob_final.H);
+        M=Matrix{T}(agg_prob_final.M), beta=T(agg_prob_final.beta),
+        omega=T(omega_true), units=units,
+        state_names=agg_prob_final.state_names,
+        action_names=agg_prob_final.action_names,
+        shock_names=agg_prob_final.shock_names,
+    )
+    agg_sol_out = _solve_ri_kalman_impl(
+        TW, agg_prob_out, :water_filling, max(final_tol, TW(10) * eps(TW)), 2000;
+        warm_state=warm_agg_final,
+    )
 
     idio_prob_final = RationalInattentionProblem(
         idio_spec.A, idio_spec.B, idio_spec.H;
@@ -887,35 +908,32 @@ function solve_mw_attention(
         state_names=idio_spec.state_names, action_names=idio_spec.action_names,
         shock_names=idio_spec.shock_names,
     )
-    idio_sol_final_w = solve_ri_kalman(idio_prob_final; method=:water_filling, tol=final_tol, max_iter=2000)
+    idio_prob_out = T === TW ? idio_prob_final : RationalInattentionProblem(
+        Matrix{T}(idio_prob_final.A), Matrix{T}(idio_prob_final.B), Matrix{T}(idio_prob_final.H);
+        M=Matrix{T}(idio_prob_final.M), beta=T(idio_prob_final.beta),
+        omega=T(omega_true), units=units,
+        state_names=idio_prob_final.state_names,
+        action_names=idio_prob_final.action_names,
+        shock_names=idio_prob_final.shock_names,
+    )
+    idio_sol_out = _solve_ri_kalman_impl(
+        TW, idio_prob_out, :water_filling, max(final_tol, TW(10) * eps(TW)), 2000;
+        warm_state=warm_id_final,
+    )
 
-    p_final = _rimw_consensus_irf(agg_sol_final_w, static_aug.B_aug, horizon)[:, 1]
+    p_final = _rimw_consensus_irf_mats(
+        Matrix{TW}(agg_prob_final.A), static_aug.B_aug, Matrix{TW}(agg_prob_final.H),
+        Matrix{TW}(agg_sol_out.K_gain), Matrix{TW}(agg_sol_out.Y_signal), horizon,
+    )[:, 1]
     y_final = q_irf[1:horizon, 1] .- p_final
-    p_idio_final = _rimw_consensus_irf(idio_sol_final_w, idio_spec.B, horizon)[:, 1]
+    p_idio_final = _rimw_consensus_irf_mats(
+        Matrix{TW}(idio_prob_final.A), idio_spec.B, Matrix{TW}(idio_prob_final.H),
+        Matrix{TW}(idio_sol_out.K_gain), Matrix{TW}(idio_sol_out.Y_signal), horizon,
+    )[:, 1]
 
-    k_agg_val = units === :bits ? agg_sol_final_w.capacity_bits : agg_sol_final_w.capacity_nats
-    k_id_val = units === :bits ? idio_sol_final_w.capacity_bits : idio_sol_final_w.capacity_nats
+    k_agg_val = units === :bits ? TW(agg_sol_out.capacity_bits) : TW(agg_sol_out.capacity_nats)
+    k_id_val = units === :bits ? TW(idio_sol_out.capacity_bits) : TW(idio_sol_out.capacity_nats)
     k_tot_val = k_agg_val + k_id_val
-
-    agg_sol_out = T === TW ? agg_sol_final_w :
-        solve_ri_kalman(RationalInattentionProblem(
-            Matrix{T}(agg_prob_final.A), Matrix{T}(agg_prob_final.B), Matrix{T}(agg_prob_final.H);
-            M=Matrix{T}(agg_prob_final.M), beta=T(agg_prob_final.beta),
-            omega=T(omega_true), units=units,
-            state_names=agg_prob_final.state_names,
-            action_names=agg_prob_final.action_names,
-            shock_names=agg_prob_final.shock_names,
-        ); method=:water_filling, tol=max(T(final_tol), T(10) * eps(T)), max_iter=2000)
-
-    idio_sol_out = T === TW ? idio_sol_final_w :
-        solve_ri_kalman(RationalInattentionProblem(
-            Matrix{T}(idio_prob_final.A), Matrix{T}(idio_prob_final.B), Matrix{T}(idio_prob_final.H);
-            M=Matrix{T}(idio_prob_final.M), beta=T(idio_prob_final.beta),
-            omega=T(omega_true), units=units,
-            state_names=idio_prob_final.state_names,
-            action_names=idio_prob_final.action_names,
-            shock_names=idio_prob_final.shock_names,
-        ); method=:water_filling, tol=max(T(final_tol), T(10) * eps(T)), max_iter=2000)
 
     return MWAttentionResult{T}(
         T(k_agg_val),
