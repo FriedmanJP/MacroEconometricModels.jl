@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 33%;
     }
     .panel {
-        width: calc(33% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,7 +139,7 @@
 </head>
 <body>
 <div class="figure-title">VECM Forecast</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 33%;">
 <div class="panel">
 <div class="panel-title">GDP</div>
 <div id="vecm_fc_111"></div>
@@ -223,16 +224,16 @@ var showTip = window.__mem_core.showTip;
 var hideTip = window.__mem_core.hideTip;
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":9.738570220638158,"ci_lo":0.0,"ci_hi":0.0},
-{"x":2,"hist":null,"fc":9.743886512952397,"ci_lo":0.0,"ci_hi":0.0},
-{"x":3,"hist":null,"fc":9.749814818232798,"ci_lo":0.0,"ci_hi":0.0},
-{"x":4,"hist":null,"fc":9.756371106961206,"ci_lo":0.0,"ci_hi":0.0},
-{"x":5,"hist":null,"fc":9.763302728268645,"ci_lo":0.0,"ci_hi":0.0},
-{"x":6,"hist":null,"fc":9.770468511192357,"ci_lo":0.0,"ci_hi":0.0},
-{"x":7,"hist":null,"fc":9.7777872749104,"ci_lo":0.0,"ci_hi":0.0},
-{"x":8,"hist":null,"fc":9.785195775636172,"ci_lo":0.0,"ci_hi":0.0},
-{"x":9,"hist":null,"fc":9.792658774176276,"ci_lo":0.0,"ci_hi":0.0},
-{"x":10,"hist":null,"fc":9.800151017795754,"ci_lo":0.0,"ci_hi":0.0}];
+    const data = [{"x":1,"hist":null,"fc":9.737333420065104,"ci_lo":0.0,"ci_hi":0.0},
+{"x":2,"hist":null,"fc":9.740506023207438,"ci_lo":0.0,"ci_hi":0.0},
+{"x":3,"hist":null,"fc":9.74367025815803,"ci_lo":0.0,"ci_hi":0.0},
+{"x":4,"hist":null,"fc":9.74698785372936,"ci_lo":0.0,"ci_hi":0.0},
+{"x":5,"hist":null,"fc":9.750354584433952,"ci_lo":0.0,"ci_hi":0.0},
+{"x":6,"hist":null,"fc":9.753715887473053,"ci_lo":0.0,"ci_hi":0.0},
+{"x":7,"hist":null,"fc":9.757059283490277,"ci_lo":0.0,"ci_hi":0.0},
+{"x":8,"hist":null,"fc":9.76036553044365,"ci_lo":0.0,"ci_hi":0.0},
+{"x":9,"hist":null,"fc":9.763630495677916,"ci_lo":0.0,"ci_hi":0.0},
+{"x":10,"hist":null,"fc":9.766849231935728,"ci_lo":0.0,"ci_hi":0.0}];
     const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [];
     const refLines = [];
@@ -338,16 +339,16 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":9.339112450419977,"ci_lo":0.0,"ci_hi":0.0},
-{"x":2,"hist":null,"fc":9.34456771770572,"ci_lo":0.0,"ci_hi":0.0},
-{"x":3,"hist":null,"fc":9.35047013242517,"ci_lo":0.0,"ci_hi":0.0},
-{"x":4,"hist":null,"fc":9.356979953548276,"ci_lo":0.0,"ci_hi":0.0},
-{"x":5,"hist":null,"fc":9.36379510789757,"ci_lo":0.0,"ci_hi":0.0},
-{"x":6,"hist":null,"fc":9.370875055076507,"ci_lo":0.0,"ci_hi":0.0},
-{"x":7,"hist":null,"fc":9.378124817431049,"ci_lo":0.0,"ci_hi":0.0},
-{"x":8,"hist":null,"fc":9.385505964353175,"ci_lo":0.0,"ci_hi":0.0},
-{"x":9,"hist":null,"fc":9.39298058134247,"ci_lo":0.0,"ci_hi":0.0},
-{"x":10,"hist":null,"fc":9.400526486761505,"ci_lo":0.0,"ci_hi":0.0}];
+    const data = [{"x":1,"hist":null,"fc":9.338074634783588,"ci_lo":0.0,"ci_hi":0.0},
+{"x":2,"hist":null,"fc":9.341798232641565,"ci_lo":0.0,"ci_hi":0.0},
+{"x":3,"hist":null,"fc":9.345376722457484,"ci_lo":0.0,"ci_hi":0.0},
+{"x":4,"hist":null,"fc":9.349128027485781,"ci_lo":0.0,"ci_hi":0.0},
+{"x":5,"hist":null,"fc":9.352838591258696,"ci_lo":0.0,"ci_hi":0.0},
+{"x":6,"hist":null,"fc":9.356545919493005,"ci_lo":0.0,"ci_hi":0.0},
+{"x":7,"hist":null,"fc":9.360208108517286,"ci_lo":0.0,"ci_hi":0.0},
+{"x":8,"hist":null,"fc":9.363827347401376,"ci_lo":0.0,"ci_hi":0.0},
+{"x":9,"hist":null,"fc":9.3673949820123,"ci_lo":0.0,"ci_hi":0.0},
+{"x":10,"hist":null,"fc":9.370910624939569,"ci_lo":0.0,"ci_hi":0.0}];
     const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [];
     const refLines = [];
@@ -453,16 +454,16 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":1,"hist":null,"fc":7.9256285332374095,"ci_lo":0.0,"ci_hi":0.0},
-{"x":2,"hist":null,"fc":7.933922835070148,"ci_lo":0.0,"ci_hi":0.0},
-{"x":3,"hist":null,"fc":7.948256988509957,"ci_lo":0.0,"ci_hi":0.0},
-{"x":4,"hist":null,"fc":7.964729911253547,"ci_lo":0.0,"ci_hi":0.0},
-{"x":5,"hist":null,"fc":7.982842466795281,"ci_lo":0.0,"ci_hi":0.0},
-{"x":6,"hist":null,"fc":8.001354545022506,"ci_lo":0.0,"ci_hi":0.0},
-{"x":7,"hist":null,"fc":8.019927084990954,"ci_lo":0.0,"ci_hi":0.0},
-{"x":8,"hist":null,"fc":8.038194836014641,"ci_lo":0.0,"ci_hi":0.0},
-{"x":9,"hist":null,"fc":8.05603327284415,"ci_lo":0.0,"ci_hi":0.0},
-{"x":10,"hist":null,"fc":8.073361733981482,"ci_lo":0.0,"ci_hi":0.0}];
+    const data = [{"x":1,"hist":null,"fc":7.920115670840433,"ci_lo":0.0,"ci_hi":0.0},
+{"x":2,"hist":null,"fc":7.918124255715179,"ci_lo":0.0,"ci_hi":0.0},
+{"x":3,"hist":null,"fc":7.919711849194734,"ci_lo":0.0,"ci_hi":0.0},
+{"x":4,"hist":null,"fc":7.921847760211314,"ci_lo":0.0,"ci_hi":0.0},
+{"x":5,"hist":null,"fc":7.924962210799253,"ci_lo":0.0,"ci_hi":0.0},
+{"x":6,"hist":null,"fc":7.9282967771119335,"ci_lo":0.0,"ci_hi":0.0},
+{"x":7,"hist":null,"fc":7.931861819858286,"ci_lo":0.0,"ci_hi":0.0},
+{"x":8,"hist":null,"fc":7.935476753456236,"ci_lo":0.0,"ci_hi":0.0},
+{"x":9,"hist":null,"fc":7.939117327718531,"ci_lo":0.0,"ci_hi":0.0},
+{"x":10,"hist":null,"fc":7.94273818724475,"ci_lo":0.0,"ci_hi":0.0}];
     const series = [{"name":"Forecast","color":"#1f77b4","key":"fc","dash":""}];
     const bands = [];
     const refLines = [];

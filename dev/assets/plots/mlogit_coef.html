@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 33%;
     }
     .panel {
-        width: calc(33% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,7 +139,7 @@
 </head>
 <body>
 <div class="figure-title">Multinomial Logit Coefficients</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 33%;">
 <div class="panel">
 <div class="panel-title">2 (vs 1)</div>
 <div id="mlogit_coef_396"></div>
@@ -223,11 +224,11 @@ var showTip = window.__mem_core.showTip;
 var hideTip = window.__mem_core.hideTip;
 
 (function() {
-    const data = [{"name":"nwifeinc","effect":-0.019795532966890274,"ci_lo":-0.03957243370447168,"ci_hi":-1.8632229308871567e-5},
-{"name":"educ","effect":0.23021295129275404,"ci_lo":0.12975336977418275,"ci_hi":0.33067253281132536},
-{"name":"exper","effect":0.07551207384719728,"ci_lo":0.04385293581201011,"ci_hi":0.10717121188238446},
-{"name":"age","effect":-0.06896089153713461,"ci_lo":-0.10033256818706654,"ci_hi":-0.03758921488720268},
-{"name":"kidslt6","effect":-0.9940190602070167,"ci_lo":-1.4427988062714174,"ci_hi":-0.545239314142616}];
+    const data = [{"name":"nwifeinc","effect":-0.019795532966890243,"ci_lo":-0.03957243370447164,"ci_hi":-1.863222930885075e-5},
+{"name":"educ","effect":0.230212951292754,"ci_lo":0.1297533697741846,"ci_hi":0.33067253281132336},
+{"name":"exper","effect":0.07551207384719717,"ci_lo":0.04385293581201005,"ci_hi":0.10717121188238429},
+{"name":"age","effect":-0.06896089153713442,"ci_lo":-0.1003325681870681,"ci_hi":-0.03758921488720073},
+{"name":"kidslt6","effect":-0.9940190602070152,"ci_lo":-1.4427988062714252,"ci_hi":-0.5452393141426053}];
     const logx = false;
     const refValue = 0.0;
 
@@ -341,11 +342,11 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"name":"nwifeinc","effect":-0.015782366395887922,"ci_lo":-0.035415985037232756,"ci_hi":0.003851252245456911},
-{"name":"educ","effect":0.21631856830311447,"ci_lo":0.11633300021499074,"ci_hi":0.3163041363912382},
-{"name":"exper","effect":0.13681949087863346,"ci_lo":0.1054225814143991,"ci_hi":0.16821640034286783},
-{"name":"age","effect":-0.11951075934382605,"ci_lo":-0.15174875928562656,"ci_hi":-0.08727275940202553},
-{"name":"kidslt6","effect":-1.9634405773595147,"ci_lo":-2.5222572492441637,"ci_hi":-1.4046239054748657}];
+    const data = [{"name":"nwifeinc","effect":-0.015782366395887846,"ci_lo":-0.03541598503723267,"ci_hi":0.003851252245456977},
+{"name":"educ","effect":0.21631856830311388,"ci_lo":0.11633300021499106,"ci_hi":0.3163041363912367},
+{"name":"exper","effect":0.13681949087863343,"ci_lo":0.10542258141439917,"ci_hi":0.1682164003428677},
+{"name":"age","effect":-0.11951075934382613,"ci_lo":-0.15174875928562748,"ci_hi":-0.08727275940202478},
+{"name":"kidslt6","effect":-1.9634405773595147,"ci_lo":-2.522257249244168,"ci_hi":-1.4046239054748613}];
     const logx = false;
     const refValue = 0.0;
 
@@ -459,11 +460,11 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"name":"nwifeinc","effect":-0.03699609331513221,"ci_lo":-0.07015300862435192,"ci_hi":-0.003839178005912512},
-{"name":"educ","effect":0.2360927780852227,"ci_lo":0.09878715747881078,"ci_hi":0.3733983986916346},
-{"name":"exper","effect":0.1740922541281501,"ci_lo":0.13144673387578054,"ci_hi":0.21673777438051967},
-{"name":"age","effect":-0.10721584991822299,"ci_lo":-0.15319824524465683,"ci_hi":-0.06123345459178914},
-{"name":"kidslt6","effect":-1.813243597892925,"ci_lo":-2.6818071623953696,"ci_hi":-0.9446800333904806}];
+    const data = [{"name":"nwifeinc","effect":-0.036996093315132116,"ci_lo":-0.07015300862435186,"ci_hi":-0.0038391780059123665},
+{"name":"educ","effect":0.23609277808522128,"ci_lo":0.09878715747881009,"ci_hi":0.3733983986916325},
+{"name":"exper","effect":0.17409225412815038,"ci_lo":0.1314467338757808,"ci_hi":0.21673777438051997},
+{"name":"age","effect":-0.10721584991822362,"ci_lo":-0.15319824524465983,"ci_hi":-0.06123345459178741},
+{"name":"kidslt6","effect":-1.813243597892928,"ci_lo":-2.681807162395379,"ci_hi":-0.944680033390477}];
     const logx = false;
     const refValue = 0.0;
 

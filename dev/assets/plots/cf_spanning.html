@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 50%;
     }
     .panel {
-        width: calc(50% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,13 +139,13 @@
 </head>
 <body>
 <div class="figure-title">Spanning diagnostic: spanned (loading inside span = 1.0)</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 50%;">
 <div class="panel">
-<div class="panel-title">infl (rel. gap = 2.36e-16)</div>
+<div class="panel-title">infl (rel. gap = 1.5e-16)</div>
 <div id="cfspan_412"></div>
 </div>
 <div class="panel">
-<div class="panel-title">ygap (rel. gap = 1.52e-16)</div>
+<div class="panel-title">ygap (rel. gap = 4.23e-17)</div>
 <div id="cfspan_413"></div>
 </div>
 </div>
@@ -219,22 +220,22 @@ var showTip = window.__mem_core.showTip;
 var hideTip = window.__mem_core.hideTip;
 
 (function() {
-    const data = [{"x":1,"emp":-1.3877787807814457e-17,"full":-2.7755575615628914e-17},
-{"x":2,"emp":0.0,"full":-5.444201490711347e-18},
-{"x":3,"emp":0.0,"full":-1.4945569282949985e-19},
-{"x":4,"emp":0.0,"full":3.4119877216755804e-18},
-{"x":5,"emp":0.0,"full":3.7163174509561246e-18},
-{"x":6,"emp":0.0,"full":3.934139233143469e-18},
-{"x":7,"emp":0.0,"full":6.14020099695234e-18},
-{"x":8,"emp":0.0,"full":5.3730839274268694e-18},
-{"x":9,"emp":0.0,"full":4.5018370670981265e-18},
-{"x":10,"emp":0.0,"full":3.927809236281286e-18},
-{"x":11,"emp":0.0,"full":4.083568429295896e-18},
-{"x":12,"emp":0.0,"full":3.578161732702551e-18},
-{"x":13,"emp":0.0,"full":3.4241549911585285e-18},
-{"x":14,"emp":0.0,"full":3.246497259457314e-18},
-{"x":15,"emp":0.0,"full":2.113051995732986e-18},
-{"x":16,"emp":0.0,"full":9.241513352523153e-19}];
+    const data = [{"x":1,"emp":-1.3877787807814457e-17,"full":-1.3877787807814457e-17},
+{"x":2,"emp":0.0,"full":1.1486672530468652e-18},
+{"x":3,"emp":0.0,"full":4.078247722432355e-18},
+{"x":4,"emp":0.0,"full":3.919157807554382e-18},
+{"x":5,"emp":0.0,"full":3.536419128274193e-18},
+{"x":6,"emp":0.0,"full":3.0645128131241775e-18},
+{"x":7,"emp":0.0,"full":4.206309478333023e-18},
+{"x":8,"emp":0.0,"full":4.334638941135476e-18},
+{"x":9,"emp":0.0,"full":4.26478736049512e-18},
+{"x":10,"emp":0.0,"full":3.6319862447363855e-18},
+{"x":11,"emp":0.0,"full":3.730467749185153e-18},
+{"x":12,"emp":0.0,"full":3.3787647947386515e-18},
+{"x":13,"emp":0.0,"full":3.1977691695067217e-18},
+{"x":14,"emp":0.0,"full":2.7911590527208267e-18},
+{"x":15,"emp":0.0,"full":1.890706986696973e-18},
+{"x":16,"emp":0.0,"full":1.0574434259339573e-18}];
     const series = [{"name":"Empirics only","color":"#1f77b4","key":"emp","dash":""},{"name":"Model extrapolated","color":"#ff7f0e","key":"full","dash":"5,3"}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -344,22 +345,22 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":1,"emp":0.0,"full":1.1102230246251565e-16},
-{"x":2,"emp":0.0,"full":-5.2962403548101424e-17},
-{"x":3,"emp":0.0,"full":-3.527323537288325e-17},
-{"x":4,"emp":0.0,"full":-2.6716655477098096e-18},
-{"x":5,"emp":0.0,"full":-1.7848038985590884e-18},
-{"x":6,"emp":0.0,"full":-2.1446597538393486e-17},
-{"x":7,"emp":0.0,"full":8.208479087997385e-18},
-{"x":8,"emp":0.0,"full":9.16265230999724e-18},
-{"x":9,"emp":0.0,"full":6.133059231796541e-18},
-{"x":10,"emp":0.0,"full":-1.1492350872165049e-18},
-{"x":11,"emp":0.0,"full":5.411883139203711e-18},
-{"x":12,"emp":0.0,"full":1.882482914556075e-18},
-{"x":13,"emp":0.0,"full":2.1012270429578754e-18},
-{"x":14,"emp":0.0,"full":1.1545757836816572e-17},
-{"x":15,"emp":0.0,"full":1.1981421738331941e-17},
-{"x":16,"emp":0.0,"full":9.24151335252315e-18}];
+    const data = [{"x":1,"emp":0.0,"full":0.0},
+{"x":2,"emp":0.0,"full":-2.8887979921611656e-17},
+{"x":3,"emp":0.0,"full":1.982814929535165e-18},
+{"x":4,"emp":0.0,"full":4.181028705629314e-18},
+{"x":5,"emp":0.0,"full":5.025514432812577e-18},
+{"x":6,"emp":0.0,"full":-1.0997335704255152e-17},
+{"x":7,"emp":0.0,"full":-8.498307339109886e-19},
+{"x":8,"emp":0.0,"full":1.1249945424530677e-18},
+{"x":9,"emp":0.0,"full":6.691209782060992e-18},
+{"x":10,"emp":0.0,"full":-6.117682695691569e-19},
+{"x":11,"emp":0.0,"full":3.8549060239388835e-18},
+{"x":12,"emp":0.0,"full":2.129733169269974e-18},
+{"x":13,"emp":0.0,"full":4.3452170731310274e-18},
+{"x":14,"emp":0.0,"full":9.19359135890823e-18},
+{"x":15,"emp":0.0,"full":8.438379950223557e-18},
+{"x":16,"emp":0.0,"full":1.0574434259339571e-17}];
     const series = [{"name":"Empirics only","color":"#1f77b4","key":"emp","dash":""},{"name":"Model extrapolated","color":"#ff7f0e","key":"full","dash":"5,3"}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
