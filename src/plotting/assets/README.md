@@ -11,7 +11,7 @@
 - **SHA-256**: `d6b03aefc9f6c44c7bc78713679c78c295028fa914319119e5cc4b4954855b1c`
 - **License**: ISC (Copyright 2010-2023 Mike Bostock). ISC is a permissive,
   GPL-compatible license. This file is redistributed verbatim under its own ISC
-  terms; it is **not** relicensed under this package's GPL-3.0-or-later.
+  terms; it is **not** relicensed under this package's GPL-3.0-only.
 
 ## Why vendored?
 

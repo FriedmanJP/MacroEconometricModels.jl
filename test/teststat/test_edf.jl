@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # EV-26 (#434): EDF goodness-of-fit battery — KS / Lilliefors / Cramér–von Mises
 # (W²) / Anderson–Darling (A²) / Watson (U²) against specified/estimated dists.

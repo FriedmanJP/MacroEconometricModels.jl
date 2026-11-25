@@ -1,7 +1,7 @@
 # MacroEconometricModels.jl
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # EV-30 (#438): explosive / rational-bubble detection — SADF (Phillips-Wu-Yu
 # 2011) / GSADF (Phillips-Shi-Yu 2015) with BSADF date-stamping.

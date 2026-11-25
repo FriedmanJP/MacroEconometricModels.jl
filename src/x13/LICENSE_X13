@@ -22,5 +22,5 @@ See the full license text at:
 https://www.census.gov/data/software/x13as.License_Agreement.html
 
 This Julia port is distributed as part of MacroEconometricModels.jl under
-GPL-3.0-or-later, which is compatible with the permissive US Government
+GPL-3.0-only, which is compatible with the permissive US Government
 Work license above.

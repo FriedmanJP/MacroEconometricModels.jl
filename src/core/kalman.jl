@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
 Shared Kalman filter building blocks — the correct primitives underlying the
@@ -372,6 +372,43 @@ function _solve_dare(A::AbstractMatrix, Q::AbstractMatrix,
                 K_ext, F_ext_m, res_ext = _dare_eval(P_ext, Am, Qm, Cm, Rm, Sm)
                 if isfinite(res_ext) && res_ext < res_best && _dare_is_stabilizing(P_ext, Am, K_ext, Cm)
                     P_best, K_best, F_best, res_best = P_ext, K_ext, F_ext_m, res_ext
+                end
+            end
+        end
+    end
+
+    # Positive-eigenspace R projection fallback for tall/singular-R systems
+    # (e.g., k > m invertible ABCD systems where Van Dooren's extended pencil
+    # emits 0/0 generalized eigenvalues under LAPACK dgges). Accepted strictly
+    # when the projected solution satisfies the full unprojected DARE residual
+    # and closed-loop stability (uniqueness of PSD stabilizing DARE solution).
+    if !R_ok && (P_best === nothing || res_best > T(1e-10)) && m > 1
+        eigR = eigen(Symmetric(Rm))
+        rmax = isempty(eigR.values) ? zero(T) : maximum(eigR.values)
+        if rmax > zero(T)
+            pos_idx = findall(>(rtol * rmax), eigR.values)
+            if 0 < length(pos_idx) < m
+                VR = Matrix{T}(eigR.vectors[:, pos_idx])
+                Cm_r = Matrix{T}(VR' * Cm)
+                Rm_r_raw = VR' * Rm * VR
+                Rm_r = Matrix{T}((Rm_r_raw + Rm_r_raw') / 2)
+                Sm_r = Matrix{T}(Sm * VR)
+                P_r, K_r = try
+                    p_tmp, k_tmp, _, _ = _solve_dare(Am, Qm, Cm_r, Rm_r; S=Sm_r, rcond_tol=rcond_tol)
+                    p_tmp, k_tmp
+                catch
+                    nothing, nothing
+                end
+                if P_r !== nothing
+                    K_proj = Matrix{T}(K_r * VR')
+                    F_raw = Cm * P_r * Cm' + Rm
+                    F_proj = Matrix{T}((F_raw + F_raw') / 2)
+                    R_mat = P_r - (Am * P_r * Am' + Qm - K_proj * F_proj * K_proj')
+                    res_proj = T(norm(R_mat) / max(norm(P_r), norm(Qm), one(T)))
+                    if isfinite(res_proj) && res_proj <= T(1e-8) && res_proj < res_best &&
+                       _dare_is_stabilizing(P_r, Am, K_proj, Cm)
+                        P_best, K_best, F_best, res_best = P_r, K_proj, F_proj, res_proj
+                    end
                 end
             end
         end

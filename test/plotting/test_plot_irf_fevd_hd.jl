@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # PLT-39 domain lane — structural-analysis plots (irf.jl / fevd.jl / hd.jl):
 #   IRF (VAR / Bayesian / LP / StructuralLP), FEVD (VAR / Bayesian / LP),

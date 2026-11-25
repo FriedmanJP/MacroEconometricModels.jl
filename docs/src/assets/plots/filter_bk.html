@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 100%;
     }
     .panel {
-        width: calc(100% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,7 +139,7 @@
 </head>
 <body>
 <div class="figure-title">Baxter-King Band-Pass Filter ([6, 32], K=12)</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 100%;">
 <div class="panel">
 <div class="panel-title">Trend-Cycle Decomposition</div>
 <div id="filt_tc_94"></div>

@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
     MacroEconometricModels
@@ -78,7 +78,8 @@ import NonlinearSolve
 import Optim
 import JLD2
 import JuMP
-import Ipopt
+import MadNLP
+import NLPModels
 using Logging
 import Tables
 
@@ -363,7 +364,7 @@ include("dsge/anderson.jl")
 include("dsge/vfi_smolyak.jl")   # Smolyak grid + collocation interpolant for VFI (#817)
 include("dsge/vfi.jl")
 include("dsge/perfect_foresight.jl")
-include("dsge/jump_solvers.jl")   # JuMP+Ipopt constrained solvers (full deps, #461)
+include("dsge/madnlp_solvers.jl") # Built-in GPL-3.0-compatible MadNLP constrained solvers (#930)
 include("dsge/occbin.jl")
 
 # GMM

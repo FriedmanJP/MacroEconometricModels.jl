@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # PrecompileTools workload (#253): pay the JIT/inference cost for the most common entry
 # points at PRECOMPILE time so users' first-call latency (TTFX) drops. Deliberately limited

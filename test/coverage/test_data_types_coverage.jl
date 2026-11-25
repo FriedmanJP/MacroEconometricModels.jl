@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # Coverage tests targeting 9 source files with low coverage:
 #   src/data/convert.jl, src/data/types.jl, src/data/filter.jl, src/data/transform.jl,

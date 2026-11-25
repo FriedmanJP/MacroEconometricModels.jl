@@ -251,7 +251,7 @@ bound = variable_bound(:R, lower=0.0)
 spec = compute_steady_state(spec; constraints=[bound])
 ```
 
-For nonlinear inequality constraints, NLopt.jl `LD_SLSQP` is the default solver --- no additional packages required:
+For nonlinear inequality constraints, the built-in sparse interior-point solver `MadNLP.jl` (`solver=:madnlp`) is the default --- no additional packages required (`NLopt.jl` `LD_SLSQP` is also built in via `solver=:nlopt`):
 
 ```julia
 # Debt-to-GDP ceiling: fn(y, ...) <= 0
@@ -263,19 +263,20 @@ debt_limit = nonlinear_constraint(
 spec = compute_steady_state(spec; constraints=[bound, debt_limit])
 ```
 
-For large-scale problems or complementarity formulations, JuMP-based backends provide additional power:
+Optional JuMP-based weak-dependency backends remain available for private local sessions:
 
 ```julia
-# Ipopt (NLP): handles general nonlinear constraints (JuMP + Ipopt are built in)
-spec = compute_steady_state(spec; constraints=[bound], solver=:ipopt)
+# Ipopt (NLP): optional weak dependency (EPL-2.0 / MUMPS CeCILL-C; not bundled by default)
+import Ipopt
+spec = compute_steady_state(spec; constraints=[bound, debt_limit], solver=:ipopt)
 
-# PATH (MCP): natural for complementarity problems (e.g., ZLB); optional dependency
+# PATH (MCP): natural for complementarity problems (e.g., ZLB); optional proprietary binary
 import PATHSolver
 spec = compute_steady_state(spec; constraints=[bound], solver=:path)
 ```
 
 !!! note "Solver Selection Guide"
-    **Built-in solvers** (no extra packages): `:nonlinearsolve` for unconstrained, `:optim` for box constraints, `:nlopt` for nonlinear inequality constraints, and `:ipopt` (JuMP + Ipopt) for large-scale NLP. **Optional:** `:path` for complementarity problems requires the PATHSolver package. The solver is auto-detected from constraint types --- override with the `solver` keyword. For full details, see [Constraints](@ref dsge_constraints).
+    **Built-in GPL-compatible solvers** (no extra packages): `:nonlinearsolve` for unconstrained, `:optim` for box constraints, `:madnlp` (sparse interior-point) for general nonlinear inequality constraints, and `:nlopt` (`LD_SLSQP`) for dense NLP. **Optional weak dependencies:** `:ipopt` (EPL-2.0 / MUMPS CeCILL-C; requires `import Ipopt`) and `:path` (proprietary MCP binary; requires `import PATHSolver`). The solver is auto-detected from constraint types --- override with the `solver` keyword. For full details, see [Constraints](@ref dsge_constraints).
 
 ---
 
@@ -376,7 +377,7 @@ The estimation pipeline is validated separately in `test/dynare_replication/esti
 
 4. **Numerical steady state converges to wrong equilibrium**: For models with multiple equilibria, the default initial guess (vector of ones) may converge to an economically irrelevant solution. Provide `initial_guess` close to the desired equilibrium, or use the analytical `steady_state` block.
 
-5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl. Nonlinear inequality constraints use the built-in JuMP + Ipopt backend (`solver=:ipopt`). PATH MCP requires the optional PATHSolver package (`import PATHSolver`).
+5. **Constrained steady state**: Box constraints (variable bounds) are handled by NonlinearSolve.jl (with automatic Optim.jl escalation when binding). Nonlinear inequality constraints use the built-in GPL-compatible MadNLP sparse interior-point backend (`solver=:madnlp`, default) or `solver=:nlopt`. Optional weak-dependency backends `:ipopt` (`import Ipopt`) and `:path` (`import PATHSolver`) remain available for local use.
 
 6. **Programmatic closures cannot be saved.** A `ModelSpec` whose residuals were written as Julia functions without `NamedEquation.expr` raises `SerializationError` at `save_model`. Use `@dsge` (or keep the expressions) so the loader can recompile. `to_spec(::BlanchardOLG)` is the same trap --- persist the [`BlanchardOLG`](@ref) and rebuild the spec after load.
 

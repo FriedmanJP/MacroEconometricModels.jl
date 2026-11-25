@@ -1,6 +1,6 @@
 # [Constraints and Occasionally Binding Models](@id dsge_constraints)
 
-Standard linearized DSGE models assume all equilibrium conditions hold with equality at all times. Occasionally binding constraints --- such as the zero lower bound on nominal interest rates, borrowing limits, or irreversible investment --- require specialized solution methods. This page covers three approaches: deterministic perfect foresight with built-in constrained solvers (Optim.jl, NLopt.jl, JuMP+Ipopt), the optional PATH complementarity backend, and the piecewise-linear OccBin algorithm (Guerrieri & Iacoviello 2015). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
+Standard linearized DSGE models assume all equilibrium conditions hold with equality at all times. Occasionally binding constraints --- such as the zero lower bound on nominal interest rates, borrowing limits, or irreversible investment --- require specialized solution methods. This page covers three approaches: deterministic perfect foresight with built-in constrained solvers (Optim.jl, NLopt.jl, MadNLP.jl), optional Ipopt (NLP) and PATH (MCP) weak-dependency backends, and the piecewise-linear OccBin algorithm (Guerrieri & Iacoviello 2015). For model specification and linearization, see [DSGE Models](@ref dsge_page). For first-order solvers, see [Linear Solvers](@ref dsge_linear).
 
 
 ```@setup dsge_constraints
@@ -140,7 +140,7 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 | `tol` | `Real` | `default_abstol(Float64)` = ``10^{-8}`` | Convergence tolerance (max absolute residual) |
 | `abstol` | `Real` | `tol` | Absolute residual gate passed to the backend; overrides `tol` for the convergence test |
 | `constraints` | `Vector` | `DSGEConstraint[]` | Variable bounds and nonlinear constraints |
-| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve`, `:nlopt`, `:ipopt`, or `:path`; auto-detected when `nothing` |
+| `solver` | `Union{Nothing, Symbol}` | `nothing` | `:nonlinearsolve`, `:nlopt`, `:madnlp`, or optional `:ipopt` / `:path`; auto-detected when `nothing` |
 | `algorithm` | `Any` | `nothing` → `NewtonRaphson()` | Algorithm for the chosen backend (e.g. `NonlinearSolve.TrustRegion()`) |
 | `sparsity` | `Symbol` | `:auto` | Intra-period Jacobian pattern (`:auto` probes and colors; `:dense` fills every block) |
 
@@ -160,17 +160,17 @@ Both routes return the identical path — `solve(spec; method=:perfect_foresight
 
 ## Constrained Perfect Foresight
 
-When variable bounds or nonlinear inequality constraints are present, the solver uses a five-tier hierarchy. Tiers 1--5 require no additional packages (JuMP + Ipopt are built in); the PATH MCP solver is an optional add-on.
+When variable bounds or nonlinear inequality constraints are present, the solver uses a five-tier hierarchy. Tiers 1--4 plus `:nlopt` are built-in GPL-3.0-compatible solvers requiring no additional packages; Ipopt and PATH are optional weak dependencies.
 
 | Tier | Backend | Handles | Activation |
 |------|---------|---------|------------|
 | 1 | NonlinearSolve.jl | Unconstrained, non-binding box | Default |
 | 2 | Projected Newton | Box-constrained PF | Auto-escalation when bounds violated |
 | 3 | Optim.jl `Fminbox(LBFGS())` | Box-constrained SS | Auto-escalation when SS bounds violated |
-| 4 | JuMP + Ipopt | Nonlinear inequality constraints | Auto-selected for `NonlinearConstraint` |
-| 5 | NLopt.jl `LD_SLSQP` / JuMP + PATH | Dense NLP / MCP | Explicit `solver=:nlopt` or `:path` |
+| 4 | MadNLP.jl (sparse IPM) | Large-scale nonlinear inequality constraints | Auto-selected for `NonlinearConstraint` |
+| 5 | NLopt.jl `LD_SLSQP` / optional JuMP + Ipopt or PATH | Dense NLP / optional NLP or MCP | Explicit `solver=:nlopt`, `:ipopt`, or `:path` |
 
-The backend is auto-detected from the constraint types. Pure `VariableBound` constraints start with NonlinearSolve and escalate to projected Newton (perfect foresight) or Optim.jl (steady state) if the bounds are violated. Any `NonlinearConstraint` in the list selects Ipopt, because JuMP and Ipopt are hard dependencies and are always available; NLopt is reached only by asking for it explicitly. Override any of this with the `solver` keyword.
+The backend is auto-detected from the constraint types. Pure `VariableBound` constraints start with NonlinearSolve and escalate to projected Newton (perfect foresight) or Optim.jl (steady state) if the bounds are violated. Any `NonlinearConstraint` in the list selects `:madnlp` (the built-in MIT-licensed sparse interior-point solver using `LDLFactorizations` and exact `ForwardDiff` block-tridiagonal Jacobians and block-pentadiagonal Hessians); `:nlopt` is reached by asking for it explicitly, and `:ipopt` / `:path` are optional weak-dependency extensions. Override any of this with the `solver` keyword.
 
 ### Box Constraints (Built-in)
 
@@ -187,11 +187,11 @@ pf = perfect_foresight(spec; shock_path=shocks, constraints=[zlb])
 The unconstrained rate bottoms out at ``-0.038``; with the bound in place the path sits exactly on ``-0.005`` through the binding quarters and the solver reports convergence. A binding box constraint is a complementarity problem — in the binding periods the bound replaces the equation in that variable's slot — and the escalation solves it with a semismooth (min-map) Newton step: at interior points the residual must equal zero, at a binding lower bound the residual must be non-negative, and at a binding upper bound the residual must be non-positive.
 
 !!! warning "Get the bound right, and check that it converged"
-    Two failures are easy to hit here. First, a bound stated in levels is wrong for a model written in deviations: this page's New Keynesian block has an all-zero steady state, so `lower=0.0` on `R` says "the policy rate may never fall at all" rather than "the policy rate may not go below zero". Second, always read `pf.converged`: when the NCP iteration exhausts `max_iter` the escalation throws rather than returning a spurious path. `solver=:ipopt` is not the escape hatch for a binding box constraint — the Ipopt formulation holds every model equation as a hard equality alongside the bound, which is infeasible precisely when the bound binds, and Ipopt reports local infeasibility. Raise `max_iter`, pose the problem explicitly as an MCP with `solver=:path`, or use OccBin when the constraint is occasionally binding rather than always.
+    Two failures are easy to hit here. First, a bound stated in levels is wrong for a model written in deviations: this page's New Keynesian block has an all-zero steady state, so `lower=0.0` on `R` says "the policy rate may never fall at all" rather than "the policy rate may not go below zero". Second, always read `pf.converged`: when the NCP iteration exhausts `max_iter` the escalation throws rather than returning a spurious path. `solver=:madnlp` and `solver=:ipopt` are not escape hatches for a binding box constraint — the NLP formulation holds every model equation as a hard equality alongside the bound, which is infeasible precisely when the bound binds, and the solver reports local infeasibility. Raise `max_iter`, pose the problem explicitly as an MCP with `solver=:path`, or use OccBin when the constraint is occasionally binding rather than always.
 
 ### Nonlinear Constraints
 
-For general nonlinear inequality constraints the auto-selected backend is Ipopt. NLopt's `LD_SLSQP` remains available through `solver=:nlopt`. Neither needs an extra install:
+For general nonlinear inequality constraints the auto-selected backend is `MadNLP.jl` (`solver=:madnlp`), a pure-Julia sparse interior-point solver implementing the Wächter–Biegler filter line-search algorithm with exact sparse `ForwardDiff` derivatives. NLopt's `LD_SLSQP` remains available through `solver=:nlopt`. Neither needs an extra install:
 
 ```julia
 # Variable bound + nonlinear constraint
@@ -207,15 +207,17 @@ pf = perfect_foresight(spec; shock_path=shocks,
 
 The `nonlinear_constraint` function takes a closure with the standard residual signature `(y, y_lag, y_lead, e, theta) -> scalar`, and the constraint is satisfied when the return value is ``\leq 0``. The closure is validated once at setup by calling it on a dummy argument, so a signature mistake surfaces immediately rather than inside the optimizer. For perfect foresight the problem is posed as a feasibility problem with the model equations as equality constraints and the user's closures as inequalities.
 
-If you route this to NLopt with `solver=:nlopt`, note that SLSQP is a dense algorithm: on problems where ``T \times n`` exceeds 1000 it warns and scales badly, and `solver=:ipopt` is the better choice.
+If you route this to NLopt with `solver=:nlopt`, note that SLSQP is a dense algorithm: on problems where ``T \times n`` exceeds 1000 it warns and scales badly, and `solver=:madnlp` (default) is the better choice.
 
-### Advanced: Ipopt and PATH Backends
+### Optional Weak-Dependency Backends: Ipopt and PATH
 
-For large-scale problems or complementarity formulations, JuMP-based backends provide additional power. JuMP + Ipopt are built-in dependencies; the PATH solver is an optional weak dependency (a proprietary binary):
+For private local workflows that explicitly require Ipopt or mixed complementarity (MCP), two optional JuMP-based weak-dependency extensions are supported. Both are excluded from default `[deps]` for `GPL-3.0-only` license compliance (`Ipopt_jll` is EPL-2.0 without active Secondary Licenses and links CeCILL-C `MUMPS_seq_jll`; `PATHSolver` is a proprietary binary):
 
-**Ipopt** (Interior Point Optimizer) handles general NLP problems. It is more robust than NLopt for large systems and needs no extra install:
+**Ipopt** (optional NLP extension) is activated by loading `import Ipopt` in your local Julia session:
 
 ```julia
+import Ipopt
+
 pf = perfect_foresight(spec; shock_path=shocks,
                         constraints=[zlb, debt_limit], solver=:ipopt)
 ```
@@ -240,7 +242,7 @@ pf = perfect_foresight(spec; shock_path=shocks,
                         constraints=[zlb], solver=:path)
 ```
 
-Everything except PATH ships with the package. `:path` requires the PATHSolver weak dependency, a proprietary binary, and is worth the install only when the complementarity formulation is the natural one — a ZLB, where the Taylor rule genuinely *is* replaced by ``R_t = 0`` rather than merely bounded.
+All default constrained solvers (`:nonlinearsolve`, projected Newton, `:optim`, `:madnlp`, and `:nlopt`) ship with the package under GPL-3.0-compatible licenses. `:ipopt` and `:path` are opt-in weak dependencies for local use only.
 
 ### Constraint Constructors
 
@@ -459,7 +461,7 @@ The unconstrained model is determinate, and the two IRFs diverge by up to 12.14 
 
 1. **A bound stated in the wrong units**: `variable_bound` and `parse_constraint` both take the bound in the same units as the model's variables. In a model written in deviations with an all-zero steady state, `lower=0.0` on a rate means "may never fall below steady state", not "may not go negative". Check the steady state before writing the bound.
 
-2. **Projected Newton failing to converge**: when the semismooth iteration cannot reach the NCP tolerance it throws rather than returning a spurious path. Raise `max_iter`, or pose the problem explicitly as an MCP with `solver=:path`. `solver=:ipopt` is not the escape hatch: it holds all model equations as hard equalities and reports infeasibility exactly when a bound binds. If the constraint is *occasionally* binding rather than always, OccBin is the better tool.
+2. **Projected Newton failing to converge**: when the semismooth iteration cannot reach the NCP tolerance it throws rather than returning a spurious path. Raise `max_iter`, or pose the problem explicitly as an MCP with `solver=:path`. `solver=:madnlp` and `solver=:ipopt` are not escape hatches: they hold all model equations as hard equalities and report infeasibility exactly when a bound binds. If the constraint is *occasionally* binding rather than always, OccBin is the better tool.
 
 3. **Non-convergence in perfect foresight**: increase `T_periods` or reduce the shock magnitude. The terminal condition assumes a return to steady state, so the horizon must be long enough for the economy to get back.
 

@@ -19,11 +19,12 @@
 using MacroEconometricModels, Random
 Random.seed!(42)
 fred = load_example(:fred_md)
-# FRED-MD "S&P 500", tcode 5 = monthly log returns of the composite index.
-spx = filter(isfinite, to_vector(apply_tcode(fred[:, ["S&P 500"]])))
+# FRED-MD "IPCONGD" (Industrial Production: Consumer Goods, FRB G.17),
+# tcode 5 = monthly log growth.
+ret = filter(isfinite, to_vector(apply_tcode(fred[:, ["IPCONGD"]])))
 ```
 
-Every example below runs on `spx`, the 803 monthly log returns of the S&P 500 composite index in the FRED-MD panel (McCracken & Ng 2016) — a series with a sample standard deviation of 3.6% per month, a worst month of ``-22.8``%, and the volatility clustering these models exist to describe.
+Every example below runs on `ret`, the 803 monthly log-growth observations of US consumer-goods industrial production (`IPCONGD`, Federal Reserve G.17) in the FRED-MD panel (McCracken & Ng 2016) — a series with a sample standard deviation of 1.05% per month, a worst monthly drop of ``-12.11``%, and the volatility clustering these models exist to describe.
 
 ## Quick Start
 
@@ -31,7 +32,7 @@ Every example below runs on `spx`, the 803 monthly log returns of the S&P 500 co
 
 ```@example volatility
 # ARCH(3) — Engle (1982)
-arch = estimate_arch(spx, 3)
+arch = estimate_arch(ret, 3)
 report(arch)
 ```
 
@@ -39,7 +40,7 @@ report(arch)
 
 ```@example volatility
 # GARCH(1,1) — the workhorse specification
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 report(garch)
 ```
 
@@ -47,13 +48,13 @@ report(garch)
 
 ```@example volatility
 # EGARCH captures leverage without positivity constraints
-egarch = estimate_egarch(spx, 1, 1)
+egarch = estimate_egarch(ret, 1, 1)
 report(egarch)
 ```
 
 ```@example volatility
 # GJR-GARCH captures leverage via an indicator function
-gjr = estimate_gjr_garch(spx, 1, 1)
+gjr = estimate_gjr_garch(ret, 1, 1)
 report(gjr)
 ```
 
@@ -61,18 +62,18 @@ report(gjr)
 
 ```@example volatility
 # SV via Kim-Shephard-Chib (1998) Gibbs sampler
-sv = estimate_sv(spx; n_samples=2000, burnin=1000)
+sv = estimate_sv(ret; n_samples=2000, burnin=1000)
 report(sv)
 ```
 
 **Recipe 5: ARCH-LM diagnostics**
 
 ```@example volatility
-# Raw returns: H₀ of no ARCH effects is rejected
-raw = arch_lm_test(spx, 5)
+# Raw growth rates: H₀ of no ARCH effects is rejected
+raw = arch_lm_test(ret, 5)
 
 # GARCH standardized residuals: H₀ is no longer rejected
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 resid = arch_lm_test(garch, 5)
 
 (raw_p = round(raw[2], digits=4), residual_p = round(resid[2], digits=4))
@@ -81,7 +82,7 @@ resid = arch_lm_test(garch, 5)
 **Recipe 6: Volatility forecasting**
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 fc = forecast(garch, 20; conf_level=0.95)
 report(fc)
 ```
@@ -125,11 +126,11 @@ The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i < 1``, with 
 
 ```@example volatility
 # Estimate ARCH(3) model
-arch = estimate_arch(spx, 3)
+arch = estimate_arch(ret, 3)
 report(arch)
 ```
 
-All three ARCH coefficients are positive and ``\hat\alpha_1 = 0.176`` and ``\hat\alpha_3 = 0.204`` are significant at 1%: a large return three months ago still raises this month's variance, which is exactly the clustering a homoskedastic model cannot represent. The persistence ``\sum\hat\alpha_i = 0.471`` implies an unconditional variance ``\hat\omega/(1-\sum\hat\alpha_i) = 0.0014``, or 3.7% per month — within a rounding of the sample standard deviation, as it should be for a correctly specified model. That persistence is also the ARCH model's weakness: reproducing the observed decay of volatility with lagged squared returns alone needs many lags, which is what GARCH fixes with a single ``\beta``.
+The first two ARCH coefficients are positive and statistically significant (``\hat\alpha_1 = 0.379`` at 1% and ``\hat\alpha_2 = 0.081`` at 5%), while ``\hat\alpha_3`` hits the zero boundary: a large production shock two months ago still raises this month's variance, capturing clustering a homoskedastic model misses. The persistence ``\sum\hat\alpha_i = 0.460`` implies an unconditional variance ``\hat\omega/(1-\sum\hat\alpha_i) = 0.000089``, or 0.94% per month — close to the sample standard deviation. Reproducing smooth volatility decay with lagged squared innovations alone requires additional lags, which GARCH summarizes with a single ``\beta``.
 
 ### ARCHModel Return Values
 
@@ -178,7 +179,7 @@ The process is covariance stationary when ``\sum_{i=1}^{q} \alpha_i + \sum_{j=1}
 
 ```@example volatility
 # Estimate GARCH(1,1) — the workhorse specification
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 report(garch)
 ```
 
@@ -198,7 +199,7 @@ report(garch)
     inverse-observed-information errors (valid only under correct Gaussian specification):
     `stderror(garch; cov_type=:hessian)`.
 
-The GARCH(1,1) puts ``\hat\alpha_1 = 0.161`` on last month's squared shock and ``\hat\beta_1 = 0.707`` on last month's variance, both significant against Bollerslev-Wooldridge standard errors. Their sum, the persistence ``\hat\alpha_1 + \hat\beta_1 = 0.869``, is below one, so the process is covariance stationary and reverts to an unconditional variance of 0.0014 — a 3.7% monthly standard deviation. The implied half-life is 4.9 months: a volatility shock has decayed halfway back to normal after roughly a quarter and a half. Two parameters reproduce what took three ARCH lags, and the log-likelihood rises from 1563.7 to 1565.8 while the BIC improves from ``-3094.0`` to ``-3104.9``.
+The GARCH(1,1) puts ``\hat\alpha_1 = 0.384`` (``p < 0.001``) on last month's squared shock and ``\hat\beta_1 = 0.187`` on last month's variance against Bollerslev-Wooldridge standard errors. Their sum, the persistence ``\hat\alpha_1 + \hat\beta_1 = 0.570``, sits well below one, so the process is covariance stationary and reverts to an unconditional variance of 0.000090 — a 0.95% monthly standard deviation. The implied half-life is 1.23 months: a volatility shock decays halfway back to normal in just over a month. Two variance parameters match the ARCH(3) log-likelihood (2677.0 vs. 2677.1) while improving BIC from ``-5320.8`` to ``-5327.2``.
 
 ### EGARCH(p,q)
 
@@ -221,11 +222,11 @@ where:
 The stationarity condition is ``\sum_{j=1}^{p} \beta_j < 1`` (in log-variance), and the unconditional variance is ``\sigma^2 = \exp(\omega / (1 - \sum \beta_j))``.
 
 ```@example volatility
-egarch = estimate_egarch(spx, 1, 1)
+egarch = estimate_egarch(ret, 1, 1)
 report(egarch)
 ```
 
-The leverage parameter is ``\hat\gamma_1 = -0.189`` with a standard error of 0.069, so the asymmetry is significant at 1%: a one-standard-deviation *fall* raises next month's log-variance by ``0.189`` more than a rise of the same size. Log-variance persistence is ``\hat\beta_1 = 0.829``. The AIC of ``-3165.0`` is the best of the three symmetric-versus-asymmetric fits here, ahead of GARCH's ``-3123.6`` and GJR's ``-3150.4`` — on monthly equity returns the sign of the shock carries information the symmetric model discards. The log-variance formulation also leaves the parameters unconstrained while guaranteeing ``\sigma^2_t > 0``.
+The asymmetry parameter is ``\hat\gamma_1 = -0.164`` with a standard error of 0.051 (``p = 0.0013``), so negative output shocks raise next month's log-variance significantly more than positive shocks of equal size. Log-variance persistence is ``\hat\beta_1 = 0.705``. The AIC drops to ``-5353.9`` from symmetric GARCH's ``-5346.0`` (just behind GJR-GARCH's ``-5355.8``), showing that shock sign carries information the symmetric model discards. The log-variance formulation also leaves the parameters unconstrained while guaranteeing ``\sigma^2_t > 0``.
 
 ### GJR-GARCH(p,q)
 
@@ -249,20 +250,20 @@ where:
 When ``\gamma_i > 0``, negative shocks have a larger impact on future variance than positive shocks of equal magnitude. This captures the **leverage effect** first documented by Black (1976): stock price declines increase financial leverage, which in turn increases equity volatility. The stationarity condition is ``\sum \alpha_i + \sum \gamma_i / 2 + \sum \beta_j < 1``, and the unconditional variance is ``\sigma^2 = \omega / (1 - \sum \alpha_i - \sum \gamma_i / 2 - \sum \beta_j)``.
 
 ```@example volatility
-gjr = estimate_gjr_garch(spx, 1, 1)
+gjr = estimate_gjr_garch(ret, 1, 1)
 report(gjr)
 ```
 
-``\hat\gamma_1 = 0.279`` with a standard error of 0.113 rejects ``\gamma_1 = 0`` at 5%, confirming the leverage effect from the threshold side. The symmetric ARCH coefficient is driven to the boundary ``\hat\alpha_1 = 0`` — a positive shock has *no* measurable effect on next month's variance once the negative-shock indicator is in the model, and the entire news impact runs through ``\gamma_1``. Persistence, ``\hat\alpha_1 + \hat\gamma_1/2 + \hat\beta_1 = 0.803``, again leaves the process stationary. GJR-GARCH nests standard GARCH at ``\gamma_i = 0``.
+``\hat\gamma_1 = 0.370`` with a standard error of 0.127 (``p = 0.0037``) rejects ``\gamma_1 = 0`` at 1%, confirming asymmetric volatility dynamics from the threshold side. The symmetric ARCH coefficient shrinks to ``\hat\alpha_1 = 0.133`` (not significant alone): most of the news impact enters through negative contractions. Persistence, ``\hat\alpha_1 + \hat\gamma_1/2 + \hat\beta_1 = 0.677``, leaves the process stationary, and AIC (``-5355.8``) is the best of the three basic GARCH-family specifications. GJR-GARCH nests standard GARCH at ``\gamma_i = 0``.
 
 ### News Impact Curve
 
 The **news impact curve** (NIC) shows how a shock ``\varepsilon_{t-1}`` maps to the next-period conditional variance ``\sigma^2_t``, holding all other information constant at the unconditional level. For symmetric models (ARCH, GARCH), the NIC is a parabola centered at zero. For asymmetric models (EGARCH, GJR-GARCH), the NIC is steeper for negative shocks.
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
-egarch = estimate_egarch(spx, 1, 1)
-gjr = estimate_gjr_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
+egarch = estimate_egarch(ret, 1, 1)
+gjr = estimate_gjr_garch(ret, 1, 1)
 
 nic_garch  = news_impact_curve(garch)
 nic_egarch = news_impact_curve(egarch; range=(-5.0, 5.0), n_points=400)
@@ -274,7 +275,7 @@ lo, hi = argmin(abs.(nic_garch.shocks .+ 2)), argmin(abs.(nic_garch.shocks .- 2)
  gjr_ratio   = round(nic_gjr.variance[lo]   / nic_gjr.variance[hi],   digits=3))
 ```
 
-The symmetric GARCH assigns a ratio of exactly 1.000 to a ``-2\sigma`` shock against a ``+2\sigma`` shock — its NIC is a parabola centred at zero, so the sign is discarded by construction. The GJR curve puts the same two shocks at 0.0041 and 0.0010, a ratio of 3.9: a two-standard-deviation drop implies almost four times the next-month variance of an identically sized rally. The EGARCH curve reaches a comparable 3.1. When the two ratios come out near 1, the leverage effect is negligible and the simpler symmetric model suffices. `news_impact_curve` returns a named tuple with `shocks` (the grid of ``\varepsilon_{t-1}``) and `variance` (the implied ``\sigma^2_t``); `range` and `n_points` default to `(-3.0, 3.0)` and `200`.
+The symmetric GARCH assigns a ratio of exactly 1.000 to a ``-2\sigma`` shock against a ``+2\sigma`` shock — its NIC is a parabola centered at zero, so the sign is discarded by construction. The GJR curve puts the same two shocks at 0.000469 and 0.000169, a ratio of 2.77: a two-standard-deviation contraction implies nearly three times the next-month variance of an identically sized expansion. The EGARCH curve implies an even steeper ratio of 5.17 under its exponential link. When both ratios sit near 1, asymmetry is negligible and the symmetric model suffices. `news_impact_curve` returns a named tuple with `shocks` (the grid of ``\varepsilon_{t-1}``) and `variance` (the implied ``\sigma^2_t``); `range` and `n_points` default to `(-3.0, 3.0)` and `200`.
 
 ```julia
 plot_result(garch; view=:news_impact)
@@ -289,7 +290,7 @@ plot_result(garch; view=:news_impact)
 ARCH, GARCH, EGARCH, and GJR-GARCH models produce a three-panel diagnostic figure via `plot_result()`: return series, conditional volatility, and standardized residuals with ``\pm 2`` standard deviation bounds.
 
 ```julia
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 plot_result(garch)
 ```
 
@@ -404,8 +405,8 @@ where:
 Note ``\pi(\nu-2)`` rather than ``\pi\nu`` — the Jacobian of the standardization is already folded in.
 
 ```@example volatility
-mg_n = estimate_garch(spx, 1, 1)
-mg_t = estimate_garch(spx, 1, 1; dist=:student)
+mg_n = estimate_garch(ret, 1, 1)
+mg_t = estimate_garch(ret, 1, 1; dist=:student)
 
 (loglik_normal = round(mg_n.loglik; digits=2),
  loglik_student = round(mg_t.loglik; digits=2),
@@ -413,7 +414,7 @@ mg_t = estimate_garch(spx, 1, 1; dist=:student)
  aic_prefers_t = mg_t.aic < mg_n.aic)
 ```
 
-On the S&P 500 returns the estimated shape is ``\hat\nu = 4.77`` — fourth moments only just finite, and far from the ``\nu \to \infty`` Gaussian limit. The log-likelihood rises from 1565.81 to 1612.51 for that one extra parameter, and AIC falls from ``-3123.62`` to ``-3215.02``. The shape parameter is charged to AIC and BIC like any other, so the improvement is not free; here it is overwhelming, which is the usual verdict on monthly equity returns. Note that the GARCH coefficients themselves barely move (``\hat\alpha_1 = 0.148``, ``\hat\beta_1 = 0.736`` against 0.161 and 0.707): the Gaussian QMLE was consistent all along, and what the t buys is the tail probability, not the variance path.
+On the `IPCONGD` growth series the estimated shape is ``\hat\nu = 5.87`` — far from the ``\nu \to \infty`` Gaussian limit. The log-likelihood rises from 2677.00 to 2700.42 for that single extra parameter, and AIC falls from ``-5346.00`` to ``-5390.85``. The shape parameter is charged to AIC and BIC like any other, so the gain reflects genuinely heavy tails in monthly macroeconomic growth. The GARCH dynamics themselves move modestly (``\hat\alpha_1 = 0.347``, ``\hat\beta_1 = 0.132`` against 0.384 and 0.187): the Gaussian QMLE remains consistent for the variance path, while the Student-t likelihood improves tail probabilities.
 
 `dist` is available on `estimate_garch`, `estimate_egarch` and `estimate_gjr_garch`. The default `:normal` is unchanged in every respect.
 
@@ -663,11 +664,11 @@ where:
 Persistence is unity by construction, the unconditional variance diverges, and multi-step variance forecasts grow linearly. The RiskMetrics EWMA is the special case ``\omega = 0``.
 
 ```@example volatility
-ig = estimate_igarch(spx, 1, 1)
+ig = estimate_igarch(ret, 1, 1)
 report(ig)
 ```
 
-The constraint binds: ``\hat\alpha_1 = 0.225`` and ``\hat\beta_1 = 0.775`` sum to one by construction, so only one of them is a free parameter. Imposing that restriction on a series whose unrestricted persistence is 0.869 costs 6.6 log-likelihood points and leaves AIC at ``-3112.5`` against the free GARCH's ``-3123.6`` — the data reject the unit root in variance here, which is the usual outcome for monthly returns and the reason IGARCH is a risk-management convention rather than a description.
+The constraint binds: ``\hat\alpha_1 = 0.651`` and ``\hat\beta_1 = 0.349`` sum to one by construction, leaving only one free variance parameter. Imposing that unit root on a series whose unrestricted persistence is 0.570 costs 12.3 log-likelihood points and worsens AIC to ``-5323.4`` against the free GARCH's ``-5346.0`` — the data strongly reject a unit root in conditional variance.
 
 ```@example volatility
 (persistence = persistence(ig),                # exactly 1.0 by construction
@@ -697,14 +698,15 @@ where:
 - ``\varphi`` captures the impact of volatility surprise ``\varepsilon^2_{t-1} - \sigma^2_{t-1}`` on the trend
 - ``\varepsilon_{t-1}`` is the innovation at time ``t-1``
 
-That identification condition is not a formality. On the full 803-month sample the MLE drives ``\varphi`` to zero and ``\rho`` onto ``\alpha + \beta``, the two components become indistinguishable, and the fit collapses onto the GARCH(1,1) solution with `converged` reported as `false` and unusable standard errors. Separating a slow trend from a fast cycle needs a window in which the two actually move at different speeds, so fit the last 500 months:
+That identification condition is not a formality. On a low-persistence series like `ret` (`IPCONGD`), the MLE pushes ``\rho`` onto ``\alpha + \beta``, the two components become indistinguishable, and the fit collapses onto the GARCH(1,1) solution with `converged` reported as `false`. Separating a slow trend from a fast cycle requires a series with higher overall volatility persistence — headline industrial production (`INDPRO`) over its last 500 months satisfies the condition cleanly:
 
 ```@example volatility
-cg = estimate_cgarch(spx[end-499:end])
+indpro = filter(isfinite, to_vector(apply_tcode(fred[:, ["INDPRO"]])))
+cg = estimate_cgarch(indpro[end-499:end])
 report(cg)
 ```
 
-Here the split identifies: the permanent component reverts with ``\hat\rho = 0.826`` while the transitory cycle carries ``\hat\alpha + \hat\beta = 0.543``, comfortably below it, and the permanent shock loading ``\hat\varphi = 0.234`` is significant at 10%. The long-run variance ``\hat\omega = 0.0015`` matches the sample variance of the window. `component_variances` returns the permanent, transitory, and total conditional-variance series, and the three reconcile exactly:
+Here the split identifies cleanly: the permanent component reverts slowly with ``\hat\rho = 0.896`` while the transitory cycle carries ``\hat\alpha + \hat\beta = 0.677``, well below it, and the permanent shock loading is ``\hat\varphi = 0.261``. `component_variances` returns the permanent, transitory, and total conditional-variance series, and the three reconcile to machine precision:
 
 ```@example volatility
 comp = component_variances(cg)
@@ -733,17 +735,17 @@ where:
 APARCH nests the standard family exactly: ``(\delta=2, \gamma=0)`` is GARCH, ``(\delta=2, \gamma \ne 0)`` is GJR-GARCH, and ``(\delta=1, \gamma \ne 0)`` is Zakoïan's TARCH. Pin parameters with the `fix_delta` / `fix_gamma` keywords.
 
 ```@example volatility
-ap = estimate_aparch(spx, 1, 1)
+ap = estimate_aparch(ret, 1, 1)
 report(ap)
 ```
 
-The free power comes out at ``\hat\delta = 0.143``, nowhere near the ``\delta = 2`` that GARCH imposes: the S&P returns are better described by a recursion in ``\sigma^{0.14}_t`` than in the variance itself, which is the Ding-Granger-Engle finding that absolute returns raised to a low power show the strongest autocorrelation. The leverage term ``\hat\gamma_1 = 0.863`` is close to its upper bound of one, again pointing at a strongly one-sided news impact. With AIC ``-3176.9`` this is the best-fitting single-regime model on the page, ahead of EGARCH's ``-3165.0``. Pinning both extra parameters reproduces the GARCH likelihood to twelve decimal places, which is the nesting claim made concrete:
+The free power comes out at ``\hat\delta = 1.836`` (SE 0.583), within one standard error of the ``\delta = 2`` variance recursion that GARCH and GJR-GARCH impose, while ``\hat\gamma_1 = 0.338`` (``p = 0.066``) points to the same downside asymmetry. Because the estimated power sits close to two, APARCH's log-likelihood (2683.0) barely improves on GJR-GARCH's (2682.9) and its AIC (``-5354.0``) trails GJR-GARCH (``-5355.8``) by the extra degree of freedom. Pinning both extra parameters reproduces the GARCH log-likelihood to full precision, confirming the nesting relationship:
 
 ```@example volatility
 # recover a plain GARCH(1,1) by pinning δ=2, γ=0
-apg = estimate_aparch(spx, 1, 1; fix_delta=2.0, fix_gamma=0.0)
+apg = estimate_aparch(ret, 1, 1; fix_delta=2.0, fix_gamma=0.0)
 (aparch_loglik = round(apg.loglik, digits=6),
- garch_loglik  = round(estimate_garch(spx, 1, 1).loglik, digits=6))
+ garch_loglik  = round(estimate_garch(ret, 1, 1).loglik, digits=6))
 ```
 
 | Keyword | Type | Default | Description |
@@ -757,14 +759,14 @@ apg = estimate_aparch(spx, 1, 1; fix_delta=2.0, fix_gamma=0.0)
 The **Engle-Ng (1993) sign-bias test** regresses squared standardized residuals on the lagged shock's sign and size to detect asymmetry a symmetric model has missed; the joint statistic is ``(n-1)R^2 \sim \chi^2(3)``.
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 sb = sign_bias_test(garch)
 (joint = round(sb.joint_statistic, digits=3),
  pvalue = round(sb.joint_pvalue, digits=4),
  sign_bias_t = round(sb.sign_bias_t, digits=3))
 ```
 
-The joint statistic of 12.75 against ``\chi^2(3)`` gives ``p = 0.005``, so the symmetric GARCH(1,1) leaves detectable asymmetry in its standardized residuals. The sign-bias coefficient itself carries a ``t`` of 2.46, meaning squared residuals are systematically larger after negative shocks — precisely the effect the EGARCH ``\hat\gamma_1 = -0.189`` and the GJR ``\hat\gamma_1 = 0.279`` pick up, and independent confirmation that the asymmetric models earn their extra parameter.
+The joint statistic of 5.092 against ``\chi^2(3)`` gives ``p = 0.1652``, so the residual-based auxiliary regression does not reject symmetry at 5%, even though the direct likelihood estimates in EGARCH (``\hat\gamma_1 = -0.164``, ``p = 0.0013``) and GJR-GARCH (``\hat\gamma_1 = 0.370``, ``p = 0.0037``) detect strong downside asymmetry — an illustration that direct likelihood comparison has higher power than post-estimation residual regressions.
 
 The **Nyblom (1989) / Hansen (1992) test** checks parameter stability against a martingale-parameter alternative, returning per-parameter statistics ``L_k`` and the joint ``L_C`` with the Hansen (1992) critical values:
 
@@ -776,7 +778,7 @@ ny = nyblom_test(garch)
  cv_individual = ny.cv_individual)
 ```
 
-The joint ``L_C = 0.816`` falls below the 5% critical value of 1.24, and every individual ``L_k`` is well under 0.470, so parameter stability is not rejected: a single GARCH(1,1) parameterization describes all 803 months, structural breaks in mean volatility notwithstanding. A rejection here is the signal to split the sample or to move to a regime-switching specification rather than to add lags.
+The joint ``L_C = 3.719`` exceeds the 5% critical value of 1.24, driven by the conditional mean (``L_1 = 2.401 > 0.470``) and variance intercept (``L_2 = 0.511 > 0.470``) while the ARCH and GARCH parameters (0.155 and 0.298) stay below 0.470. That pattern reflects secular shifts in US industrial-production growth and baseline volatility across 1959--2026 (including the Great Moderation and COVID-19), signaling a case for sub-sample estimation or a regime-switching specification rather than additional lags.
 
 ### Return Values
 
@@ -1006,23 +1008,23 @@ The SV model is estimated via the Kim-Shephard-Chib (1998) Gibbs sampler with th
 
 ```@example volatility
 # Basic SV model
-sv = estimate_sv(spx; n_samples=2000, burnin=1000)
+sv = estimate_sv(ret; n_samples=2000, burnin=1000)
 report(sv)
 ```
 
 ```@example volatility
 # SV with leverage effect
-sv_lev = estimate_sv(spx; leverage=true, n_samples=2000, burnin=1000)
+sv_lev = estimate_sv(ret; leverage=true, n_samples=2000, burnin=1000)
 report(sv_lev)
 ```
 
 ```@example volatility
 # SV with Student-t errors
-sv_t = estimate_sv(spx; dist=:studentt, n_samples=2000, burnin=1000)
+sv_t = estimate_sv(ret; dist=:studentt, n_samples=2000, burnin=1000)
 report(sv_t)
 ```
 
-The posterior mean of ``\varphi`` is ``\approx 0.92`` with a 95% credible interval that excludes one, so log-volatility is highly persistent but stationary — the same conclusion the GARCH persistence of 0.869 reaches by a different route. The volatility of volatility ``\sigma_\eta`` posterior sits near 0.25, and ``\mu \approx -6.9`` implies a long-run variance ``e^{\mu} \approx 0.001``, again matching the GARCH unconditional variance. Adding leverage or Student-t errors moves ``\varphi`` by less than 0.01 on this series: the extra flexibility is absorbed by the observation equation, not the volatility dynamics.
+The posterior mean of ``\varphi`` is ``\approx 0.90`` with a 95% credible interval that excludes one, so latent log-volatility is persistent and stationary. The volatility of volatility ``\sigma_\eta`` posterior sits near 0.28, and ``\mu \approx -9.42`` implies a long-run variance ``e^{\mu} \approx 0.000081``, matching the GARCH unconditional variance (0.000090). Adding leverage or Student-t errors shifts ``\varphi`` by at most 0.02 on this series: the extra flexibility is absorbed by the observation equation rather than the latent volatility dynamics.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -1037,7 +1039,7 @@ The posterior mean of ``\varphi`` is ``\approx 0.92`` with a 95% credible interv
 The SV model visualization shows posterior volatility with quantile credible bands:
 
 ```julia
-sv = estimate_sv(spx; n_samples=2000, burnin=1000)
+sv = estimate_sv(ret; n_samples=2000, burnin=1000)
 plot_result(sv)
 ```
 
@@ -1086,10 +1088,10 @@ Under the null hypothesis of no ARCH effects, ``\text{LM} \sim \chi^2(q)``. Reje
 
 ```@example volatility
 # Test raw data for ARCH effects (H₀: no ARCH effects)
-stat, pval, q = arch_lm_test(spx, 5)
+stat, pval, q = arch_lm_test(ret, 5)
 
 # Test standardized residuals after fitting (should fail to reject)
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 stat_r, pval_r, q_r = arch_lm_test(garch, 5)
 ```
 
@@ -1109,7 +1111,7 @@ where:
 - ``K`` is the maximum lag order
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 stat, pval, K = ljung_box_squared(garch, 10)
 ```
 
@@ -1136,7 +1138,7 @@ where:
 Confidence intervals are constructed by simulating ``n`` paths forward from the last observed state, generating the empirical distribution of future conditional variances.
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 fc = forecast(garch, 20; conf_level=0.95, n_sim=10000)
 report(fc)
 ```
@@ -1148,7 +1150,7 @@ The forecast report displays a table of point forecasts, standard errors, and co
 For SV models, each posterior draw provides a full parameter vector ``(\mu, \varphi, \sigma_\eta)`` and the terminal log-volatility ``h_T``. The forecast simulates the log-volatility process forward from the last state for each draw, yielding a posterior predictive distribution of future volatility. The reported intervals are posterior predictive quantiles, not frequentist confidence intervals.
 
 ```@example volatility
-sv = estimate_sv(spx; n_samples=2000, burnin=1000)
+sv = estimate_sv(ret; n_samples=2000, burnin=1000)
 fc_sv = forecast(sv, 20; conf_level=0.95)
 report(fc_sv)
 ```
@@ -1156,7 +1158,7 @@ report(fc_sv)
 ### Volatility Forecast Visualization
 
 ```julia
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 fc = forecast(garch, 10)
 plot_result(fc; history=garch.conditional_variance)
 ```
@@ -1196,7 +1198,7 @@ The following accessor functions provide model-specific summary statistics. The 
 In the table, ``p`` denotes `persistence(m)`. The half-life returns `Inf` if the process is non-stationary (persistence ``\geq 1``).
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 persistence(garch)              # α₁ + β₁
 halflife(garch)                 # Half-life in periods
 unconditional_variance(garch)   # Long-run variance
@@ -1226,7 +1228,7 @@ All volatility models implement the standard StatsAPI interface:
 | `vcov(m)` | Variance-covariance matrix of parameter estimates |
 
 ```@example volatility
-garch = estimate_garch(spx, 1, 1)
+garch = estimate_garch(ret, 1, 1)
 nobs(garch)          # Number of observations
 loglikelihood(garch) # Maximized log-likelihood
 aic(garch)           # AIC for model comparison
@@ -1238,16 +1240,16 @@ coef(garch)          # [μ, ω, α₁, ..., αq, β₁, ..., βp]
 
 ## Complete Example
 
-This example estimates all four GARCH-family models on monthly industrial production growth (FRED-MD INDPRO, tcode-transformed to log-growth), runs diagnostics, compares specifications, and estimates an SV model for comparison.
+This example estimates all three GARCH-family models on monthly consumer-goods industrial production growth (FRED-MD `IPCONGD`, tcode-transformed to log-growth), runs diagnostics, compares specifications, and estimates an SV model for comparison.
 
 ```@example volatility
 # === Step 1: Test for ARCH effects ===
-stat, pval, q = arch_lm_test(spx, 5)
+stat, pval, q = arch_lm_test(ret, 5)
 
 # === Step 2: Estimate competing GARCH-family models ===
-garch  = estimate_garch(spx, 1, 1)
-egarch = estimate_egarch(spx, 1, 1)
-gjr    = estimate_gjr_garch(spx, 1, 1)
+garch  = estimate_garch(ret, 1, 1)
+egarch = estimate_egarch(ret, 1, 1)
+gjr    = estimate_gjr_garch(ret, 1, 1)
 
 # Display each model's coefficient table and fit statistics
 report(garch)
@@ -1295,7 +1297,7 @@ plot_result(fc; history=garch.conditional_variance)
 
 ```@example volatility
 # === Step 6: Stochastic volatility for comparison ===
-sv = estimate_sv(spx; n_samples=2000, burnin=1000)
+sv = estimate_sv(ret; n_samples=2000, burnin=1000)
 report(sv)
 ```
 

@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 50%;
     }
     .panel {
-        width: calc(50% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,17 +139,17 @@
 </head>
 <body>
 <div class="figure-title">Panel VAR Orthogonalized Impulse Responses</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 50%;">
 <div class="panel">
 <div class="panel-title">output ← output</div>
 <div id="irf_351"></div>
 </div>
 <div class="panel">
-<div class="panel-title">prices ← output</div>
+<div class="panel-title">output ← prices</div>
 <div id="irf_352"></div>
 </div>
 <div class="panel">
-<div class="panel-title">output ← prices</div>
+<div class="panel-title">prices ← output</div>
 <div id="irf_353"></div>
 </div>
 <div class="panel">
@@ -349,19 +350,19 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.007513688366296157,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0002647257564052784,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0006561701022722754,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.00047207290192312524,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.00024556815631699027,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.00011321750372826545,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.90960390581296e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":2.0542659673574752e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":8.40390298276992e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":3.3871457060710548e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.35136047273695e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":5.353421172708719e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.1101605101418985e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.006669408934159205,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.004499284556959375,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.00229432559830098,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0010479239594848133,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.0004520497097918442,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.0001885370133212347,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":7.696797142670184e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":3.097761793427822e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":1.234695957784541e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":4.887885287948448e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.925715242554108e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":7.560809288447117e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -471,19 +472,19 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.006669408934159205,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.004499284556959375,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.00229432559830098,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.0010479239594848133,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":0.0004520497097918442,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.0001885370133212347,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":7.696797142670184e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.097761793427822e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":1.234695957784541e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.887885287948448e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.925715242554108e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":7.560809288447117e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.007513688366296157,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0002647257564052784,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0006561701022722754,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.00047207290192312524,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.00024556815631699027,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":0.00011321750372826545,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.90960390581296e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.0542659673574752e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":8.40390298276992e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":3.3871457060710548e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.35136047273695e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":5.353421172708719e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.1101605101418985e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];

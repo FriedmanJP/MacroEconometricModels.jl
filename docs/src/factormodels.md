@@ -24,7 +24,7 @@ X = X[end-59:end, :]
 
 ## Quick Start
 
-The recipes below run on `X`, the transformed FRED-MD panel (McCracken & Ng 2016) of 126 monthly indicators.
+The recipes below run on `X`, the transformed FRED-MD panel (McCracken & Ng 2016) of 114 US federal public-domain monthly indicators.
 
 **Recipe 1: Static factor model from FRED-MD**
 
@@ -115,7 +115,7 @@ plot_result(fm)
 <iframe src="../assets/plots/model_factor_static.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-Three factors account for 17.3%, 11.4%, and 9.0% of the total variance of the 126-series panel, 37.8% cumulatively. The spacing between the first three eigenvalues and the fourth (7.0%) is modest, which is typical of monthly growth-rate panels: FRED-MD co-movement is real but spread across several moderately sized factors rather than concentrated in one dominant cycle.
+Three factors account for 17.0%, 12.2%, and 9.2% of the total variance of the 114-series panel, 38.4% cumulatively. The spacing between the first three eigenvalues and the fourth (6.9%) is modest, which is typical of monthly growth-rate panels: FRED-MD co-movement is real but spread across several moderately sized factors rather than concentrated in one dominant cycle.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -634,7 +634,7 @@ where:
 ```@example factor
 block_series = ["INDPRO", "PAYEMS", "UNRATE", "CUMFNS", "DPCERA3M086SBEA",
                 "CPIAUCSL", "CPIULFSL", "PCEPI", "WPSFD49207", "PPICMM",
-                "FEDFUNDS", "GS10", "BAA", "TB3MS", "S&P 500"]
+                "FEDFUNDS", "GS10", "T10YFFM", "TB3MS", "GS1"]
 X_block = X[:, [findfirst(==(v), varnames(fred)) for v in block_series]]
 
 blocks = Dict(
@@ -647,7 +647,7 @@ fm_block = estimate_factors(X_block, 3; blocks=blocks)
 report(fm_block)
 ```
 
-Every loading outside its block is exactly zero — 30 of the 45 entries of ``\Lambda`` — so each factor is a labelled object rather than a rotation-dependent linear combination. The nominal factor loads at ``-0.97`` on `CPIULFSL` and ``-0.97`` on `CPIAUCSL` but only ``-0.11`` on `PPICMM`, showing that the consumer price series move as a bloc while the commodity-price component does not. The real factor is anchored by `CUMFNS` (``-0.92``) and `INDPRO` (``-0.90``), and the financial factor by the credit spread `BAA` (``-0.85``) and `GS10` (``-0.74``). Sign is arbitrary within each block, as always; magnitudes relative to other members of the same block are what carry meaning.
+Every loading outside its block is exactly zero — 30 of the 45 entries of ``\Lambda`` — so each factor is a labelled object rather than a rotation-dependent linear combination. The nominal factor loads at ``-0.97`` on `CPIULFSL` and ``-0.97`` on `CPIAUCSL` but only ``-0.11`` on `PPICMM`, showing that the consumer price series move as a bloc while the commodity-price component does not. The real factor is anchored by `CUMFNS` (``-0.92``) and `INDPRO` (``-0.91``), and the financial factor by short- and medium-term Treasury yields `GS1` (``-0.91``), `TB3MS` (``-0.88``), and `FEDFUNDS` (``-0.75``). Sign is arbitrary within each block, as always; magnitudes relative to other members of the same block are what carry meaning.
 
 !!! warning "Variance shares are panel-wide, not block-wise"
     In the `report` output for a block-restricted model, the `Variance Explained` column reports the ordinary principal-component shares of the whole panel, listed against block labels. Read the loadings, and the per-variable `r2`, to judge how much each *block* factor explains.
@@ -681,7 +681,7 @@ Cholesky (on `order`, default the first ``q`` observables) and sign restrictions
 struct_series = ["INDPRO", "IPFINAL", "IPMANSICS", "CUMFNS", "PAYEMS", "MANEMP", "UNRATE",
                  "DPCERA3M086SBEA", "RETAILx", "HOUST", "PERMIT",
                  "CPIAUCSL", "CPIULFSL", "PCEPI", "WPSFD49207",
-                 "FEDFUNDS", "TB3MS", "GS10", "BAA", "S&P 500"]
+                 "FEDFUNDS", "TB3MS", "GS10", "GS1", "T10YFFM"]
 X20 = X[:, [findfirst(==(v), varnames(fred)) for v in struct_series]]
 
 sdfm20 = estimate_structural_dfm(X20, 2; identification=:cholesky, p=1, H=20,
@@ -701,7 +701,7 @@ d_panel = fevd(sdfm20, 20; space=:panel, include_idiosyncratic=true)
  INDPRO_idio_h1=round(d_panel.proportions[1, end, 1]; digits=3))
 ```
 
-The impact on the two static factors is nearly diagonal — 0.9847 and 0.9488 on the diagonal, off-diagonal ``-0.0027`` and 0.0352 — so Cholesky on the first two observables is close to a relabelling of the PCA factors rather than a substantive restriction. The FEVD confirms it: the first structural shock explains 100% of static factor 1's forecast error at impact and 99.4% at ``h = 20``, and 0.1% of static factor 2 at impact, rising to 9.9% by ``h = 4`` and staying there through ``h = 20``. These are innovations of the static-factor VAR after rank-``q`` reduction, not the frequency-domain GDFM eigenvectors. The observable FEVD (`space=:panel`) answers the applied question: with idiosyncratic included, `INDPRO`'s one-step error is mostly idiosyncratic (the common shocks' shares plus that remainder sum to 1). Factor-space FEVD remains the default.
+The impact matrix places ``0.8709`` and ``-0.6806`` on the diagonal with modest cross-loading (``0.3052`` and ``0.4253``), so Cholesky on the first two observables rotates the two static factors into a real-activity shock and a second orthogonal common shock. The FEVD reflects that separation: the first structural shock accounts for 89.1% of static factor 1's forecast error at impact and 78.2% at ``h = 20``, while the second shock accounts for 71.9% of static factor 2 at impact and 66.7% at ``h = 20``. These are innovations of the static-factor VAR after rank-``q`` reduction, not the frequency-domain GDFM eigenvectors. The observable FEVD (`space=:panel`) answers the applied question: with idiosyncratic variance included, 19.5% of `INDPRO`'s one-step error is idiosyncratic while the two common shocks account for the remaining 80.5%. Factor-space FEVD remains the default.
 
 !!! note "Technical Note"
     Under `:fglr`, ``\Lambda`` is the static PCA loading matrix. With `standardize=true` and `units=:raw` (the default), panel IRFs are rescaled by each series' standard deviation so responses are in original units. Under `:gdfm_var`, loadings are OLS of the untransformed panel on the two-sided GDFM factors.

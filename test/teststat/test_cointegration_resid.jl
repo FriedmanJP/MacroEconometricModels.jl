@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # EV-11 (#419) — residual-based / parameter-stability cointegration tests:
 # Engle–Granger, Phillips–Ouliaris (Ẑ_t, Ẑ_α), Hansen Lc, Park H(p,q).

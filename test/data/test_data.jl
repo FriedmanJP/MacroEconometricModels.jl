@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 using DataFrames
 using MacroEconometricModels
@@ -1683,18 +1683,26 @@ using Test
             md = load_example(:fred_md)
             @test md isa TimeSeriesData{Float64}
             @test nobs(md) == 804
-            @test nvars(md) == 126
+            @test nvars(md) == 114
             @test frequency(md) == Monthly
             expected_desc =
                 "FRED-MD Monthly Database, January 2026 Vintage (McCracken & Ng 2016)"
             @test desc(md) == expected_desc
-            @test length(md.tcode) == 126
+            @test length(md.tcode) == 114
             @test all(t -> 1 <= t <= 7, md.tcode)
+
+            # Commercial third-party series excluded (#932)
+            md_names = Set(varnames(md))
+            for forbidden in ("S&P 500", "S&P div yield", "S&P PE ratio",
+                              "AAA", "BAA", "AAAFFM", "BAAFFM",
+                              "UMCSENTx", "VIXCLSx", "HWI", "HWIURATIO", "OILPRICEx")
+                @test !(forbidden in md_names)
+            end
 
             # Variable descriptions
             @test vardesc(md, "INDPRO") == "IP Index"
             @test vardesc(md, "RPI") == "Real Personal Income"
-            @test length(vardesc(md)) == 126
+            @test length(vardesc(md)) == 114
 
             # Source refs
             @test md.source_refs == [:mccracken_ng2016]
@@ -1714,7 +1722,7 @@ using Test
 
             # Data is numeric and not all NaN
             @test !all(isnan, md.data[:, 1])
-            @test size(md.data) == (804, 126)
+            @test size(md.data) == (804, 114)
 
             # Subsetting preserves source_refs
             sub = md[:, ["INDPRO", "UNRATE"]]
@@ -1726,14 +1734,24 @@ using Test
             qd = load_example(:fred_qd)
             @test qd isa TimeSeriesData{Float64}
             @test nobs(qd) == 268
-            @test nvars(qd) == 245
+            @test nvars(qd) == 226
             @test frequency(qd) == Quarterly
             @test occursin("FRED-QD", desc(qd))
             @test all(t -> 1 <= t <= 7, qd.tcode)
 
+            # Commercial third-party series excluded (#932)
+            qd_names = Set(varnames(qd))
+            for forbidden in ("S&P 500", "S&P div yield", "S&P PE ratio",
+                              "SPCS10RSA", "SPCS20RSA", "AAA", "BAA", "BAA10YM", "AAAFFM",
+                              "MORTGAGE30US", "MORTG10YRx", "UMCSENTx", "VIXCLSx",
+                              "USEPUINDXM", "NIKKEI225", "NASDAQCOM", "HWIx", "HWIURATIOx",
+                              "OILPRICEx")
+                @test !(forbidden in qd_names)
+            end
+
             # Variable descriptions
             @test occursin("Gross Domestic Product", vardesc(qd, "GDPC1"))
-            @test length(vardesc(qd)) == 245
+            @test length(vardesc(qd)) == 226
 
             # Source refs
             @test qd.source_refs == [:mccracken_ng2020]
@@ -1746,7 +1764,22 @@ using Test
             @test occursin("FRED-QD", s)
 
             # Data dimensions
-            @test size(qd.data) == (268, 245)
+            @test size(qd.data) == (268, 226)
+        end
+
+        @testset "Dataset UTF-8 & License Metadata (#932)" begin
+            data_dir = MacroEconometricModels._data_dir()
+            for f in readdir(data_dir)
+                endswith(f, ".toml") || continue
+                bytes = read(joinpath(data_dir, f))
+                @test isvalid(String, bytes)
+            end
+            pwt_raw = MacroEconometricModels.TOML.parsefile(joinpath(data_dir, "pwt.toml"))
+            @test pwt_raw["metadata"]["license"] == "CC-BY-4.0"
+            @test occursin("creativecommons.org/licenses/by/4.0", pwt_raw["metadata"]["license_url"])
+            @test haskey(pwt_raw["metadata"], "modifications")
+            @test isfile(joinpath(pkgdir(MacroEconometricModels), "DATA_LICENSES.md"))
+            @test isfile(joinpath(pkgdir(MacroEconometricModels), "THIRD_PARTY_LICENSES.md"))
         end
 
         @testset "Penn World Table" begin

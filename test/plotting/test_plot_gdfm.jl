@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # GDFM-08 (#900): Plotting tests for all 10 GDFM-series plot_result methods
 # across spectral.jl, nowcast.jl, and teststat.jl.

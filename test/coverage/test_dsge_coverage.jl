@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # Coverage tests for DSGE module
 # Targets: display.jl, occbin.jl, pruning.jl, blanchard_kahn.jl, pfi.jl,
@@ -217,9 +217,10 @@ end
     result = MacroEconometricModels._select_solver([vb], nothing)
     @test result == :nonlinearsolve
 
-    # With NonlinearConstraint -> :ipopt when JuMP loaded, :nlopt otherwise
+    # With NonlinearConstraint -> built-in :madnlp (#930)
     nc = nonlinear_constraint((y, yl, yle, e, theta) -> y[1]; label="test")
-    @test MacroEconometricModels._select_solver([nc], nothing) ∈ (:nlopt, :ipopt)
+    @test MacroEconometricModels._select_solver([nc], nothing) == :madnlp
+    @test MacroEconometricModels._select_solver([], :madnlp) == :madnlp
 end
 
 @testset "constraints.jl: _extract_bounds" begin
