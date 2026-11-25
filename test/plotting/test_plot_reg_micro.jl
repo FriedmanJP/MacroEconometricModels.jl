@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # PLT-39 domain lane — base cross-sectional dispatches in reg.jl. This lane fills
 # the genuinely-untested binary-choice / marginal-effect dispatches:

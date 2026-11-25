@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # GDFM-08 (#900): Infinite-dimensional Generalized Dynamic Factor Model DGP
 # (Forni, Hallin, Lippi & Zaffaroni 2015, 2017; Barigozzi, Lippi & Luciani 2021).

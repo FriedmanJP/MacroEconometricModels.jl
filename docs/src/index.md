@@ -53,7 +53,7 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 - **Simulation and IRFs**: Stochastic simulation, pruned higher-order simulation, analytical and generalized IRFs, FEVD, Lyapunov-based unconditional moments
 - **GMM Estimation**: IRF matching, Euler equation GMM, Simulated Method of Moments, analytical GMM via Lyapunov equation
 - **Bayesian Estimation**: Sequential Monte Carlo (SMC with adaptive tempering), SMC-squared (SMC² with particle filter likelihood), random-walk Metropolis-Hastings; delayed acceptance for accelerated sampling; nonlinear particle filter for higher-order solutions; posterior mode and marginal likelihood, MCMC convergence diagnostics, and Iskrev identification tests
-- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton, JuMP+Ipopt NLP) with an optional PATH (MCP) backend
+- **Constraints**: Perfect foresight (Newton solver), OccBin occasionally binding constraints (Guerrieri & Iacoviello 2015), built-in constrained solvers (Optim.jl box constraints, NLopt.jl nonlinear inequalities, projected Newton, MadNLP sparse interior-point NLP) with optional Ipopt (NLP) and PATH (MCP) weak-dependency backends
 - **Heterogeneity and Continuous Time**: Heterogeneous agents via the sequence-space Jacobian (Auclert et al. 2021), Reiter (2009), and Krusell-Smith (1998); overlapping generations (Blanchard 1985 perpetual youth, Auerbach-Kotlikoff life cycle); continuous-time HJB / Kolmogorov-Forward solvers on sparse grids
 - **Invertibility, DSGE-VAR, and Rational Inattention**: Canonical `ABCDSystem` mapping (`abcd_representation`), Fernández-Villaverde et al. (2007) poor-man's invertibility and Komunjer–Ng zeros, Hansen–Sargent DARE innovations and shock recoverability diagnostics, Del Negro–Schorfheide (2004) DSGE-VAR(``\lambda``), Sims (2003) / Afrouzi–Yang (2021) / Maćkowiak–Wiederholt (2009) Gaussian LQG rational-inattention filters and attention allocation, and Matějka–McKay (2015) Shannon discrete choice
 
@@ -131,7 +131,7 @@ New users start at [Installation & First Model](@ref getting_started_page); read
 **Data Management**
 
 - **Typed Containers**: `TimeSeriesData`, `PanelData`, `CrossSectionData`, and `IOData` with metadata (frequency, variable names, transformation codes)
-- **Built-in Datasets**: Twelve example datasets via `load_example()` — FRED-MD, FRED-QD, the Penn World Table, the Acemoglu et al. (2019) democracy panel, the Callaway-Sant'Anna minimum-wage panel, a world input-output table, and the canonical Nile, Mroz, Hamilton GNP, stack-loss, Grunfeld, and Danish money-demand series
+- **Built-in Datasets**: Thirteen example datasets via `load_example()` — FRED-MD and FRED-QD (US federal public-domain subsets), the Penn World Table (CC-BY-4.0), the Acemoglu et al. (2019) democracy panel, the Callaway-Sant'Anna minimum-wage panel, the McKay-Wolf monetary-policy shocks panel, a textbook input-output table, and the canonical Nile, Mroz, Hamilton GNP, stack-loss, Grunfeld, and Danish money-demand series (see `DATA_LICENSES.md`)
 - **Validation**: `diagnose()` detects NaN/Inf/constant columns; `fix()` repairs via listwise deletion, interpolation, or mean imputation
 - **FRED Transforms**: `apply_tcode()` / `inverse_tcode()` implement all 7 FRED-MD transformation codes (McCracken & Ng 2016)
 - **Panel Support**: Stata-style `xtset()` for panel construction, `group_data()` for per-entity extraction
@@ -218,7 +218,7 @@ work, alphabetical by author — lives on a dedicated page: see [Bibliography](@
 
 ## License
 
-This package is released under the [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html). The GPL warranty-disclaimer and redistribution-condition notices are available at the REPL via [`warranty`](@ref) and [`conditions`](@ref).
+This package is released under the [GNU General Public License v3.0 (`GPL-3.0-only`)](https://www.gnu.org/licenses/gpl-3.0.en.html). The GPL warranty-disclaimer and redistribution-condition notices are available at the REPL via [`warranty`](@ref) and [`conditions`](@ref). Bundled example datasets and vendored third-party assets are distributed under their own licenses (see `DATA_LICENSES.md` and `THIRD_PARTY_LICENSES.md`).
 
 ## Contributing
 

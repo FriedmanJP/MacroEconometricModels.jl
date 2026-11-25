@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
 Afrouzi & Yang (2021) dynamic Rational Inattention transition path solver.

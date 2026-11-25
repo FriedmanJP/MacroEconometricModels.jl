@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
 Example dataset loader for MacroEconometricModels.jl.
@@ -63,11 +63,11 @@ end
 Load a built-in example dataset.
 
 # Available Datasets
-- `:fred_md` — FRED-MD Monthly Database, January 2026 vintage
-  (126 variables × 804 months) → `TimeSeriesData`
-- `:fred_qd` — FRED-QD Quarterly Database, January 2026 vintage
-  (245 variables × 268 quarters) → `TimeSeriesData`
-- `:pwt` — Penn World Table 10.01, 38 OECD countries
+- `:fred_md` — FRED-MD Monthly Database, January 2026 vintage (US federal public-domain subset:
+  114 variables × 804 months; commercial third-party series excluded, see `DATA_LICENSES.md`) → `TimeSeriesData`
+- `:fred_qd` — FRED-QD Quarterly Database, January 2026 vintage (US federal public-domain subset:
+  226 variables × 268 quarters; commercial third-party series excluded, see `DATA_LICENSES.md`) → `TimeSeriesData`
+- `:pwt` — Penn World Table 10.01 (CC-BY-4.0), 38 OECD countries
   (42 variables × 74 years, 1950–2023) → `PanelData`
 - `:ddcg` — Acemoglu et al. (2019) Democracy-GDP Panel
   (2 variables × 9,384 obs, 184 countries × 51 years) → `PanelData`
@@ -117,10 +117,10 @@ groups, year identifiers as time index, variable descriptions, and references.
 
 # Examples
 ```julia
-# Load FRED-MD
+# Load FRED-MD (114 US federal public-domain series)
 md = load_example(:fred_md)
 nobs(md)       # 804
-nvars(md)      # 126
+nvars(md)      # 114
 desc(md)       # "FRED-MD Monthly Database, January 2026 Vintage (McCracken & Ng 2016)"
 vardesc(md, "INDPRO")  # "IP Index"
 refs(md)       # McCracken & Ng (2016)

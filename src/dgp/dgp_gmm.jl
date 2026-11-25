@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # DGP-01 (#790) / DGP-08 (#797) / DGP-17 (#806) / DGP-13 (#802): GMM, PCE
 # band-draw and DSGE-observation simulators.

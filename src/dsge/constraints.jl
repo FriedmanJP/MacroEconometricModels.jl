@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # MacroEconometricModels.jl — DSGE Constraint Types
 #
@@ -102,27 +102,39 @@ end
 # =============================================================================
 # Constrained-solver dispatch
 # =============================================================================
-# JuMP + Ipopt are full dependencies (#461): methods for `_jump_*` are always
-# provided by src/dsge/jump_solvers.jl, so `_check_jump_loaded` is now a no-op
-# guard kept for API stability. PATHSolver remains a weak dependency, so the
-# `_path_*` methods are added by the PATHSolver extension only when it is loaded.
+# MadNLP (MIT) + NLPModels (MPL-2.0) are built-in GPL-3.0-compatible
+# dependencies (#930): `_madnlp_*` methods live in src/dsge/madnlp_solvers.jl
+# and handle `solver=:madnlp` (the default when `NonlinearConstraint` is
+# present). Ipopt (EPL-2.0 / MUMPS CeCILL-C) and PATHSolver (proprietary) are
+# optional weak dependencies whose `_jump_*` and `_path_*` methods are loaded
+# by ext/MacroEconometricModelsIpoptExt.jl and ext/MacroEconometricModelsPATHExt.jl
+# when the user explicitly opts in (`import Ipopt` / `import PATHSolver`).
 
-const _JUMP_INSTALL_MSG = "JuMP + Ipopt not loaded."   # retained for API stability; JuMP/Ipopt are hard deps
+const _JUMP_INSTALL_MSG = "Ipopt not loaded. Ipopt is an optional weak dependency " *
+    "(EPL-2.0 / MUMPS CeCILL-C; not bundled in default GPL-3.0-only builds).\n" *
+    "Use the built-in GPL-compatible interior-point solver `solver=:madnlp` (default), or for private local use:\n" *
+    "  using Pkg; Pkg.add(\"Ipopt\")\n" *
+    "Then load: import Ipopt"
 const _PATH_INSTALL_MSG = "PATHSolver not loaded. The PATH MCP solver is optional (proprietary binary).\n" *
     "Install with:\n" *
     "  using Pkg; Pkg.add(\"PATHSolver\")\n" *
     "Then load: import PATHSolver"
 
-# Generic-function declarations. `_jump_*` methods live in jump_solvers.jl (always
-# loaded); `_path_*` methods are added by the PATHSolver extension when present.
+# Generic-function declarations. `_madnlp_*` methods live in madnlp_solvers.jl;
+# `_jump_*` and `_path_*` methods are added by their optional extensions when loaded.
 function _jump_compute_steady_state end
 function _jump_perfect_foresight end
 function _path_compute_steady_state end
 function _path_perfect_foresight end
 
-# JuMP + Ipopt are hard deps, so this always passes; kept for backward compatibility.
+"""Check if the optional Ipopt extension is loaded."""
+function _ipopt_available()
+    return hasmethod(_jump_compute_steady_state, Tuple{ModelSpec, Vector})
+end
+
+"""Throw an informative error if the optional Ipopt extension is not loaded."""
 function _check_jump_loaded()
-    if !hasmethod(_jump_compute_steady_state, Tuple{ModelSpec, Vector})
+    if !_ipopt_available()
         throw(ArgumentError(_JUMP_INSTALL_MSG))
     end
     return nothing
@@ -145,24 +157,21 @@ end
     _select_solver(constraints, solver_override) -> Symbol
 
 Auto-detect solver:
-- NonlinearConstraints → :ipopt (if JuMP loaded) else :nlopt
-- Box bounds only → :nonlinearsolve (unconstrained try, then semismooth
-  projected Newton for PF / Optim Fminbox for SS). Ipopt is deliberately NOT
-  auto-selected for bounds-only problems: the JuMP formulation holds every model
-  equation as a hard equality, so it is infeasible whenever a bound genuinely
-  binds — the binding case is a complementarity problem (#556; `:path` is the
-  explicit MCP route).
-User override always wins. PATH still reachable via `solver=:path`.
+- NonlinearConstraints → `:madnlp` (built-in GPL-3.0-compatible sparse IPM)
+- Box bounds only → `:nonlinearsolve` (unconstrained try, then semismooth
+  projected Newton for PF / Optim Fminbox for SS). Interior-point NLP solvers
+  (`:madnlp`, `:ipopt`) are deliberately NOT auto-selected for bounds-only
+  problems: their formulation holds every model equation as a hard equality,
+  so it is infeasible whenever a bound genuinely binds — the binding case is
+  a complementarity problem (#556; `:path` is the explicit MCP route).
+User override always wins (`:nonlinearsolve`, `:optim`, `:nlopt`, `:madnlp`,
+optional weakdeps `:ipopt` and `:path`).
 """
 function _select_solver(constraints::Vector, solver_override::Union{Nothing,Symbol})
     solver_override !== nothing && return solver_override
     has_nlcon = any(c -> c isa NonlinearConstraint, constraints)
     if has_nlcon
-        # Prefer Ipopt when JuMP extension is loaded (more robust for large NLP)
-        if hasmethod(_jump_compute_steady_state, Tuple{ModelSpec, Vector})
-            return :ipopt
-        end
-        return :nlopt
+        return :madnlp
     end
     return :nonlinearsolve
 end

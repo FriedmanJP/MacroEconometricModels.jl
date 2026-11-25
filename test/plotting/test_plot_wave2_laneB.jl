@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # PLT Wave-2 Lane B tests: ARIMA (PLT-25), MCMC diagnostics (PLT-26), and
 # static-Bayesian prior/posterior & predictive checks (PLT-27). Structural

@@ -1,6 +1,6 @@
 # MacroEconometricModels.jl — Spectral Analysis & ACF/PACF Tests
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 using Test, MacroEconometricModels, Random, Statistics, LinearAlgebra, StatsAPI, DataFrames
 

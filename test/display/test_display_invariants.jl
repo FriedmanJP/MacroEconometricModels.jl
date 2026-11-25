@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # Display invariants (T176 / #275). Renders every fixture through `_render` and
 # asserts the RAW-string properties that the Stage-11 display batch (#260–#274)

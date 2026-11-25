@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
 Perfect foresight (deterministic) solver for DSGE models.
@@ -35,7 +35,7 @@ Uses NonlinearSolve.jl as the default Newton solver with block-tridiagonal spars
 - `tol::Real=1e-8` — convergence tolerance (max abs residual); default is `default_abstol(Float64)`
 - `abstol::Real=tol` — absolute residual gate passed to the solver; overrides `tol` for the convergence test
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected
+- `solver::Symbol` — `:nonlinearsolve` (default for box bounds), `:nlopt` (SLSQP), `:madnlp` (built-in sparse IPM, default for nonlinear inequalities), or optional weakdeps `:ipopt` (NLP) / `:path` (MCP); auto-detected
 - `algorithm` — NonlinearSolve.jl algorithm (default: `NewtonRaphson()`); passed through to chosen backend
 """
 function perfect_foresight(spec::ModelSpec{FT};
@@ -77,7 +77,7 @@ function perfect_foresight(spec::ModelSpec{FT};
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "NonlinearSolve solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
+                    "Use solver=:madnlp (default), solver=:nlopt, or optional solver=:ipopt for nonlinear inequality constraints."))
             lower, upper = _extract_bounds(spec, constraints)
             pf = _nonlinearsolve_perfect_foresight(spec, T_periods, shocks;
                         max_iter=max_iter, tol=tol, abstol=abstol,
@@ -94,27 +94,29 @@ function perfect_foresight(spec::ModelSpec{FT};
             end
             bounds_ok && return pf
             # Escalate to the semismooth projected Newton (always available).
-            # Ipopt is NOT a valid escalation target here: `_jump_perfect_foresight`
-            # poses hard equalities + bounds, which is infeasible whenever a bound
-            # genuinely binds (the binding case is a complementarity problem, #556).
+            # Hard-equality NLP solvers (:madnlp / :ipopt) are NOT valid
+            # escalation targets here because a binding box constraint is a
+            # complementarity problem (#556).
             return _projected_newton_pf(spec, T_periods, shocks, lower, upper;
                         max_iter=max_iter, tol=tol, abstol=abstol)
         elseif chosen == :nlopt
             return _nlopt_perfect_foresight(spec, T_periods, shocks, constraints;
                         algorithm=algorithm)
+        elseif chosen == :madnlp
+            return _madnlp_perfect_foresight(spec, T_periods, shocks, constraints)
         elseif chosen == :path
             _check_path_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:nlopt or solver=:ipopt."))
+                    "Use solver=:madnlp, solver=:nlopt, or optional solver=:ipopt."))
             return _path_perfect_foresight(spec, T_periods, shocks, constraints)
         elseif chosen == :ipopt
             _check_jump_loaded()
             return _jump_perfect_foresight(spec, T_periods, shocks, constraints)
         else
             throw(ArgumentError("Unknown solver :$chosen. " *
-                "Valid options: :nonlinearsolve, :nlopt, :path, :ipopt"))
+                "Valid options: :nonlinearsolve, :nlopt, :madnlp, :path, :ipopt"))
         end
     end
 
@@ -393,7 +395,7 @@ function _nlopt_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
     # Warn for large problems
     if N > 1000
         @warn "NLopt PF with $N decision variables may be slow. " *
-              "Consider solver=:ipopt with JuMP + Ipopt for large problems."
+              "Consider solver=:madnlp for large-scale sparse interior-point NLP."
     end
 
     alg_sym = algorithm !== nothing ? algorithm : :LD_SLSQP
@@ -454,13 +456,13 @@ function _nlopt_perfect_foresight(spec::ModelSpec{FT}, T_periods::Int,
     if ret ∉ (:SUCCESS, :FTOL_REACHED, :XTOL_REACHED, :STOPVAL_REACHED, :MAXEVAL_REACHED, :ROUNDOFF_LIMITED)
         throw(ErrorException(
             "NLopt PF solver failed (return code: $ret). " *
-            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+            "Try solver=:madnlp for large-scale sparse interior-point NLP."))
     end
 
     if max_resid > 1e-4
         throw(ErrorException(
             "NLopt PF solver did not find a feasible solution (max |F| = $max_resid, return code: $ret). " *
-            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+            "Try solver=:madnlp for large-scale sparse interior-point NLP."))
     end
 
     converged = max_resid < FT(1e-6)

@@ -94,9 +94,10 @@
         flex-wrap: wrap;
         gap: 16px;
         justify-content: center;
+        --mem-panel-width: 33%;
     }
     .panel {
-        width: calc(33% - 16px);
+        width: calc(var(--mem-panel-width, 100%) - 16px);
         min-width: 300px;
         background: var(--mem-panel-bg);
         border: 1px solid var(--mem-panel-border);
@@ -138,241 +139,241 @@
 </head>
 <body>
 <div class="figure-title">Impulse Response Functions</div>
-<div class="panel-grid">
+<div class="panel-grid" style="--mem-panel-width: 33%;">
 <div class="panel">
 <div class="panel-title">Var 1 ← Shock 1</div>
 <div id="irf_279"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 2 ← Shock 1</div>
+<div class="panel-title">Var 1 ← Shock 2</div>
 <div id="irf_280"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 3 ← Shock 1</div>
+<div class="panel-title">Var 1 ← Shock 3</div>
 <div id="irf_281"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 4 ← Shock 1</div>
+<div class="panel-title">Var 2 ← Shock 1</div>
 <div id="irf_282"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 5 ← Shock 1</div>
+<div class="panel-title">Var 2 ← Shock 2</div>
 <div id="irf_283"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 6 ← Shock 1</div>
+<div class="panel-title">Var 2 ← Shock 3</div>
 <div id="irf_284"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 7 ← Shock 1</div>
+<div class="panel-title">Var 3 ← Shock 1</div>
 <div id="irf_285"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 8 ← Shock 1</div>
+<div class="panel-title">Var 3 ← Shock 2</div>
 <div id="irf_286"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 9 ← Shock 1</div>
+<div class="panel-title">Var 3 ← Shock 3</div>
 <div id="irf_287"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 10 ← Shock 1</div>
+<div class="panel-title">Var 4 ← Shock 1</div>
 <div id="irf_288"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 11 ← Shock 1</div>
+<div class="panel-title">Var 4 ← Shock 2</div>
 <div id="irf_289"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 12 ← Shock 1</div>
+<div class="panel-title">Var 4 ← Shock 3</div>
 <div id="irf_290"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 13 ← Shock 1</div>
+<div class="panel-title">Var 5 ← Shock 1</div>
 <div id="irf_291"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 14 ← Shock 1</div>
+<div class="panel-title">Var 5 ← Shock 2</div>
 <div id="irf_292"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 15 ← Shock 1</div>
+<div class="panel-title">Var 5 ← Shock 3</div>
 <div id="irf_293"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 16 ← Shock 1</div>
+<div class="panel-title">Var 6 ← Shock 1</div>
 <div id="irf_294"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 17 ← Shock 1</div>
+<div class="panel-title">Var 6 ← Shock 2</div>
 <div id="irf_295"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 18 ← Shock 1</div>
+<div class="panel-title">Var 6 ← Shock 3</div>
 <div id="irf_296"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 19 ← Shock 1</div>
+<div class="panel-title">Var 7 ← Shock 1</div>
 <div id="irf_297"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 20 ← Shock 1</div>
+<div class="panel-title">Var 7 ← Shock 2</div>
 <div id="irf_298"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 1 ← Shock 2</div>
+<div class="panel-title">Var 7 ← Shock 3</div>
 <div id="irf_299"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 2 ← Shock 2</div>
+<div class="panel-title">Var 8 ← Shock 1</div>
 <div id="irf_300"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 3 ← Shock 2</div>
+<div class="panel-title">Var 8 ← Shock 2</div>
 <div id="irf_301"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 4 ← Shock 2</div>
+<div class="panel-title">Var 8 ← Shock 3</div>
 <div id="irf_302"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 5 ← Shock 2</div>
+<div class="panel-title">Var 9 ← Shock 1</div>
 <div id="irf_303"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 6 ← Shock 2</div>
+<div class="panel-title">Var 9 ← Shock 2</div>
 <div id="irf_304"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 7 ← Shock 2</div>
+<div class="panel-title">Var 9 ← Shock 3</div>
 <div id="irf_305"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 8 ← Shock 2</div>
+<div class="panel-title">Var 10 ← Shock 1</div>
 <div id="irf_306"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 9 ← Shock 2</div>
+<div class="panel-title">Var 10 ← Shock 2</div>
 <div id="irf_307"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 10 ← Shock 2</div>
+<div class="panel-title">Var 10 ← Shock 3</div>
 <div id="irf_308"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 11 ← Shock 2</div>
+<div class="panel-title">Var 11 ← Shock 1</div>
 <div id="irf_309"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 12 ← Shock 2</div>
+<div class="panel-title">Var 11 ← Shock 2</div>
 <div id="irf_310"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 13 ← Shock 2</div>
+<div class="panel-title">Var 11 ← Shock 3</div>
 <div id="irf_311"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 14 ← Shock 2</div>
+<div class="panel-title">Var 12 ← Shock 1</div>
 <div id="irf_312"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 15 ← Shock 2</div>
+<div class="panel-title">Var 12 ← Shock 2</div>
 <div id="irf_313"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 16 ← Shock 2</div>
+<div class="panel-title">Var 12 ← Shock 3</div>
 <div id="irf_314"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 17 ← Shock 2</div>
+<div class="panel-title">Var 13 ← Shock 1</div>
 <div id="irf_315"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 18 ← Shock 2</div>
+<div class="panel-title">Var 13 ← Shock 2</div>
 <div id="irf_316"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 19 ← Shock 2</div>
+<div class="panel-title">Var 13 ← Shock 3</div>
 <div id="irf_317"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 20 ← Shock 2</div>
+<div class="panel-title">Var 14 ← Shock 1</div>
 <div id="irf_318"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 1 ← Shock 3</div>
+<div class="panel-title">Var 14 ← Shock 2</div>
 <div id="irf_319"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 2 ← Shock 3</div>
+<div class="panel-title">Var 14 ← Shock 3</div>
 <div id="irf_320"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 3 ← Shock 3</div>
+<div class="panel-title">Var 15 ← Shock 1</div>
 <div id="irf_321"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 4 ← Shock 3</div>
+<div class="panel-title">Var 15 ← Shock 2</div>
 <div id="irf_322"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 5 ← Shock 3</div>
+<div class="panel-title">Var 15 ← Shock 3</div>
 <div id="irf_323"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 6 ← Shock 3</div>
+<div class="panel-title">Var 16 ← Shock 1</div>
 <div id="irf_324"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 7 ← Shock 3</div>
+<div class="panel-title">Var 16 ← Shock 2</div>
 <div id="irf_325"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 8 ← Shock 3</div>
+<div class="panel-title">Var 16 ← Shock 3</div>
 <div id="irf_326"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 9 ← Shock 3</div>
+<div class="panel-title">Var 17 ← Shock 1</div>
 <div id="irf_327"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 10 ← Shock 3</div>
+<div class="panel-title">Var 17 ← Shock 2</div>
 <div id="irf_328"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 11 ← Shock 3</div>
+<div class="panel-title">Var 17 ← Shock 3</div>
 <div id="irf_329"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 12 ← Shock 3</div>
+<div class="panel-title">Var 18 ← Shock 1</div>
 <div id="irf_330"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 13 ← Shock 3</div>
+<div class="panel-title">Var 18 ← Shock 2</div>
 <div id="irf_331"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 14 ← Shock 3</div>
+<div class="panel-title">Var 18 ← Shock 3</div>
 <div id="irf_332"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 15 ← Shock 3</div>
+<div class="panel-title">Var 19 ← Shock 1</div>
 <div id="irf_333"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 16 ← Shock 3</div>
+<div class="panel-title">Var 19 ← Shock 2</div>
 <div id="irf_334"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 17 ← Shock 3</div>
+<div class="panel-title">Var 19 ← Shock 3</div>
 <div id="irf_335"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 18 ← Shock 3</div>
+<div class="panel-title">Var 20 ← Shock 1</div>
 <div id="irf_336"></div>
 </div>
 <div class="panel">
-<div class="panel-title">Var 19 ← Shock 3</div>
+<div class="panel-title">Var 20 ← Shock 2</div>
 <div id="irf_337"></div>
 </div>
 <div class="panel">
@@ -451,26 +452,26 @@ var showTip = window.__mem_core.showTip;
 var hideTip = window.__mem_core.hideTip;
 
 (function() {
-    const data = [{"x":0,"irf":0.003997249169303825,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0009823021144637484,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00029571990765008037,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-8.336634352338098e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.3746163140634756e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.67987974407023e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.8636733754146727e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-5.135352627056356e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.3933812162893958e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.703122520092275e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":9.562677304129966e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.3667352437135346e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.468926269516212e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.1101800592001458e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.6039244115883626e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":8.121316265202664e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-2.076731762697046e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":1.2208948252198776e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-5.613850242220489e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":2.3212643418168854e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0034196253559382783,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.000630619845144595,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0001875779003551672,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-4.505913014491766e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.0664997379014839e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.168130258215685e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.0842743514116553e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.4012931205789906e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-4.6877305915498863e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":2.7640283923707368e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.2952977389177804e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":5.490839611876426e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-2.2013163709431267e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":8.520935800771401e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-3.220779610543775e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.1969426131341837e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-4.392916562239325e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":1.5970511215135588e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-5.7637970463283586e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.0682816989905855e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -580,26 +581,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.004588423483121141,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.001115940272664145,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0003389213099353169,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-9.595651559307357e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.7517203117495077e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-7.801032152846795e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.1976699243339816e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-6.129814258769057e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.6895243825096442e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-4.584989089363822e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.218879236169382e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.14877526018816e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":7.797825611381582e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.8037323031120299e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":3.6693767549996035e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-5.339062728587922e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-2.447849994493016e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":6.752923785227574e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-3.9888596150340627e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.8372729515582013e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":1.531835725334745e-19,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00045878166433633763,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.00010272412143128412,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.4930465903490544e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.0616416464235683e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":3.3547812671898133e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.0599313640896037e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":3.3839994614359445e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.0887893130698973e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":3.5324764210229704e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.1551869909031078e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":3.806528633535572e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-1.2633097137410898e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":4.220570925413136e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-1.4186307821795612e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":4.7946004149705707e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-1.628428905307263e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":5.554882613153334e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-1.902130523409702e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":6.53509187078973e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -709,26 +710,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.002714247309871628,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0007328276868706945,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00022728174502474166,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-6.793660754972893e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.0533192632839328e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.196360511998288e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.8735020899334909e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-5.670917664751581e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.719002023601422e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-5.2183613171539516e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.5866203089972862e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-4.8320362449593655e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.4741615741720184e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-4.505632951001028e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.3797470848350554e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-4.2336172893301256e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.3017438555044821e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.011179551526631e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.2387367265636286e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.8341619521494486e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-6.0871329170074166e-21,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-7.522648386648148e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-1.9710705343188732e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":1.4713030829891447e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-7.895627605770437e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":3.5266594288504853e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.460337840975047e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":5.76851588493439e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-2.2111817819294587e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":8.300430289988778e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-3.0691783830797054e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.1221559796566054e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-4.067736957490509e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.4647189962881688e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-5.246553561269761e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.8714503283616426e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-6.653121411748624e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":2.3588227488973974e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-8.344660883076188e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.9467380310221476e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -838,26 +839,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.003456771371746527,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00034453831083468425,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00015161830102335087,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-3.9228891363896835e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.1507742488104879e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-3.2274542094414183e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":9.070713939831428e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.5146023775251796e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":6.883163310256182e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.850503851433045e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.857012476449772e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.2317496500121863e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.9634337087686305e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-6.511474499030282e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.179531345367105e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.0188014688591324e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-5.153831464641069e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":4.2230910861582787e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-2.1402827788036397e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":9.271802091314632e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.003905262813391256,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0007004828144677576,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0002121095346664872,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-5.1246227457652916e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.2330826764444294e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.588810616640966e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.0965949507892515e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.1199651236169612e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-4.3156148361555676e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":2.7488895129184663e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.3235858410522617e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":5.6878857945187714e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-2.2988999467516476e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":8.946024048920768e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-3.3939539983219987e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.2646771682490517e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-4.650793987266998e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":1.6933868131285325e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-6.118735423272994e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.197702857674605e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -967,26 +968,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.006202935724846615,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0014547542218185405,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00043834589293600897,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00012145274592773432,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.405162184012183e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-9.376079284399587e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.546835688399199e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-6.774526521440284e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.7519229228139602e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-4.345220347962087e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.0077510665122129e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.0612687357519813e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":3.052943634455221e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":1.0386679411036956e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-3.63534658348706e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.174638413875042e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-1.006157814257097e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":4.173592798045042e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-1.6294367922187699e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":6.12164697717328e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.000150643293553827,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0005141289944919372,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.00011111565138013788,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.817974403802684e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.1554042317678204e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":3.648762339468399e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.1508644814466702e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":3.669024462097602e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.1787170238784472e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":3.818664140378237e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.2470147936861854e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":4.103620179054174e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-1.3602042026651927e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":4.5390391418616804e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-1.5240715202883392e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":5.1460886028456535e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-1.74633457338156e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":5.9526508431155015e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-2.0370095313929483e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":6.994533614420026e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1096,26 +1097,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0011540581408036664,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00020053196781072262,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":2.9451599832211187e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.6515690452498297e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":9.192213876975086e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-4.001545936634125e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.6179006510070439e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-6.208642584137668e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":2.306232103134346e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-8.368908879647933e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":2.985145760080018e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.0508128799084616e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":3.6607223318934938e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.2646523929582329e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":4.3390861751768827e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.4803144540980102e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.026138903411263e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.6996346689345232e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":5.72760100685737e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.9244002388068713e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":1.4336958510562677e-19,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0001045862736800716,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-1.594375261952647e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":1.4047215770537374e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-7.956176041033786e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":3.6250093514727005e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.517987189375282e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":6.037508569225174e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-2.3250025151427132e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":8.756207895932684e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-3.245468690317239e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.1887553737021294e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-4.315145274380718e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.5554943059956951e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-5.576495099886808e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.9905064207250088e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-7.080284072757614e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":2.5113943641022956e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-8.887641768930256e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":3.1394149992665294e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1225,26 +1226,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0007456886789800566,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00018796945401648295,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":4.623643962888037e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-2.828961901051145e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.4722683883384632e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.329246247709281e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.533304705433788e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-9.665385383932865e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.5754793147328737e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.2936272075599618e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.6038929813639415e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.617784165489495e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.627964304908028e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.9420437788486067e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":6.656960235598849e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.2692835526457527e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":7.699803110826308e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-2.602279259858266e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":8.765146856727842e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.9437355401179135e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.002617357469360431,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0007404366285524792,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.000234924200387608,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-7.292341390943108e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":2.29953609044365e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-7.295861951570745e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.3353576780635488e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-7.536433471420402e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.4520070841452027e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-8.040413744039035e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.6562645197738485e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-8.836753755796165e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.9587653545141544e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-9.964991419896913e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.373954300634048e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.1477514354925328e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.9206979011194184e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.3441913236562532e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.623108796882596e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.5943918814779324e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1354,26 +1355,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0006154637904813271,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0002457538156553342,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":4.793776843946119e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-3.298304038274186e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.7657540142002595e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-7.694880527461311e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.102462539593646e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.189295459726118e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":4.4137989336441627e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.6007174702357863e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":5.707011875877526e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.0082211705770502e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":6.994029911230846e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.4156274546995364e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":8.286535025176645e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.826561389706582e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":9.59576536989276e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.24451810760368e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.093261446878742e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.672901190684385e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-3.0164139227595362e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":8.938919103757398e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-1.5082584677350958e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.7930297905276797e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-6.25791011411501e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":3.64030450510354e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.2392763390176544e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.077808359680922e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.5438009597868235e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-6.76434866889497e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.7649996036954663e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.0838149040561501e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":4.1323579518495107e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.5453633750499373e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":5.6981853137631936e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.0789660454400733e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":7.523783596014676e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.70570683972078e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":9.681861753493636e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.450719381054487e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1483,26 +1484,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0002141888186742342,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00013026247603491393,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":9.360163135901617e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-5.557855304191684e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.6914708951415033e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.1316011696280668e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.4618870264660305e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.6866357469812495e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":6.198436145091825e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.2318706238500404e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":7.913905104254672e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.772912253690902e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":9.624193053858632e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.314772621093992e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.1344702993198878e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.862230342867769e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.3090266967976557e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.419902153681167e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.487528786189785e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.992292253010042e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0016889763168365765,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0005768693215374735,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00018384727266956767,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-6.0230682461063686e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.9785794692178966e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-6.555414059852008e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.186022489439288e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-7.335832743036466e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.4756610388652145e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-8.39726773123746e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.8611512454402417e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-9.78736446054447e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":3.3596519331151727e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.1567157373258419e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.992848151430124e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.3813462158249435e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.787897578512893e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.6622129406865032e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":5.77858344367066e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.0112095574471095e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1612,26 +1613,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0011505208793178602,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0018393773278877997,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.00029948071878297577,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":6.713279727806321e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-7.97190651076169e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.188185376564735e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.5542984759210663e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-8.54532692603046e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.832756857256379e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.5641203343542957e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":6.046062559849645e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.2562865029294024e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":8.215736894297367e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.938027231439714e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.0362907912940394e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.6158623692040114e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.2507634772381058e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.2959852447160066e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.4669076050082186e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.984336624851713e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.004175703858957575,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0004378726359029798,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00020335475321899175,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-5.695157817366502e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.8169224679969977e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-5.647555841586764e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.7853856797354771e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-5.677566203714609e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.8216624884183573e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.892336449815801e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.9214230847285174e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.314152792477636e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.090202375523545e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-6.966688035369435e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.336639257844685e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-7.881958028880058e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.6723977409590417e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-9.102178630611753e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.112656358370299e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.0681657890975235e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1741,26 +1742,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0006778843130414244,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00047604167478064723,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0002333089254396484,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-9.941384856141832e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.944397366984007e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.4976036305170096e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":5.520361050787213e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.9921716343377984e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":7.076037746734656e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.482667192132728e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.6261069963689e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.973629111205286e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.0184582535501856e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.469398173931714e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.1764937971701462e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.9741666707222934e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.3380248422940025e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.4920223206097586e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.504332408195341e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-5.0269891934365485e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.002840546690070469,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00033459545504812844,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":1.4119816530001207e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":6.789342812679368e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.0391509393279785e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.5987008352599734e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-3.6971347257696786e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-8.559301870911143e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.488042973452836e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.779966565100119e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.3270631839510667e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-5.677515406881253e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.288769429712064e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-8.891526789706365e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.369326899990265e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.2544359547689698e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.610214545640659e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.6778010194260264e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":6.060145145147393e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.176015777156132e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1870,26 +1871,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0016398532200866075,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0006124266157491328,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-6.213856237399028e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":1.7746142582473252e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.9232187320877122e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.8073023185560046e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.83929478748007e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.1132390337965437e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":9.490727538243025e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.875155198806556e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.4984753009276912e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-5.593388948669919e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.037054753307279e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-7.285652387087841e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.5700292009376663e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-8.968154626474338e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":3.1023769130038774e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.0656272866608661e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":3.638854058819468e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.2364755387826973e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00026072808868785513,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0005247660608131941,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0001306560520710626,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-4.51092621990168e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.4380257808225907e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-4.724047314583578e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.5549314739521974e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-5.162131438006385e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.7245341424794325e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.796804808993696e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.959204688900775e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.65434821261787e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.269965806453259e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-7.773052664241736e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.670600489948456e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-9.201890184087216e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.178495360545698e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.1002410925384951e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.815400003025216e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.3251345962723732e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -1999,26 +2000,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0016990492945396878,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0002166219326493383,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":7.790801311550188e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.17426739078046e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.973866301441651e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-9.602746653816168e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.21187795516933e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.6878787513577354e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":6.458489072193008e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.3928528239033287e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.668099946340591e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.0876944915170613e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.0857754671390211e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.7793604393995264e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.3047509699785518e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-4.474156273911853e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.525679428858515e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-5.178117428895948e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.7504372547541699e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-5.897093811482329e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.006632731551878108,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0016599763508537806,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0005119410838487292,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00014878601672325113,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":4.4055862515568195e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.3009973692168845e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.856336093697794e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.1458572058107545e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":3.416179247617338e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.0222517488376102e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":3.072031277996163e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-9.276435837781347e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.8162823137442966e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-8.601277922301601e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.644157894785902e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-8.186121378193574e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.553502360840785e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-8.02830480794521e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.544807929915143e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-8.133707550657533e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2128,26 +2129,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0008317763175607043,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0007457225811649481,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.00011933689994176604,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":3.628640826358529e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-8.280118601243839e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":1.8593341277985098e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-3.3668409812437457e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":3.045140705604711e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.3968459160541781e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.1714123438350265e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":5.9695310377811875e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.5922874426032728e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.039440279470031e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.973624585157566e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.4716894750961728e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-5.329464353973405e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.8979884288370118e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-6.672974560921902e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.32238560088983e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-8.016632150836127e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.00025504675901430533,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0004872418215144362,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.00010675670972906682,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.3634364056988064e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-9.45336403475836e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.733951705706273e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-7.807911037957719e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.2259714617806013e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-6.306529016064907e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":1.7746812682253043e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-4.9488112945924776e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.3637385951951647e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-3.6983270886073617e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":9.808251386959445e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-2.5178760353619598e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":6.142609539040984e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-1.3708053679457925e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":2.524240906030711e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-2.1997864927841436e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.1665257779053215e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2257,26 +2258,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.002344152664293855,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00015219548985866968,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-9.987990474507902e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":1.665528603020506e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-7.41937503361684e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":3.180395584320919e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-1.252774721159349e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":4.744912783919115e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-1.745178673635026e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":6.288415385196221e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-2.2309566785625428e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":7.820215546427857e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-2.7151433708878296e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":9.35409102822985e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-3.202137394811341e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":1.0903553447855215e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-3.6961428810427844e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":1.2481679029314564e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-4.201239547472512e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.4101224468778832e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.002684821320122452,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0009457075715172485,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0002689700244542062,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-8.131927506081816e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":2.428555216596835e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-7.31773983650531e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.2133584502246506e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-6.734506561689703e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.061596700131812e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-6.353851874486057e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.972476976113358e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.170492139306641e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.9458310049470533e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-6.186748834792079e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.9834858380011832e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-6.411841588659964e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.0895043353267955e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-6.862421940982393e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.270425361671295e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-7.563451419101767e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2386,26 +2387,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0010496343343560758,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00044217440629362877,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-4.340619853569924e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":1.096109942682447e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-4.4720597796922815e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.17122291062956e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.441580388124378e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.166327687354299e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":9.230318871369556e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.660514441020334e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.3895186263335462e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-5.12106511161316e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.8478498492613442e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-6.56280147353964e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.3024262138589165e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-7.999382021078151e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":2.7574489936791933e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-9.443796122016458e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":3.216940316732663e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.0908529632896106e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0013499509576555947,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0003383479292268397,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":1.7562051752349438e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-1.501795692075259e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.0394377069598714e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-4.927106576927699e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.118261298137524e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-8.549260502705831e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":3.324994359784801e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.260844259333394e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":4.6967155281945405e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.7267716520356498e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":6.286123284607944e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-2.271042896474718e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":8.156108921961746e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.9153775343852623e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.0381776564648434e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-3.685802378276306e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.3053463875655196e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-4.6137173967381e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2515,26 +2516,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0021253870686359475,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0031990724722427448,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0012403445599591249,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0005418425490746483,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.00021171709073750087,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-8.008772555714618e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.9404087586827997e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.0583435633752548e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.7513506531394862e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.3140555504940461e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.5597846527662294e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.570197606485103e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.373134377621719e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.8290154595943493e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":6.198416882829673e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.0926897020949106e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":7.042438419305059e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-2.3633487390412507e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":7.911871636316782e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.6430893911226235e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00468557732502124,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0001501679834469438,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00015864348293333035,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-4.175930500466701e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.4298307948756968e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-4.6061612916573386e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.52133264453789e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-5.03901885438023e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.6821365271919078e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.64851625777833e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.9074879493979293e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.4737349350033094e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.206873092419375e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-7.552560372006716e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.5935207276863675e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-8.932362472326901e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.084227800301957e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.0672648334778839e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.7000261357977674e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.2847636065745615e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2644,26 +2645,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0031080582481193293,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":7.098118490838452e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-9.504387841602546e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":2.6248528798979024e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.3316076081028275e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":5.947146591334181e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-2.407551933627022e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":9.270933814546038e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-3.449902913409725e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":1.2536925413121394e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-4.476532305872274e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.577094116968355e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-5.4977124402679066e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":1.9002744989749262e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-6.52278391797368e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.2261117891498784e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-7.560682960851406e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":2.557383265739368e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-8.620064653800202e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":2.896792395327983e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00016818582086609255,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0006626899165436288,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00021639195515482567,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-8.706555608495621e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":3.246951864551633e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.2056290883244335e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.412966970211617e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.6017897672165358e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":5.773118371185359e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.0694750771475795e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":7.386276066154709e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-2.6271417145591674e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":9.318027954580027e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.297435880277471e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.1647233643792372e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-4.107801897746683e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.4469531737960544e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-5.091591140895642e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.7901305694032375e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-6.289439262736064e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2773,26 +2774,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.06310130945242029,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.03888464672832592,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.00490368048420866,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":0.0013273585558567888,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-0.00018612512543787126,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":6.154167547889748e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.9229403415084865e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.1960110493572354e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":5.615327010961037e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.3459633984815523e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":9.198818370474518e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.4658458910231464e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.270655343969768e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-4.567209797199691e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.617279970324336e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-5.660671468592274e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.9630158659522352e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-6.756292904491181e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.3109731689867622e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-7.863711368061654e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0006202793101508706,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0004113912703849347,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":9.79006839576223e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-2.0420183607413166e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.4413617027902983e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-6.9751810240844106e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.0206594210637704e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.225084438977036e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.779057082167956e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.8160717062019543e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":6.775280504837829e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-2.4937981098286903e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":9.08626288507299e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.2848807227297823e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.1803394519102846e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-4.220863986831956e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.5035738183512777e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-5.3395354573652157e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.8914433120843994e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-6.686471207222043e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -2902,26 +2903,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":41.02308424472118,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-7.709198752318577,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":3.0304156356338443,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.9656461868129993,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.3226309082697109,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-0.1064421746022599,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.03519379224313482,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-0.011621042540449166,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.0038357984146112738,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-0.001265409843086214,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.0004172687005739355,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-0.00013753835202366283,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":4.5318353552851765e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.4927329259905327e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":4.9154346038346915e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.6181774181569466e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.325814867436392e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.752475139018699e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":5.765442782857407e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.8964294124288557e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.004996541983824069,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.00037446128939711736,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00021943126558548968,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-6.211837502102956e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":2.080527012942559e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-6.732255069176611e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.2189392661494454e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-7.347003100710369e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.4508167295653265e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-8.225054064761917e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.7760990687840466e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-9.417255766756352e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":3.2089745518730204e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.097804797340469e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.7686276339636944e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.297600878088602e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.479393751656963e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.5497361707940534e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":5.3717535337716074e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.8649683553439653e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3031,26 +3032,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-1.2462480103796792e-19,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0003297292531707472,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-7.536489903996635e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":2.5486800330175816e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-7.742106701178203e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":2.423685694589621e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-7.550816836980021e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":2.3624290631798433e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-7.405509958372585e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":2.3272255413271385e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-7.3304731269888855e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":2.3143970013675033e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-7.323730900705319e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":2.3227013851584713e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-7.382333021619683e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.351273137487784e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-7.503931699982726e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":2.3994734951164853e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-7.686835093338383e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":2.4668667246520773e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0008480514267731121,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0008957275239168259,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00031475820971492956,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00012489237820422955,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":4.682640839231372e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.7397378929865695e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":6.375604549165965e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.3159061225743935e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":8.352116767145475e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.995409398963723e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.0695225737358275e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.8052499592982196e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.3499983906027467e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.778314477073779e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.6880837284480722e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.95443275202813e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.097656969828842e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-7.381998737608473e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.5956046926883317e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-9.119969490302209e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3160,26 +3161,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.00014817214586678048,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00036332868890657133,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-7.912078643710534e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":2.7107149626225984e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-8.184123138888944e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":2.558519093860826e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-7.949599709938287e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":2.481351833838674e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-7.759352933589518e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":2.4325691631064285e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-7.644034997258398e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":2.407731991558412e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-7.601539887745581e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":2.40538772255616e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-7.628428407961492e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.424514112533254e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-7.72189509820765e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":2.4643353948400592e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-7.879840714436933e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":2.5242944695696247e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.000406500131028775,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0005049124633876672,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":6.389348929675714e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-2.4913349371701125e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.7883034530410816e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-8.723481444345654e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.7900869024852453e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.5402418078848979e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":6.016132929898622e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.288184419083654e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":8.542015499006054e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.145567362407281e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.1465124185505582e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.1460433248559255e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.490102333708514e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.329494162588835e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.8987592017484687e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-6.743687883877137e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.389059579287803e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-8.446231525699986e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3289,26 +3290,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.00019705337153532286,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":9.099452955184412e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-1.4233587319921406e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":4.9997425218499604e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.3380892298529757e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":3.8117906984838565e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-1.0524625800213624e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":2.8836145933482898e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-7.747970394068767e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":2.033122700964576e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-5.153319047843095e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.238845815383561e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-2.7180510600244158e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":4.9057623890923906e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-4.1406511254411187e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.2040139568248432e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.784847214416262e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-9.020466380017849e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":3.902840517116744e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.5617055349026482e-14,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.005840015453676822,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0005164153285750208,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0002748872147421077,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-7.903756768001706e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":2.634592020927608e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-8.531831199660453e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.8104365862694198e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-9.303487876373304e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":3.1025930036243987e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.040999552602666e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":3.5127918195904436e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.191401561839842e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":4.059065009855083e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.3884171735446e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":4.765644376548847e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.640705916927314e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":5.663265445580142e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.959158518967262e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":6.7904308021057884e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.357364702605034e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3418,26 +3419,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0028570860925105474,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00038168592510221645,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-1.622661621975148e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":1.3204178636562371e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-3.43622148997942e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":1.1213183607131955e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-3.451453970534441e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":1.0815431128372702e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-3.383648231475849e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":1.0622115221695686e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-3.3415790155168243e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.053753329883173e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-3.3305719929420734e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":1.0550656546659382e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-3.349603849338739e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":1.065694663818328e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-3.3975501672464826e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":1.0853224542007352e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-3.473566170348154e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.1137271936465372e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.001221844304193163,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0011113509501849334,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00039707298215148194,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00015718361065659533,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":5.90226043167542e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.19374602975514e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":8.04311588973682e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.9225492941958313e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.0542621482395144e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.781770586913202e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.350512096102383e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-4.805599462915788e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.705072463498785e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-6.035608897236558e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.1324083902339037e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-7.522140051089623e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.6500601334590045e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-9.326354119604297e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.2793687315390054e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.1522758717490678e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3547,26 +3548,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.00011998829051209278,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0005828128134054438,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.00013103007673156674,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":4.4801955017480496e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.3653110652732392e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":4.29569513753793e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-1.3444702873307733e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":4.2262508604511285e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-1.3309604908922254e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":4.20184855770819e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-1.3295106849646381e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":4.216131796489846e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-1.3399114366605023e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":4.2672562502155435e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-1.3617551904745814e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":4.354037313507555e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-1.3947337724715694e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":4.475675486895305e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-1.4386501749214344e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":4.631717136553961e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.00039048764271790593,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00043119011526424576,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":4.0972087720755105e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-4.736691412497727e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":2.8119009084161015e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.3053380063791577e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":5.519357256110306e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.2082922753648693e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":8.537469197972206e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.2241927969624624e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.1974506477781308e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-4.39268593503965e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.5963845398614102e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-5.759753618813693e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.0663672396107006e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-7.380021530476062e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.626298247082077e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-9.319005805775984e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.298924916895607e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.1655792824851014e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3676,26 +3677,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.004675958580022222,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0002214191783126147,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00017250000151679533,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-4.68831449038724e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.5662023052654776e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-4.967355152163811e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.5993584097941195e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-5.140733717187203e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.6563159875029274e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-5.34326035043661e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.7261939974116308e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-5.583762965346192e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.8083763690289577e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-5.863243714803597e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.9030084252603624e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-6.182504473464896e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":2.010380069774244e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-6.5426327185286715e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.1308842214021055e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-6.945028989109546e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.005816746086501018,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0008479706070828086,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0003534229441324253,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0001068815092195466,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":3.5261319174161906e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.1487488139745248e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.7905144584064726e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.2580498652247594e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.204455332378585e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.4135529307950065e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":4.7785568464571224e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.623310595712435e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":5.538423720442037e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.896793738851575e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.517649269927933e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.2459770258993736e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":7.758709626842402e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.685898839187743e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":9.314738993381378e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.235303685197005e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3805,26 +3806,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.005083168220652727,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0004977234014804985,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.000248837156651276,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-7.223448132875113e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.370399219445673e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-7.553472698407205e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.4299245182367877e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-7.814482695315121e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":2.518188865172933e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-8.125563358831695e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":2.6255690270182494e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-8.494623815185967e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.751586755409119e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-8.922865629982374e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.8965030317005e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-9.411518941368057e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":3.060770936432441e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-9.96226766733253e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":3.2449978155145527e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.0577271345888236e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0026701597326879694,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0015394384470909879,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0005723678040243344,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00022196527155868084,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":8.302975868934565e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-3.070233221509065e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.1219053106728425e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-4.06560263445028e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.4635594045445458e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.241328336788728e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.869277755784381e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.644516234168502e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.3555183202136403e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-8.332240758455728e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.942141252459493e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.0373648247386902e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.653245621128335e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.285279084996644e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.51816583734251e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.5872101022413348e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -3934,26 +3935,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.005963635566089894,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0006587433143404213,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00030967532867866076,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-9.087690180076793e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.9726054831878492e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-9.477347665647301e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.0476370696559672e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-9.799544807164255e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.157250197070876e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.0185918459040027e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":3.2907833379473926e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.0645206178468512e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":3.4477163894295386e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.1178804183371334e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":3.6283713050251144e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.1788215912743198e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":3.833306090962854e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.247552032473741e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":4.063272422959563e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.3243394739620274e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0005234602807196753,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0023234696783292837,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.0003676664433246326,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":8.7164679375055e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.1072319331250617e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.191461471555889e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.945885829917684e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.1231814843370305e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":5.225193871818992e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.2063398220365224e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":8.824772050130455e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.410656090603348e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.287785518539648e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.782059845412021e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.7540388442784874e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-6.373961139546341e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.2995713206267591e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-8.249500517395878e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.946182013769235e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.0484104937344592e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4063,26 +4064,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.006128750914772668,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0010236239689518259,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0004012079208670123,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00012222163708302397,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.962176606354683e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.267135624786467e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.074901899862649e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.3112662778896254e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":4.2269559520544657e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.364451945035732e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.4103885311073745e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.4273750979705014e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":4.6249588842406304e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.5002054538652987e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":4.871171027030942e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.5831564808738108e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.1498174325021825e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.6765197757765422e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":5.461945716580208e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.7806664392151641e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.013968871675768867,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0005632179328970903,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00048807006419139304,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0001272778607851475,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":4.2465411800284574e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.337762291761139e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.32165577116265e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.4014523356705732e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.5860456519785195e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.5116981538719722e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":5.018988321706054e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.6773625051031232e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":5.6397882318055295e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.9066420128432208e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.477320218077402e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.2100303282190925e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":7.569170528935037e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.6009567965274116e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":8.96312637350956e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.096378576314114e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4192,26 +4193,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.013510767730568292,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.000790953071984415,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0005303654179533418,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00014572439787738435,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":4.8149510954332985e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.519511748827132e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.862921316981513e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.5545618513227934e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":4.982504178807446e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.5994243223300354e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":5.143055783403331e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.656361263205496e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.342354006717686e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.7254953771147022e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":5.580344708988527e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.8069135624344433e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.857431371015154e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.9007990443482724e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":6.1743542078040785e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.007437150006784e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0026664263173098676,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0008946015106693722,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0002957484841464122,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00014400751779662137,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":5.8457528264946746e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.31239668949688e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":8.845626220354352e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.317854430946378e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.225909651660818e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-4.479834055001668e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.6232398538637632e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-5.843121079467442e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.0924456106785906e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-7.462254294512978e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.6524427234204304e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-9.40282133191106e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.3260178680060304e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.1744079597595006e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.140768905537166e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.4582212392193787e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4321,26 +4322,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0035141720655028604,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.001115693010013717,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0003577668669792512,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00011469654947449053,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.68522788776407e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.1858379782390824e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.821763085359779e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.2334549856916356e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.98630049759072e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.289927909189821e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.179010419138029e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.3553733763252842e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":4.40036099032471e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.429978155246667e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":4.6510577191565536e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.5140018690697617e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":4.932035971867521e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.6077763634183364e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":5.2444589504358004e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.7117054929577799e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0003771376089175305,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.00023846935205417086,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00018578845290124246,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-9.537469319557895e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":4.220122337045513e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.734892050573522e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":6.82481298033853e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.6085463137661674e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":9.772190238780411e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.6079513850607185e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.3176447492467523e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-4.7721839023027934e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.7171981084344722e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-6.147575311175227e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.191891267797206e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-7.789575770761614e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":2.760960277939379e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-9.765015317103315e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":3.447652417587007e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.2154846813655803e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4450,26 +4451,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.006888689411852073,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":8.785054749713309e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00015448741896677916,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-3.4333327777611014e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.2098457367826358e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-3.7595334993036882e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.207902850595576e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-3.857504965864133e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.2366524986557952e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.9694513159974903e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.2764063981323549e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-4.1106983596929555e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.3258318684700933e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-4.282177126871388e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.3848646601863125e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-4.484142761749993e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.4536013186643938e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.717051606647924e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.532225031624e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.981611011315273e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00292646588389654,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0009586534001949244,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0003079752441547401,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00010045372658884201,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":3.296196894709907e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.0901059510873933e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.6297171380971317e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.2163337152613036e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.099625061543329e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.3889864865809698e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":4.7278639133441124e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.615873935664277e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":5.542466132383547e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.9069856046667037e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.578939308825969e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.274907005275871e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":7.881797881517743e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.7353548662302308e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":9.506453076462591e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.3078419282065023e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4579,26 +4580,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.004155172292743444,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0001416001138331333,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":7.257282006720362e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.3664378054253123e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":5.127199347556635e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.5794447516395013e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":5.113237314858088e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.6381938310346352e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":5.273057089062601e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.6986398649537295e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":5.480938296252457e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.7708508127334465e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.72889050799607e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.8555710836945843e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":6.016853727127383e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.9530428159197033e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":6.3455927637619054e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-2.063573238848618e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":6.71623113699099e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.1875696344530655e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.004595459685615339,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0017776141693532765,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0006745782631378365,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00025116834494771684,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":9.233236731528447e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-3.360782075249037e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.2140596671848174e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-4.359762867053072e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.5582861012352416e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.548837076461293e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.9699014499243037e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.976277162397e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.465682270468061e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-8.700467604829511e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.0659663965334747e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.0792313887594042e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.795491526574823e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.333817256901597e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.684418690281364e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.6443428201269288e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4708,26 +4709,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.006039439624533692,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00011009778267473577,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00012688950026522208,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-2.7002497208161006e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":9.581876428536804e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.9508367307200494e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":9.435745251743236e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.996417792058187e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":9.556867356568724e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.052380432861999e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":9.768989601955585e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.1320744815410023e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.005929201656455e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.236023529932665e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.0426221204611526e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.364139065067555e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.0869619531995804e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.516499147100568e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.1390057359098062e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.6933904017142696e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.002372770015122069,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0008228357901076251,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-8.46601062795628e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":2.701111850942104e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-3.998926700511542e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":1.955770648524933e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.150384420180776e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.195427997671873e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.0895871966027433e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-4.749410347980938e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.9356926881160228e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-7.57319324257759e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.883787075744933e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.077444700302612e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.970121288706551e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.4477341202681488e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":5.237245691860456e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.8828259452226528e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":6.735647572171899e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.400174580182237e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4837,26 +4838,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0026539220822553652,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0006424993671337851,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-8.518262366435108e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":3.686601137870942e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.1028089519880766e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":3.5999653877234027e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-1.1516933467888004e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":3.7105785295397417e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-1.19567738020227e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":3.8597178917088596e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-1.247507954909093e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":4.037253199382025e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-1.308084697347118e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":4.24288108955709e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-1.3776114835645261e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":4.4771510182708226e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-1.456315296010419e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":4.740880805286337e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-1.5444915812325716e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":5.035116429259772e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.007206709073041786,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00017984355927983388,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00014395386628923826,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-2.843967887059275e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.0358870050845986e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-3.1809469491255848e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.0301965052203324e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.324779881050727e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.084950052539661e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.565184849114953e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.1803635762397879e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.93450601791877e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.3197558722278714e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.452144473041212e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.5096148668384343e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.14205635540865e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.7585140067392398e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-6.034947405815688e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.0773928892556573e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-7.169680819917074e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -4966,26 +4967,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.004989327950251343,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":3.2548199740071574e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00012627623175317604,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-2.9852796373826413e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.0326718418823779e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-3.2269247044283113e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.0365073350257953e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-3.314065356201981e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.0632508130615184e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.4156597795084383e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.0991582979879031e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.5424033308190385e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.1433070772604705e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.6949889915142175e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.19567244286124e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.8736784024041176e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.2563544369336168e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.078912827720292e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.3255258489297526e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.3113472745175824e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.002117579473868879,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0002899153194263426,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":4.938125429013136e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-3.1276843966346736e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.2617312497561857e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-5.103553163587463e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.9705014590808755e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-7.448645455917744e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.7671449814542614e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.0153910631570602e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":3.690882594337322e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.3318903483998395e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":4.778903703081722e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.7069598939571524e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.074993299762881e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.1557605785362636e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":7.631802190212852e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.696595925704711e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":9.5130385975388e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.3516615996828917e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5095,26 +5096,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.006747349311297612,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00676132424531414,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0017945000857503826,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0006055298938462947,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.00019218486049674908,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.205115564635795e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.9986864105546504e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-6.453280414106869e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":2.085891496080079e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-6.751066725014762e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":2.187528538816749e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-7.095924275808062e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.3041073122656228e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-7.488650172410029e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.4360214299288687e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-7.930613686038543e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":2.5837687702790335e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-8.423572960535048e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.7479649986971408e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-8.969662511946166e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0023192253548122116,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0002420218293256205,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":2.8246755166659854e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-8.077926121484293e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":5.17561555493033e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.259129777375529e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":9.410726942314166e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.716597733833141e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.4256520665894895e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-5.3533684194563435e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.98001209172077e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-7.240772235053739e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.6251352498110567e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-9.45377969543646e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.3866223723159244e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.208103466850412e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.295146590607316e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.522893381171624e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":5.38766415333076e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.9026012102878653e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5224,26 +5225,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0017536462409313677,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0010434262726825984,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.0002035967606099791,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":7.539270747707788e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-2.3284664323996288e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":7.530382717480667e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-2.4123935831014242e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":7.762722330033416e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-2.50007294237868e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":8.06503252558239e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-2.6051976986090002e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":8.426404963871099e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-2.7287791152156154e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":8.846770884581353e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-2.871157293324309e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":9.327224134268821e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-3.032773244443902e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":9.86938523678668e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-3.2142161558728368e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.0475354192583675e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.004291141792823936,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00014476105490148722,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":7.910426856653229e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-1.5085799149001984e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":5.777221294448257e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.8220443854414757e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":6.079415590897618e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.0174284004605655e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":6.758880979520952e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.275975485051456e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":7.706180001846288e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-2.6214269022395422e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":8.954655575026762e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.070023403274089e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.0558706492801922e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-3.641398225551727e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.2587706560317847e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-4.360115009257556e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.5128385815207318e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-5.256758426590823e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5353,26 +5354,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.38024979319695884,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0002879645064286612,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.009597601303038794,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0022627318725227854,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.0007818024102372291,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-0.0002438773712049849,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":7.821894532492143e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.4972421044151503e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":8.000776724138539e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.5668228181727097e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.249686683450544e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.6555928919485714e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":8.561364286132575e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.7640099549670014e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":8.93540283791238e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.8922055904199773e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":9.372353691270637e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.0404502343411015e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":9.873327731609618e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.2091785069382655e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0007233861244403141,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0003590147730650639,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":8.79060076450496e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-3.765076626121122e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.3707459482417337e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-5.07494307930104e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.847166871436269e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-6.680923878223987e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.400782000233184e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-8.586162206531177e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":3.058844493369944e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.0863402589518394e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":3.848393964738441e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.3605129167624183e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":4.801733039235987e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.6923750671278003e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":5.95805584682865e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.095598940110607e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":7.365087583139937e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.5868520093603705e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5482,26 +5483,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":34.79873277480823,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.6792814258253428,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":1.0827679852399246,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.28516922978403214,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.09892108063667235,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-0.03194590110833935,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.010499794849777375,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-0.0034370883596882584,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.0011265395167016643,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-0.00036920988162131096,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.00012103276150784967,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.968207908295562e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.3012175358759403e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-4.267383799349761e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.3996683922903254e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-4.591297555005218e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.5062196460665245e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.941739597649108e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.6214611297635435e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-5.320655465627137e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0016018750322874377,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0008917824732448228,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.00012787974985834657,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":4.128337254632753e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-9.276610092863931e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.081354912067083e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-3.5992535371923314e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.0770523280832233e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.3628960857238404e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.7272652745269943e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":8.674630396430113e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.803570233743564e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.555334849644039e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-6.098041594552784e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":2.3254415572031165e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-8.697410380659474e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.2072609694245966e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.1702382110721722e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.2353150538499956e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.5231681953121718e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5611,26 +5612,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-1.5588403379358552e-19,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00019398282591680818,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":3.258566103418706e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-8.58046293356155e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.6121032035262477e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.1659890371115418e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-2.5715599815428548e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":3.6980824853971254e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-2.066439279817863e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":9.320844814272578e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-3.815745020511629e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.4777906845408703e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-5.52204237849373e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":2.0126007365775538e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-7.202302779071358e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.5417510932098924e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-8.872592551101657e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":3.0701916045345976e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-1.0548187103392956e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":3.602647593534727e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.006379776929536083,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00016650504418677152,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00012418892853775107,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-2.3718788359311814e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":8.576156075849224e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.5826958725477962e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":8.230188566856665e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.61042385938881e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":8.376899715531096e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.7080837108755223e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":8.827585602713798e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-2.8997866600884678e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":9.595915208346579e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.1972869151810353e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.0720540238393709e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-3.6152756567900495e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.2254716177472734e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-4.173058654197416e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.4267855729125755e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-4.895478563104095e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5740,26 +5741,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-4.502545476520719e-19,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0002466792850500004,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":4.4042160113334805e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.2332735094932704e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.702166197989766e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-5.434296432303827e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":7.14423352918375e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":8.030969612820488e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-1.2043470812293122e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":6.753138139409947e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-3.0509769427911177e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.2500015129433124e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-4.843542134283946e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":1.8104925466969711e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-6.600248031693472e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":2.3623982685379056e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-8.338271072885444e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":2.9109995152076228e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-1.007387167535688e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":3.4613148899490546e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0023497685686721995,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-9.853228540663222e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-9.74803127140497e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-9.564880677134581e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":4.99443694942857e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-2.4058317418902915e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.019434226841604e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-4.09810517480596e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.588141526692534e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-6.008588045397738e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.23444150975153e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-8.204731514547761e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.983971461072915e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.0772404561624226e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.866470179774299e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.381410998160927e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.917409402270985e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.745278153247949e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":6.179467319314538e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.1836782234752788e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5869,26 +5870,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0005548402954858095,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00027330702087286185,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":7.483725492429757e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-2.351460845347491e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":7.134307693120017e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.189696299173684e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":6.717203925284127e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.0662734659858008e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":6.36866164860209e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.967397556693025e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":6.091418977889591e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.890398409176762e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.880447332851647e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.8335832772817265e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":5.7309930737166584e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.7955562147236264e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.639023641478698e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.7751523815631367e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":5.601192343890384e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.7714149263200426e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.003536371697464215,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-3.205843106036633e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":6.722153044822771e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-6.1413466681943825e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.3505571245968184e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":9.4473664294146e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-5.735348023193867e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.7321432125112404e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.166540341883955e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":4.697994451689749e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.8238422076479055e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":6.9079640919115855e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-2.5710277702771652e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":9.446449390641157e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-3.4371875136697163e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.2413092174516715e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-4.4566358086478546e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":1.5926305894841e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-5.6703327448643075e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.0128041957093423e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -5998,26 +5999,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0019144358986960927,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0002522944899408023,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":4.742237496345466e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-5.6660762801375855e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":8.842159518751371e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.7647127623448518e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":9.824067932963001e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":9.960542560040692e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-7.28898909698188e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":3.582568908335291e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-1.5310627866333971e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":6.083094278638117e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-2.3118437826256096e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":8.527349969030849e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-3.0788191928405005e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":1.0939764965544286e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-3.839390181508413e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":1.334318523525476e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-4.600593392295285e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.5759356855457008e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0029039121675641364,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0005352348892493925,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-4.814582282036299e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":2.5191716978138897e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-7.2028095936456266e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.3848730882125316e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-7.673428191641983e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":2.512177314470311e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-8.267826025200094e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":2.7423326306937534e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-9.15561619234141e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":3.0756251267332835e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-1.0389285406057873e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":3.5269354195877967e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-1.2026048109904285e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":4.1165213475996264e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-1.4138538233475691e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":4.870225220558188e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-1.6818508611275331e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":5.820537555096506e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6127,26 +6128,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0004105727796305263,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00023931710866834354,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":2.3467909571991023e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-4.680871997772672e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-4.3982433175112867e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":6.46553573981718e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-3.687757380231194e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":1.671253496328899e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-6.86299136889018e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":2.662688796775368e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-9.96186913159587e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":3.6339487560192066e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-1.301301218247581e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":4.5947309816635557e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-1.6045477737196007e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":5.554042849266501e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-1.9087015256607195e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":6.520471250867477e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-2.2164242388481343e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":7.502287674660155e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.001599983381757245,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":5.765533063122567e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-8.350665757912833e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.0350070496747013e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.2386740990283655e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":4.7318091864327926e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.7817713813327474e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":6.595181846140457e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-2.4139116639803265e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":8.756897306333452e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-3.155117625014486e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.1306878775124845e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-4.034716288161152e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.4348080316978164e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-5.088291282791568e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.8004187812963835e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-6.358848348659213e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":2.2424932310415657e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-7.898564023765164e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.779227667485393e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6256,26 +6257,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.000797253576200348,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0006560477756377178,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00015580616297592085,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-6.017213058735816e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":2.0290200910784354e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-6.993900808268832e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":2.381308126757762e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-8.082954039774794e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":2.7317507814653914e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-9.201902210396895e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":3.090551966721386e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.0353734088174471e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":3.460983988129385e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.1546869868075757e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":3.8458547390645634e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.2790066684826467e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":4.24794941378413e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.4092162969176392e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":4.670081858734866e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.5462132791660372e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0015964708090670974,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0005450773586054759,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-4.358665034607053e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":1.1114289905699179e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":5.284864754014837e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.2090801768201696e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":7.440573312570832e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.522733527778828e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.50262295082573e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-6.045335557570354e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.3455581313661975e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-8.880290355859736e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":3.3041061979551373e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.2137195784268082e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":4.4154867575503344e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.5944007045297682e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":5.7237288954738906e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.0452700675284108e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":7.281401996246724e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.584546996567841e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6385,26 +6386,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.00019171989498494984,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00089767031536554,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00024893830876350373,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-9.176191578914525e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.1212558183797014e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.0723993802336037e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.650504146714044e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.2381368102633525e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":4.182260776746418e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.408111035641082e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.72733706960825e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.5831471874428212e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":5.290389202983879e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.7645451118591978e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":5.875653453980367e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.953634077881479e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":6.487352757487032e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-2.151755118279755e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":7.129757451799019e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.3602706035459273e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.005162813629778613,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":4.904184203210279e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.00012242730995399055,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-2.7250872793235026e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":9.64536197981649e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-3.0221500764379573e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":9.864526744666703e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-3.218365095642666e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.0603235044265813e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-3.516646256112418e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.1742949346487716e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.945191855101532e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.332809383994336e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.5250209227680176e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.5430584130902783e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.282281102393459e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.814358984253507e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-6.25016601894787e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.1584919200896082e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-7.47039401045882e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6514,26 +6515,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0004878068419854692,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0010925259828227553,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00031073475113066056,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00011391525905042644,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":3.883926569398054e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.3349492807970891e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":4.547398919446923e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.5431055464413655e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":5.214735738981045e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.7563973175537094e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":5.898551210539843e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.9759420475543904e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":6.604637416559144e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.2033791093670963e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":7.338314915106552e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-2.440379150066329e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":8.104888414515262e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-2.6886263913259274e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":8.909719643365945e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.94983097884813e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0010947749939001286,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0003361744802428056,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":8.603333513685988e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-4.086174650822358e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":1.5787822182802085e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-6.096512489714985e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":2.289207552537566e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-8.47573838484149e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":3.101213976007728e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.124876365117258e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":4.0524201720215546e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.4521129800796752e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":5.181280259598816e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.8424299736839412e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":6.53352170483724e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-2.3116983022240323e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":8.164349212596343e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.879137073551353e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.0140737807458286e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-3.568103690410632e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6643,26 +6644,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.0020375705592143357,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0014061037939272526,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0004374347708306571,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0001560029594639414,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":5.333268542192167e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.8266581019535446e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":6.2124567759259246e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.1046036268673236e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":7.102649645757303e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.3894527662064637e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.016402487319587e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.683019397814827e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":8.961126812197614e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.987500913240419e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":9.94387284591722e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.3051198905962494e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.0971698228770458e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.6381194023893195e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.2051749133159388e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.988780531025581e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.010583398440489146,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0015530681071918091,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0007849182001580962,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.00045211514838015533,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.00020118121539623794,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-8.368220088237415e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":3.31028569817395e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-1.2704952278537088e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":4.773193220300708e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-1.7660437705010124e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":6.46004779315786e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-2.3425680585753177e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":8.437549025637794e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.0229657582446655e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.0784873382314789e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-3.834641071688902e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.3597067209249105e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-4.810607111048176e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.6988946959724727e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-5.99083929635084e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6772,26 +6773,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.003380412099069654,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0014651107161792896,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00032845719606700935,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00013631496039964695,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":4.7294426340277086e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.676184228494094e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":5.832470376892513e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.016077020424086e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":6.918066774708664e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.3605834303198863e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.016000980656706e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.7110043965214435e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":9.136733801806955e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.0700917905778014e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.0289298017463359e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.4406474245121607e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.148253601076362e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.825457752602068e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.2725257425593362e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.2273136129146325e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.0033447314326495326,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.005733444455908797,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0014616347348221017,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0005077415598279145,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0001637668105722786,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-5.431448298836511e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":1.804682965377959e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-6.042942479852109e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.034762415013321e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-6.888372764230442e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":2.3429609482820096e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-8.00256973624926e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.7433558117211308e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-9.43444274744031e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.253446534661949e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.1245955484110845e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":3.895163835821947e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.3514553598615186e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":4.695818614082646e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.63364278236739e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -6901,26 +6902,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.00399609147850618,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00139207079890152,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.0004790019540179249,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.00016395980313148003,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":5.581334243547292e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-1.8916176430921535e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":6.386740929492195e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.1494019722392987e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":7.213391583277204e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.4149375046465075e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":8.067734201698183e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-2.6902386133359768e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":8.956141642340889e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-2.977320767586612e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":9.885006473700622e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.278215579511793e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.0860799149442023e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-3.594987958639961e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.189012220262837e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-3.929752977051245e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.026231177059992995,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.008304956238847557,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0033168131895236507,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0012256072538765499,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0004524329022987785,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.0001648357010603129,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":5.961994945691754e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.1428346893654005e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":7.664474736512986e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.7307541446329008e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":9.698933581622139e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.436090282090672e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.2148135447278932e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-4.287685471315345e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.5112498343451207e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-5.320547831996925e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.871414379783058e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-6.577304972663316e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":2.3101942178431422e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-8.109969846663589e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7030,26 +7031,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.003236864603780975,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0005559662663252831,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":6.592811233902257e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-3.504518785520886e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.1627999243459046e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-4.165081891662874e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.4459511498105687e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-5.001209945693436e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.7160090023666816e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-5.8557983149222395e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.988553851938599e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-6.725492642373992e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":2.266711799680077e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-7.616698656770628e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.552759288805037e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-8.536343764116216e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":2.848893420112033e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-9.49134269830284e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":3.157301016643877e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.0488622477624853e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.004979872221620489,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.0004986344505157848,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0001876280913264303,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-3.8382597009219174e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":8.044126327533865e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-1.0297586180293434e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.431293660363203e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":1.9851834864310296e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.1268433506078879e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":5.2061274981588174e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-2.1905616550337374e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":8.742805094814072e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-3.3741741757784955e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.2727402603717559e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-4.722754431763405e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.7313404941062676e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-6.288845354857324e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":2.2681235039015714e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-8.134588851190998e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.9045463878148098e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7159,26 +7160,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0021003354670378976,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0003405722185523259,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":3.385650951349729e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.88280324157406e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":5.992146269606946e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.1108161174331317e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":7.196942930943184e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-2.45528133451254e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":8.326038453348074e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-2.8133588015905472e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":9.473804856347719e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-3.1811178993845247e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.0654850971246113e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-3.5609784504635826e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.1878541520751295e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-3.9557549201050575e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.3153891450257111e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-4.368295843439452e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":1.4489957392396317e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-4.801483834918063e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.001973579343693756,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.0007076370122247867,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.00010967857731054567,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":4.32811796417526e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.2842462198222044e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":4.1310519912123005e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.3142372951329028e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":4.2370875827566896e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.3754626607236842e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":4.5020846196979187e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.4846451749578092e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":4.930865688240221e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-1.648452871548986e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":5.544223747588995e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-1.8748335977177716e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":6.370766224082516e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-2.1741277941620728e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":7.447564012569097e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-2.5595743956586216e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":8.821721878492513e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7288,26 +7289,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.003246613976505146,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0003772260490258189,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":2.0528193743298745e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-1.8824961465331495e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":6.33469086478281e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-2.402661630346109e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":8.627394873214625e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-3.0705570602330753e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.0775830265594368e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.745980624318878e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.291767863265409e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-4.425577299995777e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.5079509302333199e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-5.114617071535244e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.7280114821429513e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-5.8187673035170203e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.9537366651776566e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-6.543615411686123e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.1868824581945385e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-7.294689044510465e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0010759654768474215,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-2.103273328899557e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-7.024923674345002e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.122457257897109e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.4190995986659484e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":5.809804857900513e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-2.2886506849245378e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":8.74820116204494e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-3.278064331853957e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":1.2104461097431275e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-4.421118779218346e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":1.6013562088980116e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-5.762624781871165e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":2.063131325011049e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-7.356318065385795e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":2.6143888972142433e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-9.266775038259992e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":3.2775643822670896e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-1.1572037379644803e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":4.079833587618742e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7417,26 +7418,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.0035474660516100305,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.00015737291896466643,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.0001425891995527942,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":4.246791492913934e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-1.5174866831335095e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":5.1460559827525205e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-1.7546974612483894e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":5.94199336457094e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-2.005854795964676e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":6.748609824305278e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-2.264345087134631e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":7.579217004939518e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-2.5316098497767382e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":8.440564814277079e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-2.8096026211940723e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":9.338979215616759e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-3.100318410046206e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":1.0280811179289566e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-3.405779519333852e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":1.127251617205259e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.10910960375798781,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.044817507680850556,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-0.004326505211468913,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":0.001141983878111389,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-4.76767506912818e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-6.592351223529671e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":4.884996190621776e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.4484144341789096e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":1.0737271707194503e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-4.390053229173696e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":1.7211565309528695e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-6.563268602084155e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":2.4546793275027447e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-9.051728479244011e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":3.3026745909237125e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.1952886763976466e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":4.298643945530419e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-1.5382286745714633e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":5.482526159844327e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-1.9478263680526466e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7546,26 +7547,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.00210330446663704,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.00044362241027960675,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":6.569286495131453e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-3.1336892843083185e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":1.0498405641517417e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-3.726393321722365e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":1.2892776053959232e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-4.443084806893648e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.5202264477412063e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-5.17526102357511e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.7539075685419263e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-5.921673837058397e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.9928448546020497e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-6.687870059850413e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":2.238966156598987e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-7.479755505833517e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":2.4941439389956134e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-8.303231887015944e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.7602464866051013e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-9.164223584426823e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.39432505207992863,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.002877468028001725,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.009526618915172584,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.002137108561542698,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0007518990085603478,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.00023510770183904426,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":7.6520672233078e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-2.4901049117094063e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":8.183432605462479e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-2.7077761219175012e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":9.022438023140213e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-3.025239508993799e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":1.0202077251605816e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-3.458225318479872e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":1.1776255763349951e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-4.0263709164104534e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":1.3815043776407609e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-4.754669014272175e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":1.6407225423480954e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-5.6745835338957784e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7675,26 +7676,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":0.02901570598183297,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0067248133809694405,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.002579846248598416,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0008608299415588087,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.00029454134337609925,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-9.96266448968863e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":3.363074133607203e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-1.1312143328002302e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":3.7949426632762587e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-1.2700533118745317e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":4.241690110058653e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-1.4140495987461933e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":4.7064659144458497e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.564268512516938e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":5.192594578100575e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.7217714209472091e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":5.703453887282836e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.8876368862874325e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":6.242493292210758e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-2.0629702352525003e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.08907602882058266,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":-0.02370354764543647,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":0.0059977004608554535,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":-0.0029432473943970645,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":0.0011512791205913772,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":-0.000448691048874263,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":0.00016954621703399678,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":-6.306550370119179e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":2.315552049860605e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":-8.421423226078462e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":3.040171702082505e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":-1.0911821238798528e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":3.8985479434400643e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":-1.387759841677236e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":4.925393689572162e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":-1.7439177521735097e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":6.162579122566195e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":-2.174227644337292e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":7.66086954090246e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":-2.6963895082686203e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7804,26 +7805,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.004757070903887342,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":0.0005052358279911714,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":-0.0002723597857120698,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":8.727842674830473e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":-3.07390846750514e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":1.049421323237928e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":-3.582805738580823e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":1.2158136603216738e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":-4.1106120496469705e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":1.3849209132800954e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":-4.652316265625152e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":1.5588385831269863e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":-5.211545589178699e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":1.7389459131613743e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":-5.792459262213697e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":1.9265733404172437e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":-6.399260735402859e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":2.123056765098524e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":-7.0362006620986165e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":2.329751781239238e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":0.00020901832349900707,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":5.193392578677062e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-2.620447913725042e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":1.3870600815091874e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-6.03169194135294e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":2.4708559877268344e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-9.685254657862681e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":3.6939008787352485e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-1.3816037753948974e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":5.09500297997321e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-1.8590692240501084e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":6.728464428339972e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-2.419831082826407e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":8.659299676660752e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-3.0863787122141195e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.0965390353377836e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-3.885734967727015e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":1.3740630649227549e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-4.850565197810644e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":1.70987798684196e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -7933,26 +7934,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":-0.16735362427303158,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-0.0315953569439125,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":0.00431088488248679,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.0021690752602911713,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.0007309003370549046,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-0.0002620943833157259,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":9.131171380659202e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-3.1653516842588635e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":1.0882595524759634e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-3.719678300405241e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":1.264897735095366e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-4.2830227149021817e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":1.444968073311264e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-4.859643945810325e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":1.6299470481377943e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-5.454057219297037e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":1.821263580402775e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-6.070758139445781e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":2.020338307944709e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-6.714243797619894e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.00015999726435649285,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00015419987772873634,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-4.129211886837777e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":1.4172064021739827e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-4.596030273726072e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":1.525808698767036e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-5.079684076110205e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":1.7035353994171798e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-5.744440498602406e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":1.9471919803731516e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-6.630608307190435e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":2.267008810826984e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-7.778314301549517e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":2.676999131334762e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-9.237586574032491e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":3.194872041012103e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-1.1071065826576652e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":3.842739494584874e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-1.3356701918488017e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":4.648048214186206e-13,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];
@@ -8062,26 +8063,26 @@ var hideTip = window.__mem_core.hideTip;
 })();
 
 (function() {
-    const data = [{"x":0,"irf":2.468055187418698,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":1,"irf":-8.11680382873962,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":2,"irf":2.08840312076873,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":3,"irf":-0.7352534556514456,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":4,"irf":0.23838308859122576,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":5,"irf":-0.07879905713153457,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":6,"irf":0.025915539601911803,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":7,"irf":-0.0085311378571553,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":8,"irf":0.002806959702323667,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":9,"irf":-0.0009234470921578451,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":10,"irf":0.00030374188848455606,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":11,"irf":-9.989200697742203e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":12,"irf":3.284690658524406e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":13,"irf":-1.0799468310308785e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":14,"irf":3.550255784022227e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":15,"irf":-1.167000757810103e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":16,"irf":3.8356697130128396e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":17,"irf":-1.2605897567688935e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":18,"irf":4.14259429301978e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
-{"x":19,"irf":-1.361257549342441e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
+    const data = [{"x":0,"irf":-0.0007412559334696887,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":1,"irf":0.00024478543844816083,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":2,"irf":-9.606348238299659e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":3,"irf":3.5444103157815015e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":4,"irf":-1.3038260900271954e-5,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":5,"irf":4.740100202453699e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":6,"irf":-1.7114057313469798e-6,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":7,"irf":6.142601684792318e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":8,"irf":-2.19466263791591e-7,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":9,"irf":7.812406523534134e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":10,"irf":-2.772787173738049e-8,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":11,"irf":9.817605670803291e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":12,"irf":-3.4693282098821443e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":13,"irf":1.224025834268709e-9,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":14,"irf":-4.3128648672835064e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":15,"irf":1.5180016216637266e-10,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":16,"irf":-5.338165450494014e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":17,"irf":1.8758258221360884e-11,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":18,"irf":-6.5876247285305414e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0},
+{"x":19,"irf":2.3123119690747928e-12,"ci_lo":0.0,"ci_hi":0.0,"zero":0}];
     const series = [{"name":"IRF","color":"#1f77b4","key":"irf","dash":""}];
     const bands = [];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];

@@ -92,14 +92,11 @@ function main()
         # Trending I(1) series: log INDPRO (for filters + ARIMA(1,1,0) with widening CIs)
         y_rw = filter(isfinite, log.(fred_gm[:, "INDPRO"]))
 
-        # Volatility: INDPRO growth rate (fallback to S&P 500 if available)
+        # Volatility: Consumer Goods Industrial Production monthly log growth (public-domain FRB G.17)
         y_vol = filter(isfinite, apply_tcode(fred_gm[:, "INDPRO"], 5))
-        sp_idx = findfirst(v -> occursin("S&P", v) && occursin("500", v),
-                           varnames(fred_gm))
-        if sp_idx !== nothing
-            sp_ret = filter(isfinite,
-                            apply_tcode(fred_gm[:, varnames(fred_gm)[sp_idx]], 5))
-            length(sp_ret) > 100 && (y_vol = sp_ret)
+        if "IPCONGD" in varnames(fred_gm)
+            ip_ret = filter(isfinite, apply_tcode(fred_gm[:, "IPCONGD"], 5))
+            length(ip_ret) > 100 && (y_vol = ip_ret)
         end
 
         # Wide panel for factor models: ≤20 clean transformed series
@@ -292,8 +289,8 @@ function main()
     # -------------------------------------------------------------------
     # Use raw-level FRED-MD interest rate/spread panel (no tcode transform)
     # for visually meaningful factor forecasts with non-zero magnitudes
-    _fac_vars = ["FEDFUNDS", "GS1", "GS10", "AAA", "BAA",
-                 "T5YFFM", "T10YFFM", "AAAFFM", "BAAFFM"]
+    _fac_vars = ["FEDFUNDS", "TB3MS", "TB6MS", "GS1", "GS5", "GS10",
+                 "TB3SMFFM", "T5YFFM", "T10YFFM"]
     _fac_avail = [v for v in _fac_vars if v in varnames(fred_gm)]
     _X_fac = to_matrix(fred_gm[:, _fac_avail])
     _fac_good = [j for j in 1:size(_X_fac,2) if !any(isnan, _X_fac[:,j])]

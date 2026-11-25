@@ -223,3 +223,102 @@ jobs:
             exit 1
           fi
           echo "rng-lint OK — no bare rand/randn in src/"
+
+  # GPL-3.0-only license compliance lint (#930-#933): verifies no GPL-incompatible
+  # solver JLLs in default [deps], no MKL dispatch in src/test, FFTW defaults to
+  # GPL-compatible fftw provider, and bundled datasets are strict UTF-8 & clean.
+  license-compliance:
+    name: License compliance (#930-#933)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - name: Static source & dataset license checks
+        run: |
+          if git grep -n -E '^[^#]*(MKLLUFactorization|set_provider!\("mkl"\))' -- src/ ext/ test/; then
+            echo "::error::Forbidden proprietary MKL invocation found in src/, ext/, or test/ (#931)"
+            exit 1
+          fi
+          if git grep -n -E '(^|[^A-Za-z])GPL-3\.0-or-later' -- src/ ext/ test/ README.md CONTRIBUTING.md DATA_LICENSES.md THIRD_PARTY_LICENSES.md docs/src/index.md docs/src/citation.md; then
+            echo "::error::Stale GPL-3.0-or-later header found (package is GPL-3.0-only)"
+            exit 1
+          fi
+          echo "Static source checks OK"
+      - name: Verify default dependency graph, FFTW/LinearSolve non-MKL, and dataset UTF-8/provenance
+        run: |
+          julia --startup-file=no -e '
+            using Pkg, TOML
+            proj = TOML.parsefile("Project.toml")
+            @assert !haskey(proj["deps"], "Ipopt") "Ipopt must remain in [weakdeps], not [deps] (#930)"
+            @assert haskey(proj["weakdeps"], "Ipopt") "Ipopt must be declared in [weakdeps]"
+            @assert !haskey(proj["deps"], "PATHSolver") "PATHSolver must remain in [weakdeps], not [deps]"
+            @assert haskey(proj["weakdeps"], "PATHSolver") "PATHSolver must be declared in [weakdeps]"
+            @assert haskey(proj["deps"], "MadNLP") "MadNLP must be declared in [deps] (#930)"
+            @assert haskey(proj["deps"], "NLPModels") "NLPModels must be declared in [deps] (#930)"
+            isempty(Pkg.Registry.reachable_registries()) && Pkg.Registry.add("General")
+            mktempdir() do dir
+                # 1. Resolve the exact unmodified Project.toml and verify zero GPL-incompatible
+                #    packages enter the default Manifest.toml.
+                cp("Project.toml", joinpath(dir, "Project.toml"))
+                Pkg.activate(dir)
+                Pkg.resolve()
+                m = Pkg.Types.read_manifest(joinpath(dir, "Manifest.toml"))
+                forbidden = Set(["Ipopt", "Ipopt_jll", "MUMPS_seq_jll", "MUMPS_jll",
+                                 "SPRAL_jll", "METIS_jll", "ASL_jll", "HSL_jll",
+                                 "PATHSolver", "PATH_jll"])
+                hits = [p.second.name for p in m.deps if p.second.name in forbidden]
+                @assert isempty(hits) "GPL-incompatible packages found in default Manifest: $hits (#930)"
+                # 2. Verify downstream LocalPreferences.toml pins disable MKL_jll and keep FFTW on
+                #    GPL-compatible fftw. Preferences.jl only reads [LinearSolve] when LinearSolve
+                #    is listed in [deps] or [extras] of the active Project.toml, so add it to
+                #    [extras] in the temp copy and verify in a fresh Julia subprocess (avoiding
+                #    world-age issues and skipping precompilation of unrelated deps).
+                ls_uuid = "7ed4a6bd-45a5-4d45-b8e1-4c9b2323eb65"
+                ptxt = read(joinpath(dir, "Project.toml"), String)
+                ptxt = replace(ptxt, "[extras]\n" => "[extras]\nLinearSolve = \"$ls_uuid\"\n")
+                write(joinpath(dir, "Project.toml"), ptxt)
+                write(joinpath(dir, "LocalPreferences.toml"), """
+                [LinearSolve]
+                LoadMKL_JLL = false
+
+                [FFTW]
+                provider = "fftw"
+                """)
+                withenv("JULIA_PKG_PRECOMPILE_AUTO" => "0") do
+                    Pkg.instantiate()
+                end
+                check_code = """
+                    prefs = Base.get_preferences(Base.UUID("$ls_uuid"))
+                    @assert get(prefs, "LoadMKL_JLL", nothing) === false "LinearSolve LoadMKL_JLL preference was not active: \$prefs (#931)"
+                    import FFTW, NonlinearSolve
+                    @assert FFTW.fftw_provider == "fftw" "FFTW provider must default to fftw (#931)"
+                    @assert !NonlinearSolve.LinearSolve.usemkl "LinearSolve.usemkl must be false when LoadMKL_JLL = false (#931)"
+                    @assert !any(k -> k.name == "MKL_jll", keys(Base.loaded_modules)) "MKL_jll must not be loaded when LoadMKL_JLL = false (#931)"
+                    println("Runtime FFTW/LinearSolve non-MKL verification PASSED")
+                """
+                run(`$(Base.julia_cmd()) --startup-file=no --project=$dir -e $check_code`)
+            end
+            for f in readdir("data")
+                endswith(f, ".toml") || continue
+                bytes = read(joinpath("data", f))
+                @assert isvalid(String, bytes) "data/$f is not valid UTF-8 (#932)"
+                TOML.parsefile(joinpath("data", f))
+            end
+            md = TOML.parsefile("data/fred_md.toml")
+            qd = TOML.parsefile("data/fred_qd.toml")
+            for bad in ("S&P 500", "S&P div yield", "S&P PE ratio", "AAA", "BAA",
+                        "AAAFFM", "BAAFFM", "UMCSENTx", "VIXCLSx", "HWI", "HWIURATIO", "OILPRICEx")
+                @assert !(bad in md["variables"]["names"]) "Commercial series $bad in fred_md.toml (#932)"
+            end
+            for bad in ("S&P 500", "S&P div yield", "S&P PE ratio", "SPCS10RSA", "SPCS20RSA",
+                        "AAA", "BAA", "BAA10YM", "AAAFFM", "MORTGAGE30US", "MORTG10YRx",
+                        "UMCSENTx", "VIXCLSx", "USEPUINDXM", "NIKKEI225", "NASDAQCOM",
+                        "HWIx", "HWIURATIOx", "OILPRICEx")
+                @assert !(bad in qd["variables"]["names"]) "Commercial series $bad in fred_qd.toml (#932)"
+            end
+            pwt = TOML.parsefile("data/pwt.toml")
+            @assert pwt["metadata"]["license"] == "CC-BY-4.0" "pwt.toml missing CC-BY-4.0 metadata (#932)"
+            println("License compliance gate PASSED")
+          '

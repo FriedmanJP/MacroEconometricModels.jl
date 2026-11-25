@@ -6,6 +6,39 @@ output, not just documentation.
 
 ---
 
+## v1.1.1
+
+License compliance and solver dependency release (closes `#930`–`#933`), updating the package
+license from `GPL-3.0-or-later` to `GPL-3.0-only` and removing GPL-incompatible binaries and
+commercial dataset series from default redistribution with zero performance regression.
+
+**Changed**
+
+- **License (`GPL-3.0-only`)**: Updated package license notices and source headers from
+  `GPL-3.0-or-later` to GNU General Public License v3.0 (`GPL-3.0-only`).
+- **Constrained DSGE NLP Solver (`#930`)**: Demoted `Ipopt` (`Ipopt_jll` EPL-2.0 without active
+  Exhibit A Secondary Licenses; `MUMPS_seq_jll` CeCILL-C) from `[deps]` to `[weakdeps]`
+  (`ext/MacroEconometricModelsIpoptExt.jl`), removing 10 transitive C/Fortran JLLs from default
+  installs. Added a built-in GPL-3.0-compatible sparse interior-point solver (`solver=:madnlp`,
+  default when `NonlinearConstraint` is present) powered by `MadNLP` (`0.8.x`, MIT), `NLPModels`
+  (MPL-2.0), `SuiteSparse` UMFPACK (GPL-2.0+), and exact `ForwardDiff` block-tridiagonal
+  Jacobians and block-pentadiagonal Lagrangian Hessians. `solver=:ipopt` (`import Ipopt`) and
+  `solver=:path` (`import PATHSolver`) remain available as opt-in weak-dependency extensions.
+- **Non-MKL `NonlinearSolve` Dispatch & CI License Gate (`#931`)**: `compute_steady_state`
+  explicitly passes `NonlinearSolve.LinearSolve.LUFactorization()` (OpenBLAS BSD-3) to
+  `NonlinearSolve.TrustRegion` so default steady-state solves never dispatch to proprietary Intel
+  `MKLLUFactorization`. Added a `license-compliance` CI workflow job and `THIRD_PARTY_LICENSES.md`
+  documenting vendored assets (`d3.v7.min.js` ISC, US Census X-13 port) and downstream
+  `LocalPreferences.toml` requirements (`[LinearSolve] LoadMKL_JLL = false`, `[FFTW] provider = "fftw"`).
+- **Bundled Datasets & Attribution (`#932`)**: Filtered `data/fred_md.toml` (126 → 114 series)
+  and `data/fred_qd.toml` (245 → 226 series) to US federal government public-domain series only
+  (removing commercial S&P, Moody's, University of Michigan, CBOE, Freddie Mac, Conference Board,
+  Baker–Bloom–Davis, Nikkei, NASDAQ, and spliced WTI series) and fixed invalid non-UTF-8 bytes in
+  both files. Added mandatory CC-BY-4.0 license, URL, attribution, and modification metadata to
+  `data/pwt.toml`, and created `DATA_LICENSES.md` covering all 13 bundled datasets plus a snippet
+  for loading the full official St. Louis Fed FRED-MD/FRED-QD CSVs directly.
+- **Compat**: Updated `SHA` compat to `"0.7, 1"` for warning-free Julia 1.13 support.
+
 ## v1.1.0
 
 Major econometric expansion introducing five new method families across 46 issues

@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 using Test
 using LinearAlgebra
@@ -299,7 +299,7 @@ const M_QF = MacroEconometricModels
         qd = load_example(:fred_qd)
         vars = ["GDPC1", "PCECC96", "GPDIC1", "INDPRO", "PAYEMS", "UNRATE",
                 "HOUST", "CPIAUCSL", "FEDFUNDS", "TB3MS", "GS1", "GS10",
-                "AAA", "BAA", "BAA10YM", "GS10TB3Mx", "M2REAL", "S&P 500"]
+                "GS5", "T5YFFM", "TB3SMFFM", "GS10TB3Mx", "M2REAL", "BUSLOANSx"]
         qd_sub = apply_tcode(qd[:, vars])
         X_raw = to_matrix(qd_sub)
         keep = [all(isfinite, @view(X_raw[t, :])) for t in 1:size(X_raw, 1)]

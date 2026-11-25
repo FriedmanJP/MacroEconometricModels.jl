@@ -146,7 +146,7 @@
 
 ### Dynamic Stochastic General Equilibrium (DSGE) Models
 - **Model Specification & Steady-State Solvers**
-  - Symbolic rational-expectations model specification with automatic lead/lag handling, analytical or numerical Newton steady-state computation, and box- or inequality-constrained steady-state solvers via interior-point and sequential quadratic programming methods (plus optional mixed complementarity problem support)
+  - Symbolic rational-expectations model specification with automatic lead/lag handling, analytical or numerical Newton steady-state computation, and box- or inequality-constrained steady-state solvers via built-in GPL-compatible interior-point (MadNLP) and sequential quadratic programming (NLopt) methods, plus optional Ipopt NLP and PATH mixed complementarity weak-dependency extensions
   - Native support for pre-linearized DSGE specifications such as Smets & Wouters (2007)
 - **First-Order & Higher-Order Perturbation Solvers**
   - Linear rational-expectations solvers: Sims (2002) Gensys QZ decomposition, Blanchard & Kahn (1980) eigenvalue counting, and Klein (2000) generalized Schur decomposition
@@ -272,7 +272,7 @@
 - **Interactive D3.js Visualization** — Self-contained HTML figures powered by inline D3.js v7 with zero external runtime dependencies (277 single-argument `plot_result` dispatches), supporting impulse responses, quantile IRFs, variance and spectral decompositions, historical decompositions, trend-cycle filters, volatility paths, spectral densities, quantile factor surfaces, Eurocoin indicators, ABCD eigenvalue spectra, rational-inattention diagnostics, nowcast fan charts and ragged-edge heatmaps, DSGE/HANK wealth distributions and Lorenz curves, input-output networks, and event-study plots in Solarized Light and Dark themes
 - **Publication Tables & Tidy Data Interoperability** — Switchable plain-text, LaTeX, and HTML regression and summary tables alongside complete Tables.jl integration across over 145 result types (coefficients, marginal effects, impulse responses, variance and historical decompositions, quantile factor models, SSVARMA, ABCD/DSGE-VAR, rational attention, forecast evaluations, policy counterfactuals, input-output tables, DSGE/HANK solutions, and the 60-type hypothesis test battery)
 - **Reproducibility, Serialization & Bibliographic Citations** — Bit-for-bit reproducibility manifests capturing RNG state, thread count, and environment metadata; versioned JLD2 model serialization; and automatic American Economic Association (AEA) bibliographic reference export in plain text, BibTeX, LaTeX, and HTML
-- **Built-in Benchmark Datasets** — Thirteen ready-to-use datasets included out of the box: FRED-MD (McCracken & Ng 2016), FRED-QD (McCracken & Ng 2020), Penn World Table (Feenstra, Inklaar & Timmer 2015), Acemoglu et al. (2019) democracy-growth panel, Callaway & Sant'Anna (2021) county minimum-wage panel, Grunfeld (1958) firm investment panel, Mroz (1987) labor-supply cross-section, World Input-Output Table, US monetary-policy shocks, Johansen-Juselius Danish money demand, Hamilton (1989) US GNP, Nile river flow, and Brownlee stack-loss data
+- **Built-in Benchmark Datasets** — Thirteen ready-to-use datasets included out of the box (see [DATA_LICENSES.md](DATA_LICENSES.md) for provenance and data licenses): FRED-MD (114 US federal public-domain series; McCracken & Ng 2016), FRED-QD (226 US federal public-domain series; McCracken & Ng 2020), Penn World Table 10.01 (CC-BY-4.0; Feenstra, Inklaar & Timmer 2015), Acemoglu et al. (2019) democracy-growth panel, Callaway & Sant'Anna (2021) county minimum-wage panel, Grunfeld (1958) firm investment panel, Mroz (1987) labor-supply cross-section, Miller & Blair (2009) input-output table, US monetary-policy shocks, Johansen-Juselius Danish money demand, Hamilton (1989) US GNP, Nile river flow, and Brownlee stack-loss data
 
 ## Documentation & Bibliography
 
@@ -284,4 +284,7 @@
 
 ## License
 
-GPL-3.0-or-later
+`MacroEconometricModels.jl` is licensed under the **GNU General Public License v3.0 (`GPL-3.0-only`)** — see [LICENSE](LICENSE).
+
+- **Bundled Datasets**: Distributed independently under their own public-domain statuses or data licenses (including CC-BY-4.0 for Penn World Table 10.01 and US federal public-domain subsets for FRED-MD/FRED-QD) — see [DATA_LICENSES.md](DATA_LICENSES.md).
+- **Third-Party Assets, Optional Solvers & Downstream Redistribution**: Vendored assets (`d3.v7.min.js` ISC, X-13 US Government work port), optional weak dependencies (`Ipopt`, `PATHSolver`), and mandatory `LocalPreferences.toml` settings (`[LinearSolve] LoadMKL_JLL = false`, `[FFTW] provider = "fftw"`) for downstream GPL-3.0-only binary distributors (e.g., `PackageCompiler`) are documented in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

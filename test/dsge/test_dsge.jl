@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 using Test
 using MacroEconometricModels
@@ -7986,7 +7986,50 @@ end
     @test all(pf.path[:, 1] .<= 1.0 + 1e-3)
 end
 
-@testset "Explicit solver=:ipopt/:path errors without JuMP" begin
+@testset "Constrained SS & PF via built-in MadNLP (#930)" begin
+    _suppress_warnings() do
+    spec = @dsge begin
+        parameters: ρ = 0.9, σ = 1.0
+        endogenous: y
+        exogenous: ε
+        y[t] = ρ * y[t-1] + σ * ε[t]
+        steady_state: [0.0]
+    end
+    spec = compute_steady_state(spec)
+
+    # Binding lower bound SS
+    spec_b = compute_steady_state(spec; constraints=[variable_bound(:y, lower=0.5)], solver=:madnlp)
+    @test spec_b.steady_state[1] ≈ 0.5 atol=1e-4
+
+    # NonlinearConstraint auto-selects :madnlp
+    nlc_nb = nonlinear_constraint((y, yl, yld, e, th) -> y[1] - 1.5; label="cap_y")
+    nlc_bind = nonlinear_constraint((y, yl, yld, e, th) -> -(y[1] - 0.3); label="floor_y")
+    spec_nb = compute_steady_state(spec; constraints=[nlc_nb])
+    @test abs(spec_nb.steady_state[1]) < 1e-4
+    spec_fl = compute_steady_state(spec; constraints=[nlc_bind])
+    @test spec_fl.steady_state[1] ≈ 0.3 atol=1e-4
+
+    # Non-binding NL constraint PF (auto-routes to :madnlp)
+    shocks = zeros(20, 1)
+    shocks[1, 1] = 1.0
+    pf_unc = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks)
+    pf_nl = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+                  constraints=[nlc_nb])
+    @test pf_nl isa PerfectForesightPath
+    @test pf_nl.converged
+    @test maximum(abs.(pf_nl.path .- pf_unc.path)) < 1e-4
+
+    # Infeasible binding box + hard equality PF via explicit solver=:madnlp
+    shocks_inf = zeros(10, 1)
+    shocks_inf[1, 1] = -3.0
+    pf_inf = solve(spec; method=:perfect_foresight, T_periods=10, shock_path=shocks_inf,
+                   constraints=[variable_bound(:y, lower=0.0)], solver=:madnlp)
+    @test pf_inf isa PerfectForesightPath
+    @test !pf_inf.converged
+    end
+end
+
+@testset "Explicit solver=:ipopt/:path errors without optional weakdeps" begin
     spec = @dsge begin
         parameters: ρ = 0.9, σ = 0.01
         endogenous: y
@@ -7996,8 +8039,8 @@ end
     end
     spec = compute_steady_state(spec)
     constraints = [variable_bound(:y, lower=0.0)]
-    # These should error if JuMP is not loaded (in CI they may be loaded)
-    if !hasmethod(MacroEconometricModels._jump_compute_steady_state, Tuple{ModelSpec, Vector})
+    # Ipopt is an optional weakdep (#930): throws ArgumentError unless `import Ipopt` loaded
+    if !MacroEconometricModels._ipopt_available()
         @test_throws ArgumentError compute_steady_state(spec;
             constraints=constraints, solver=:ipopt)
     end
@@ -8011,15 +8054,45 @@ end
     # Bounds-only → :nonlinearsolve (default)
     @test MacroEconometricModels._select_solver(bounds_only, nothing) == :nonlinearsolve
 
-    # With NonlinearConstraints → :nlopt when JuMP not loaded, :ipopt when loaded
-    result = MacroEconometricModels._select_solver(mixed, nothing)
-    @test result ∈ (:nlopt, :ipopt)
+    # With NonlinearConstraints → built-in GPL-compatible :madnlp (#930)
+    @test MacroEconometricModels._select_solver(mixed, nothing) == :madnlp
 
     # User override always wins
+    @test MacroEconometricModels._select_solver(bounds_only, :madnlp) == :madnlp
     @test MacroEconometricModels._select_solver(bounds_only, :ipopt) == :ipopt
     @test MacroEconometricModels._select_solver(mixed, :path) == :path
     @test MacroEconometricModels._select_solver(bounds_only, :optim) == :optim
     @test MacroEconometricModels._select_solver(mixed, :nlopt) == :nlopt
+end
+
+@testset "GPL-3.0 Linear Algebra & FFTW Defaults (#931)" begin
+    # FFTW must default to GPL-2.0+ FFTW, never proprietary Intel MKL
+    @test MacroEconometricModels.FFTW.fftw_provider == "fftw"
+
+    # Steady-state TrustRegion default uses explicit OpenBLAS column-pivoted QRFactorization
+    # (never MKLLUFactorization; works on both square Dogleg and rectangular 2n×n MoreTrustRegion)
+    spec_rbc = @dsge begin
+        parameters: α = 0.36, β = 0.99, δ = 0.025, ρ = 0.95
+        endogenous: y, c, k, a
+        exogenous: ε
+        y[t] = exp(a[t]) * k[t-1]^α
+        c[t] + k[t] - (1 - δ) * k[t-1] = y[t]
+        1 / c[t] = β * (1 / c[t+1]) * (α * exp(a[t+1]) * k[t]^(α - 1) + 1 - δ)
+        a[t] = ρ * a[t-1] + ε[t]
+    end
+    ss_spec = compute_steady_state(spec_rbc)
+    @test all(isfinite.(ss_spec.steady_state))
+    @test ss_spec.steady_state[3] > 0.0
+
+    # 1-equation nonlinear steady state (exercises 2×1 augmented system under LinearSolve v5+)
+    spec_1d = @dsge begin
+        parameters: ρ = 0.8
+        endogenous: x
+        exogenous: ε
+        x[t] = ρ * x[t-1] + ε[t]
+    end
+    ss_1d = compute_steady_state(spec_1d)
+    @test abs(ss_1d.steady_state[1]) < 1e-8
 end
 
 # NOTE: JuMP/Ipopt and PATHSolver weakdep-extension testsets were moved to

@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 """
 Numerical steady-state computation for DSGE models via NonlinearSolve.jl.
@@ -42,7 +42,7 @@ family stationary solver (`HASteadyState`, `DCEGMSolution`,
 - `method::Symbol` — `:auto` (NonlinearSolve), `:analytical`
 - `ss_fn::Function` — for `:analytical`, a function `θ → y_ss::Vector`
 - `constraints::Vector{<:DSGEConstraint}` — variable bounds and nonlinear inequalities
-- `solver::Symbol` — `:nonlinearsolve` (default), `:optim` (Fminbox), `:nlopt` (SLSQP), `:ipopt` (NLP), or `:path` (MCP); auto-detected if not specified
+- `solver::Symbol` — `:nonlinearsolve` (default for box bounds), `:optim` (Fminbox), `:nlopt` (SLSQP), `:madnlp` (built-in sparse IPM, default for nonlinear inequalities), or optional weakdeps `:ipopt` (NLP) / `:path` (MCP); auto-detected if not specified
 - `algorithm` — NonlinearSolve.jl algorithm (default: `TrustRegion()`); passed through to chosen backend
 """
 function compute_steady_state(spec::ModelSpec{T};
@@ -81,16 +81,16 @@ function compute_steady_state(spec::ModelSpec{T};
     if !isempty(constraints)
         _validate_constraints(spec, constraints)
         chosen = _select_solver(constraints, solver)
-        chosen ∉ (:path, :ipopt, :nonlinearsolve, :optim, :nlopt) &&
+        chosen ∉ (:path, :ipopt, :madnlp, :nonlinearsolve, :optim, :nlopt) &&
             throw(ArgumentError("Unknown solver :$chosen. " *
-                "Valid options: :nonlinearsolve, :optim, :nlopt, :path, :ipopt"))
+                "Valid options: :nonlinearsolve, :optim, :nlopt, :madnlp, :path, :ipopt"))
 
         if chosen == :nonlinearsolve
             lower, upper = _extract_bounds(spec, constraints)
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "NonlinearSolve solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:nlopt (default) or solver=:ipopt for nonlinear inequality constraints."))
+                    "Use solver=:madnlp (default), solver=:nlopt, or optional solver=:ipopt for nonlinear inequality constraints."))
             y_ss = _nonlinearsolve_steady_state(spec, lower, upper;
                         initial_guess=initial_guess, algorithm=algorithm)
             # Check if bounds are violated — escalate to Optim if needed
@@ -106,18 +106,21 @@ function compute_steady_state(spec::ModelSpec{T};
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "Optim solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:nlopt or solver=:ipopt."))
+                    "Use solver=:madnlp, solver=:nlopt, or optional solver=:ipopt."))
             y_ss = _optim_steady_state(spec, lower, upper;
                         initial_guess=initial_guess, algorithm=algorithm)
         elseif chosen == :nlopt
             y_ss = _nlopt_steady_state(spec, constraints;
                         initial_guess=initial_guess, algorithm=algorithm)
+        elseif chosen == :madnlp
+            y_ss = _madnlp_compute_steady_state(spec, constraints;
+                        initial_guess=initial_guess)
         elseif chosen == :path
             _check_path_loaded()
             any(c -> c isa NonlinearConstraint, constraints) &&
                 throw(ArgumentError(
                     "PATH solver cannot handle NonlinearConstraint. " *
-                    "Use solver=:nlopt or solver=:ipopt."))
+                    "Use solver=:madnlp, solver=:nlopt, or optional solver=:ipopt."))
             y_ss = _path_compute_steady_state(spec, constraints;
                         initial_guess=initial_guess)
         else  # :ipopt
@@ -255,7 +258,19 @@ function _nonlinearsolve_steady_state(spec::ModelSpec{T}, lower::Vector{T}, uppe
         prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing)
     end
 
-    alg = algorithm !== nothing ? algorithm : NonlinearSolve.TrustRegion()
+    # Explicit GPL-compatible dense linear solver (OpenBLAS column-pivoted QR via
+    # LinearAlgebra.qr!(A, ColumnNorm())) so NonlinearSolve never dispatches to
+    # LinearSolve's proprietary MKLLUFactorization (#931). Column-pivoted QR handles
+    # square Jacobians (Dogleg / LinearSolve v3), rectangular (2n × n) augmented
+    # least-squares systems (MoreTrustRegionDescent / LinearSolve v5+), and
+    # rank-deficient/singular Jacobians (e.g., NK determinacy sweeps) uniformly.
+    alg = if algorithm !== nothing
+        algorithm
+    else
+        LS = NonlinearSolve.LinearSolve
+        linsolve = LS.QRFactorization(LinearAlgebra.ColumnNorm())
+        NonlinearSolve.TrustRegion(; linsolve=linsolve)
+    end
     # invokelatest: LinearSolve's @generated QR-fallback can be stale in the
     # world that compiled this method (#816). A leftover MethodError is caught
     # by compute_steady_state and rewritten as DSGESolveError.
@@ -310,7 +325,7 @@ function _optim_steady_state(spec::ModelSpec{T}, lower::Vector{T}, upper::Vector
 
     if !Optim.converged(result)
         @warn "Optim steady state solver did not converge. " *
-              "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."
+              "Try solver=:madnlp for large-scale interior-point NLP."
     end
 
     y_ss = Vector{T}(Optim.minimizer(result))
@@ -391,7 +406,7 @@ function _nlopt_steady_state(spec::ModelSpec{T}, constraints::Vector;
         # per-θ failure that Bayesian likelihood closures catch and count, not a code bug.
         throw(DSGESolveError(
             "NLopt steady state solver did not converge (return code: $ret). " *
-            "Try solver=:ipopt with JuMP + Ipopt for large-scale NLP."))
+            "Try solver=:madnlp for large-scale interior-point NLP."))
     end
 
     # Verify residuals are near zero (warn if not — binding constraints make nonzero residual expected)

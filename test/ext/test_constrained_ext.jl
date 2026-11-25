@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 
 # Constrained-DSGE weakdep extension tests (JuMP/Ipopt + PATHSolver).
 #
@@ -168,30 +168,40 @@ end
     end
     spec = compute_steady_state(spec)
 
-    # Non-binding NL constraint: SS=0 < 1.5
+    # Non-binding NL constraint: SS=0 < 1.5 (explicit :ipopt and default :madnlp parity)
     nlc_nb = nonlinear_constraint(
         (y, y_lag, y_lead, e, theta) -> y[1] - 1.5;
         label="cap_y"
     )
-    spec_c = compute_steady_state(spec; constraints=[nlc_nb])
+    spec_c = compute_steady_state(spec; constraints=[nlc_nb], solver=:ipopt)
+    spec_c_mad = compute_steady_state(spec; constraints=[nlc_nb])
     @test abs(spec_c.steady_state[1]) < 0.01
+    @test abs(spec_c_mad.steady_state[1]) < 0.01
+    @test spec_c_mad.steady_state ≈ spec_c.steady_state atol=1e-4
 
     # Binding NL constraint: SS=0 but force y >= 0.3 via -(y - 0.3) <= 0 → y >= 0.3
     nlc_bind = nonlinear_constraint(
         (y, y_lag, y_lead, e, theta) -> -(y[1] - 0.3);
         label="floor_y"
     )
-    spec_floor = compute_steady_state(spec; constraints=[nlc_bind])
+    spec_floor = compute_steady_state(spec; constraints=[nlc_bind], solver=:ipopt)
+    spec_floor_mad = compute_steady_state(spec; constraints=[nlc_bind])
     @test spec_floor.steady_state[1] ≈ 0.3 atol=0.01
+    @test spec_floor_mad.steady_state[1] ≈ 0.3 atol=0.01
+    @test spec_floor_mad.steady_state ≈ spec_floor.steady_state atol=1e-4
 
     # Non-binding NL constraint in PF
     shocks = zeros(20, 1)
     shocks[1, 1] = 1.0
     pf = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
-                constraints=[nlc_nb])
+                constraints=[nlc_nb], solver=:ipopt)
+    pf_mad = solve(spec; method=:perfect_foresight, T_periods=20, shock_path=shocks,
+                   constraints=[nlc_nb])
     @test pf isa PerfectForesightPath
     @test pf.converged
+    @test pf_mad.converged
     @test all(pf.path[:, 1] .<= 1.5 + 1e-3)
+    @test maximum(abs.(pf_mad.path .- pf.path)) < 1e-4
     end # _suppress_warnings
 end
 

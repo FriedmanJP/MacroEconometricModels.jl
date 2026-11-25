@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # EV-23 (#431): Panel ARDL — Pooled Mean Group (PMG), Mean Group (MG), Dynamic
 # Fixed Effects (DFE), and the generalized Hausman selection test.

@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under GPL-3.0-or-later. See LICENSE for details.
+# Licensed under GPL-3.0-only. See LICENSE for details.
 #
 # Tests for Markov-switching regression / mean-switching AR (EV-07 / #415):
 # the scaled Hamilton (1989) forward filter, the Kim (1994) smoother, EM, and the

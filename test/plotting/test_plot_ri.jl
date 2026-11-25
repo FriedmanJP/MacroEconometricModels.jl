@@ -2,7 +2,7 @@
 # Copyright (C) 2025-2026 Wookyung Chung <chung@friedman.jp>
 #
 # This file is part of MacroEconometricModels.jl.
-# Licensed under the GPL-3.0-or-later license.
+# Licensed under the GPL-3.0-only license.
 
 using Test, Random, LinearAlgebra
 using MacroEconometricModels

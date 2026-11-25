@@ -21,7 +21,7 @@ using MacroEconometricModels, DataFrames, Random
 **Recipe 1: Load FRED-MD and inspect a subset**
 
 ```@example data
-fred = load_example(:fred_md)                        # 126 variables, 804 months
+fred = load_example(:fred_md)                        # 114 variables, 804 months
 describe_data(fred[:, ["INDPRO", "CPIAUCSL", "FEDFUNDS"]])
 ```
 
@@ -246,9 +246,9 @@ d_dt[["2020Q1", "2020Q2"], :]   # sub-container; d_dt["2020Q1", :] returns one r
 
 | Key | Returns | Size | Content |
 |-----|---------|------|---------|
-| `:fred_md` | `TimeSeriesData` | 804 × 126, Monthly | FRED-MD, January 2026 vintage (McCracken & Ng 2016) |
-| `:fred_qd` | `TimeSeriesData` | 268 × 245, Quarterly | FRED-QD, January 2026 vintage (McCracken & Ng 2021) |
-| `:pwt` | `PanelData` | 2812 × 42, 38 countries × 74 years | Penn World Table 10.01, OECD countries (Feenstra, Inklaar & Timmer 2015) |
+| `:fred_md` | `TimeSeriesData` | 804 × 114, Monthly | FRED-MD, January 2026 vintage, US federal public-domain subset (McCracken & Ng 2016) |
+| `:fred_qd` | `TimeSeriesData` | 268 × 226, Quarterly | FRED-QD, January 2026 vintage, US federal public-domain subset (McCracken & Ng 2021) |
+| `:pwt` | `PanelData` | 2812 × 42, 38 countries × 74 years | Penn World Table 10.01 (CC-BY-4.0), OECD countries (Feenstra, Inklaar & Timmer 2015) |
 | `:ddcg` | `PanelData` | 9384 × 2, 184 countries × 51 years | Democracy and growth (Acemoglu, Naidu, Restrepo & Robinson 2019) |
 | `:mpdta` | `PanelData` | 2500 × 3, 500 counties × 5 years | County minimum wage and employment (Callaway & Sant'Anna 2021) |
 | `:grunfeld` | `PanelData` | 200 × 3, 10 firms × 20 years | Firm investment, 1935-1954 (Grunfeld 1958) --- the canonical SUR/3SLS panel |
@@ -264,7 +264,7 @@ The first five plus `:mp_shocks` are the working datasets for the macro methods 
 
 ### The FRED Databases
 
-FRED-MD and FRED-QD ship as the January 2026 vintage with the St. Louis Fed variable descriptions and the recommended transformation code for every series. Because the codes travel with the data, `apply_tcode(d)` with no second argument reproduces the transformations used in the source papers.
+FRED-MD and FRED-QD ship as the January 2026 vintage filtered to US federal government public-domain series (114 monthly and 226 quarterly series from BEA, BLS, Census, DOL, the Federal Reserve Board, Treasury, and FHFA), carrying the St. Louis Fed variable descriptions and recommended transformation codes. Commercial third-party series (S&P, Moody's, University of Michigan, CBOE, Freddie Mac, Conference Board, Nikkei, NASDAQ, and Baker–Bloom–Davis indices) are excluded from redistribution; users who need the complete official McCracken & Ng CSVs can download them directly from the [St. Louis Fed FRED-MD/FRED-QD portal](https://research.stlouisfed.org/econ/mccracken/fred-databases/) under the FRED Terms of Use (see `DATA_LICENSES.md` for full dataset provenance and a direct-download loader snippet). Because the codes travel with the data, `apply_tcode(d)` with no second argument reproduces the transformations used in the source papers.
 
 ```@example data
 qd = load_example(:fred_qd)
@@ -283,7 +283,7 @@ refs(:fred_md; format=:bibtex)
 
 ### Research Panels
 
-The Penn World Table loads as a balanced `PanelData`: 38 OECD countries observed every year from 1950 to 2023, with 42 national-accounts variables. Individual countries come out as `TimeSeriesData` through `group_data`.
+The Penn World Table 10.01 (Feenstra, Inklaar & Timmer 2015, licensed under [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/), subset to 38 OECD countries and converted to TOML) loads as a balanced `PanelData`: 38 OECD countries observed every year from 1950 to 2023, with 42 national-accounts variables. Individual countries come out as `TimeSeriesData` through `group_data`. See `DATA_LICENSES.md` for full provenance and attribution notices across all 13 bundled datasets.
 
 ```@example data
 (nobs(pwt), nvars(pwt), ngroups(pwt), isbalanced(pwt), vardesc(pwt, "rgdpna"))

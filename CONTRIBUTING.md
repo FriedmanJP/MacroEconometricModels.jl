@@ -102,4 +102,4 @@ Be respectful and constructive. We are all here to build good econometric tools.
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [GNU General Public License v3.0](LICENSE).
-In short, when you submit a contribution, you agree to grant the project a non-exclusive, worldwide, royalty-free license to use, reproduce, modify, and distribute your contribution under the terms of the GNU General Public License v3.0 (or any later version). You retain copyright ownership of your original contributions.
+In short, when you submit a contribution, you agree to grant the project a non-exclusive, worldwide, royalty-free license to use, reproduce, modify, and distribute your contribution under the terms of the GNU General Public License v3.0 (`GPL-3.0-only`). You retain copyright ownership of your original contributions.
