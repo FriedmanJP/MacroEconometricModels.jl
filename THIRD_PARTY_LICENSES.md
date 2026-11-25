@@ -51,11 +51,11 @@ The following solvers have GPL-incompatible licenses and are isolated in `[weakd
 `NonlinearSolve` (via `LinearSolve`) and `FFTW` carry optional references to Intel's proprietary `MKL_jll` / `oneTBB_jll` / `IntelOpenMP_jll` (Intel Simplified Software License, ISSL — incompatible with GPL-3.0).
 
 `MacroEconometricModels.jl` never invokes `MKLLUFactorization` or `FFTW.set_provider!("mkl")`:
-- `compute_steady_state` explicitly passes a GPL-compatible dense linear solver (`LinearSolve.LUFactorization()` via OpenBLAS) to `NonlinearSolve.TrustRegion`.
+- `compute_steady_state` explicitly passes a GPL-compatible dense linear solver (`LinearSolve.QRFactorization(LinearAlgebra.ColumnNorm())` via OpenBLAS) to `NonlinearSolve.TrustRegion`.
 - `perfect_foresight` explicitly passes `linsolve=\` (block-Thomas / SuiteSparse UMFPACK).
 - `FFTW` defaults to `provider = "fftw"` (`FFTW_jll`, GPL-2.0-or-later).
 
-However, `LinearSolve.jl` checks the `LoadMKL_JLL` preference at package load time on x86_64 CPUs (defaulting to `true` on non-EPYC Intel x86_64 CPUs). **Downstream GPL-3.0-only redistributors building standalone applications or sysimages MUST pin the following preferences in `LocalPreferences.toml` before precompiling/bundling** (and exclude `MKL_jll`, `oneTBB_jll`, and `IntelOpenMP_jll` from redistributed binaries):
+However, `LinearSolve.jl` checks the `LoadMKL_JLL` preference at package load time on x86_64 CPUs (defaulting to `true` on non-EPYC Intel x86_64 CPUs). **Downstream GPL-3.0-only redistributors building standalone applications or sysimages MUST list `LinearSolve` in their application's `Project.toml` (`[deps]` or `[extras]`, required for Julia's `Preferences.jl` to load `[LinearSolve]`) and pin the following preferences in `LocalPreferences.toml` before precompiling/bundling** (and exclude `MKL_jll`, `oneTBB_jll`, and `IntelOpenMP_jll` from redistributed binaries):
 
 ```toml
 [LinearSolve]

@@ -258,16 +258,17 @@ function _nonlinearsolve_steady_state(spec::ModelSpec{T}, lower::Vector{T}, uppe
         prob = NonlinearSolve.NonlinearProblem(nlfn, y0, nothing)
     end
 
-    # Explicit GPL-compatible dense linear solver (OpenBLAS LU via LinearAlgebra.lu!
-    # with automatic column-pivoted QR fallback on rank-deficient Jacobians) so
-    # NonlinearSolve never dispatches to LinearSolve's proprietary MKLLUFactorization (#931).
+    # Explicit GPL-compatible dense linear solver (OpenBLAS column-pivoted QR via
+    # LinearAlgebra.qr!(A, ColumnNorm())) so NonlinearSolve never dispatches to
+    # LinearSolve's proprietary MKLLUFactorization (#931). Column-pivoted QR handles
+    # square Jacobians (Dogleg / LinearSolve v3), rectangular (2n × n) augmented
+    # least-squares systems (MoreTrustRegionDescent / LinearSolve v5+), and
+    # rank-deficient/singular Jacobians (e.g., NK determinacy sweeps) uniformly.
     alg = if algorithm !== nothing
         algorithm
     else
         LS = NonlinearSolve.LinearSolve
-        linsolve = (isdefined(LS, :DefaultLinearSolver) && isdefined(LS, :DefaultAlgorithmChoice)) ?
-                   LS.DefaultLinearSolver(LS.DefaultAlgorithmChoice.LUFactorization) :
-                   LS.LUFactorization()
+        linsolve = LS.QRFactorization(LinearAlgebra.ColumnNorm())
         NonlinearSolve.TrustRegion(; linsolve=linsolve)
     end
     # invokelatest: LinearSolve's @generated QR-fallback can be stale in the

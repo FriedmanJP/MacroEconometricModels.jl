@@ -8069,7 +8069,8 @@ end
     # FFTW must default to GPL-2.0+ FFTW, never proprietary Intel MKL
     @test MacroEconometricModels.FFTW.fftw_provider == "fftw"
 
-    # Steady-state TrustRegion default uses explicit OpenBLAS LUFactorization (no MKLLUFactorization)
+    # Steady-state TrustRegion default uses explicit OpenBLAS column-pivoted QRFactorization
+    # (never MKLLUFactorization; works on both square Dogleg and rectangular 2n×n MoreTrustRegion)
     spec_rbc = @dsge begin
         parameters: α = 0.36, β = 0.99, δ = 0.025, ρ = 0.95
         endogenous: y, c, k, a
@@ -8082,6 +8083,16 @@ end
     ss_spec = compute_steady_state(spec_rbc)
     @test all(isfinite.(ss_spec.steady_state))
     @test ss_spec.steady_state[3] > 0.0
+
+    # 1-equation nonlinear steady state (exercises 2×1 augmented system under LinearSolve v5+)
+    spec_1d = @dsge begin
+        parameters: ρ = 0.8
+        endogenous: x
+        exogenous: ε
+        x[t] = ρ * x[t-1] + ε[t]
+    end
+    ss_1d = compute_steady_state(spec_1d)
+    @test abs(ss_1d.steady_state[1]) < 1e-8
 end
 
 # NOTE: JuMP/Ipopt and PATHSolver weakdep-extension testsets were moved to
