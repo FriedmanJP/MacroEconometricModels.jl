@@ -1132,7 +1132,7 @@ end
         @test length(me.se) == 3
         @test length(me.z_stat) == 3
         @test length(me.p_values) == 3
-        @test me.conf_level == 0.95
+        @test me.conf_level == 0.90
         @test me.varnames == ["const", "x1", "x2"]
 
         # Intercept has no marginal effect (NaN); slopes have positive SEs

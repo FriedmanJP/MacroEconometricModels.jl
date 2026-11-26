@@ -351,7 +351,7 @@ function anderson_rubin_test(model, beta0;
 end
 
 """
-    anderson_rubin_ci(model; level=0.95, n_grid=1001, span=20, grid=nothing,
+    anderson_rubin_ci(model; level=DEFAULT_CI_MICRO, n_grid=1001, span=20, grid=nothing,
                       cov_type=model.cov_type, clusters=nothing) -> AndersonRubinCI
 
 Anderson-Rubin confidence set for the coefficient on a **single** endogenous regressor,
@@ -368,7 +368,7 @@ the edge of that range are reported as unbounded; widen `span` or pass an explic
 to search further. Component boundaries strictly inside the range are refined by bisection.
 
 # Keywords
-- `level::Real=0.95` — nominal coverage
+- `level::Real=0.90` — nominal coverage (`DEFAULT_CI_MICRO`)
 - `n_grid::Int=1001` — grid points over the search range
 - `span::Real=20` — half-width of the default range, in 2SLS standard errors
 - `grid::AbstractVector` — explicit grid, overriding `span`/`n_grid`
@@ -378,7 +378,7 @@ to search further. Component boundaries strictly inside the range are refined by
 [`AndersonRubinCI`](@ref).
 """
 function anderson_rubin_ci(model;
-                           level::Real=0.95,
+                           level::Real=DEFAULT_CI_MICRO,
                            n_grid::Int=1001,
                            span::Real=20,
                            grid::Union{Nothing,AbstractVector}=nothing,
@@ -389,7 +389,7 @@ function anderson_rubin_ci(model;
     length(endog) == 1 || throw(ArgumentError(
         "anderson_rubin_ci inverts over a single endogenous coefficient; this model has " *
         "$(length(endog)). Use anderson_rubin_test at specific vectors instead."))
-    (0 < level < 1) || throw(ArgumentError("level must be in (0, 1)"))
+    lv = _validate_conf_level(level)
     n_grid >= 5 || throw(ArgumentError("n_grid must be at least 5"))
 
     ct = cov_type === nothing ? model_cov : cov_type

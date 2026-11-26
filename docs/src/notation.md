@@ -75,6 +75,22 @@ It is scoped to that context and never overlaps ``y_t``.
 
 ---
 
+## Confidence and Credible Interval Defaults
+
+Starting in `v1.1.2`, default interval coverage follows domain conventions across all estimators,
+`StatsAPI.confint`, `Tables.jl` / `DataFrame`, `report`, and `plot_result`:
+
+| Domain | Default Coverage | Default Quantiles | Constant |
+|--------|------------------|-------------------|----------|
+| Macroeconometrics, time series, dynamic, structural, Bayesian, and LP-DiD (`estimate_lp_did`) | **68%** (`0.68`) | `[0.16, 0.5, 0.84]` | `DEFAULT_CI_MACRO` / `DEFAULT_QUANTILES_MACRO` |
+| Microeconometrics, cross-sectional, discrete-choice, count, quantile, micro-panel, RDD, SUR/3SLS, GMM/SMM, cross-sectional `estimate_threshold`, and non-LP DiD (`estimate_did`, `estimate_event_study_lp`, `honest_did`) | **90%** (`0.90`) | `[0.05, 0.5, 0.95]` | `DEFAULT_CI_MICRO` / `DEFAULT_QUANTILES_MICRO` |
+
+- Query the domain default for any model or result with [`default_ci_level`](@ref)`(m)`, and extract a coefficient `DataFrame` at any coverage with [`coef_table`](@ref)`(m; conf_level=0.95)`.
+- Every estimator, `confint`, `report`, and `plot_result` method accepts any user-specified coverage in ``(0, 1)`` via `conf_level`, `level`, `ci_level`, `ci`, or `quantiles` (pass `0.95` to reproduce pre-`v1.1.2` 95% intervals).
+- Hypothesis-test significance thresholds (``\alpha = 0.05`` for unit-root, cointegration, structural-break, specification, and equality tests) and Growth-at-Risk / Expected Shortfall tail probabilities remain unchanged.
+
+---
+
 ## Operators and Conventions
 
 - ``\cdot`` — matrix-vector product

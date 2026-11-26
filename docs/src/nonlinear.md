@@ -114,7 +114,7 @@ The `trim` fraction guards each regime against rank deficiency: it must leave en
 | `trim` | `Real` | `0.15` | Fraction of extreme ``q`` values excluded from the ``\gamma`` grid |
 | `linearity` | `Bool` | `true` | Run `hansen_linearity_test` and attach the result |
 | `reps` | `Int` | `1000` | Bootstrap replications for the linearity test |
-| `ci_level` | `Real` | `0.95` | Confidence level for the threshold CI (`0.90`, `0.95`, or `0.99`) |
+| `ci_level` | `Real` | `0.90` (`0.68` for SETAR) | Confidence level for the threshold CI, any value in ``(0, 1)`` |
 | `het` | `Bool` | `false` | Heteroskedasticity-correct the threshold CI |
 | `rng` | `AbstractRNG` | `default_rng()` | Generator for the linearity bootstrap |
 
@@ -219,10 +219,11 @@ where:
 - ``\text{CI}`` is the ``100(1-\alpha)\%`` confidence interval for ``\gamma``
 - ``c(\alpha)`` is the non-standard asymptotic critical value corresponding to confidence level ``1-\alpha``
 
-The critical values are non-standard — they are quantiles of the distribution with CDF ``(1 - e^{-x/2})^2`` — and are tabulated exactly as
+The critical values are non-standard — they are quantiles of the distribution with CDF ``(1 - e^{-x/2})^2`` — and admit the exact closed form ``c(1 - \alpha) = -2 \ln(1 - \sqrt{1 - \alpha})`` (Hansen 2000, Theorem 1) for any confidence level in ``(0, 1)``:
 
-| Level ``\alpha`` | ``c(\alpha)`` |
-|:----------------:|:-------------:|
+| Confidence level ``1 - \alpha`` | ``c(1 - \alpha)`` |
+|:-------------------------------:|:-----------------:|
+| 0.68 | 3.48 |
 | 0.90 | 5.94 |
 | 0.95 | 7.35 |
 | 0.99 | 10.59 |
@@ -619,7 +620,7 @@ typeof(m2)
 3. **Forecasting a generic threshold model.** `forecast` is defined only for SETAR models (from `estimate_setar`); a generic `estimate_threshold` fit would require future exogenous ``X`` and ``q`` and raises an error. The same restriction applies to STAR: only self-exciting fits (``s_t = y_{t-d}``) can be projected.
 4. **Reading the threshold CI as symmetric.** The Hansen (2000) interval inverts a nonstandard LR statistic and is generally asymmetric around ``\hat\gamma``; a very sharp threshold in a large sample can produce a degenerate interval at ``\hat\gamma``.
 5. **Confusing the delay `d` with the AR order `p`.** In `estimate_setar(y, p, d)`, `p` is the number of autoregressive lags per regime and `d` is the delay of the threshold variable ``y_{t-d}``.
-6. **Requesting an untabulated `ci_level`.** Hansen's (2000) critical values exist only for `0.90`, `0.95`, and `0.99`; any other level raises an `ArgumentError` rather than interpolating a value that has no tabulation behind it.
+6. **Passing an out-of-range `ci_level`.** `ci_level` accepts any confidence level strictly in ``(0, 1)`` via Hansen's (2000, Theorem 1) closed-form quantile ``-2 \ln(1 - \sqrt{\text{ci\_level}})`` (defaulting to `0.90` for cross-sectional `estimate_threshold` and `0.68` for `estimate_setar`); values at or outside ``(0, 1)`` raise an `ArgumentError`.
 7. **Comparing STAR ``\hat\gamma`` across series without the scaling in mind.** The reported slope is already divided by ``\hat\sigma_s``, so it is dimension-free — but that also means it is *not* the raw slope of the exponent, and multiplying it back requires the `sigma_s` field.
 
 ---

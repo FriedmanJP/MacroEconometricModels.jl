@@ -330,12 +330,13 @@ function Base.show(io::IO, m::MidasModel{T}) where {T}
 
     lin_names = m.varnames[1:p_lin]
     _coef_table(io, "Coefficients", lin_names, m.beta, se[1:p_lin];
-                dist = :t, dof_r = max(dofr, 1))
+                dist = :t, dof_r = max(dofr, 1), level = DEFAULT_CI_MACRO)
 
     if !isempty(m.theta)
         th_names = m.varnames[(p_lin + 1):end]
         _coef_table(io, "Weight parameters (θ)", th_names, m.theta,
-                    se[(p_lin + 1):end]; dist = :t, dof_r = max(dofr, 1))
+                    se[(p_lin + 1):end]; dist = :t, dof_r = max(dofr, 1),
+                    level = DEFAULT_CI_MACRO)
     end
     _sig_legend(io)
 end

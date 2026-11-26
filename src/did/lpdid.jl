@@ -47,7 +47,7 @@ and time-only fixed effects (long differencing absorbs unit FE).
 - `reweight::Bool=false` — IPW reweighting for equally weighted ATE
 - `nocomp::Bool=false` — restrict to observations in CCS at all horizons
 - `cluster::Symbol=:unit` — clustering level (:unit, :time, :twoway)
-- `conf_level::Real=0.95` — confidence level
+- `conf_level::Real=0.68` — confidence level (`DEFAULT_CI_MACRO`)
 - `only_pooled::Bool=false` — skip event study, compute pooled only
 - `only_event::Bool=false` — skip pooled estimates
 - `post_pooled::Union{Nothing,Tuple{Int,Int}}=nothing` — pooled post-treatment window (start, end)
@@ -73,12 +73,13 @@ function estimate_lp_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                          reweight::Bool=false,
                          nocomp::Bool=false,
                          cluster::Symbol=:unit,
-                         conf_level::Real=0.95,
+                         conf_level::Real=DEFAULT_CI_MACRO,
                          only_pooled::Bool=false,
                          only_event::Bool=false,
                          post_pooled::Union{Nothing,Tuple{Int,Int}}=nothing,
                          pre_pooled::Union{Nothing,Tuple{Int,Int}}=nothing,
                          ) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     _validate_lpdid_inputs(nonabsorbing, notyet, nevertreated, oneoff, only_pooled, only_event)
 
     outcome_col = _resolve_varindex(pd, outcome)

@@ -303,7 +303,7 @@ end
 
 """
     forecast(qfm::QuantileFactorModel{T}, h::Int; p::Int=1, ci_method::Symbol=:none,
-             conf_level::Real=0.95, n_boot::Int=299, rng::AbstractRNG=Random.default_rng(),
+             conf_level::Real=DEFAULT_CI_MACRO, n_boot::Int=299, rng::AbstractRNG=Random.default_rng(),
              seed::Union{Integer,Nothing}=nothing) -> FactorForecast{T}
 
 Forecast quantile factors and panel observables `h` steps ahead from an estimated
@@ -328,7 +328,7 @@ where:
 # Keyword Arguments
 - `p::Int = 1` — QAR/QVAR lag order (`1 ≤ p < T_obs`)
 - `ci_method::Symbol = :none` — confidence interval method (`:none` or `:bootstrap` moving-block bootstrap)
-- `conf_level::Real = 0.95` — confidence level in `(0, 1)` when `ci_method = :bootstrap`
+- `conf_level::Real = 0.68` — confidence level in `(0, 1)` when `ci_method = :bootstrap` (`DEFAULT_CI_MACRO`)
 - `n_boot::Int = 299` — number of moving-block bootstrap replications (`>= 2` when `ci_method = :bootstrap`)
 - `rng::AbstractRNG = Random.default_rng()` — RNG for bootstrap resampling
 - `seed::Union{Integer,Nothing} = nothing` — integer seed overriding `rng` via `Xoshiro(seed)`
@@ -340,16 +340,14 @@ forecasts in raw panel units (with zero bounds/SEs when `ci_method == :none`).
 function forecast(qfm::QuantileFactorModel{T}, h::Int;
                   p::Int=1,
                   ci_method::Symbol=:none,
-                  conf_level::Real=0.95,
+                  conf_level::Real=DEFAULT_CI_MACRO,
                   n_boot::Int=299,
                   rng::AbstractRNG=Random.default_rng(),
                   seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
     h >= 1 || throw(ArgumentError("forecast horizon h must be >= 1, got $h"))
     p >= 1 || throw(ArgumentError("QAR/QVAR lag order p must be >= 1, got $p"))
     validate_option(ci_method, "ci_method", (:none, :bootstrap))
-    conf_T = T(conf_level)
-    (isfinite(conf_level) && zero(T) < conf_T < one(T)) ||
-        throw(ArgumentError("conf_level must lie strictly in (0, 1), got $conf_level"))
+    conf_T = T(_validate_conf_level(conf_level))
     if ci_method === :bootstrap
         n_boot >= 2 || throw(ArgumentError("n_boot must be >= 2 when ci_method=:bootstrap, got $n_boot"))
     else

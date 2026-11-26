@@ -813,7 +813,7 @@ function Base.show(io::IO, m::SVARModel{T}) where {T}
         else
             fill(T(NaN), length(coefs))
         end
-        _coef_table(io, "Free elements", names, coefs, ses)
+        _coef_table(io, "Free elements", names, coefs, ses; level=DEFAULT_CI_MACRO)
         _sig_legend(io)
     end
     _matrix_table(io, m.A, "A"; row_labels=m.varnames, col_labels=m.varnames)

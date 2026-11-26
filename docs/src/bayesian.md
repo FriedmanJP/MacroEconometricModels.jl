@@ -647,7 +647,7 @@ The intervals widen with the horizon because they carry two distinct sources of 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `reps` | `Int` | `nothing` | Number of posterior draws to use (default: all) |
-| `conf_level` | `Real` | `0.95` | Credible interval level |
+| `conf_level` | `Real` | `0.68` | Credible interval level |
 | `point_estimate` | `Symbol` | `:mean` | Central tendency (`:mean` or `:median`) |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator for the simulated shock paths |
 
@@ -676,7 +676,7 @@ cfc = conditional_forecast(post, scenario, 12)
 report(cfc)
 ```
 
-The conditioned rows are pinned to 2.0 with a degenerate ``[2.0, 2.0]`` band — a hard condition holds in every posterior draw — against an unconditional funds-rate path of about ``-0.04``. The spillovers carry credible intervals that reflect the full posterior: industrial production is put at ``+1.35`` percent in the first conditioned month, but with a 95% band of ``[-1.48, 4.14]`` that straddles zero. Compare this with the [VAR](@ref var_page) dispatch, which conditions on a single point estimate and therefore reports a far tighter band for the same scenario. `n_draws` on the result records how many posterior draws survived the stationarity filter — 89 of 100 here.
+The conditioned rows are pinned to 2.0 with a degenerate ``[2.0, 2.0]`` band — a hard condition holds in every posterior draw — against an unconditional funds-rate path of about ``-0.04``. The spillovers carry credible intervals that reflect the full posterior: industrial production is put at ``+1.35`` percent in the first conditioned month, with a wide credible band (default 68%, configurable via `conf_level`) that reflects both parameter and shock uncertainty. Compare this with the [VAR](@ref var_page) dispatch, which conditions on a single point estimate and therefore reports a far tighter band for the same scenario. `n_draws` on the result records how many posterior draws survived the stationarity filter — 89 of 100 here.
 
 ```julia
 plot_result(cfc)
@@ -686,7 +686,7 @@ plot_result(cfc)
 |---------|------|---------|-------------|
 | `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
 | `reps` | `Int` | `nothing` | Posterior draws to use (default: all) |
-| `conf_level` | `Real` | `0.95` | Credible-band coverage |
+| `conf_level` | `Real` | `0.68` | Credible-band coverage |
 | `point_estimate` | `Symbol` | `:mean` | Central tendency across draws (`:mean` or `:median`) |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
@@ -752,7 +752,7 @@ The impact column of the third shock is the recursive impact matrix ``A_t^{-1}\S
 |---------|------|---------|-------------|
 | `t` | `Int` | `post.T_eff` | Date within the effective sample at which to evaluate the response |
 | `n_draws` | `Int` | `500` | Posterior draws used, capped at the number available |
-| `quantile_levels` | `Vector{<:Real}` | `[0.05, 0.16, 0.84, 0.95]` | Credible-band levels |
+| `quantile_levels` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Credible-band levels |
 | `stationary_only` | `Bool` | `true` | Drop draws whose companion matrix at date `t` is explosive |
 
 ```julia

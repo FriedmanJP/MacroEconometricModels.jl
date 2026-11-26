@@ -510,27 +510,32 @@ function _gdfm_resolve_vars(vars, names::Vector{String})
 end
 
 """
-    plot_result(r::GDFMNowcastResult; vars=1:min(6, length(r.nowcast)), ncols=0,
-                title="", save_path=nothing) -> PlotOutput
+    plot_result(r::GDFMNowcastResult; vars=1:min(6, length(r.nowcast)),
+                conf_level=DEFAULT_CI_MACRO, ncols=0, title="",
+                save_path=nothing) -> PlotOutput
 
 Plot Wiener–Kolmogorov GDFM ragged-edge nowcast/forecast/backcast paths alongside
-the imputed panel series and 95% predictive uncertainty bands (`nowcast ± 1.96 * se`)
-for selected series.
+the imputed panel series and `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) predictive
+uncertainty bands (`nowcast ± z * se`) for selected series.
 
 # Keyword Arguments
 - `vars=1:min(6, length(r.nowcast))`: Indices or names of panel variables to display
+- `conf_level::Real=DEFAULT_CI_MACRO`: Confidence level in `(0, 1)` for predictive bands (default `0.68`)
 - `ncols::Int=0`: Grid column count (`0` = auto)
 - `title::String=""`: Custom figure title (`""` = auto-generated)
 - `save_path::Union{Nothing,String}=nothing`: Optional HTML output file path
 """
 function plot_result(r::GDFMNowcastResult{T};
                      vars=1:min(6, length(r.nowcast)),
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      ncols::Int=0,
                      title::String="",
                      save_path::Union{Nothing,String}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    pct = _ci_pct(lv)
     T_r, N = size(r.panel_imputed)
     var_idxs = _gdfm_resolve_vars(vars, r.varnames)
-    z_val = T(1.96)
+    z_val = T(_conf_z(lv))
     x_nc = T_r + r.horizon
 
     panels = _PanelSpec[]
@@ -602,7 +607,7 @@ function plot_result(r::GDFMNowcastResult{T};
         s_json = _series_json(["Imputed panel", "Nowcast"],
                               [_PLOT_SERIES[1], _PLOT_SERIES[2]];
                               keys=["hist", "nc"], dash=["", "6,3"])
-        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"name\":\"95% CI\"," *
+        bands = "[{\"lo_key\":\"ci_lo\",\"hi_key\":\"ci_hi\",\"name\":\"$(pct)% CI\"," *
                 "\"color\":$(_json(_PLOT_SERIES[2])),\"alpha\":$(_PLOT_CI_ALPHA)}]"
         refs = "[{\"value\":$(_json(x_nc)),\"axis\":\"x\"," *
                "\"color\":$(_json(_PLOT_ALERT)),\"dash\":\"5,3\"}]"

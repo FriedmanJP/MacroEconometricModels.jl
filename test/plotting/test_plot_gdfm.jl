@@ -254,7 +254,7 @@ isdefined(@__MODULE__, :check_plot) || include(joinpath(@__DIR__, "plot_test_hel
         p_def = plot_result(gnc)
         @test length(panel_titles(p_def.html)) == 6
         @test occursin("Showing 6 of 12", p_def.html)
-        @test occursin("95% CI", p_def.html)
+        @test occursin("68% CI", p_def.html)
         @test occursin("missing at T", p_def.html)
 
         p_sel = plot_result(gnc; vars=["Series_1", "Series_4"], ncols=2, title="Custom NC")

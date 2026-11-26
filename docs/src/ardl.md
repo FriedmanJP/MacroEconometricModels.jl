@@ -126,7 +126,7 @@ lr = long_run(m)
 (theta = round.(lr.theta, digits=4), denom = round(lr.denom, digits=4))
 ```
 
-The estimated long-run multiplier is ``\hat\theta = 2.0063`` with a delta-method standard error of ``0.0126``, so the true value of 2 sits comfortably inside the 95% interval ``[1.982, 2.031]``. The denominator ``1 - \sum_i\hat\varphi_i = 0.4069`` is well away from zero — the dependent variable is not close to a unit root — which is why the multiplier is estimated this precisely. The same quantity read with the opposite sign is the speed of adjustment ``\alpha = -0.4069``, matching the 0.4 built into the data-generating process.
+The estimated long-run multiplier is ``\hat\theta = 2.0063`` with a delta-method standard error of ``0.0126``, so the true value of 2 sits comfortably inside the 68% interval ``[1.994, 2.019]`` (and 95% interval ``[1.982, 2.031]``). The denominator ``1 - \sum_i\hat\varphi_i = 0.4069`` is well away from zero — the dependent variable is not close to a unit root — which is why the multiplier is estimated this precisely. The same quantity read with the opposite sign is the speed of adjustment ``\alpha = -0.4069``, matching the 0.4 built into the data-generating process.
 
 The conditional error-correction re-parameterisation writes the same fitted model as ``\Delta y_t = c + \alpha(y_{t-1} - \theta' x_{t-1}) + \text{short-run } \Delta\text{ terms} + u_t``. A negative ``\alpha`` indicates the system corrects deviations from the long-run relationship; `report(m)` prints ``\alpha`` with its ``t``-ratio in the error-correction block, where it appears as ``-0.4069`` with ``t = -36.47``. Roughly 41% of any gap between ``y_t`` and its long-run level ``2 x_t`` is closed within one period.
 
@@ -269,7 +269,7 @@ plot_result(mm; view=:multipliers)          # or plot_result(nm; view=:multiplie
 |---------|------|---------|-------------|
 | `bootstrap` | `Bool` | `true` | Compute pointwise bootstrap bands |
 | `nreps` | `Int` | `500` | Bootstrap replications |
-| `level` | `Real` | `0.95` | Coverage of the pointwise bands |
+| `level` | `Real` | `0.68` | Coverage of the pointwise bands |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source; pass a seeded generator for reproducible bands |
 
 ---

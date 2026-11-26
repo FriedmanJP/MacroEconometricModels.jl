@@ -325,8 +325,9 @@ StatsAPI.dof(r::LanneLuotoGMMResult) = r.n_params
 StatsAPI.dof_residual(r::LanneLuotoGMMResult) = size(r.shocks, 1) * size(r.B0, 1) - r.n_params
 StatsAPI.islinear(::LanneLuotoGMMResult) = false
 
-function StatsAPI.confint(r::LanneLuotoGMMResult{T}; level::Real=0.95) where {T}
-    z = T(quantile(Normal(), 1 - (1 - level) / 2))
+function StatsAPI.confint(r::LanneLuotoGMMResult{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    z = T(_conf_z(lv))
     hcat(r.theta .- z .* r.se_theta, r.theta .+ z .* r.se_theta)
 end
 

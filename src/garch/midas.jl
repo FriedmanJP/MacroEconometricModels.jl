@@ -394,11 +394,11 @@ function _show_garch_midas(io::IO, m::GarchMidasModel{T}) where {T}
     sr_names = String["μ (mean)", "α (ARCH)", "β (GARCH)"]
     sr_vals = T[m.mu, m.alpha, m.beta]
     _coef_table(io, "GARCH-MIDAS ($(m.rv), span=$(m.span), K=$(m.K), m=$(m.m_freq))",
-                sr_names, sr_vals, se[1:3]; dist=:z)
+                sr_names, sr_vals, se[1:3]; dist=:z, level=DEFAULT_CI_MACRO)
     # long-run / MIDAS block: m, θ, w
     lr_names = String["m (LR const)", "θ (MIDAS)", "w (Beta shape)"]
     lr_vals = T[m.m_const, m.theta, m.w]
-    _coef_table(io, "Long-run (MIDAS) parameters", lr_names, lr_vals, se[4:6]; dist=:z)
+    _coef_table(io, "Long-run (MIDAS) parameters", lr_names, lr_vals, se[4:6]; dist=:z, level=DEFAULT_CI_MACRO)
 
     fit_data = Any[
         "HF observations"  length(m.y);

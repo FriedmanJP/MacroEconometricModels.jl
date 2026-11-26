@@ -16,7 +16,7 @@ yN N N N N N
 
 Equation: yN
 
-Coef. Std.Err. t P>|t| CI lower CI upper
+Coef. Std.Err. t P>|t| N% CI Low N% CI High
 
 (Intercept) N N N N N N
 yN.LN N N N N N N
@@ -26,7 +26,7 @@ yN.LN N N N N N N
 
 Equation: yN
 
-Coef. Std.Err. t P>|t| CI lower CI upper
+Coef. Std.Err. t P>|t| N% CI Low N% CI High
 
 (Intercept) N N N N N N
 yN.LN N N N N N N

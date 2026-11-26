@@ -1827,8 +1827,11 @@ end
     # Reported median/CI bounds are interpolated Statistics.quantile of the (unweighted,
     # post-terminal-resample) draws — the old order-statistic indexing did not match.
     @test ps[:ρ][:median]   ≈ quantile(d, 0.5)
-    @test ps[:ρ][:ci_lower] ≈ quantile(d, 0.025)
-    @test ps[:ρ][:ci_upper] ≈ quantile(d, 0.975)
+    @test ps[:ρ][:ci_lower] ≈ quantile(d, 0.16)
+    @test ps[:ρ][:ci_upper] ≈ quantile(d, 0.84)
+    ps95 = posterior_summary(result; conf_level=0.95)
+    @test ps95[:ρ][:ci_lower] ≈ quantile(d, 0.025)
+    @test ps95[:ρ][:ci_upper] ≈ quantile(d, 0.975)
     end
 end
 
@@ -3538,8 +3541,8 @@ end
         @test length(birf.variables) >= 1
         @test length(birf.shocks) >= 1
         @test size(birf.point_estimate) == (10, length(birf.variables), length(birf.shocks))
-        @test birf.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
-        @test size(birf.quantiles, ndims(birf.quantiles)) == 4  # 4 quantile levels
+        @test birf.quantile_levels == Float64[0.16, 0.5, 0.84]
+        @test size(birf.quantiles, ndims(birf.quantiles)) == 3  # 3 quantile levels
 
         # Custom quantiles
         birf2 = irf(result, 5; n_draws=5, quantiles=[0.1, 0.9], rng=Xoshiro(42))
@@ -3561,7 +3564,7 @@ end
         @test bfevd.horizon == 10
         @test length(bfevd.variables) >= 1
         @test length(bfevd.shocks) >= 1
-        @test bfevd.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
+        @test bfevd.quantile_levels == Float64[0.16, 0.5, 0.84]
 
         # FEVD proportions should be in [0, 1]
         @test all(x -> 0.0 <= x <= 1.0 + 1e-10, bfevd.point_estimate)
@@ -3575,7 +3578,7 @@ end
         @test bsim isa BayesianDSGESimulation{Float64}
         @test bsim.T_periods == 20
         @test length(bsim.variables) >= 1
-        @test bsim.quantile_levels == Float64[0.05, 0.16, 0.84, 0.95]
+        @test bsim.quantile_levels == Float64[0.16, 0.5, 0.84]
         @test size(bsim.point_estimate) == (20, length(bsim.variables))
         @test size(bsim.all_paths, 2) == 20
         @test size(bsim.all_paths, 3) == length(bsim.variables)

@@ -394,7 +394,7 @@ Iterating in levels keeps the error-correction term active at every step, so the
 |---------|------|---------|-------------|
 | `ci_method` | `Symbol` | `:none` | Confidence interval method: `:none`, `:bootstrap`, `:simulation` |
 | `reps` | `Int` | `500` | Number of bootstrap or simulation replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for intervals |
+| `conf_level` | `Real` | `0.68` | Confidence level for intervals |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
 ### Return Value

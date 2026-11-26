@@ -12,7 +12,7 @@ Observations N
 
 Event-Study Coefficients
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 e=-N N N N N N N
 e=-N N N N N N N

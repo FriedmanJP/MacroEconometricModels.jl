@@ -150,10 +150,11 @@ function StatsAPI.vcov(m::AbstractVolatilityModel)
 end
 
 """Confidence intervals for volatility model parameters."""
-function StatsAPI.confint(m::AbstractVolatilityModel; level::Real=0.95)
+function StatsAPI.confint(m::AbstractVolatilityModel; level::Real=DEFAULT_CI_MACRO)
+    lv = _validate_conf_level(level)
     T = eltype(m.y)
     se = stderror(m)
-    z = T(quantile(Normal(), (1 + level) / 2))
+    z = T(_conf_z(lv))
     c = coef(m)
     hcat(c .- z .* se, c .+ z .* se)
 end
@@ -194,7 +195,7 @@ function _show_volatility_model(io::IO, header::String, m;
     end
 
     # Publication-quality coefficient table
-    _coef_table(io, header, param_names, param_vals, se; dist=:z)
+    _coef_table(io, header, param_names, param_vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     pers = persistence(m)
     uv = unconditional_variance(m)

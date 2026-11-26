@@ -48,7 +48,7 @@ end
 """Print long-run multipliers as a Stata-style coefficient table (#534)."""
 function Base.show(io::IO, lr::ARDLLongRun{T}) where {T}
     _coef_table(io, "ARDL Long-Run Multipliers", lr.varnames, lr.theta, lr.se;
-                dist=:z)
+                dist=:z, level=DEFAULT_CI_MACRO)
     println(io, "  Speed-of-adjustment denom (1 − Σφ̂) = ", _fmt(lr.denom))
     _sig_legend(io)
 end
@@ -411,4 +411,35 @@ struct PMGModel{T<:AbstractFloat}
     n_nonconv::Int
     converged::Bool
     iters::Int
+end
+
+# =============================================================================
+# StatsAPI.confint — ARDL, ARDLLongRun, NARDL, PMG (default 68%)
+# =============================================================================
+
+"""Confidence intervals for ARDLLongRun long-run multipliers (normal distribution, default 68%)."""
+function StatsAPI.confint(lr::ARDLLongRun{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    crit = T(_conf_z(lv))
+    return hcat(lr.theta .- crit .* lr.se, lr.theta .+ crit .* lr.se)
+end
+
+"""Confidence intervals for ARDLModel coefficients (t-distribution, default 68%)."""
+function StatsAPI.confint(m::ARDLModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    dof_r = max(m.n - m.K, 1)
+    se = sqrt.(max.(diag(m.vcov), zero(T)))
+    crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+    return hcat(m.coef .- crit .* se, m.coef .+ crit .* se)
+end
+
+"""Confidence intervals for NARDLModel coefficients (delegates to underlying ARDLModel, default 68%)."""
+StatsAPI.confint(m::NARDLModel; level::Real=DEFAULT_CI_MACRO) =
+    StatsAPI.confint(m.ardl; level=level)
+
+"""Confidence intervals for PMGModel long-run coefficients (normal distribution, default 68%)."""
+function StatsAPI.confint(m::PMGModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    crit = T(_conf_z(lv))
+    return hcat(m.theta .- crit .* m.theta_se, m.theta .+ crit .* m.theta_se)
 end

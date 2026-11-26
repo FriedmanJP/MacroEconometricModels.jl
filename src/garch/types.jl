@@ -956,7 +956,7 @@ function _show_cgarch(io::IO, m::CGARCHModel{T}) where {T}
     names = String["μ (mean)", "ω (long-run σ²)", "ρ (perm. persist.)",
                    "φ (perm. loading)", "α (transitory)", "β (transitory)"]
     vals = T[m.mu, m.omega, m.rho, m.phi, m.alpha, m.beta]
-    _coef_table(io, "Component-GARCH(1,1) Model", names, vals, se; dist=:z)
+    _coef_table(io, "Component-GARCH(1,1) Model", names, vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     fit_data = Any[
         "Observations"          length(m.y);
@@ -989,7 +989,7 @@ function _show_aparch(io::IO, m::APARCHModel{T}) where {T}
         "  [" * (m.fixed_delta ? "δ=$(round(m.delta;digits=3)) fixed" : "") *
         (m.fixed_delta && m.fixed_gamma ? ", " : "") *
         (m.fixed_gamma ? "γ fixed" : "") * "]" : ""
-    _coef_table(io, "APARCH($(m.p),$(m.q)) Model" * tag, names, vals, se; dist=:z)
+    _coef_table(io, "APARCH($(m.p),$(m.q)) Model" * tag, names, vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     pers = persistence(m)
     uv = unconditional_variance(m)

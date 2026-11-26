@@ -708,21 +708,21 @@ as `n_failed`), matching the BVAR IRF convention.
 # Keywords
 - `t::Int=post.T_eff` — date within the effective sample (1 = first post-training period)
 - `n_draws::Int=500` — posterior draws used (capped at the number available)
-- `quantile_levels::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95]` — credible-band levels
+- `quantile_levels::Vector{<:Real}=DEFAULT_QUANTILES_MACRO` — credible-band levels (default `[0.16, 0.5, 0.84]`, 68%)
 - `stationary_only::Bool=true` — drop explosive draws
 """
 function irf(post::TVPVARPosterior{T}, horizon::Int;
              t::Int=post.T_eff, n_draws::Int=500,
-             quantile_levels::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+             quantile_levels::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
              stationary_only::Bool=true) where {T<:AbstractFloat}
     horizon >= 1 || throw(ArgumentError("horizon must be positive"))
     1 <= t <= post.T_eff || throw(ArgumentError(
         "t must be in 1:$(post.T_eff), got $t"))
+    ql = T.(_validate_quantiles(quantile_levels))
     n, p = post.n, post.p
     m = 1 + n * p
     N_avail = size(post.B_draws, 1)
     N = min(n_draws, N_avail)
-    ql = T.(quantile_levels)
 
     sims = Array{T,4}(undef, N, horizon, n, n)
     valid = 0
@@ -785,8 +785,8 @@ Posterior mean and credible bands of the **standard-deviation** path
 Returns a `T_eff × n` mean matrix and a `T_eff × n × n_q` quantile array.
 """
 function volatility_path(post::TVPVARPosterior{T};
-                         quantile_levels::Vector{<:Real}=[0.16, 0.5, 0.84]) where {T<:AbstractFloat}
-    ql = T.(quantile_levels)
+                         quantile_levels::Vector{<:Real}=DEFAULT_QUANTILES_MACRO) where {T<:AbstractFloat}
+    ql = T.(_validate_quantiles(quantile_levels))
     vol = exp.(post.H_draws ./ 2)                   # σ = exp(h/2); n_draws × T_eff × n
     mu = dropdims(mean(vol; dims=1); dims=1)
     qs = Array{T,3}(undef, post.T_eff, post.n, length(ql))

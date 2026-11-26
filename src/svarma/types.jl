@@ -503,7 +503,8 @@ function report(io::IO, m::SVARMAModel{T}) where {T}
         c_off = n + m.p * n^2 + m.q * n^2
         c_names = ["C[$i,$j]" for j in 1:n for i in 1:n]
         _coef_table(io, "Structural Impact Matrix (C) Inference",
-                    c_names, vec(m.C), Vector{T}(m.se[(c_off + 1):k_coef]); dist=:z)
+                    c_names, vec(m.C), Vector{T}(m.se[(c_off + 1):k_coef]);
+                    dist=:z, level=DEFAULT_CI_MACRO)
     end
     return nothing
 end

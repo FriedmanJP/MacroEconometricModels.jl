@@ -128,7 +128,7 @@ The point-estimate engine is also exposed for advanced users who supply their ow
 | `method` | `Symbol` | `:cholesky` | Identification method (`:cholesky`, `:sign`, `:narrative`, `:long_run`, ICA/ML/heteroskedasticity variants) |
 | `ci_type` | `Symbol` | `:none` | CI method: `:none`, `:bootstrap`, or `:theoretical` |
 | `reps` | `Int` | `200` | Number of bootstrap or simulation replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for interval construction |
+| `conf_level` | `Real` | `0.68` | Confidence level for interval construction |
 | `stationary_only` | `Bool` | `false` | Reject explosive draws and redraw (Kilian & Lütkepohl 2017) |
 | `bootstrap` | `Symbol` | `:iid` | Residual resampling scheme: `:iid`, `:wild`, or `:block` |
 | `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |

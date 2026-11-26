@@ -28,7 +28,7 @@ Use `favar_panel_forecast` to map factor forecasts to all N panel variables.
 Passed through to `forecast(::VARModel, h; ...)`:
 - `ci_method::Symbol=:bootstrap`: CI method (`:none` or `:bootstrap`)
 - `reps::Int=500`: Number of bootstrap replications
-- `conf_level::Real=0.95`: Confidence level
+- `conf_level::Real=0.68`: Confidence level (`DEFAULT_CI_MACRO`)
 
 # Example
 ```julia

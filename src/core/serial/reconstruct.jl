@@ -114,6 +114,14 @@ function _from_serializable(::Type{T}, p::AbstractDict, ::Int) where {T}
                 push!(args, NaN)   # IV-GMM diagnostic added in v0.9.7 (#815)
                 continue
             end
+            if f === :alpha && T <: QuantileRegModel
+                push!(args, 1 - DEFAULT_CI_MICRO)  # added in v1.1.2 (#936)
+                continue
+            end
+            if f === :conf_level && (T <: BaiPerronResult || T <: CorTestResult)
+                push!(args, T <: BaiPerronResult ? DEFAULT_CI_MACRO : 0.95)  # added in v1.1.2 (#939, #940)
+                continue
+            end
             throw(SerializationError(
                 "field '$key' of $(nameof(T)) is missing from the payload — the file " *
                 "was saved by an older package version, before this field existed. " *

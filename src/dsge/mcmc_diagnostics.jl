@@ -360,7 +360,7 @@ function trace(result::BayesianDSGE{T}, param::Symbol) where {T<:AbstractFloat}
 end
 
 """
-    acf(result::BayesianDSGE, param::Symbol; lags=0, conf_level=0.95) → ACFResult
+    acf(result::BayesianDSGE, param::Symbol; lags=0, conf_level=DEFAULT_CI_MACRO) → ACFResult
 
 Autocorrelation function of the retained draw sequence for `param` (dispatches
 to the spectral [`acf`](@ref)); useful for assessing chain mixing.

@@ -50,29 +50,22 @@ function _coef_ci_json(names::AbstractVector, est::AbstractVector,
 end
 
 """
-    _coef_plot_json(names, est, se; z=1.96) -> String
+    _coef_plot_json(names, est, se; z=_conf_z(DEFAULT_CI_MICRO)) -> String
 
 Coefficient-plot `data_json` from an estimate / standard-error pair, with symmetric
 `ci = est ± z·se`; intercept omitted (via `_coef_ci_json`).
 """
-_coef_plot_json(names::AbstractVector, est::AbstractVector, se::AbstractVector; z::Real=1.96) =
+_coef_plot_json(names::AbstractVector, est::AbstractVector, se::AbstractVector;
+                z::Real=_conf_z(DEFAULT_CI_MICRO)) =
     _coef_ci_json(names, est, est .- z .* se, est .+ z .* se)
 
 # Diagonal standard errors from a covariance matrix (nonnegative-clamped sqrt).
 _diag_se(V::AbstractMatrix) = sqrt.(max.(diag(V), zero(eltype(V))))
 
-# Normal critical value and integer-percent label for a confidence level (#838).
-function _conf_z(conf_level::Real)
-    c = Float64(conf_level)
-    0 < c < 1 || throw(ArgumentError("conf_level must be in (0, 1); got $conf_level"))
-    quantile(Normal(), 1 - (1 - c) / 2)
-end
-_ci_pct(conf_level::Real) = round(Int, 100 * Float64(conf_level))
-
 # Build a single coef panel from an est/se pair.
 function _coef_panel(prefix::String, names::AbstractVector, est::AbstractVector,
-                     se::AbstractVector; z::Real=1.96, xlabel::String="Coefficient",
-                     ptitle::String)
+                     se::AbstractVector; z::Real=_conf_z(DEFAULT_CI_MICRO),
+                     xlabel::String="Coefficient", ptitle::String)
     id = _next_plot_id(prefix)
     js = _render_coef_plot_js(id, _coef_plot_json(names, est, se; z=z);
                               ref_value=0, xlabel=xlabel, ylabel="")
@@ -89,10 +82,11 @@ _resolve_category(category, nonbase_labels::Vector{String}) =
 # =============================================================================
 
 """
-    plot_result(m::PanelRegModel; view=:coef, acf_lags=0, title="", save_path=nothing)
+    plot_result(m::PanelRegModel; view=:coef, acf_lags=0, title="", save_path=nothing,
+                conf_level=DEFAULT_CI_MICRO)
 
 `view=:coef` (default) draws a horizontal coefficient plot of the panel-regression
-slopes `β ± z·SE` at confidence level `conf_level` (default 0.95; SE from
+slopes `β ± z·SE` at confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`; SE from
 `diag(vcov_mat)`), with a zero reference line; intercept
 omitted. `view=:diagnostics` draws the shared four-panel residual diagnostics
 (residual-vs-fitted, histogram + fitted normal, Normal Q-Q, residual ACF) from the
@@ -101,7 +95,7 @@ model's stored `residuals`/`fitted` (PLT-24). Unknown `view` throws an `Argument
 function plot_result(m::PanelRegModel{T};
                      view::Symbol=:coef, acf_lags::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     if view === :coef
         z = _conf_z(conf_level)
         panel = _coef_panel("preg_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
@@ -120,17 +114,19 @@ function plot_result(m::PanelRegModel{T};
 end
 
 """
-    plot_result(m::PanelIVModel; view=:coef, acf_lags=0, title="", save_path=nothing)
+    plot_result(m::PanelIVModel; view=:coef, acf_lags=0, title="", save_path=nothing,
+                conf_level=DEFAULT_CI_MICRO)
 
 `view=:coef` (default) draws a horizontal coefficient plot of the panel-IV slopes
-`β ± z·SE` at confidence level `conf_level` (default 0.95); intercept omitted. `view=:diagnostics` draws the shared four-panel
+`β ± z·SE` at confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`); intercept omitted.
+`view=:diagnostics` draws the shared four-panel
 residual diagnostics from the model's stored `residuals`/`fitted` (PLT-24). Unknown
 `view` throws an `ArgumentError`.
 """
 function plot_result(m::PanelIVModel{T};
                      view::Symbol=:coef, acf_lags::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     if view === :coef
         z = _conf_z(conf_level)
         panel = _coef_panel("piv_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
@@ -149,15 +145,15 @@ function plot_result(m::PanelIVModel{T};
 end
 
 """
-    plot_result(m::PMGModel; title="", save_path=nothing)
+    plot_result(m::PMGModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 Horizontal coefficient plot of the PMG/MG long-run coefficients `θ ± z·SE` at
-confidence level `conf_level` (default 0.95) (`theta`/`theta_se` over `xnames`),
+confidence level `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) (`theta`/`theta_se` over `xnames`),
 with a zero reference line.
 """
 function plot_result(m::PMGModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("pmg_coef", m.xnames, m.theta, m.theta_se;
                         xlabel="Long-run coefficient", z=z,
@@ -173,17 +169,17 @@ end
 # =============================================================================
 
 """
-    plot_result(m::OrderedModel; title="", save_path=nothing)
+    plot_result(m::OrderedModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Two horizontal dot-and-whisker panels: the ordered-model slopes `β ± z·SE` (SE
 from the `β` block of `diag(vcov_mat)`), and the estimated `cutpoints ± z·SE` (the
 `α` block), each with a zero reference line. The cutpoints live on the latent-index
 scale, so they get their own panel rather than sharing the coefficient axis.
-Confidence level `conf_level` (default 0.95) applies to both panels.
+Confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`) applies to both panels.
 """
 function plot_result(m::OrderedModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     K = length(m.beta)
     z = _conf_z(conf_level)
     se_all = _diag_se(m.vcov_mat)
@@ -203,18 +199,19 @@ end
 # =============================================================================
 
 """
-    plot_result(m::MultinomialLogitModel; category=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(m::MultinomialLogitModel; category=nothing, ncols=0, title="",
+                save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Per-outcome coefficient facets: one horizontal coefficient panel per non-base
 category (columns of `β`, SE from the matching block of `diag(vcov_mat)`), titled
 `"<cat> (vs <base>)"`. When `category` (Int index or label among the non-base
 categories) is given, only that outcome's panel is drawn (plotrule C3).
-Whiskers are `β ± z·SE` at confidence level `conf_level` (default 0.95).
+Whiskers are `β ± z·SE` at confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`).
 """
 function plot_result(m::MultinomialLogitModel{T};
                      category::Union{Int,String,Nothing}=nothing, ncols::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     K, Jm1 = size(m.beta)
     se_all = _diag_se(m.vcov_mat)
@@ -239,18 +236,19 @@ end
 # =============================================================================
 
 """
-    plot_result(me::MultinomialMarginalEffects; category=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(me::MultinomialMarginalEffects; category=nothing, ncols=0, title="",
+                save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Per-outcome average-marginal-effect facets from `effects` (K × J, base = column 1),
 one panel per non-base category. When `me.se === nothing` the whiskers collapse to
 the point (no fabricated CI) and the subtitle says so (plotrule C6). `category`
 selects one non-base outcome by Int index or label. Whiskers are `effect ± z·SE`
-at confidence level `conf_level` (default 0.95).
+at confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`).
 """
 function plot_result(me::MultinomialMarginalEffects{T};
                      category::Union{Int,String,Nothing}=nothing, ncols::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     K, J = size(me.effects)
     nonbase = String[string(me.categories[j]) for j in 2:J]
@@ -289,7 +287,7 @@ end
 Forest plot of logit odds ratios on a **log x-axis** with the reference line at **1**
 (not 0): `or` with log-scale intervals `exp(log(or) ± z·SE_log)` recomputed from the
 stored delta-method SEs at confidence level `conf_level` (default: the level stored
-in `r`, usually 0.95), intercept omitted. Uses the coef renderer's `logx=true` /
+in `r`, usually 0.90), intercept omitted. Uses the coef renderer's `logx=true` /
 `ref_value=1` options (plotrule A4).
 """
 function plot_result(r::OddsRatio{T};
@@ -322,18 +320,19 @@ end
 # =============================================================================
 
 """
-    plot_result(m::HeckmanModel; view=:outcome, title="", save_path=nothing)
+    plot_result(m::HeckmanModel; view=:outcome, title="", save_path=nothing,
+                conf_level=DEFAULT_CI_MICRO)
 
 Coefficient plot for one equation of the Heckman selection model:
 `view=:outcome` (default) draws the outcome equation (`beta`/`vcov_beta`/`outcome_names`),
 `view=:selection` the selection probit (`gamma`/`vcov_gamma`/`select_names`). Unknown
 `view` throws an `ArgumentError`. Whiskers use confidence level `conf_level`
-(default 0.95).
+(default `0.90`, `DEFAULT_CI_MICRO`).
 """
 function plot_result(m::HeckmanModel{T};
                      view::Symbol=:outcome, title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     if view === :outcome
         panel = _coef_panel("heck_out", m.outcome_names, m.beta, _diag_se(m.vcov_beta);
@@ -356,14 +355,14 @@ end
 # =============================================================================
 
 """
-    plot_result(m::TobitModel; title="", save_path=nothing)
+    plot_result(m::TobitModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Horizontal coefficient plot of the Tobit slopes `β ± z·SE` at confidence level
-`conf_level` (default 0.95); intercept omitted.
+`conf_level` (default `0.90`, `DEFAULT_CI_MICRO`); intercept omitted.
 """
 function plot_result(m::TobitModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     # vcov_mat is (k+1)×(k+1) with σ last — take the β block only.
     z = _conf_z(conf_level)
     se_beta = _diag_se(m.vcov_mat)[1:length(m.beta)]
@@ -376,14 +375,14 @@ function plot_result(m::TobitModel{T};
 end
 
 """
-    plot_result(m::TruncRegModel; title="", save_path=nothing)
+    plot_result(m::TruncRegModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Horizontal coefficient plot of the truncated-regression slopes `β ± z·SE` at
-confidence level `conf_level` (default 0.95).
+confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`).
 """
 function plot_result(m::TruncRegModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     # vcov_mat is (k+1)×(k+1) with σ last — take the β block only.
     z = _conf_z(conf_level)
     se_beta = _diag_se(m.vcov_mat)[1:length(m.beta)]
@@ -396,15 +395,15 @@ function plot_result(m::TruncRegModel{T};
 end
 
 """
-    plot_result(m::CointRegModel; title="", save_path=nothing)
+    plot_result(m::CointRegModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 Horizontal coefficient plot of the cointegrating-regression coefficients
-`coef ± z·SE` at confidence level `conf_level` (default 0.95) (SE from
+`coef ± z·SE` at confidence level `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) (SE from
 `diag(vcov)`); intercept/trend rows omitted.
 """
 function plot_result(m::CointRegModel{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("cr_coef", m.varnames, m.coef, _diag_se(m.vcov);
                         z=z, ptitle="Cointegrating Coefficients ($(m.method), $(_ci_pct(conf_level))% CI)")
@@ -423,7 +422,7 @@ function _system_coef_plot(eqnames::Vector{String}, varnames::Vector{Vector{Stri
                            betas::Vector{Vector{T}}, ses::Vector{Vector{T}},
                            label::String, title::String,
                            save_path::Union{String,Nothing}, ncols::Int,
-                           conf_level::Real=0.95) where {T}
+                           conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     panels = _PanelSpec[]
     for j in eachindex(eqnames)
@@ -438,27 +437,27 @@ function _system_coef_plot(eqnames::Vector{String}, varnames::Vector{Vector{Stri
 end
 
 """
-    plot_result(m::SURModel; ncols=0, title="", save_path=nothing)
+    plot_result(m::SURModel; ncols=0, title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 One horizontal coefficient panel per equation of a seemingly-unrelated-regression
 system (`betas`/`ses`/`varnames` per equation); intercepts omitted. Whiskers use
-confidence level `conf_level` (default 0.95).
+confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`).
 """
 plot_result(m::SURModel{T}; ncols::Int=0, title::String="",
             save_path::Union{String,Nothing}=nothing,
-            conf_level::Real=0.95) where {T} =
+            conf_level::Real=DEFAULT_CI_MICRO) where {T} =
     _system_coef_plot(m.eqnames, m.varnames, m.betas, m.ses,
                       "SUR System Coefficients", title, save_path, ncols, conf_level)
 
 """
-    plot_result(m::ThreeSLSModel; ncols=0, title="", save_path=nothing)
+    plot_result(m::ThreeSLSModel; ncols=0, title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 One horizontal coefficient panel per equation of a three-stage-least-squares system.
-Whiskers use confidence level `conf_level` (default 0.95).
+Whiskers use confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`).
 """
 plot_result(m::ThreeSLSModel{T}; ncols::Int=0, title::String="",
             save_path::Union{String,Nothing}=nothing,
-            conf_level::Real=0.95) where {T} =
+            conf_level::Real=DEFAULT_CI_MICRO) where {T} =
     _system_coef_plot(m.eqnames, m.varnames, m.betas, m.ses,
                       "3SLS System Coefficients", title, save_path, ncols, conf_level)
 
@@ -467,16 +466,16 @@ plot_result(m::ThreeSLSModel{T}; ncols::Int=0, title::String="",
 # =============================================================================
 
 """
-    plot_result(m::PanelLogitModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::PanelLogitModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Panel logit coefficients as a horizontal dot-and-whisker plot
-(`β ± z·SE` at confidence level `conf_level`, default 0.95; SE from
+(`β ± z·SE` at confidence level `conf_level`, default `0.90`, `DEFAULT_CI_MICRO`; SE from
 `diag(vcov_mat)`), with a zero reference line. Estimation method and
 pseudo-R² are stated in the panel subtitle.
 """
 function plot_result(m::PanelLogitModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("plogit_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
                         z=z, ptitle="Coefficients ($(m.method), $(_ci_pct(conf_level))% CI)")
@@ -487,16 +486,16 @@ function plot_result(m::PanelLogitModel{T}; title::String="",
 end
 
 """
-    plot_result(m::PanelProbitModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::PanelProbitModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Panel probit coefficients as a horizontal dot-and-whisker plot
-(`β ± z·SE` at confidence level `conf_level`, default 0.95), with a zero
+(`β ± z·SE` at confidence level `conf_level`, default `0.90`, `DEFAULT_CI_MICRO`), with a zero
 reference line. Estimation method and pseudo-R² are stated in the panel
 subtitle.
 """
 function plot_result(m::PanelProbitModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("pprobit_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
                         z=z, ptitle="Coefficients ($(m.method), $(_ci_pct(conf_level))% CI)")
@@ -507,16 +506,16 @@ function plot_result(m::PanelProbitModel{T}; title::String="",
 end
 
 """
-    plot_result(m::PanelCointRegModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::PanelCointRegModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 Panel cointegrating-regression coefficients as a horizontal dot-and-whisker
-plot (`β ± z·SE` at confidence level `conf_level`, default 0.95; SE from the
+plot (`β ± z·SE` at confidence level `conf_level`, default `0.68`, `DEFAULT_CI_MACRO`; SE from the
 stored `se`), with a zero reference line. Method, pooling, and cross-section
 size are stated in the panel subtitle.
 """
 function plot_result(m::PanelCointRegModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("pcreg_coef", m.varnames, m.coef, m.se;
                         z=z, ptitle="Cointegrating Coefficients ($(m.method)/" *
@@ -635,14 +634,14 @@ function plot_result(d::RIIIADiagnostic{T};
 end
 
 """
-    plot_result(m::RILogitModel; conf_level=0.95, title="", save_path=nothing)
+    plot_result(m::RILogitModel; conf_level=DEFAULT_CI_MICRO, title="", save_path=nothing)
 
 Horizontal dot-and-whisker coefficient plot (`_coef_panel`) of `[beta; omega]` with
-normal confidence intervals `± z * SE` at confidence level `conf_level` (default `0.95`)
+normal confidence intervals `± z * SE` at confidence level `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`)
 and a zero reference line.
 """
 function plot_result(m::RILogitModel{T};
-                     conf_level::Real=0.95,
+                     conf_level::Real=DEFAULT_CI_MICRO,
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     z = _conf_z(conf_level)

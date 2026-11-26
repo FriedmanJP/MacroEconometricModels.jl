@@ -27,7 +27,7 @@ Stochastic Volatility model (Taylor 1986), estimated via Kim-Shephard-Chib (1998
 - `sigma_eta_post::Vector{T}`: Posterior draws of σ_η (volatility of volatility)
 - `volatility_mean::Vector{T}`: Posterior mean of exp(hₜ) at each time t
 - `volatility_quantiles::Matrix{T}`: Quantiles of exp(hₜ) (T × n_quantiles)
-- `quantile_levels::Vector{T}`: Quantile levels (e.g., [0.025, 0.5, 0.975])
+- `quantile_levels::Vector{T}`: Quantile levels (default `[0.16, 0.5, 0.84]`, `DEFAULT_QUANTILES_MACRO`)
 - `dist::Symbol`: Error distribution (:normal or :studentt)
 - `leverage::Bool`: Whether leverage effect was estimated
 - `n_samples::Int`: Number of posterior samples
@@ -103,9 +103,14 @@ function Base.show(io::IO, m::SVModel{T}) where {T}
     phi_s = std(m.phi_post)
     se_s = std(m.sigma_eta_post)
 
-    mu_q = quantile(m.mu_post, [0.025, 0.5, 0.975])
-    phi_q = quantile(m.phi_post, [0.025, 0.5, 0.975])
-    se_q = quantile(m.sigma_eta_post, [0.025, 0.5, 0.975])
+    ql = m.quantile_levels
+    q_lo = isempty(ql) ? Float64(DEFAULT_QUANTILES_MACRO[1]) : Float64(first(ql))
+    q_hi = isempty(ql) ? Float64(DEFAULT_QUANTILES_MACRO[end]) : Float64(last(ql))
+    q_vec = [q_lo, 0.5, q_hi]
+
+    mu_q = quantile(m.mu_post, q_vec)
+    phi_q = quantile(m.phi_post, q_vec)
+    se_q = quantile(m.sigma_eta_post, q_vec)
 
     title = "Stochastic Volatility Model"
     m.leverage && (title *= " (with leverage)")
@@ -133,7 +138,7 @@ function Base.show(io::IO, m::SVModel{T}) where {T}
     ]
     _pretty_table(io, data;
         title = "Parameters",
-        column_labels = ["Parameter", "Mean", "Std", "2.5%", "50%", "97.5%"],
+        column_labels = ["Parameter", "Mean", "Std", _quantile_pct_label(q_lo), "50%", _quantile_pct_label(q_hi)],
         alignment = [:l, :r, :r, :r, :r, :r],
     )
 end

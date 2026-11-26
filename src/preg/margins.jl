@@ -18,7 +18,7 @@ using LinearAlgebra, Statistics, Distributions
 # =============================================================================
 
 """
-    marginal_effects(m::PanelLogitModel{T}; conf_level=0.95, n_quadrature=12) -> MarginalEffects{T}
+    marginal_effects(m::PanelLogitModel{T}; conf_level=DEFAULT_CI_MICRO, n_quadrature=12) -> MarginalEffects{T}
 
 Compute average marginal effects from a panel logit model with delta-method SEs.
 
@@ -32,7 +32,7 @@ Compute average marginal effects from a panel logit model with delta-method SEs.
 
 # Arguments
 - `m::PanelLogitModel{T}` -- estimated panel logit model
-- `conf_level::Real` -- confidence level for CIs (default 0.95)
+- `conf_level::Real` -- confidence level for CIs (default `0.90`, `DEFAULT_CI_MICRO`)
 - `n_quadrature::Int` -- number of Gauss-Hermite quadrature points for RE/CRE (default 12)
 
 # Returns
@@ -43,16 +43,17 @@ Compute average marginal effects from a panel logit model with delta-method SEs.
 - Cameron, A. C. & Trivedi, P. K. (2005). *Microeconometrics*. Cambridge University Press.
 """
 function marginal_effects(m::PanelLogitModel{T};
-                          conf_level::Real=0.95,
+                          conf_level::Real=DEFAULT_CI_MICRO,
                           n_quadrature::Int=12) where {T<:AbstractFloat}
+    lv = T(_validate_conf_level(conf_level))
     if m.method == :pooled
-        return _panel_logit_ame_pooled(m, T(conf_level))
+        return _panel_logit_ame_pooled(m, lv)
     elseif m.method == :fe
-        return _panel_logit_ame_fe(m, T(conf_level))
+        return _panel_logit_ame_fe(m, lv)
     elseif m.method == :re
-        return _panel_logit_ame_re(m, T(conf_level), n_quadrature)
+        return _panel_logit_ame_re(m, lv, n_quadrature)
     elseif m.method == :cre
-        return _panel_logit_ame_cre(m, T(conf_level), n_quadrature)
+        return _panel_logit_ame_cre(m, lv, n_quadrature)
     else
         throw(ArgumentError("Unsupported method: $(m.method)"))
     end
@@ -63,7 +64,7 @@ end
 # =============================================================================
 
 """
-    marginal_effects(m::PanelProbitModel{T}; conf_level=0.95, n_quadrature=12) -> MarginalEffects{T}
+    marginal_effects(m::PanelProbitModel{T}; conf_level=DEFAULT_CI_MICRO, n_quadrature=12) -> MarginalEffects{T}
 
 Compute average marginal effects from a panel probit model with delta-method SEs.
 
@@ -74,21 +75,22 @@ Compute average marginal effects from a panel probit model with delta-method SEs
 
 # Arguments
 - `m::PanelProbitModel{T}` -- estimated panel probit model
-- `conf_level::Real` -- confidence level for CIs (default 0.95)
+- `conf_level::Real` -- confidence level for CIs (default `0.90`, `DEFAULT_CI_MICRO`)
 - `n_quadrature::Int` -- Gauss-Hermite quadrature points for RE/CRE (default 12)
 
 # Returns
 `MarginalEffects{T}` with AMEs, delta-method SEs, z-stats, p-values, and CIs.
 """
 function marginal_effects(m::PanelProbitModel{T};
-                          conf_level::Real=0.95,
+                          conf_level::Real=DEFAULT_CI_MICRO,
                           n_quadrature::Int=12) where {T<:AbstractFloat}
+    lv = T(_validate_conf_level(conf_level))
     if m.method == :pooled
-        return _panel_probit_ame_pooled(m, T(conf_level))
+        return _panel_probit_ame_pooled(m, lv)
     elseif m.method == :re
-        return _panel_probit_ame_re(m, T(conf_level), n_quadrature)
+        return _panel_probit_ame_re(m, lv, n_quadrature)
     elseif m.method == :cre
-        return _panel_probit_ame_cre(m, T(conf_level), n_quadrature)
+        return _panel_probit_ame_cre(m, lv, n_quadrature)
     else
         throw(ArgumentError("Unsupported method: $(m.method)"))
     end

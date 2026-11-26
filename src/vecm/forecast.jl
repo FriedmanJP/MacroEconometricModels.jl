@@ -11,7 +11,7 @@ VECM-specific forecasting that iterates directly in levels to preserve cointegra
 using LinearAlgebra, Statistics
 
 """
-    forecast(vecm::VECMModel, h; ci_method=:none, reps=500, conf_level=0.95) -> VECMForecast
+    forecast(vecm::VECMModel, h; ci_method=:none, reps=500, conf_level=DEFAULT_CI_MACRO) -> VECMForecast
 
 Forecast from a VECM by iterating the VECM equations in levels.
 
@@ -23,7 +23,7 @@ forecast path.
 - `h`: Forecast horizon
 - `ci_method`: `:none` (default), `:bootstrap`, or `:simulation`
 - `reps`: Number of bootstrap/simulation replications (default 500)
-- `conf_level`: Confidence level (default 0.95)
+- `conf_level`: Confidence level (default `0.68`, `DEFAULT_CI_MACRO`)
 
 # Returns
 `VECMForecast` with level and difference forecasts, plus CIs if requested.
@@ -31,10 +31,11 @@ forecast path.
 function forecast(vecm::VECMModel{T}, h::Int;
                   ci_method::Symbol=:none,
                   reps::Int=500,
-                  conf_level::Real=0.95,
+                  conf_level::Real=DEFAULT_CI_MACRO,
                   rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
+    _validate_conf_level(conf_level)
     ci_method ∈ (:none, :bootstrap, :simulation) ||
         throw(ArgumentError("ci_method must be :none, :bootstrap, or :simulation"))
 

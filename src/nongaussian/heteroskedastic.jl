@@ -391,7 +391,8 @@ function _show_B0_ses(io::IO, B0::AbstractMatrix{T}, se::AbstractMatrix) where {
     n = size(B0, 1)
     se_m = size(se) == (n, n) ? Matrix{T}(se) : fill(T(NaN), n, n)
     names = ["B₀[$i,$j]" for j in 1:n for i in 1:n]
-    _coef_table(io, "Structural Impact Matrix (B₀)", names, vec(B0), vec(se_m); dist=:z)
+    _coef_table(io, "Structural Impact Matrix (B₀)", names, vec(B0), vec(se_m);
+                dist=:z, level=DEFAULT_CI_MACRO)
 end
 
 function _coerce_se_vcov(se, vcov, n::Int, ::Type{T}) where {T<:AbstractFloat}

@@ -516,7 +516,7 @@ function _tobit_ame(theta::AbstractVector{S}, X::Matrix{T}, L::T, U::T,
 end
 
 """
-    marginal_effects(m::TobitModel; which=:unconditional, conf_level=0.95) -> MarginalEffects{T}
+    marginal_effects(m::TobitModel; which=:unconditional, conf_level=DEFAULT_CI_MICRO) -> MarginalEffects{T}
 
 Average marginal effects for a Tobit model via the McDonald–Moffitt (1980) decomposition, with
 delta-method standard errors (Jacobian through `(β, σ)` by forward-mode autodiff).
@@ -535,7 +535,8 @@ with `aᵢ=(lower−x'ᵢβ)/σ`, `bᵢ=(upper−x'ᵢβ)/σ`. Intercept rows ca
 - Greene, W. H. (2018). *Econometric Analysis*, 8th ed. Pearson, ch. 19.
 """
 function marginal_effects(m::TobitModel{T}; which::Symbol=:unconditional,
-                          conf_level::Real=0.95) where {T<:AbstractFloat}
+                          conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     which in (:unconditional, :conditional, :probability) ||
         throw(ArgumentError("which must be :unconditional, :conditional, or :probability; got :$which"))
     k = length(m.beta)
@@ -553,7 +554,7 @@ function marginal_effects(m::TobitModel{T}; which::Symbol=:unconditional,
         z_stat[j] = se[j] > zero(T) ? me[j] / se[j] : zero(T)
         p_values[j] = T(2 * (1 - cdf(Normal(), abs(z_stat[j]))))
     end
-    z_crit = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_crit = T(_conf_z(lv))
     ci_lower = me .- z_crit .* se
     ci_upper = me .+ z_crit .* se
     @inbounds for j in 1:k
@@ -563,7 +564,7 @@ function marginal_effects(m::TobitModel{T}; which::Symbol=:unconditional,
         end
     end
     MarginalEffects{T}(me, se, z_stat, p_values, ci_lower, ci_upper,
-                       copy(m.varnames), :ame, T(conf_level))
+                       copy(m.varnames), :ame, T(lv))
 end
 
 # =============================================================================
@@ -587,9 +588,11 @@ for M in (:TobitModel, :TruncRegModel)
     end
 end
 
-function StatsAPI.confint(m::Union{TobitModel{T},TruncRegModel{T}}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::Union{TobitModel{T},TruncRegModel{T}};
+                          level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 

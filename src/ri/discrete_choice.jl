@@ -1649,10 +1649,11 @@ StatsAPI.bic(m::RILogitModel) = m.bic
 StatsAPI.r2(m::RILogitModel) = m.pseudo_r2
 StatsAPI.islinear(::RILogitModel) = false
 
-function StatsAPI.confint(m::RILogitModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::RILogitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     theta = coef(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(theta .- crit .* se, theta .+ crit .* se)
 end
 

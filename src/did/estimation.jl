@@ -18,7 +18,7 @@ Routes to internal implementations based on `method` keyword.
                  covariates::Vector{String}=String[],
                  control_group::Symbol=:never_treated,
                  cluster::Symbol=:unit,
-                 conf_level::Real=0.95) where {T}
+                 conf_level::Real=DEFAULT_CI_MICRO) where {T}
 
 Estimate a Difference-in-Differences model.
 
@@ -40,7 +40,7 @@ Estimate a Difference-in-Differences model.
 - `covariates`: Additional control variable names
 - `control_group`: `:never_treated` (default) or `:not_yet_treated`
 - `cluster`: SE clustering: `:unit` (default), `:time`, `:twoway`
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.90`, `DEFAULT_CI_MICRO`)
 - `n_boot`: Number of bootstrap replications for `:did_multiplegt` (default: 200)
 - `base_period`: `:varying` (default, R `did` default) or `:universal`. For `:callaway_santanna` only.
   `:varying` uses adjacent-period comparisons for pre-treatment cells;
@@ -70,12 +70,13 @@ function estimate_did(pd::PanelData{T}, outcome::Union{String,Symbol},
                       covariates::Vector{String}=String[],
                       control_group::Symbol=:never_treated,
                       cluster::Symbol=:unit,
-                      conf_level::Real=0.95,
+                      conf_level::Real=DEFAULT_CI_MICRO,
                       n_boot::Int=200,
                       base_period::Symbol=:varying,
                       seed::Union{Integer,Nothing}=nothing,
                       rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(conf_level)
     # Validate inputs
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)

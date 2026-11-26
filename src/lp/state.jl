@@ -288,12 +288,13 @@ estimate_state_lp(Y::AbstractMatrix, shock_var::Int, state_var::AbstractVector,
     estimate_state_lp(Float64.(Y), shock_var, Float64.(state_var), horizon; kwargs...)
 
 """
-    state_irf(model::StateLPModel{T}; regime::Symbol=:both, conf_level::Real=0.95) -> NamedTuple
+    state_irf(model::StateLPModel{T}; regime::Symbol=:both, conf_level::Real=DEFAULT_CI_MACRO) -> NamedTuple
 
-Extract state-dependent IRFs.
+Extract state-dependent IRFs (default 68% CIs).
 """
 function state_irf(model::StateLPModel{T}; regime::Symbol=:both,
-                   conf_level::Real=0.95) where {T<:AbstractFloat}
+                   conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     H = model.horizon
     n_response = length(model.response_vars)
     shock_coef_idx = 2
@@ -316,7 +317,7 @@ function state_irf(model::StateLPModel{T}; regime::Symbol=:both,
         end
     end
 
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z = T(_conf_z(lv))
     irf_diff = irf_exp .- irf_rec
 
     regime == :expansion && return (values=irf_exp, ci_lower=irf_exp .- z .* se_exp,

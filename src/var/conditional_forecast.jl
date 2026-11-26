@@ -453,7 +453,7 @@ forecast uses the conditional mean; the bands come from `reps` draws.
 - `Q::Union{Nothing,AbstractMatrix}=nothing` — rotation matrix; `nothing` = Cholesky. Only
   affects the reported `shocks` (the forecast itself is rotation-invariant, see above)
 - `reps::Int=1000` — draws used for the bands
-- `conf_level::Real=0.95` — band coverage
+- `conf_level::Real=0.68` — band coverage (`DEFAULT_CI_MACRO`)
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 
 # Returns
@@ -466,13 +466,13 @@ forecast uses the conditional mean; the bands come from `reps` draws.
 function conditional_forecast(model::VARModel{T}, conditions, h::Int;
                               Q::Union{Nothing,AbstractMatrix}=nothing,
                               reps::Int=1000,
-                              conf_level::Real=0.95,
+                              conf_level::Real=DEFAULT_CI_MACRO,
                               seed::Union{Integer,Nothing}=nothing,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
     reps < 1 && throw(ArgumentError("reps must be positive"))
-    (0 < conf_level < 1) || throw(ArgumentError("conf_level must be in (0, 1)"))
+    _validate_conf_level(conf_level)
 
     n, p = nvars(model), model.p
     varnames = model.varnames
@@ -530,20 +530,20 @@ Non-stationary posterior draws are skipped (as in `forecast(::BVARPosterior, h)`
 - `Q::Union{Nothing,AbstractMatrix}=nothing` — rotation matrix; `nothing` = Cholesky. Only
   affects the reported `shocks` (the forecast itself is rotation-invariant, see above)
 - `reps::Union{Nothing,Int}=nothing` — posterior draws used (default: all)
-- `conf_level::Real=0.95` — credible-band coverage
+- `conf_level::Real=0.68` — credible-band coverage (`DEFAULT_CI_MACRO`)
 - `point_estimate::Symbol=:mean` — `:mean` or `:median` across draws
 - `rng::AbstractRNG=Random.default_rng()` — random number generator
 """
 function conditional_forecast(post::BVARPosterior{T}, conditions, h::Int;
                               Q::Union{Nothing,AbstractMatrix}=nothing,
                               reps::Union{Nothing,Int}=nothing,
-                              conf_level::Real=0.95,
+                              conf_level::Real=DEFAULT_CI_MACRO,
                               point_estimate::Symbol=:mean,
                               seed::Union{Integer,Nothing}=nothing,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
-    (0 < conf_level < 1) || throw(ArgumentError("conf_level must be in (0, 1)"))
+    _validate_conf_level(conf_level)
     point_estimate ∈ (:mean, :median) ||
         throw(ArgumentError("point_estimate must be :mean or :median"))
 

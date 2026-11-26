@@ -103,9 +103,10 @@ end
 
 """Return a zero ACFResult when data is degenerate (e.g., constant series)."""
 function _zero_acf_result(::Type{T}, lags::Vector{Int}, n::Int;
+                          conf_level::Real=DEFAULT_CI_MACRO,
                           ccf_vals::Union{Nothing,Vector{T}}=nothing) where {T<:AbstractFloat}
     maxlag = length(lags)
-    ci = T(1.96) / sqrt(T(n))
+    ci = T(_conf_z(conf_level)) / sqrt(T(n))
     ACFResult{T}(lags, zeros(T, maxlag), zeros(T, maxlag), ci,
                  ccf_vals, zeros(T, maxlag), ones(T, maxlag), n)
 end
@@ -115,14 +116,14 @@ end
 # =============================================================================
 
 """
-    acf(y::AbstractVector; lags::Int=0, conf_level::Real=0.95) -> ACFResult
+    acf(y::AbstractVector; lags::Int=0, conf_level::Real=DEFAULT_CI_MACRO) -> ACFResult
 
 Compute the sample autocorrelation function.
 
 # Arguments
 - `y` — time series vector
 - `lags` — maximum lag (default: min(n-1, 10*log10(n)))
-- `conf_level` — confidence level for the white-noise band (default: 0.95)
+- `conf_level` — confidence level for the white-noise band (default: `0.68`, `DEFAULT_CI_MACRO`)
 
 # Returns
 `ACFResult` with ACF values, empty PACF, Ljung-Box Q-stats, and p-values.
@@ -134,7 +135,8 @@ result.acf          # autocorrelation at lags 1:20
 result.q_pvalues    # Ljung-Box p-values
 ```
 """
-function acf(y::AbstractVector{T}; lags::Int=0, conf_level::Real=0.95) where {T<:AbstractFloat}
+function acf(y::AbstractVector{T}; lags::Int=0, conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 3 && throw(ArgumentError("Need at least 3 observations, got $n"))
 
@@ -145,14 +147,14 @@ function acf(y::AbstractVector{T}; lags::Int=0, conf_level::Real=0.95) where {T<
     # Sample ACF via biased estimator (Bartlett)
     ymean = mean(y)
     gamma0 = sum((y[t] - ymean)^2 for t in 1:n) / n
-    gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n)
+    gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n; conf_level=lv)
 
     rho = zeros(T, maxlag)
     for k in 1:maxlag
         rho[k] = sum((y[t] - ymean) * (y[t-k] - ymean) for t in (k+1):n) / n / gamma0
     end
 
-    z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_val = T(_conf_z(lv))
     ci = z_val / sqrt(T(n))
 
     q_stats, q_pvalues = _ljung_box_cumulative(rho, n, maxlag)
@@ -168,7 +170,7 @@ acf(y::AbstractVector{<:Real}; kwargs...) = acf(Float64.(y); kwargs...)
 # =============================================================================
 
 """
-    pacf(y::AbstractVector; lags::Int=0, method::Symbol=:levinson, conf_level::Real=0.95) -> ACFResult
+    pacf(y::AbstractVector; lags::Int=0, method::Symbol=:levinson, conf_level::Real=DEFAULT_CI_MACRO) -> ACFResult
 
 Compute the sample partial autocorrelation function.
 
@@ -176,13 +178,14 @@ Compute the sample partial autocorrelation function.
 - `y` — time series vector
 - `lags` — maximum lag (default: min(n-1, 10*log10(n)))
 - `method` — `:levinson` (Levinson-Durbin, default) or `:ols`
-- `conf_level` — confidence level for the white-noise band (default: 0.95)
+- `conf_level` — confidence level for the white-noise band (default: `0.68`, `DEFAULT_CI_MACRO`)
 
 # Returns
 `ACFResult` with PACF values, empty ACF, and no Q-stats.
 """
 function pacf(y::AbstractVector{T}; lags::Int=0, method::Symbol=:levinson,
-              conf_level::Real=0.95) where {T<:AbstractFloat}
+              conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 3 && throw(ArgumentError("Need at least 3 observations, got $n"))
     method in (:levinson, :ols) || throw(ArgumentError("method must be :levinson or :ols"))
@@ -191,14 +194,14 @@ function pacf(y::AbstractVector{T}; lags::Int=0, method::Symbol=:levinson,
     maxlag = max(1, maxlag)
     lag_idx = collect(1:maxlag)
 
-    z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_val = T(_conf_z(lv))
     ci = z_val / sqrt(T(n))
 
     if method == :levinson
         # Need ACF first
         ymean = mean(y)
         gamma0 = sum((y[t] - ymean)^2 for t in 1:n) / n
-        gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n)
+        gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n; conf_level=lv)
 
         rho = zeros(T, maxlag)
         for k in 1:maxlag
@@ -221,7 +224,7 @@ pacf(y::AbstractVector{<:Real}; kwargs...) = pacf(Float64.(y); kwargs...)
 # =============================================================================
 
 """
-    acf_pacf(y::AbstractVector; lags::Int=0, method::Symbol=:levinson, conf_level::Real=0.95) -> ACFResult
+    acf_pacf(y::AbstractVector; lags::Int=0, method::Symbol=:levinson, conf_level::Real=DEFAULT_CI_MACRO) -> ACFResult
 
 Compute both ACF and PACF in a single pass.
 
@@ -232,7 +235,8 @@ Same as `acf()` / `pacf()`.
 `ACFResult` with both `acf` and `pacf` fields populated, plus Ljung-Box Q-stats.
 """
 function acf_pacf(y::AbstractVector{T}; lags::Int=0, method::Symbol=:levinson,
-                  conf_level::Real=0.95) where {T<:AbstractFloat}
+                  conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 3 && throw(ArgumentError("Need at least 3 observations, got $n"))
     method in (:levinson, :ols) || throw(ArgumentError("method must be :levinson or :ols"))
@@ -244,7 +248,7 @@ function acf_pacf(y::AbstractVector{T}; lags::Int=0, method::Symbol=:levinson,
     # ACF
     ymean = mean(y)
     gamma0 = sum((y[t] - ymean)^2 for t in 1:n) / n
-    gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n)
+    gamma0 < T(1e-15) && return _zero_acf_result(T, lag_idx, n; conf_level=lv)
 
     rho = zeros(T, maxlag)
     for k in 1:maxlag
@@ -254,7 +258,7 @@ function acf_pacf(y::AbstractVector{T}; lags::Int=0, method::Symbol=:levinson,
     # PACF
     pacf_vals = method == :levinson ? _pacf_levinson(rho, maxlag) : _pacf_ols(y, maxlag)
 
-    z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_val = T(_conf_z(lv))
     ci = z_val / sqrt(T(n))
 
     q_stats, q_pvalues = _ljung_box_cumulative(rho, n, maxlag)
@@ -270,7 +274,7 @@ acf_pacf(y::AbstractVector{<:Real}; kwargs...) = acf_pacf(Float64.(y); kwargs...
 # =============================================================================
 
 """
-    ccf(x::AbstractVector, y::AbstractVector; lags::Int=0, conf_level::Real=0.95) -> ACFResult
+    ccf(x::AbstractVector, y::AbstractVector; lags::Int=0, conf_level::Real=DEFAULT_CI_MACRO) -> ACFResult
 
 Compute the cross-correlation function between `x` and `y`.
 
@@ -280,13 +284,14 @@ Positive lags mean `x` leads `y`.
 # Arguments
 - `x`, `y` — time series vectors (same length)
 - `lags` — maximum lag (default: min(n-1, 10*log10(n)))
-- `conf_level` — confidence level (default: 0.95)
+- `conf_level` — confidence level (default: `0.68`, `DEFAULT_CI_MACRO`)
 
 # Returns
 `ACFResult` with `ccf` field populated. The `lags` field runs from `-lags` to `+lags`.
 """
 function ccf(x::AbstractVector{T}, y::AbstractVector{T};
-             lags::Int=0, conf_level::Real=0.95) where {T<:AbstractFloat}
+             lags::Int=0, conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(x)
     n == length(y) || throw(DimensionMismatch("x and y must have the same length"))
     n < 3 && throw(ArgumentError("Need at least 3 observations, got $n"))
@@ -300,7 +305,7 @@ function ccf(x::AbstractVector{T}, y::AbstractVector{T};
     sy = sqrt(sum((y[t] - ymean)^2 for t in 1:n) / n)
 
     (sx < T(1e-15) || sy < T(1e-15)) && return _zero_acf_result(T, lag_idx, n;
-        ccf_vals=zeros(T, 2 * maxlag + 1))
+        conf_level=lv, ccf_vals=zeros(T, 2 * maxlag + 1))
 
     ccf_vals = zeros(T, 2 * maxlag + 1)
     for k in -maxlag:maxlag
@@ -311,7 +316,7 @@ function ccf(x::AbstractVector{T}, y::AbstractVector{T};
         ccf_vals[k + maxlag + 1] = s / (n * sx * sy)
     end
 
-    z_val = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_val = T(_conf_z(lv))
     ci = z_val / sqrt(T(n))
 
     ACFResult{T}(lag_idx, zeros(T, length(lag_idx)), zeros(T, length(lag_idx)),

@@ -301,19 +301,20 @@ function _select_horizons(H::Int)
 end
 
 """
-    _coef_table(io, title, names, coefs, se; dist=:z, dof_r=0, level=0.95)
+    _coef_table(io, title, names, coefs, se; dist=:z, dof_r=0, level=DEFAULT_CI_MICRO)
 
 Publication-quality 7-column coefficient table (Stata/EViews style).
 
-Columns: Name | Coef. | Std.Err. | z/t | P>|z/t| | [95% CI lower | CI upper] | stars
+Columns: Name | Coef. | Std.Err. | z/t | P>|z/t| | <pct>% CI Low | <pct>% CI High | stars
 """
 function _coef_table(io::IO, title::String, names::Vector{String},
                      coefs::Vector{T}, se::Vector{T};
-                     dist::Symbol=:z, dof_r::Int=0, level::Real=0.95,
+                     dist::Symbol=:z, dof_r::Int=0, level::Real=DEFAULT_CI_MICRO,
                      ref_rows::Union{Nothing,AbstractVector{Int}}=nothing,
                      coef_label::String="Coef.") where {T}
+    lv = _validate_conf_level(level)
     n = length(names)
-    alpha = 1 - level
+    alpha = 1 - lv
     z_crit = dist == :z ? T(quantile(Normal(), 1 - alpha / 2)) :
                           T(quantile(TDist(dof_r), 1 - alpha / 2))
     stat_label = dist == :z ? "z" : "t"
@@ -357,9 +358,10 @@ function _coef_table(io::IO, title::String, names::Vector{String},
         end
     end
 
+    pct = _ci_pct(lv)
     col_labels = [
         "", coef_label, "Std.Err.", stat_label,
-        "P>|$stat_label|", "CI lower", "CI upper", "",
+        "P>|$stat_label|", "$(pct)% CI Low", "$(pct)% CI High", "",
     ]
     _pretty_table(
         io, data;
@@ -398,16 +400,19 @@ end
 _irf_horizons(H::Int) = unique!(sort(vcat([0], _select_horizons(H))))
 
 """
-    _irf_horizon_table(io, values, se, row_labels, title; horizons, z=1.96)
+    _irf_horizon_table(io, values, se, row_labels, title; horizons, conf_level=DEFAULT_CI_MACRO, z=nothing)
 
-Shared horizon-summary renderer for IRFs/forecasts with significance marks (S4/T168).
+Shared horizon-summary renderer for IRFs/forecasts with band-exclusion marks (S4/T168).
 `values` and `se` are `(H+1) × n_row`, indexed from `h=0` (row `h+1`). A cell is marked
-`*` when `|value| > z·se`. Callers append `_show_note(io, "* significant …")`.
+`*` when `|value| > z_eff·se`, where `z_eff = z === nothing ? _conf_z(conf_level) : Float64(z)`.
+Callers append `_show_note(io, ...)`.
 """
 function _irf_horizon_table(io::IO, values::AbstractMatrix, se::AbstractMatrix,
                             row_labels::Vector{String}, title::String;
                             horizons::Vector{Int}=_irf_horizons(size(values, 1) - 1),
-                            z::Real=1.96)
+                            conf_level::Real=DEFAULT_CI_MACRO,
+                            z::Union{Nothing,Real}=nothing)
+    z_eff = z === nothing ? _conf_z(conf_level) : Float64(z)
     n_row = size(values, 2)
     data = Matrix{Any}(undef, n_row, length(horizons) + 1)
     for r in 1:n_row
@@ -415,7 +420,7 @@ function _irf_horizon_table(io::IO, values::AbstractMatrix, se::AbstractMatrix,
         for (c, h) in enumerate(horizons)
             v = values[h + 1, r]
             s = se[h + 1, r]
-            star = (isfinite(s) && s > 0 && abs(v) > z * s) ? "*" : ""
+            star = (isfinite(s) && s > 0 && abs(v) > z_eff * s) ? "*" : ""
             data[r, c + 1] = string(_fmt(v), star)
         end
     end

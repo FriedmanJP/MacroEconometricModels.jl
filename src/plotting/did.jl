@@ -327,16 +327,16 @@ function plot_result(r::NegativeWeightResult{T}; title::String="",
 end
 
 """
-    plot_result(r::PretrendTestResult; title="", save_path=nothing, conf_level=0.95)
+    plot_result(r::PretrendTestResult; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Pretrend (parallel-trends placebo) test: pre-treatment coefficients as a
-dot-and-whisker (`β ± z·SE` at confidence level `conf_level`, default 0.95),
+dot-and-whisker (`β ± z·SE` at confidence level `conf_level`, default `0.90`, `DEFAULT_CI_MICRO`),
 with a zero reference line. The joint test statistic, p-value, and test type
 are stated in the panel subtitle.
 """
 function plot_result(r::PretrendTestResult{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     names = ["lead $i" for i in eachindex(r.pre_coefficients)]
     panel = _coef_panel("pretrend", names, r.pre_coefficients, r.pre_se;

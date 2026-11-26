@@ -391,10 +391,11 @@ function StatsAPI.vcov(m::AbstractARIMAModel)
 end
 
 # Confidence intervals
-function StatsAPI.confint(m::AbstractARIMAModel; level::Real=0.95)
+function StatsAPI.confint(m::AbstractARIMAModel; level::Real=DEFAULT_CI_MACRO)
+    lv = _validate_conf_level(level)
     T = eltype(m.y)
     se = stderror(m)
-    z = T(quantile(Normal(), (1 + level) / 2))
+    z = T(_conf_z(lv))
     c = coef(m)
     hcat(c .- z .* se, c .+ z .* se)
 end
@@ -442,7 +443,7 @@ function _show_arima_model(io::IO, header::String, m::AbstractARIMAModel;
     end
 
     # Publication-quality coefficient table
-    _coef_table(io, header, param_names, param_vals, se; dist=:z)
+    _coef_table(io, header, param_names, param_vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     # σ² row (separate — not a regression coefficient)
     sigma_data = Any["σ²" _fmt(m.sigma2)]
@@ -612,7 +613,7 @@ function Base.show(io::IO, m::ARFIMAModel)
         push!(se, T(NaN))
     end
     header = "ARFIMA($(m.p),$(round(m.d; digits=4)),$(m.q)) Model"
-    _coef_table(io, header, param_names, param_vals, se; dist=:z)
+    _coef_table(io, header, param_names, param_vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     sigma_data = Any["σ²" _fmt(m.sigma2)]
     _pretty_table(io, sigma_data; column_labels=["", "Estimate"], alignment=[:l, :r])
@@ -671,7 +672,7 @@ end
 
 function Base.show(io::IO, r::GPHResult)
     _coef_table(io, "GPH Log-Periodogram Regression (Geweke–Porter-Hudak 1983)",
-                ["d"], [r.d], [r.se]; dist=:z)
+                ["d"], [r.d], [r.se]; dist=:z, level=DEFAULT_CI_MACRO)
     _pretty_table(io, Any[
         "Frequencies (m)" r.m;
         "Trimmed"         r.trim;
@@ -683,7 +684,7 @@ end
 
 function Base.show(io::IO, r::LocalWhittleResult)
     _coef_table(io, "Local Whittle Estimator (Robinson 1995)",
-                ["d"], [r.d], [r.se]; dist=:z)
+                ["d"], [r.d], [r.se]; dist=:z, level=DEFAULT_CI_MACRO)
     _pretty_table(io, Any[
         "Frequencies (m)" r.m;
         "Observations"    r.n;

@@ -249,7 +249,7 @@ end
 function Base.show(io::IO, r::MincerZarnowitzResult{T}) where {T}
     _coef_table(io, "Mincer–Zarnowitz Efficiency Regression (actual = a + b·fc)",
                 ["a (intercept)", "b (slope)"], T[r.a, r.b], r.se;
-                dist=:z)
+                dist=:z, level=DEFAULT_CI_MACRO)
     data = Any[
         "Joint H₀: (a,b)=(0,1)"  "";
         "Wald χ²(2)"             string(_fmt(r.wald), "  [p=", _format_pvalue(r.pvalue_wald), "]");

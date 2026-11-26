@@ -112,14 +112,18 @@ end
     # =========================================================================
     # (2) Hansen (2000) tabulated critical constants — asserted EXACTLY
     # =========================================================================
-    @testset "Hansen (2000) critical constants 5.94 / 7.35 / 10.59" begin
-        @test MacroEconometricModels._hansen2000_crit(0.90) == 5.94
-        @test MacroEconometricModels._hansen2000_crit(0.95) == 7.35
-        @test MacroEconometricModels._hansen2000_crit(0.99) == 10.59
+    @testset "Hansen (2000) critical values — exact closed form & Table 1" begin
+        @test isapprox(MacroEconometricModels._hansen2000_crit(0.68), -2 * log(1 - sqrt(0.68)); atol=1e-12)
+        @test isapprox(MacroEconometricModels._hansen2000_crit(0.90), 5.94; atol=1e-2)
+        @test isapprox(MacroEconometricModels._hansen2000_crit(0.95), 7.35; atol=1e-2)
+        @test isapprox(MacroEconometricModels._hansen2000_crit(0.99), 10.59; atol=1e-2)
+        @test isapprox(MacroEconometricModels._hansen2000_crit(0.80), -2 * log(1 - sqrt(0.80)); atol=1e-12)
         @test MacroEconometricModels.HANSEN2000_CRIT == (var"0.90"=5.94, var"0.95"=7.35, var"0.99"=10.59)
-        @test_throws ArgumentError MacroEconometricModels._hansen2000_crit(0.80)
+        @test_throws ArgumentError MacroEconometricModels._hansen2000_crit(0.0)
+        @test_throws ArgumentError MacroEconometricModels._hansen2000_crit(1.0)
         # Cross-check against the closed form: c(α) solves (1 − exp(−c/2))² = α.
         cdf(x) = (1 - exp(-x/2))^2
+        @test isapprox(cdf(MacroEconometricModels._hansen2000_crit(0.68)), 0.68; atol=1e-12)
         @test isapprox(cdf(5.94), 0.90; atol=1e-3)
         @test isapprox(cdf(7.35), 0.95; atol=1e-3)
         @test isapprox(cdf(10.59), 0.99; atol=1e-3)

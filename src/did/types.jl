@@ -127,11 +127,30 @@ function DIDResult{T}(att, se, ci_lower, ci_upper, event_times, reference_period
                  treatment_var, control_group, cluster, conf_level, att_vcov, :universal)
 end
 
+function _did_confint_rescale(est::Vector{T}, se::Vector{T}, ci_lo::Vector{T},
+                              ci_hi::Vector{T}, stored_level::T,
+                              level::Union{Nothing,Real}) where {T}
+    level === nothing && return hcat(ci_lo, ci_hi)
+    lv = _validate_conf_level(level)
+    isapprox(lv, Float64(stored_level); atol=1e-12) && return hcat(ci_lo, ci_hi)
+    # Check whether analytic normal rescaling is valid for all finite estimates
+    for i in eachindex(est)
+        if isfinite(est[i]) && !isfinite(se[i])
+            throw(ArgumentError(
+                "cannot rescale DiD confidence intervals analytically to level=$level " *
+                "because standard error at index $i is non-finite"))
+        end
+    end
+    z = T(_conf_z(lv))
+    return hcat(est .- z .* se, est .+ z .* se)
+end
+
 # StatsAPI interface
 StatsAPI.nobs(r::DIDResult) = r.n_obs
 StatsAPI.coef(r::DIDResult) = r.att
 StatsAPI.stderror(r::DIDResult) = r.se
-StatsAPI.confint(r::DIDResult) = hcat(r.ci_lower, r.ci_upper)
+StatsAPI.confint(r::DIDResult; level::Union{Nothing,Real}=nothing) =
+    _did_confint_rescale(r.att, r.se, r.ci_lower, r.ci_upper, r.conf_level, level)
 StatsAPI.vcov(r::DIDResult) = r.att_vcov
 
 # =============================================================================
@@ -202,7 +221,8 @@ end
 StatsAPI.nobs(r::EventStudyLP) = r.n_obs
 StatsAPI.coef(r::EventStudyLP) = r.coefficients
 StatsAPI.stderror(r::EventStudyLP) = r.se
-StatsAPI.confint(r::EventStudyLP) = hcat(r.ci_lower, r.ci_upper)
+StatsAPI.confint(r::EventStudyLP; level::Union{Nothing,Real}=nothing) =
+    _did_confint_rescale(r.coefficients, r.se, r.ci_lower, r.ci_upper, r.conf_level, level)
 
 # =============================================================================
 # LPDiDResult — LP-DiD with full Dube et al. (2025) specification
@@ -284,7 +304,8 @@ end
 StatsAPI.nobs(r::LPDiDResult) = r.T_obs
 StatsAPI.coef(r::LPDiDResult) = r.coefficients
 StatsAPI.stderror(r::LPDiDResult) = r.se
-StatsAPI.confint(r::LPDiDResult) = hcat(r.ci_lower, r.ci_upper)
+StatsAPI.confint(r::LPDiDResult; level::Union{Nothing,Real}=nothing) =
+    _did_confint_rescale(r.coefficients, r.se, r.ci_lower, r.ci_upper, r.conf_level, level)
 
 # =============================================================================
 # BaconDecomposition
@@ -458,7 +479,7 @@ function Base.show(io::IO, r::DIDResult{T}) where {T}
     ref_rows = r.base_period == :varying ? Int[] :
                findall(==(r.reference_period), r.event_times)
     _coef_table(io, "Event-Study Coefficients", evt_names,
-                T.(r.att), T.(r.se); dist=:z, ref_rows=ref_rows)
+                T.(r.att), T.(r.se); dist=:z, level=r.conf_level, ref_rows=ref_rows)
 
     # Overall ATT
     println(io)
@@ -502,7 +523,7 @@ function Base.show(io::IO, r::EventStudyLP{T}) where {T}
 
     evt_names = ["h=" * string(e) for e in r.event_times]
     _coef_table(io, "Dynamic Treatment Effects", evt_names,
-                T.(r.coefficients), T.(r.se); dist=:z,
+                T.(r.coefficients), T.(r.se); dist=:z, level=r.conf_level,
                 ref_rows=findall(==(r.reference_period), r.event_times))
 end
 
@@ -540,7 +561,7 @@ function Base.show(io::IO, r::LPDiDResult{T}) where {T}
 
     evt_names = ["h=" * string(e) for e in r.event_times]
     _coef_table(io, "Dynamic Treatment Effects", evt_names,
-                T.(r.coefficients), T.(r.se); dist=:z,
+                T.(r.coefficients), T.(r.se); dist=:z, level=r.conf_level,
                 ref_rows=findall(==(r.reference_period), r.event_times))
 
     if r.pooled_post !== nothing || r.pooled_pre !== nothing
@@ -559,7 +580,7 @@ function Base.show(io::IO, r::LPDiDResult{T}) where {T}
             push!(pooled_ses, r.pooled_post.se)
         end
         _coef_table(io, "Pooled Estimates", pooled_names,
-                    pooled_coefs, pooled_ses; dist=:z)
+                    pooled_coefs, pooled_ses; dist=:z, level=r.conf_level)
     end
 end
 

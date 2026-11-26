@@ -59,10 +59,21 @@ refs
 ### Output Tables
 
 ```@docs
+coef_table
 table
 print_table
 long_table
 write_csv
+```
+
+### Confidence & Credible Interval Defaults
+
+```@docs
+DEFAULT_CI_MACRO
+DEFAULT_CI_MICRO
+DEFAULT_QUANTILES_MACRO
+DEFAULT_QUANTILES_MICRO
+default_ci_level
 ```
 
 ### Logging

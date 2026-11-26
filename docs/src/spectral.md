@@ -168,7 +168,7 @@ result = ccf(x, y; lags=24)        # Cross-correlation
 |---------|------|---------|-------------|
 | `lags` | `Int` | `0` | Maximum lag (0 selects ``\min(n-1, \text{round}(10\log_{10} n))``) |
 | `method` | `Symbol` | `:levinson` | PACF algorithm: `:levinson` or `:ols`; accepted by `pacf` and `acf_pacf` only |
-| `conf_level` | `Real` | `0.95` | Confidence level for the white-noise band |
+| `conf_level` | `Real` | `0.68` | Confidence level for the white-noise band |
 
 Passing `method` to `acf` or `ccf` raises a `MethodError` — neither function computes a PACF, so neither accepts the keyword.
 
@@ -231,7 +231,7 @@ I = periodogram(y; window=:hann)
 show(stdout, I)
 ```
 
-The raw periodogram resolves 51 Fourier frequencies from 100 observations, the finest grid any of these estimators offers, and places its peak at ``\omega = 1.1938`` — a period of ``2\pi/1.1938 \approx 5.3`` months. Because each ordinate is a ``\chi^2_2`` variable regardless of ``n``, that peak comes with a 95 percent confidence interval running from ``0.27`` to ``39.5`` times the point estimate, a span of a factor of 146. A single periodogram spike is never evidence on its own.
+The raw periodogram resolves 51 Fourier frequencies from 100 observations, the finest grid any of these estimators offers, and places its peak at ``\omega = 1.1938`` — a period of ``2\pi/1.1938 \approx 5.3`` months. Because each ordinate is a ``\chi^2_2`` variable regardless of ``n``, that peak carries a wide confidence interval (even at the default 68% level, spanning roughly an order of magnitude from ``0.55`` to ``5.7`` times the point estimate, and at 95% a factor of 146). A single periodogram spike is never evidence on its own.
 
 ### Welch's Method
 
@@ -331,7 +331,7 @@ AIC selects ``p = 1``: the effective bandwidth of ``0.0628 = 2\pi/100`` correspo
 | `bandwidth` | `Int` | `0` (selects ``\text{round}(\sqrt{n})``) | `:smoothed` | Daniell kernel half-width |
 | `order` | `Int` | `0` (selects by AIC) | `:ar` | AR order |
 | `n_freq` | `Int` | `256` | `:ar` | Frequency grid points |
-| `conf_level` | `Real` | `0.95` | all | Confidence level for the ``\chi^2`` spectral bounds |
+| `conf_level` | `Real` | `0.68` | all | Confidence level for the ``\chi^2`` spectral bounds |
 
 !!! warning "`:periodogram` is not a `spectral_density` method"
     `spectral_density(y; method=:periodogram)` throws an `ArgumentError`. The raw periodogram is a separate function, `periodogram(y)`, because it is inconsistent — its variance does not shrink with ``n`` — and `spectral_density` is the entry point for the consistent estimators.

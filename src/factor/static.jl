@@ -442,7 +442,7 @@ scree_plot_data(m::FactorModel) = (factors=1:length(m.eigenvalues), explained_va
 # =============================================================================
 
 """
-    forecast(model::FactorModel, h; p=1, ci_method=:theoretical, conf_level=0.95, n_boot=1000)
+    forecast(model::FactorModel, h; p=1, ci_method=:theoretical, conf_level=DEFAULT_CI_MACRO, n_boot=1000)
 
 Forecast factors and observables h steps ahead from a static factor model.
 
@@ -456,18 +456,19 @@ to produce multi-step forecasts and confidence intervals.
 # Keyword Arguments
 - `p::Int=1`: VAR lag order for factor dynamics
 - `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, or `:bootstrap`
-- `conf_level::Real=0.95`: Confidence level for intervals
+- `conf_level::Real=0.68`: Confidence level for intervals (`DEFAULT_CI_MACRO`)
 - `n_boot::Int=1000`: Number of bootstrap replications (if `ci_method=:bootstrap`)
 
 # Returns
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(m::FactorModel{T}, h::Int; p::Int=1, ci_method::Symbol=:theoretical,
-    conf_level::Real=0.95, n_boot::Int=1000,
+    conf_level::Real=DEFAULT_CI_MACRO, n_boot::Int=1000,
     rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
     p < 1 && throw(ArgumentError("p must be ≥ 1"))
+    _validate_conf_level(conf_level)
     ci_method ∈ (:none, :theoretical, :bootstrap) || throw(ArgumentError("ci_method must be :none, :theoretical, or :bootstrap"))
 
     r = m.r

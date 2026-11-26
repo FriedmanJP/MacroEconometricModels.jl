@@ -639,7 +639,7 @@ Fields:
 - `point_estimate::Matrix{T}` — T_periods x n_vars (posterior median)
 - `T_periods::Int` — number of simulation periods
 - `variables::Vector{String}` — variable names
-- `quantile_levels::Vector{T}` — quantile levels (e.g. [0.05, 0.16, 0.84, 0.95])
+- `quantile_levels::Vector{T}` — quantile levels (default `[0.16, 0.5, 0.84]`, `DEFAULT_QUANTILES_MACRO`)
 - `all_paths::Array{T,3}` — n_draws x T_periods x n_vars (raw draws)
 - `manifest::Union{Nothing,ReproManifest}` — seed and environment recorded when
   `simulate` was called with `seed=`; `nothing` otherwise

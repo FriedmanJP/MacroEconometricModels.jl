@@ -937,10 +937,11 @@ end
 
 StatsAPI.dof_residual(m::QuantileFactorPanelModel) = max(StatsAPI.nobs(m) - StatsAPI.dof(m), 1)
 
-function StatsAPI.confint(m::QuantileFactorPanelModel{T}; level::Real=0.95) where {T}
-    (zero(T) < T(level) < one(T)) || throw(ArgumentError("level must be in (0, 1), got $level"))
+function StatsAPI.confint(m::QuantileFactorPanelModel{T};
+                          level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     df_r = StatsAPI.dof_residual(m)
-    crit = T(Distributions.quantile(Distributions.TDist(df_r), one(T) - (one(T) - T(level)) / 2))
+    crit = T(Distributions.quantile(Distributions.TDist(df_r), one(T) - (one(T) - T(lv)) / 2))
     lo = m.beta .- crit .* m.stderr
     hi = m.beta .+ crit .* m.stderr
     return hcat(lo, hi)
@@ -980,12 +981,13 @@ end
 # Tables.jl Source Interface (DataFrame(m) & CSV export)
 # =============================================================================
 
-function _qfm_pan_coef_nt(m::QuantileFactorPanelModel; level::Real=0.95)
+function _qfm_pan_coef_nt(m::QuantileFactorPanelModel; level::Real=DEFAULT_CI_MICRO)
+    lv = _validate_conf_level(level)
     est = Float64.(m.beta)
     s = Float64.(m.stderr)
     stat = est ./ s
     dof_r = StatsAPI.dof_residual(m)
-    a = 1 - level
+    a = 1.0 - lv
     td = Distributions.TDist(dof_r)
     zc = Distributions.quantile(td, 1 - a / 2)
     pval = Float64[2 * (1 - Distributions.cdf(td, abs(z))) for z in stat]

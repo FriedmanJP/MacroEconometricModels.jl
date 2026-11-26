@@ -296,12 +296,13 @@ function doubly_robust_lp(Y::AbstractMatrix{T}, treatment::AbstractVector{Bool},
 end
 
 """
-    propensity_irf(model::PropensityLPModel{T}; conf_level::Real=0.95) -> LPImpulseResponse{T}
+    propensity_irf(model::PropensityLPModel{T}; conf_level::Real=DEFAULT_CI_MACRO) -> LPImpulseResponse{T}
 
-Extract treatment effect (ATE) IRF from PropensityLPModel.
+Extract treatment effect (ATE) IRF from PropensityLPModel (default 68% CIs).
 """
-function propensity_irf(model::PropensityLPModel{T}; conf_level::Real=0.95) where {T<:AbstractFloat}
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+function propensity_irf(model::PropensityLPModel{T}; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
+    z = T(_conf_z(lv))
     ci_lower = model.ate .- z .* model.ate_se
     ci_upper = model.ate .+ z .* model.ate_se
 
@@ -309,7 +310,7 @@ function propensity_irf(model::PropensityLPModel{T}; conf_level::Real=0.95) wher
     cov_type_sym = model.cov_estimator isa NeweyWestEstimator ? :newey_west : :white
 
     LPImpulseResponse{T}(model.ate, ci_lower, ci_upper, model.ate_se, model.horizon,
-                         response_names, "Treatment Effect (ATE)", cov_type_sym, T(conf_level))
+                         response_names, "Treatment Effect (ATE)", cov_type_sym, T(lv))
 end
 
 """

@@ -450,7 +450,7 @@ end
 # =============================================================================
 
 """
-    forecast(m::STARModel, h; reps=1000, level=0.90, rng=Random.default_rng())
+    forecast(m::STARModel, h; reps=1000, level=DEFAULT_CI_MACRO, rng=Random.default_rng())
 
 Multi-step bootstrap-simulation forecast of a fitted [`STARModel`](@ref).
 
@@ -459,16 +459,17 @@ paths, drawing residuals with replacement from the fitted residuals at each step
 Only self-exciting models (`sₜ = y_{t-d}`) are supported; a model fit with an
 external transition variable would require its future path. Returns a
 [`STARForecast`](@ref) with the mean path, per-horizon standard deviations, and
-central `level` percentile bands.
+central `level` percentile bands (default 68%).
 """
-function forecast(m::STARModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+function forecast(m::STARModel{T}, h::Int; reps::Int=1000,
+                  level::Real=DEFAULT_CI_MACRO,
                   seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     startswith(m.sname, "y[t-") || throw(ArgumentError(
         "forecast is only defined for self-exciting STAR models (sₜ = y_{t-d})."))
     h >= 1 || throw(ArgumentError("horizon h must be ≥ 1."))
-    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+    _validate_conf_level(level)
 
     p = m.p; d = m.d
     # Reconstruct the observed history: z[:,1] is the constant, z[1, 2:end] are the

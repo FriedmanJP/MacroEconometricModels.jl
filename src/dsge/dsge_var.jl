@@ -1552,15 +1552,18 @@ end
 
 has_uncertainty(post::DSGEVARPosterior) = !isinf(post.lambda) && post.n_draws > 1
 
-function uncertainty_bounds(post::DSGEVARPosterior{T}) where {T<:AbstractFloat}
+function uncertainty_bounds(post::DSGEVARPosterior{T};
+                            conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     has_uncertainty(post) || return nothing
+    q_lo, _, q_hi = _conf_level_to_quantiles(lv)
     _, k, n = size(post.B_draws)
     lo = Matrix{T}(undef, k, n)
     hi = Matrix{T}(undef, k, n)
     @inbounds for j in 1:n, i in 1:k
         d = @view post.B_draws[:, i, j]
-        lo[i, j] = T(quantile(d, 0.025))
-        hi[i, j] = T(quantile(d, 0.975))
+        lo[i, j] = T(quantile(d, q_lo))
+        hi[i, j] = T(quantile(d, q_hi))
     end
     return (lo, hi)
 end
@@ -1601,7 +1604,7 @@ draws `post.B0_draws` directly. For any other identification scheme (`:cholesky`
 """
 function irf(post::DSGEVARPosterior{T}, horizon::Int;
              method::Symbol=:dsge_qr,
-             quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+             quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
              point_estimate::Symbol=:mean,
              shock_names::Union{Nothing,Vector{String}}=nothing,
              threaded::Bool=false,
@@ -1609,6 +1612,7 @@ function irf(post::DSGEVARPosterior{T}, horizon::Int;
              shock_size::Union{Nothing,Pair}=nothing,
              kwargs...) where {T<:AbstractFloat}
     horizon >= 1 || throw(ArgumentError("horizon must be >= 1; got $horizon"))
+    _validate_quantiles(quantiles)
     point_estimate in (:mean, :median) || throw(ArgumentError(
         "point_estimate must be :mean or :median; got :$point_estimate"))
 
@@ -1674,12 +1678,13 @@ For any other identification method, delegates to [`BVARPosterior`](@ref).
 """
 function fevd(post::DSGEVARPosterior{T}, horizon::Int;
               method::Symbol=:dsge_qr,
-              quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+              quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
               point_estimate::Symbol=:mean,
               shock_names::Union{Nothing,Vector{String}}=nothing,
               threaded::Bool=false,
               kwargs...) where {T<:AbstractFloat}
     horizon >= 1 || throw(ArgumentError("horizon must be >= 1; got $horizon"))
+    _validate_quantiles(quantiles)
     point_estimate in (:mean, :median) || throw(ArgumentError(
         "point_estimate must be :mean or :median; got :$point_estimate"))
 
@@ -1741,12 +1746,13 @@ function historical_decomposition(
     horizon::Int=0;
     method::Symbol=(size(post.B0_draws, 3) == post.n ? :dsge_qr : :cholesky),
     data::AbstractMatrix=Matrix{T}(undef, 0, 0),
-    quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
+    quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
     point_estimate::Symbol=:mean,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     seed::Union{Integer,Nothing}=nothing,
     kwargs...,
 ) where {T<:AbstractFloat}
+    _validate_quantiles(quantiles)
     if method !== :dsge_qr
         return historical_decomposition(_to_bvar_posterior(post), horizon;
                                         data=data, method=method, quantiles=quantiles,
@@ -1843,21 +1849,22 @@ end
 
 """
     forecast(post::DSGEVARPosterior, h::Int;
-             reps=nothing, conf_level::Real=0.95, point_estimate::Symbol=:mean,
+             reps=nothing, conf_level::Real=DEFAULT_CI_MACRO, point_estimate::Symbol=:mean,
              store_draws::Bool=false, rng::AbstractRNG=Random.default_rng(),
              seed::Union{Integer,Nothing}=nothing) -> BVARForecast
 
-Compute out-of-sample forecasts with posterior credible intervals from a
+Compute out-of-sample forecasts with posterior credible intervals (default 68%) from a
 [`DSGEVARPosterior`](@ref) by delegating to [`BVARPosterior`](@ref).
 """
 function forecast(post::DSGEVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
-                  conf_level::Real=0.95,
+                  conf_level::Real=DEFAULT_CI_MACRO,
                   point_estimate::Symbol=:mean,
                   store_draws::Bool=false,
                   rng::AbstractRNG=Random.default_rng(),
                   seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(conf_level)
     return forecast(_to_bvar_posterior(post), h;
                     reps=reps, conf_level=conf_level,
                     point_estimate=point_estimate,
@@ -2062,7 +2069,14 @@ end
 
 report(prof::DSGEVARLambdaProfile) = report(stdout, prof)
 
-function Base.show(io::IO, post::DSGEVARPosterior{T}) where {T}
+function _show_dsge_var_posterior(io::IO, post::DSGEVARPosterior{T};
+                                  conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(conf_level)
+    q_lo, q_med, q_hi = _conf_level_to_quantiles(lv)
+    lo_lbl = _quantile_pct_label(q_lo)
+    med_lbl = _quantile_pct_label(q_med)
+    hi_lbl = _quantile_pct_label(q_hi)
+
     k = size(post.B_draws, 2)
     m = length(post.shock_names)
     lam_str = isinf(post.lambda) ? "Inf" : _fmt(post.lambda; digits=4)
@@ -2106,14 +2120,14 @@ function Base.show(io::IO, post::DSGEVARPosterior{T}) where {T}
             th_tbl[i, 1] = string(post.param_names[i])
             th_tbl[i, 2] = _fmt(mean(col))
             th_tbl[i, 3] = _fmt(std(col))
-            th_tbl[i, 4] = _fmt(T(quantile(col, 0.025)))
-            th_tbl[i, 5] = _fmt(T(quantile(col, 0.50)))
-            th_tbl[i, 6] = _fmt(T(quantile(col, 0.975)))
+            th_tbl[i, 4] = _fmt(T(quantile(col, q_lo)))
+            th_tbl[i, 5] = _fmt(T(quantile(col, q_med)))
+            th_tbl[i, 6] = _fmt(T(quantile(col, q_hi)))
         end
         println(io)
         _pretty_table(io, th_tbl;
             title = "DSGE Structural Parameter Posterior",
-            column_labels = ["Parameter", "Mean", "Std", "2.5%", "50%", "97.5%"],
+            column_labels = ["Parameter", "Mean", "Std", lo_lbl, med_lbl, hi_lbl],
             alignment = [:l, :r, :r, :r, :r, :r],
         )
     end
@@ -2134,14 +2148,14 @@ function Base.show(io::IO, post::DSGEVARPosterior{T}) where {T}
             tbl[i, 1] = coef_names[i]
             tbl[i, 2] = _fmt(mean(col))
             tbl[i, 3] = _fmt(std(col))
-            tbl[i, 4] = _fmt(T(quantile(col, 0.025)))
-            tbl[i, 5] = _fmt(T(quantile(col, 0.50)))
-            tbl[i, 6] = _fmt(T(quantile(col, 0.975)))
+            tbl[i, 4] = _fmt(T(quantile(col, q_lo)))
+            tbl[i, 5] = _fmt(T(quantile(col, q_med)))
+            tbl[i, 6] = _fmt(T(quantile(col, q_hi)))
         end
         println(io)
         _pretty_table(io, tbl;
             title = "Equation: $(post.varnames[eq])",
-            column_labels = ["", "Mean", "Std", "2.5%", "50%", "97.5%"],
+            column_labels = ["", "Mean", "Std", lo_lbl, med_lbl, hi_lbl],
             alignment = [:l, :r, :r, :r, :r, :r],
         )
     end
@@ -2155,15 +2169,18 @@ function Base.show(io::IO, post::DSGEVARPosterior{T}) where {T}
     return nothing
 end
 
+Base.show(io::IO, post::DSGEVARPosterior) = _show_dsge_var_posterior(io, post)
+
 """
-    report([io::IO], post::DSGEVARPosterior; repro::Bool=false)
+    report([io::IO], post::DSGEVARPosterior; repro::Bool=false, conf_level::Real=DEFAULT_CI_MACRO)
 
 Print a comprehensive summary of a [`DSGEVARPosterior`](@ref), including DSGE structural
 parameter summaries (in joint mode), per-equation VAR coefficient posteriors, posterior mean
 innovation covariance ``\\Sigma_u``, and posterior mean DSGE-QR structural impact matrix ``B_0``.
 """
-function report(io::IO, post::DSGEVARPosterior{T}) where {T}
-    show(io, post)
+function report(io::IO, post::DSGEVARPosterior{T};
+                conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    _show_dsge_var_posterior(io, post; conf_level=conf_level)
     m = length(post.shock_names)
     if 0 < post.n <= 12 && 0 < m <= 12
         B0_mean = dropdims(mean(post.B0_draws; dims=1); dims=1)
@@ -2174,5 +2191,5 @@ function report(io::IO, post::DSGEVARPosterior{T}) where {T}
     return nothing
 end
 
-report(post::DSGEVARPosterior; repro::Bool=false) =
-    report(IOContext(stdout, :repro => repro), post)
+report(post::DSGEVARPosterior; repro::Bool=false, conf_level::Real=DEFAULT_CI_MACRO) =
+    report(IOContext(stdout, :repro => repro), post; conf_level=conf_level)

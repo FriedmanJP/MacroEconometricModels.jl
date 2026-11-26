@@ -40,7 +40,7 @@ end
         @test fc.horizon == H
         @test fc.shock_var == 1
         @test fc.ci_method == :analytical
-        @test fc.conf_level ≈ 0.95
+        @test fc.conf_level ≈ 0.68
 
         # T159: the point forecast is ci_method-invariant (bands change, points don't —
         # verified bit-identical); analytical bands bracket it (strict pins below).

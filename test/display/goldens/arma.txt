@@ -1,6 +1,6 @@
 ARMA(N,N) Model
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 (Intercept) N N N N N N
 φ[N] N N N N N N

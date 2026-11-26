@@ -226,7 +226,7 @@ On this dataset TWFE and Callaway-Sant'Anna happen to agree closely — aggregat
 | `horizon` | `Int` | `5` | Post-treatment horizon ``H`` |
 | `control_group` | `Symbol` | `:never_treated` | `:never_treated` or `:not_yet_treated` |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.90` | Confidence level |
 | `base_period` | `Symbol` | `:varying` | `:varying` or `:universal` (Callaway-Sant'Anna only) |
 | `n_boot` | `Int` | `200` | Bootstrap replications (de Chaisemartin-D'Haultfoeuille only) |
 | `covariates` | `Vector{String}` | `String[]` | Additional controls (TWFE only) |
@@ -528,7 +528,7 @@ plot_result(h)
 | `restriction` | `Symbol` | `:rm` | `:rm` (relative magnitudes) or `:sd` (second differences) |
 | `Mbar` | `Real` | `1.0` | Relative-magnitudes bound (used when `restriction=:rm`) |
 | `M` | `Real` | `0.0` | Smoothness bound in outcome units per period squared (used when `restriction=:sd`) |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.90` | Confidence level |
 
 The core method `honest_did(betahat, sigma; num_pre, num_post, ...)` takes the same keywords plus `num_pre`, `num_post`, and `l_vec`, the linear combination of post-period effects to target.
 

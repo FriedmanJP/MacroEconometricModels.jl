@@ -17,14 +17,14 @@ Iterations N
 
 Coefficients
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 xN N N N N N N
 xN N N N N N N
 
 Cutpoints
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 cutN N N N N N N
 cutN N N N N N N

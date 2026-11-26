@@ -22,7 +22,7 @@ using LinearAlgebra, Statistics, Distributions
                    leads::Int=0, horizon::Int=5,
                    control_group::Symbol=:never_treated,
                    cluster::Symbol=:unit,
-                   conf_level::Real=0.95) where {T<:AbstractFloat}
+                   conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
 
 Internal Borusyak-Jaravel-Spiess (2024) imputation DiD estimator.
 
@@ -45,7 +45,7 @@ Internal Borusyak-Jaravel-Spiess (2024) imputation DiD estimator.
 - `horizon`: Post-treatment horizon (default: 5)
 - `control_group`: `:never_treated` (default) or `:not_yet_treated`
 - `cluster`: SE clustering: `:unit`, `:time`, `:twoway` (default: `:unit`)
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.90`, `DEFAULT_CI_MICRO`)
 
 # Returns
 `DIDResult{T}` with event-study ATTs, SEs, CIs, and group-time ATTs.
@@ -57,7 +57,8 @@ function _estimate_bjs(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                         leads::Int=0, horizon::Int=5,
                         control_group::Symbol=:never_treated,
                         cluster::Symbol=:unit,
-                        conf_level::Real=0.95) where {T<:AbstractFloat}
+                        conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
 
     timing = _extract_treatment_timing(pd, treat_col)
 

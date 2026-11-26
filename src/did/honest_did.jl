@@ -370,7 +370,7 @@ end
 
 """
     honest_did(betahat, sigma; num_pre, num_post, restriction=:rm,
-               Mbar=1.0, M=0.0, l_vec=nothing, conf_level=0.95) -> NamedTuple
+               Mbar=1.0, M=0.0, l_vec=nothing, conf_level=DEFAULT_CI_MICRO) -> NamedTuple
 
 Rambachan-Roth (2023) robust confidence set for `theta = l_vec'tau_post` from
 event-study coefficients `betahat = [beta_pre; beta_post]` (reference period
@@ -406,7 +406,8 @@ function honest_did(betahat::AbstractVector{<:Real}, sigma::AbstractMatrix{<:Rea
                     restriction::Symbol=:rm,
                     Mbar::Real=1.0, M::Real=0.0,
                     l_vec::Union{Nothing,AbstractVector{<:Real}}=nothing,
-                    conf_level::Real=0.95)
+                    conf_level::Real=DEFAULT_CI_MICRO)
+    _validate_conf_level(conf_level)
     T = float(promote_type(eltype(betahat), eltype(sigma)))
     p, q = num_pre, num_post
     length(betahat) == p + q ||
@@ -518,7 +519,7 @@ function _honest_did_eventstudy(att::Vector{T}, se::Vector{T}, event_times::Vect
 end
 
 """
-    honest_did(result::DIDResult; restriction=:rm, Mbar=1.0, M=0.0, conf_level=0.95)
+    honest_did(result::DIDResult; restriction=:rm, Mbar=1.0, M=0.0, conf_level=DEFAULT_CI_MICRO)
 
 Rambachan-Roth (2023) sensitivity analysis for a DiD event-study result. Runs
 the robust confidence set for every post-treatment period (target `l_vec = e_k`)
@@ -550,7 +551,8 @@ h.breakdown_value  # smallest Mbar that overturns significance
 """
 function honest_did(result::DIDResult{T}; restriction::Symbol=:rm,
                     Mbar::Real=1.0, M::Real=0.0,
-                    conf_level::Real=0.95) where {T<:AbstractFloat}
+                    conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     if result.base_period == :varying &&
        any(e -> e == result.reference_period, result.event_times)
         @warn "base_period=:varying estimates ATT at e=$(result.reference_period) (the " *
@@ -567,7 +569,7 @@ function honest_did(result::DIDResult{T}; restriction::Symbol=:rm,
 end
 
 """
-    honest_did(result::EventStudyLP; restriction=:rm, Mbar=1.0, M=0.0, conf_level=0.95)
+    honest_did(result::EventStudyLP; restriction=:rm, Mbar=1.0, M=0.0, conf_level=DEFAULT_CI_MICRO)
 
 Rambachan-Roth (2023) sensitivity analysis for an event-study LP result. The
 cross-horizon covariance is not stored for LP event studies, so a diagonal
@@ -575,7 +577,8 @@ covariance from the per-horizon standard errors is used (with a warning).
 """
 function honest_did(result::EventStudyLP{T}; restriction::Symbol=:rm,
                     Mbar::Real=1.0, M::Real=0.0,
-                    conf_level::Real=0.95) where {T<:AbstractFloat}
+                    conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     _honest_did_eventstudy(result.coefficients, result.se, result.event_times,
                            result.reference_period, nothing;
                            restriction=restriction, Mbar=T(Mbar), M=T(M),

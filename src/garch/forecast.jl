@@ -13,16 +13,16 @@ Variance forecasting for GARCH, EGARCH, and GJR-GARCH models.
 # =============================================================================
 
 """
-    forecast(m::GARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::GARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
-Forecast conditional variance from a GARCH(p,q) model.
+Forecast conditional variance from a GARCH(p,q) model (default 68% CIs).
 
 Uses analytical iteration for point forecasts and simulation for CIs.
 Point forecasts converge to unconditional variance as h → ∞.
 """
-function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::GARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q
@@ -65,13 +65,13 @@ end
 # =============================================================================
 
 """
-    forecast(m::EGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::EGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
-Forecast conditional variance from an EGARCH(p,q) model via simulation.
+Forecast conditional variance from an EGARCH(p,q) model via simulation (default 68% CIs).
 """
-function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::EGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q
@@ -113,13 +113,13 @@ end
 # =============================================================================
 
 """
-    forecast(m::GJRGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::GJRGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
-Forecast conditional variance from a GJR-GARCH(p,q) model via simulation.
+Forecast conditional variance from a GJR-GARCH(p,q) model via simulation (default 68% CIs).
 """
-function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::GJRGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q
@@ -183,17 +183,17 @@ StatsAPI.predict(m::GJRGARCHModel, h::Int; kwargs...) = forecast(m, h; kwargs...
 # =============================================================================
 
 """
-    forecast(m::IGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::IGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Forecast conditional variance from an IGARCH(p,q) model. The point forecast is
 computed **analytically** from the unit-persistence recursion
 `E[σ²_{t+k}] = ω + Σαᵢ E[σ²_{t+k-i}] + Σβⱼ E[σ²_{t+k-j}]` (using `E[ε²]=E[σ²]` for
 future shocks), which grows without bound (strictly increasing when `ω > 0`);
-confidence bands come from simulated paths.
+confidence bands come from simulated paths (default 68%).
 """
-function forecast(m::IGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::IGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
     q, p = m.q, m.p
 
@@ -246,14 +246,14 @@ function forecast(m::IGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=1
 end
 
 """
-    forecast(m::CGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::CGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Forecast conditional variance from a Component-GARCH(1,1) model via simulation of
-the permanent/transitory recursion; point forecasts revert to the long-run level `ω`.
+the permanent/transitory recursion (default 68% CIs); point forecasts revert to the long-run level `ω`.
 """
-function forecast(m::CGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::CGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
     last_eps_sq = m.residuals[end]^2
     last_h = m.conditional_variance[end]
@@ -276,14 +276,14 @@ function forecast(m::CGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=1
 end
 
 """
-    forecast(m::APARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::APARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Forecast conditional variance from an APARCH(p,q) model via simulation of the
-power-`δ` recursion.
+power-`δ` recursion (default 68% CIs).
 """
-function forecast(m::APARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::APARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
     q, p = m.q, m.p
     d = m.delta

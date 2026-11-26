@@ -186,7 +186,7 @@ function plot_result(r::BaiPerronResult{T}; view::Symbol=:criteria, title::Strin
                              xlabel="Observation", ylabel="")
         isempty(title) && (title = "Bai–Perron Estimated Break Dates")
         ptitle = r.n_breaks == 0 ? "No structural breaks detected" :
-                 "$(r.n_breaks) break(s) with 95% confidence intervals"
+                 "$(r.n_breaks) break(s) with $(_ci_pct(r.conf_level))% confidence intervals"
         p = _make_plot([_PanelSpec(id, ptitle, js)]; title=title)
         save_path !== nothing && save_plot(p, save_path)
         return p

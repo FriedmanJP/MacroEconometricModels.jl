@@ -19,20 +19,21 @@ References:
 # =============================================================================
 
 """
-    periodogram(y::AbstractVector; window::Symbol=:rectangular, conf_level::Real=0.95) -> SpectralDensityResult
+    periodogram(y::AbstractVector; window::Symbol=:rectangular, conf_level::Real=DEFAULT_CI_MACRO) -> SpectralDensityResult
 
 Compute the raw periodogram of `y`.
 
 # Arguments
 - `y` — time series vector
 - `window` — data window/taper (default: `:rectangular`; see `_spectral_window`)
-- `conf_level` — confidence level for chi-squared CI (default: 0.95)
+- `conf_level` — confidence level for chi-squared CI (default: `0.68`, `DEFAULT_CI_MACRO`)
 
 # Returns
 `SpectralDensityResult` with frequency grid, density, and confidence bounds.
 """
 function periodogram(y::AbstractVector{T}; window::Symbol=:rectangular,
-                     conf_level::Real=0.95) where {T<:AbstractFloat}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 4 && throw(ArgumentError("Need at least 4 observations, got $n"))
 
@@ -55,7 +56,7 @@ function periodogram(y::AbstractVector{T}; window::Symbol=:rectangular,
     end
 
     # Chi-squared CI (periodogram has chi2(2) / 2 distribution)
-    alpha = T(1 - conf_level)
+    alpha = T(1 - lv)
     nu = T(2.0)  # degrees of freedom per frequency
     ci_lower = density .* (nu / T(quantile(Chisq(nu), 1 - alpha / 2)))
     ci_upper = density .* (nu / T(quantile(Chisq(nu), alpha / 2)))
@@ -84,7 +85,7 @@ Estimate the spectral density of `y`.
 
 # Common Keyword Arguments
 - `window::Symbol=:hann` — data window
-- `conf_level::Real=0.95` — confidence level
+- `conf_level::Real=DEFAULT_CI_MACRO` — confidence level (default `0.68`)
 
 # Method-Specific Keywords
 ## `:welch`
@@ -120,9 +121,10 @@ spectral_density(y::AbstractVector{<:Real}; kwargs...) = spectral_density(Float6
 # =============================================================================
 
 function _spectral_welch(y::AbstractVector{T};
-                         window::Symbol=:hann, conf_level::Real=0.95,
+                         window::Symbol=:hann, conf_level::Real=DEFAULT_CI_MACRO,
                          segment_length::Int=0, overlap::Real=0.5,
                          kwargs...) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 4 && throw(ArgumentError("Need at least 4 observations"))
 
@@ -160,7 +162,7 @@ function _spectral_welch(y::AbstractVector{T};
 
     # CI with equivalent degrees of freedom
     nu = T(2 * n_segments)
-    alpha = T(1 - conf_level)
+    alpha = T(1 - lv)
     ci_lower = density .* (nu / T(quantile(Chisq(nu), 1 - alpha / 2)))
     ci_upper = density .* (nu / T(quantile(Chisq(nu), alpha / 2)))
 
@@ -174,8 +176,9 @@ end
 # =============================================================================
 
 function _spectral_smoothed(y::AbstractVector{T};
-                            window::Symbol=:rectangular, conf_level::Real=0.95,
+                            window::Symbol=:rectangular, conf_level::Real=DEFAULT_CI_MACRO,
                             bandwidth::Int=0, kwargs...) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 4 && throw(ArgumentError("Need at least 4 observations"))
 
@@ -212,7 +215,7 @@ function _spectral_smoothed(y::AbstractVector{T};
 
     # Equivalent DOF for Daniell kernel
     nu = T(2 * (2 * m + 1))
-    alpha = T(1 - conf_level)
+    alpha = T(1 - lv)
     ci_lower = density .* (nu / T(quantile(Chisq(nu), 1 - alpha / 2)))
     ci_upper = density .* (nu / T(quantile(Chisq(nu), alpha / 2)))
 
@@ -292,8 +295,9 @@ function _burg_coefficients(y::AbstractVector{T}, p::Int) where {T<:AbstractFloa
 end
 
 function _spectral_ar(y::AbstractVector{T};
-                      conf_level::Real=0.95, order::Int=0,
+                      conf_level::Real=DEFAULT_CI_MACRO, order::Int=0,
                       n_freq::Int=256, kwargs...) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     n < 4 && throw(ArgumentError("Need at least 4 observations"))
 
@@ -317,7 +321,7 @@ function _spectral_ar(y::AbstractVector{T};
 
     # AR spectrum CI (chi2 with 2 DOF equivalent, following Priestley 1981)
     nu = T(2 * n / p)  # equivalent DOF
-    alpha = T(1 - conf_level)
+    alpha = T(1 - lv)
     ci_lower = density .* (nu / T(quantile(Chisq(nu), 1 - alpha / 2)))
     ci_upper = density .* (nu / T(quantile(Chisq(nu), alpha / 2)))
 

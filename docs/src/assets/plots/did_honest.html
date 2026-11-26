@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Honest DiD: Robust CI (breakdown = 0.304)</title>
+<title>Honest DiD: Robust CI (breakdown = 0.342)</title>
 <style>    /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
        light default, a prefers-color-scheme dark override, and an explicit
        data-theme override the docs toggle stamps on the root element. */
@@ -138,7 +138,7 @@
     </style>
 </head>
 <body>
-<div class="figure-title">Honest DiD: Robust CI (breakdown = 0.304)</div>
+<div class="figure-title">Honest DiD: Robust CI (breakdown = 0.342)</div>
 <div class="panel-grid" style="--mem-panel-width: 100%;">
 <div class="panel">
 <div class="panel-title">Honest DiD Sensitivity (Δ^RM, M̅ = 1.000)</div>
@@ -215,12 +215,12 @@ var showTip = window.__mem_core.showTip;
 var hideTip = window.__mem_core.hideTip;
 
 (function() {
-    const data = [{"x":0,"att":2.3176767971720182,"orig_lo":1.5299555901639217,"orig_hi":3.105398004180115,"robust_lo":0.18463430949365867,"robust_hi":4.685347814356533,"zero":0},
-{"x":1,"att":2.926838014471052,"orig_lo":2.1447465709123437,"orig_hi":3.7089294580297603,"robust_lo":-1.0560281186155691,"robust_hi":7.317206337560345,"zero":0},
-{"x":2,"att":3.06962725851813,"orig_lo":2.3393248927988712,"orig_hi":3.799929624237389,"robust_lo":-3.0640874276467414,"robust_hi":9.314540233314496,"zero":0},
-{"x":3,"att":2.860271160141423,"orig_lo":2.251083848439542,"orig_hi":3.4694584718433035,"robust_lo":-5.25334452591486,"robust_hi":11.145274765651017,"zero":0},
-{"x":4,"att":3.2192098793734134,"orig_lo":2.6310023302237053,"orig_hi":3.8074174285231215,"robust_lo":-6.9692865669498545,"robust_hi":13.495856317731132,"zero":0},
-{"x":5,"att":3.79869972448635,"orig_lo":3.1071770716445606,"orig_hi":4.49022237732814,"robust_lo":-8.456303057575793,"robust_hi":16.099681028733983,"zero":0}];
+    const data = [{"x":0,"att":2.3176767971720182,"orig_lo":1.6566003209744642,"orig_hi":2.9787532733695725,"robust_lo":0.41600562983873624,"robust_hi":4.416254433597922,"zero":0},
+{"x":1,"att":2.926838014471052,"orig_lo":2.2704861846964155,"orig_hi":3.5831898442456884,"robust_lo":-0.6388195751677668,"robust_hi":6.834482222488399,"zero":0},
+{"x":2,"att":3.06962725851813,"orig_lo":2.4567381929537664,"orig_hi":3.682516324082494,"robust_lo":-2.4126448195995467,"robust_hi":8.64521988222187,"zero":0},
+{"x":3,"att":2.860271160141423,"orig_lo":2.3490250520243907,"orig_hi":3.371517268258455,"robust_lo":-4.39515169737893,"robust_hi":10.259527293758735,"zero":0},
+{"x":4,"att":3.2192098793734134,"orig_lo":2.7255705430127612,"orig_hi":3.7128492157340656,"robust_lo":-5.889073285159839,"robust_hi":12.401470849242532,"zero":0},
+{"x":5,"att":3.79869972448635,"orig_lo":3.218355619891568,"orig_hi":4.379043829081132,"robust_lo":-7.155415708449224,"robust_hi":14.791401549608318,"zero":0}];
     const series = [{"name":"ATT","color":"#1f77b4","key":"att","dash":""}];
     const bands = [{"lo_key":"robust_lo","hi_key":"robust_hi","name":"Robust CI","color":"#ff7f0e","alpha":0.12},{"lo_key":"orig_lo","hi_key":"orig_hi","name":"Original CI","color":"#1f77b4","alpha":0.3}];
     const refLines = [{"value":0,"color":"#999","dash":"4,3"}];

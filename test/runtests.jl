@@ -43,6 +43,7 @@ const TEST_GROUPS = [
         "core/test_error_paths.jl",
         "core/test_display_backends.jl",
         "core/test_coverage_gaps.jl",
+        "ci_defaults_audit.jl",
     ]),
     # Group 2: Bayesian & SVAR (heavy sampling + multi-start optimization)
     ("Bayesian & SVAR" => [

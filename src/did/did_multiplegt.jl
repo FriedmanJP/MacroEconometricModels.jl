@@ -158,7 +158,7 @@ end
                               leads::Int=0, horizon::Int=5,
                               control_group::Symbol=:never_treated,
                               cluster::Symbol=:unit,
-                              conf_level::Real=0.95,
+                              conf_level::Real=DEFAULT_CI_MICRO,
                               n_boot::Int=200) where {T}
 
 de Chaisemartin & D'Haultfoeuille (2020) estimator for staggered DiD with
@@ -178,7 +178,7 @@ binary absorbing treatment.
 - `horizon`: Post-treatment horizon (default: 5)
 - `control_group`: `:never_treated` (default) or `:not_yet_treated`
 - `cluster`: SE clustering (default: `:unit`)
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.90`, `DEFAULT_CI_MICRO`)
 - `n_boot`: Number of bootstrap replications (default: 200)
 
 # Returns
@@ -191,9 +191,10 @@ function _estimate_did_multiplegt(pd::PanelData{T}, outcome_col::Int, treat_col:
                                    leads::Int=0, horizon::Int=5,
                                    control_group::Symbol=:never_treated,
                                    cluster::Symbol=:unit,
-                                   conf_level::Real=0.95,
+                                   conf_level::Real=DEFAULT_CI_MICRO,
                                    n_boot::Int=200,
                                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
 
     timing = _extract_treatment_timing(pd, treat_col)
 

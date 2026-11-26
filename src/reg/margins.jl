@@ -286,7 +286,7 @@ end
 # =============================================================================
 
 """
-    marginal_effects(m::LogitModel{T}; type=:ame, at=nothing, conf_level=0.95) -> MarginalEffects{T}
+    marginal_effects(m::LogitModel{T}; type=:ame, at=nothing, conf_level=DEFAULT_CI_MICRO) -> MarginalEffects{T}
 
 Compute marginal effects from a logistic regression model with delta-method SEs.
 
@@ -305,7 +305,7 @@ The intercept column has no marginal effect: its entries are `NaN`.
 - `m::LogitModel{T}` — estimated logit model
 - `type::Symbol` — :ame (default), :mem, or :mer
 - `at::Union{Nothing,Dict}` — for :mer, Dict mapping column index => value
-- `conf_level::Real` — confidence level (default 0.95)
+- `conf_level::Real` — confidence level (default `0.90`, `DEFAULT_CI_MICRO`)
 
 # Returns
 `MarginalEffects{T}` with effects, delta-method SEs, z-stats, p-values, and CIs.
@@ -325,12 +325,12 @@ me_mer = marginal_effects(m; type=:mer, at=Dict(2=>0.0))  # MER at x2=0
 function marginal_effects(m::LogitModel{T};
                           type::Symbol=:ame,
                           at::Union{Nothing,Dict}=nothing,
-                          conf_level::Real=0.95) where {T<:AbstractFloat}
-    _marginal_effects_impl(m, :logit, type, at, conf_level)
+                          conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _marginal_effects_impl(m, :logit, type, at, _validate_conf_level(conf_level))
 end
 
 """
-    marginal_effects(m::ProbitModel{T}; type=:ame, at=nothing, conf_level=0.95) -> MarginalEffects{T}
+    marginal_effects(m::ProbitModel{T}; type=:ame, at=nothing, conf_level=DEFAULT_CI_MICRO) -> MarginalEffects{T}
 
 Compute marginal effects from a probit regression model with delta-method SEs.
 
@@ -349,7 +349,7 @@ The intercept column has no marginal effect: its entries are `NaN`.
 - `m::ProbitModel{T}` — estimated probit model
 - `type::Symbol` — :ame (default), :mem, or :mer
 - `at::Union{Nothing,Dict}` — for :mer, Dict mapping column index => value
-- `conf_level::Real` — confidence level (default 0.95)
+- `conf_level::Real` — confidence level (default `0.90`, `DEFAULT_CI_MICRO`)
 
 # Returns
 `MarginalEffects{T}` with effects, delta-method SEs, z-stats, p-values, and CIs.
@@ -368,8 +368,8 @@ me_mer = marginal_effects(m; type=:mer, at=Dict(2=>0.0))  # MER at x2=0
 function marginal_effects(m::ProbitModel{T};
                           type::Symbol=:ame,
                           at::Union{Nothing,Dict}=nothing,
-                          conf_level::Real=0.95) where {T<:AbstractFloat}
-    _marginal_effects_impl(m, :probit, type, at, conf_level)
+                          conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _marginal_effects_impl(m, :probit, type, at, _validate_conf_level(conf_level))
 end
 
 # =============================================================================
@@ -377,7 +377,7 @@ end
 # =============================================================================
 
 """
-    odds_ratio(m::LogitModel{T}; conf_level=0.95) -> OddsRatio{T}
+    odds_ratio(m::LogitModel{T}; conf_level=DEFAULT_CI_MICRO) -> OddsRatio{T}
 
 Compute odds ratios from a logistic regression model with delta-method CIs.
 
@@ -386,7 +386,7 @@ Confidence intervals on log scale: exp(beta +/- z * SE(beta)).
 
 # Arguments
 - `m::LogitModel{T}` — estimated logit model
-- `conf_level::Real` — confidence level (default 0.95)
+- `conf_level::Real` — confidence level (default `0.90`, `DEFAULT_CI_MICRO`)
 
 # Returns
 [`OddsRatio{T}`](@ref) with fields:
@@ -402,13 +402,14 @@ Confidence intervals on log scale: exp(beta +/- z * SE(beta)).
 m = estimate_logit(y, X)
 result = odds_ratio(m)
 result.or       # odds ratios
-result.ci_lower # lower 95% CI
+result.ci_lower # lower 90% CI
 ```
 
 # References
 - Agresti, A. (2002). *Categorical Data Analysis*. 2nd ed. Wiley, ch. 5.
 """
-function odds_ratio(m::LogitModel{T}; conf_level::Real=0.95) where {T<:AbstractFloat}
+function odds_ratio(m::LogitModel{T}; conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     beta = m.beta
     se_beta = sqrt.(max.(diag(m.vcov_mat), zero(T)))
     k = length(beta)
@@ -419,9 +420,9 @@ function odds_ratio(m::LogitModel{T}; conf_level::Real=0.95) where {T<:AbstractF
     se_or = or .* se_beta
 
     # CIs on log scale: exp(beta +/- z * SE(beta))
-    z_crit = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_crit = T(_conf_z(lv))
     ci_lower = exp.(beta .- z_crit .* se_beta)
     ci_upper = exp.(beta .+ z_crit .* se_beta)
 
-    OddsRatio(or, se_or, ci_lower, ci_upper, copy(m.varnames), T(conf_level))
+    OddsRatio(or, se_or, ci_lower, ci_upper, copy(m.varnames), T(lv))
 end

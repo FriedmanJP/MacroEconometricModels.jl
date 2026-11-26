@@ -280,13 +280,10 @@ end
 # Rational Inattention & Steady-State Kalman Plots (#923)
 # =============================================================================
 
-# Validate conf_level in (0, 1) and return (z_critical, ci_percent).
+# Validate conf_level in (0, 1) and return (z_critical, ci_percent_label).
 function _ri_conf_crit(conf_level::Real)
-    c = Float64(conf_level)
-    (isfinite(c) && 0 < c < 1) || throw(ArgumentError(
-        "conf_level must be in (0, 1); got $conf_level"))
-    z = quantile(Normal(), 1 - (1 - c) / 2)
-    return z, round(Int, 100 * c)
+    lv = _validate_conf_level(conf_level)
+    return _conf_z(lv), _ci_pct(lv)
 end
 
 # Build [{name, effect, ci_lo, ci_hi}] JSON rows for _render_coef_plot_js.
@@ -726,14 +723,14 @@ function plot_result(r::MWAttentionResult{T};
 end
 
 """
-    plot_result(r::RIEstimationResult; conf_level=0.95, title="", save_path=nothing)
+    plot_result(r::RIEstimationResult; conf_level=DEFAULT_CI_MACRO, title="", save_path=nothing)
 
 Horizontal dot-and-whisker coefficient plot (`_render_coef_plot_js`) of the estimated
 Rational Inattention parameters `r.params ± z * r.stderr` at confidence level
-`conf_level` (default `0.95`), with a zero reference line.
+`conf_level` (default `0.68`, `DEFAULT_CI_MACRO`), with a zero reference line.
 """
 function plot_result(r::RIEstimationResult{T};
-                     conf_level::Real=0.95,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     z, pct = _ri_conf_crit(conf_level)
@@ -749,14 +746,14 @@ function plot_result(r::RIEstimationResult{T};
 end
 
 """
-    plot_result(r::CGTestResult; conf_level=0.95, title="", save_path=nothing)
+    plot_result(r::CGTestResult; conf_level=DEFAULT_CI_MACRO, title="", save_path=nothing)
 
 Horizontal dot-and-whisker coefficient plot (`_render_coef_plot_js`) of the
 Coibion–Gorodnichenko regression estimates `[alpha, beta_cg]` with HAC intervals
-`± z * se` at confidence level `conf_level` (default `0.95`), plus a zero reference line.
+`± z * se` at confidence level `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`), plus a zero reference line.
 """
 function plot_result(r::CGTestResult{T};
-                     conf_level::Real=0.95,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     z, pct = _ri_conf_crit(conf_level)

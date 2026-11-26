@@ -255,7 +255,7 @@ report(mz)
 
 Read the two blocks against each other. Individually the AR(2) looks efficient: the
 intercept of ``-0.094`` is nowhere near significant (``p = 0.73``) and the slope 0.8967
-has a 95% interval of ``[0.260, 1.533]`` that comfortably contains one. Jointly the
+has a 68% interval (and 95% interval ``[0.260, 1.533]``) that comfortably contains one. Jointly the
 forecast fails, with ``\chi^2(2) = 13.89`` and ``p < 0.001``. The two readings are not in
 conflict: the HAC covariance of ``(a, b)`` has a correlation of ``-0.98``, so the pair
 travels a long way along that ridge without either marginal statistic moving, while the
@@ -345,7 +345,7 @@ plot_result(ev)                      # grouped bar: all models within each metri
 plot_result(ev; metric="RMSE")       # a single metric, ranked best first
 plot_result(ev; view=:theil)         # stacked Theil bias/variance/covariance bars
 plot_result(mz)                      # efficiency line against the 45-degree reference
-plot_result(dm)                      # loss differential with its 95% interval
+plot_result(dm)                      # loss differential with its 68% interval
 plot_result(comb)                    # combination weights and standalone MSEs
 ```
 

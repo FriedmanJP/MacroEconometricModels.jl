@@ -60,7 +60,7 @@ function reproduce(model::PVARModel)
     fresh = pvar_bootstrap_irf(model, Int(get(s, "H", size(model.boot_irf, 1) - 1));
                                irf_type=Symbol(get(s, "irf_type", "oirf")),
                                n_draws=Int(get(s, "n_draws", size(model.boot_draws, 1))),
-                               ci=get(s, "ci", 0.95),
+                               ci=get(s, "ci", DEFAULT_CI_MACRO),
                                seed=man.seed)
     diffs = [_repro_field_diff("draws", model.boot_draws, fresh.draws),
              _repro_field_diff("irf", model.boot_irf, fresh.irf)]
@@ -82,7 +82,7 @@ function reproduce(r::DIDResult)
                          covariates=covs,
                          control_group=Symbol(get(s, "control_group", "never_treated")),
                          cluster=Symbol(get(s, "cluster", "unit")),
-                         conf_level=get(s, "conf_level", 0.95),
+                         conf_level=get(s, "conf_level", DEFAULT_CI_MICRO),
                          n_boot=Int(get(s, "n_boot", 200)),
                          base_period=Symbol(get(s, "base_period", "varying")),
                          seed=man.seed)

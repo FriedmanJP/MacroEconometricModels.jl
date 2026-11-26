@@ -367,7 +367,7 @@ function _align_instrument(Z::AbstractMatrix, T_obs::Int, p::Int, T_eff::Int)
 end
 
 """
-    proxy_ar_band(model, z; horizon=0, normalize_var=1, level=0.95, ...) -> LPIVARBand
+    proxy_ar_band(model, z; horizon=0, normalize_var=1, level=DEFAULT_CI_MACRO, ...) -> LPIVARBand
 
 Weak-instrument-robust Anderson–Rubin bands for a `k = 1` proxy SVAR (Montiel
 Olea, Stock & Watson 2021). Builds the observationally equivalent LP-IV
@@ -375,9 +375,11 @@ Olea, Stock & Watson 2021). Builds the observationally equivalent LP-IV
 [`lp_iv_ar_band`](@ref).
 """
 function proxy_ar_band(model::VARModel{T}, z;
-                       horizon::Int=0, normalize_var::Int=1, level::Real=0.95,
+                       horizon::Int=0, normalize_var::Int=1,
+                       level::Real=DEFAULT_CI_MACRO,
                        n_grid::Int=401, span::Real=20, bandwidth::Int=0,
                        responses=nothing) where {T<:AbstractFloat}
+    _validate_conf_level(level)
     Z = z isa AbstractVector ? reshape(collect(float.(z)), :, 1) : Matrix{T}(float.(z))
     size(Z, 2) == 1 || throw(ArgumentError("Anderson-Rubin bands require k=1 instrument"))
     Y = model.Y

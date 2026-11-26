@@ -39,7 +39,7 @@ shock leads z_{t+h}, z_{t+h-1}, ..., z_t and computing R².
 - `method`: Estimator (:r2, :lp_a, :lp_b). Default: :r2
 - `bias_correct`: Apply VAR-based bootstrap bias correction. Default: true
 - `n_boot`: Number of bootstrap replications. Default: 500
-- `conf_level`: Confidence level for CIs. Default: 0.95
+- `conf_level`: Confidence level for CIs. Default: `0.68` (`DEFAULT_CI_MACRO`)
 - `var_lags`: VAR lag order for bias correction (default: HQIC-selected)
 
 # Returns
@@ -53,7 +53,7 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
                  method::Symbol=:r2,
                  bias_correct::Bool=true,
                  n_boot::Int=500,
-                 conf_level::Real=0.95,
+                 conf_level::Real=DEFAULT_CI_MACRO,
                  var_lags::Union{Nothing,Int}=nothing,
                  seed::Union{Integer,Nothing}=nothing,
                  rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
@@ -61,6 +61,7 @@ function lp_fevd(slp::StructuralLP{T}, horizon::Int;
     # Reproducibility parity with irf(::VARModel; seed=) (#537): a seed owns the
     # RNG so the bootstrap bands are reproducible bit-for-bit.
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(conf_level)
     @assert method ∈ (:r2, :lp_a, :lp_b) "method must be :r2, :lp_a, or :lp_b"
 
     n = nvars(slp)

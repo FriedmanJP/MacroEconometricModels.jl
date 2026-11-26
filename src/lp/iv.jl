@@ -167,13 +167,14 @@ weak_instrument_test(F_stats::Vector{T}; threshold::T=T(10.0)) where {T<:Abstrac
      min_F=minimum(F_stats), passes_threshold=all(F_stats .>= threshold), threshold=threshold)
 
 """
-    lp_iv_irf(model::LPIVModel{T}; conf_level::Real=0.95) -> LPImpulseResponse{T}
+    lp_iv_irf(model::LPIVModel{T}; conf_level::Real=DEFAULT_CI_MACRO) -> LPImpulseResponse{T}
 
-Extract IRF from LP-IV model.
+Extract IRF from LP-IV model (default 68% CIs).
 """
-function lp_iv_irf(model::LPIVModel{T}; conf_level::Real=0.95) where {T<:AbstractFloat}
+function lp_iv_irf(model::LPIVModel{T}; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     irf_data = extract_shock_irf(model.B, model.vcov, model.response_vars, 2;
-                                  conf_level=conf_level)
+                                  conf_level=lv)
 
     response_names = model.varnames[model.response_vars]
     shock_name = "$(model.varnames[model.shock_var]) (IV)"
@@ -181,7 +182,7 @@ function lp_iv_irf(model::LPIVModel{T}; conf_level::Real=0.95) where {T<:Abstrac
 
     LPImpulseResponse{T}(irf_data.values, irf_data.ci_lower, irf_data.ci_upper,
                          irf_data.se, model.horizon, response_names, shock_name,
-                         cov_type_sym, T(conf_level))
+                         cov_type_sym, T(lv))
 end
 
 """

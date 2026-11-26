@@ -68,7 +68,7 @@ end
 # =============================================================================
 
 """
-    irf(model, horizon; method=:cholesky, ci_type=:none, reps=200, conf_level=0.95, ...)
+    irf(model, horizon; method=:cholesky, ci_type=:none, reps=200, conf_level=DEFAULT_CI_MACRO, ...)
 
 Compute IRFs with optional confidence intervals.
 
@@ -131,7 +131,7 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
 """
 function irf(model::VARModel{T}, horizon::Int;
     method::Symbol=:cholesky, check_func=nothing, narrative_check=nothing,
-    ci_type::Symbol=:none, reps::Int=200, conf_level::Real=0.95,
+    ci_type::Symbol=:none, reps::Int=200, conf_level::Real=DEFAULT_CI_MACRO,
     stationary_only::Bool=false,
     bootstrap::Symbol=:iid, block_length::Int=0, wild_dist::Symbol=:rademacher,
     bias_correct::Bool=false, bias_reps::Int=0,
@@ -151,6 +151,7 @@ function irf(model::VARModel{T}, horizon::Int;
     # Reproducibility (T246/#345): a `seed` owns the RNG so bootstrap bands can be
     # reproduced bit-for-bit (the per-replication sub-seeding is thread-invariant).
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(conf_level)
     _validate_data(model.Sigma, "Sigma")
     _validate_data(model.B, "B")
     user_norm = normalize
@@ -692,7 +693,7 @@ irf(slp::StructuralLP) = slp.irf
 # =============================================================================
 
 """
-    lp_irf(model::LPModel{T}; conf_level=0.95, ci_type=:analytical, bootstrap=:wild, …)
+    lp_irf(model::LPModel{T}; conf_level=DEFAULT_CI_MACRO, ci_type=:analytical, bootstrap=:wild, …)
         -> LPImpulseResponse{T}
 
 Extract impulse response functions with confidence intervals from an LP model.
@@ -716,11 +717,12 @@ Extract impulse response functions with confidence intervals from an LP model.
 The point estimates and standard errors are the analytical ones in both cases; only the
 bands change, so switching `ci_type` never moves the reported IRF.
 """
-function lp_irf(model::LPModel{T}; conf_level::Real=0.95,
+function lp_irf(model::LPModel{T}; conf_level::Real=DEFAULT_CI_MACRO,
                 ci_type::Symbol=:analytical, bootstrap::Symbol=:wild,
                 block_length::Int=0, wild_dist::Symbol=:rademacher,
                 reps::Int=500, seed::Union{Integer,Nothing}=nothing,
                 rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     ci_type in (:analytical, :bootstrap) || throw(ArgumentError(
         "ci_type must be :analytical or :bootstrap; got :$ci_type"))
     # Validate BEFORE the threaded bootstrap loop: an ArgumentError raised inside
@@ -800,10 +802,12 @@ end
 
 Convenience function: estimate LP and extract IRF in one call.
 """
-function lp_irf(Y::AbstractMatrix, shock_var::Int, horizon::Int; conf_level::Real=0.95,
+function lp_irf(Y::AbstractMatrix, shock_var::Int, horizon::Int;
+                conf_level::Real=DEFAULT_CI_MACRO,
                 ci_type::Symbol=:analytical, bootstrap::Symbol=:wild, block_length::Int=0,
                 wild_dist::Symbol=:rademacher, reps::Int=500,
                 seed::Union{Integer,Nothing}=nothing, kwargs...)
+    _validate_conf_level(conf_level)
     model = estimate_lp(Y, shock_var, horizon; kwargs...)
     lp_irf(model; conf_level=conf_level, ci_type=ci_type, bootstrap=bootstrap,
            block_length=block_length, wild_dist=wild_dist, reps=reps, seed=seed)

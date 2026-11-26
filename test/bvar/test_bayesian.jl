@@ -305,8 +305,8 @@ end
         @test length(out) > 0
         @test occursin("Bayesian VAR", out)
         @test occursin("Mean", out)
-        @test occursin("2.5%", out)
-        @test occursin("97.5%", out)
+        @test occursin("16%", out)
+        @test occursin("84%", out)
         @test occursin("Posterior Mean", out)
         _tprint("BVARPosterior show test passed.")
     end
@@ -331,7 +331,7 @@ end
         @test all(fc.ci_lower .<= fc.forecast)
         @test all(fc.forecast .<= fc.ci_upper)
         @test fc.point_estimate == :mean  # default
-        @test fc.conf_level == 0.95
+        @test fc.conf_level == 0.68
 
         # point_estimate=:mean
         fc_mean = forecast(post, 4; point_estimate=:mean)

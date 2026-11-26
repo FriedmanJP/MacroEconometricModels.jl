@@ -291,8 +291,8 @@ where:
 - ``V`` is the estimated covariance of ``[\beta; \theta]``,
 - ``s_f = \sum_k w_k(\hat\theta)\, x^{hf}_{f,k}`` is the weighted indicator for the forecast period.
 
-The interval uses normal quantiles rather than ``t``: at the default `level=0.95` the
-half-width is ``1.96\,\widehat{\text{se}}``.
+The interval uses normal quantiles rather than ``t``: at the default `level=0.68` the
+half-width is ``z_{0.84}\,\widehat{\text{se}} \approx 0.994\,\widehat{\text{se}}`` (pass `level=0.95` for ``1.96\,\widehat{\text{se}}``).
 
 ```@example midas
 fc = forecast(model, ip_new; level=0.68)
@@ -310,7 +310,7 @@ quarter is not ruled out at one standard error.
 | Keyword | Type | Default | Description |
 |---|---|---|---|
 | `y_lags` | `AbstractVector` or `nothing` | `nothing` | Own lags, most-recent-first; defaults to the last retained in-sample targets |
-| `level` | `Real` | `0.95` | Nominal coverage of the prediction interval |
+| `level` | `Real` | `0.68` | Nominal coverage of the prediction interval |
 
 **Return value** (`MidasForecast`): `forecast`, `se`, `ci_lower` and `ci_upper` (each a
 length-1 `Vector{T}`), plus `horizon::Int` and `conf_level::T`.

@@ -134,6 +134,15 @@ StatsAPI.nobs(m::PVARModel) = m.n_obs
 StatsAPI.dof(m::PVARModel) = m.m * size(m.Phi, 2)
 StatsAPI.stderror(m::PVARModel) = vec(m.se)
 
+"""Confidence intervals for PVARModel coefficients (normal distribution, default 68%)."""
+function StatsAPI.confint(m::PVARModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    crit = T(_conf_z(lv))
+    b = vec(m.Phi)
+    s = vec(m.se)
+    return hcat(b .- crit .* s, b .+ crit .* s)
+end
+
 # =============================================================================
 # PVARStability
 # =============================================================================
@@ -238,7 +247,8 @@ function Base.show(io::IO, model::PVARModel{T}) where {T}
     for eq in 1:model.m
         coef_vals = T.(model.Phi[eq, :])
         se_vals = T.(model.se[eq, :])
-        _coef_table(io, "Equation: $(model.varnames[eq])", regressor_names, coef_vals, se_vals; dist=:z)
+        _coef_table(io, "Equation: $(model.varnames[eq])", regressor_names, coef_vals, se_vals;
+                    dist=:z, level=DEFAULT_CI_MACRO)
     end
 end
 

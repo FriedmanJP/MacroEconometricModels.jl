@@ -12,7 +12,7 @@ live here for parallel-lane file isolation:
 - `PerfectForesightPath` — per-variable transition lines (`view=:levels` from `path`,
   with a per-panel steady-state reference line; `view=:deviations` from `deviations`,
   with a zero line).
-- `KalmanSmootherResult` — smoothed state means ± 1.96·√diag(cov) bands, with the
+- `KalmanSmootherResult` — smoothed state means ± `z`·√diag(cov) bands (`conf_level`, default `0.68`), with the
   observed data overlaid when supplied. The struct carries no names, so `varnames`
   is a **required** keyword.
 - `DSGEEstimation` — a parameter dot-and-whisker (`θ ± z·stderror`, `conf_level`) with a J-test
@@ -43,23 +43,25 @@ function _pf_path_json(col::AbstractVector; xstart::Int=1)
 end
 
 """
-    _smoothed_state_json(states, covs, i; obs=nothing) -> String
+    _smoothed_state_json(states, covs, i; obs=nothing, z=_conf_z(DEFAULT_CI_MACRO)) -> String
 
 Line+band `data_json` `[{x, sm, lo, hi[, obs]}, …]` for state `i` of a smoother
-result: `states` is `n×T`, `covs` is `n×n×T`; the band is `sm ± 1.96·√covs[i,i,t]`.
+result: `states` is `n×T`, `covs` is `n×n×T`; the band is `sm ± z·√covs[i,i,t]`.
 When `obs` (length `T`) is supplied it is emitted as an `obs` overlay column.
 Non-finite means/variances serialize to `null` (a visible gap; plotrule A7).
 """
 function _smoothed_state_json(states::AbstractMatrix, covs::AbstractArray{<:Any,3},
-                              i::Int; obs::Union{AbstractVector,Nothing}=nothing)
+                              i::Int; obs::Union{AbstractVector,Nothing}=nothing,
+                              z::Real=_conf_z(DEFAULT_CI_MACRO))
+    zf = Float64(z)
     Tn = size(states, 2)
     rows = Vector{Pair{String,String}}[]
     for t in 1:Tn
         m = states[i, t]
         v = covs[i, i, t]
         sd = (isfinite(v) && v > 0) ? sqrt(v) : NaN
-        lo = (isfinite(m) && isfinite(sd)) ? m - 1.96 * sd : NaN
-        hi = (isfinite(m) && isfinite(sd)) ? m + 1.96 * sd : NaN
+        lo = (isfinite(m) && isfinite(sd)) ? m - zf * sd : NaN
+        hi = (isfinite(m) && isfinite(sd)) ? m + zf * sd : NaN
         row = Pair{String,String}["x" => _json(t), "sm" => _json(m),
                                   "lo" => _json(lo), "hi" => _json(hi)]
         obs !== nothing && push!(row, "obs" => _json(obs[t]))
@@ -69,14 +71,14 @@ function _smoothed_state_json(states::AbstractMatrix, covs::AbstractArray{<:Any,
 end
 
 """
-    _dsge_coef_json(names, est, se; z=1.96) -> String
+    _dsge_coef_json(names, est, se; z=_conf_z(DEFAULT_CI_MACRO)) -> String
 
 Coefficient-plot `data_json` `[{name, effect, ci_lo, ci_hi}, …]` for a parameter
 estimate/standard-error pair (`ci = est ± z·se`). Used for the DSGE-GMM parameter
 plot; DSGE deep parameters carry no intercept row, so none is omitted.
 """
 function _dsge_coef_json(names::AbstractVector, est::AbstractVector,
-                         se::AbstractVector; z::Real=1.96)
+                         se::AbstractVector; z::Real=_conf_z(DEFAULT_CI_MACRO))
     rows = Vector{Pair{String,String}}[]
     for i in eachindex(names)
         push!(rows, ["name" => _json(string(names[i])), "effect" => _json(est[i]),
@@ -152,12 +154,13 @@ end
 
 """
     plot_result(r::KalmanSmootherResult; varnames, data=nothing, var=nothing,
-                max_panels=12, ncols=0, title="", save_path=nothing)
+                conf_level=DEFAULT_CI_MACRO, max_panels=12, ncols=0, title="",
+                save_path=nothing)
 
-Smoothed-state plot: per state, the smoothed mean with a ±1.96·√diag(covariance)
-band, optionally overlaying the observed `data`. The struct carries no names, so
-`varnames` is **required** and must have length `size(smoothed_states, 1)` — otherwise
-an `ArgumentError` is thrown. `data` (when supplied) must be `T_obs × n` or
+Smoothed-state plot: per state, the smoothed mean with a `conf_level` (`±z·√diag(covariance)`,
+default `0.68`, `DEFAULT_CI_MACRO`) band, optionally overlaying the observed `data`. The struct
+carries no names, so `varnames` is **required** and must have length `size(smoothed_states, 1)` —
+otherwise an `ArgumentError` is thrown. `data` (when supplied) must be `T_obs × n` or
 `n × T_obs`; a mismatched shape throws (plotrule Robustness). `var` selects one state
 by `Int` or name; otherwise up to `max_panels` states are drawn (cap noted, C7).
 """
@@ -165,8 +168,12 @@ function plot_result(r::KalmanSmootherResult{T};
                      varnames::Union{Nothing,Vector{String}}=nothing,
                      data::Union{Nothing,AbstractMatrix}=nothing,
                      var::Union{Int,String,Nothing}=nothing,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      max_panels::Int=12, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    z = _conf_z(lv)
+    pct = _ci_pct(lv)
     n, Tn = size(r.smoothed_states)
     varnames === nothing && throw(ArgumentError(
         "varnames is required — KalmanSmootherResult stores no variable names " *
@@ -188,19 +195,20 @@ function plot_result(r::KalmanSmootherResult{T};
     for j in idx
         id = _next_plot_id("ks_state")
         obs = obs_mat === nothing ? nothing : @view obs_mat[:, j]
-        data_json = _smoothed_state_json(r.smoothed_states, r.smoothed_covariances, j; obs=obs)
+        data_json = _smoothed_state_json(r.smoothed_states, r.smoothed_covariances, j;
+                                         obs=obs, z=z)
         snames = obs === nothing ? ["Smoothed"] : ["Smoothed", "Observed"]
         skeys = obs === nothing ? ["sm"] : ["sm", "obs"]
         sdash = obs === nothing ? [""] : ["", "6,3"]
         series_json = _series_json(snames, _colors_for(snames); keys=skeys, dash=sdash)
         band_color = _colors_for(snames)[1]
         bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(band_color))," *
-                "\"alpha\":$(_json(_PLOT_CI_ALPHA)),\"name\":\"±1.96 s.e.\"}]"
+                "\"alpha\":$(_json(_PLOT_CI_ALPHA)),\"name\":\"$(pct)% CI\"}]"
         js = _render_line_js(id, data_json, series_json; bands_json=bands, integer_x=true,
                              xlabel="Period", ylabel=varnames[j])
         push!(panels, _PanelSpec(id, varnames[j], js))
     end
-    ftitle = isempty(title) ? "Kalman-Smoothed States (±95% band)" : title
+    ftitle = isempty(title) ? "Kalman-Smoothed States ($(pct)% CI)" : title
     p = _make_plot(panels; title=ftitle, ncols=ncols, note=note)
     save_path !== nothing && save_plot(p, save_path)
     p
@@ -211,10 +219,10 @@ end
 # =============================================================================
 
 """
-    plot_result(est::DSGEEstimation; title="", save_path=nothing)
+    plot_result(est::DSGEEstimation; title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 Parameter coefficient plot for a GMM-estimated DSGE: `θ ± z·stderror(est)` at
-confidence level `conf_level` (default 0.95) as a
+confidence level `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) as a
 horizontal dot-and-whisker over `param_names`, with the Hansen J-test annotated in
 the panel title (`J = … (p = …)`, rounded via `_fmt`/`_format_pvalue`, plotrule C9).
 This is a **parameter** plot — the struct stores no empirical/model moments, so no
@@ -222,13 +230,13 @@ moment-fit exhibit is drawn (plotrule C6; moment fit lives in the GMM/SMM plot).
 """
 function plot_result(est::DSGEEstimation{T};
                      title::String="", save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     id = _next_plot_id("dsge_est")
     z = _conf_z(conf_level)
     se = StatsAPI.stderror(est)
     data_json = _dsge_coef_json(est.param_names, est.theta, se; z=z)
     js = _render_coef_plot_js(id, data_json; ref_value=0, xlabel="Estimate", ylabel="")
-    ptitle = "Estimated Parameters ($(est.method)); J = $(_fmt(est.J_stat; digits=3)) (p = $(_format_pvalue(est.J_pvalue)))"
+    ptitle = "Estimated Parameters ($(est.method), $(_ci_pct(conf_level))% CI); J = $(_fmt(est.J_stat; digits=3)) (p = $(_format_pvalue(est.J_pvalue)))"
     panel = _PanelSpec(id, ptitle, js)
     ftitle = isempty(title) ? "DSGE-GMM Parameter Estimates" : title
     p = _make_plot([panel]; title=ftitle, ncols=1)
@@ -1016,7 +1024,7 @@ end
 
 """
     plot_result(post::DSGEVARPosterior; view=:irf, var=nothing, shock=nothing,
-                horizon=20, method=:dsge_qr, quantiles=[0.05, 0.16, 0.5, 0.84, 0.95],
+                horizon=20, method=:dsge_qr, quantiles=DEFAULT_QUANTILES_MACRO,
                 stat=:median, params=nothing, thin=1, max_panels=12,
                 ncols=0, title="", save_path=nothing)
 
@@ -1043,7 +1051,7 @@ function plot_result(post::DSGEVARPosterior{T};
                      shock::Union{Int,String,AbstractVector,Nothing}=nothing,
                      horizon::Int=20,
                      method::Symbol=:dsge_qr,
-                     quantiles::AbstractVector{<:Real}=[0.05, 0.16, 0.5, 0.84, 0.95],
+                     quantiles::AbstractVector{<:Real}=DEFAULT_QUANTILES_MACRO,
                      stat::Symbol=:median,
                      params=nothing,
                      thin::Int=1,
@@ -1057,7 +1065,7 @@ function plot_result(post::DSGEVARPosterior{T};
         horizon >= 1 || throw(ArgumentError("horizon must be >= 1; got $horizon"))
         stat in (:median, :mean) || throw(ArgumentError("stat must be :median or :mean; got :$stat"))
 
-        q_req = Float64[Float64(q) for q in quantiles]
+        q_req = _validate_quantiles(quantiles)
         birf = irf(post, horizon; method=method, quantiles=q_req, point_estimate=stat)
         vars_to_plot = _abcd_resolve_sel(var, birf.variables)
         shocks_to_plot = _abcd_resolve_sel(shock, birf.shocks)

@@ -29,7 +29,7 @@ using LinearAlgebra, Statistics, Distributions
 
 """
     forecast(lp::LPModel{T}, shock_path::AbstractVector{<:Real};
-             ci_method=:analytical, conf_level=0.95, n_boot=500) -> LPForecast{T}
+             ci_method=:analytical, conf_level=DEFAULT_CI_MACRO, n_boot=500) -> LPForecast{T}
 
 Compute direct multi-step LP forecasts given a shock trajectory.
 
@@ -44,16 +44,17 @@ where controls_T are the last `lags` observations of Y.
 
 # Keyword Arguments
 - `ci_method`: `:analytical` (default), `:bootstrap`, or `:none`
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.68`, `DEFAULT_CI_MACRO`)
 - `n_boot`: Number of bootstrap replications (default: 500)
 
 # Returns
 `LPForecast{T}` with point forecasts, CIs, and standard errors.
 """
 function forecast(lp::LPModel{T}, shock_path::AbstractVector{<:Real};
-                  ci_method::Symbol=:analytical, conf_level::Real=0.95,
+                  ci_method::Symbol=:analytical, conf_level::Real=DEFAULT_CI_MACRO,
                   n_boot::Int=500,
                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     H = lp.horizon
     @assert length(shock_path) == H "shock_path must have length H=$H"
     @assert ci_method ∈ (:analytical, :bootstrap, :none) "ci_method must be :analytical, :bootstrap, or :none"
@@ -199,7 +200,7 @@ end
 
 """
     forecast(slp::StructuralLP{T}, shock_idx::Int, shock_path::AbstractVector{<:Real};
-             ci_method=:analytical, conf_level=0.95, n_boot=500) -> LPForecast{T}
+             ci_method=:analytical, conf_level=DEFAULT_CI_MACRO, n_boot=500) -> LPForecast{T}
 
 Compute direct multi-step forecast from a structural LP model using a specific
 orthogonalized shock.
@@ -211,14 +212,15 @@ orthogonalized shock.
 
 # Keyword Arguments
 - `ci_method`: `:analytical` (default), `:bootstrap`, or `:none`
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.68`, `DEFAULT_CI_MACRO`)
 - `n_boot`: Number of bootstrap replications (default: 500)
 """
 function forecast(slp::StructuralLP{T}, shock_idx::Int,
                   shock_path::AbstractVector{<:Real};
-                  ci_method::Symbol=:analytical, conf_level::Real=0.95,
+                  ci_method::Symbol=:analytical, conf_level::Real=DEFAULT_CI_MACRO,
                   n_boot::Int=500,
                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     n = nvars(slp)
     @assert 1 <= shock_idx <= n "shock_idx must be in 1:$n"
 

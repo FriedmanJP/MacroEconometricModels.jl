@@ -15,7 +15,7 @@ Cov. type HCN (robust)
 
 Coefficients
 
-Coef. Std.Err. t P>|t| CI lower CI upper
+Coef. Std.Err. t P>|t| N% CI Low N% CI High
 
 xN N N N N N N
 xN N N N N N N

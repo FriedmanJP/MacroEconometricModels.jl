@@ -296,12 +296,13 @@ function cross_validate_lambda(Y::AbstractMatrix{T}, shock_var::Int, horizon::In
 end
 
 """
-    smooth_lp_irf(model::SmoothLPModel{T}; conf_level::Real=0.95) -> LPImpulseResponse{T}
+    smooth_lp_irf(model::SmoothLPModel{T}; conf_level::Real=DEFAULT_CI_MACRO) -> LPImpulseResponse{T}
 
-Extract smoothed IRF from SmoothLPModel.
+Extract smoothed IRF from SmoothLPModel (default 68% CIs).
 """
-function smooth_lp_irf(model::SmoothLPModel{T}; conf_level::Real=0.95) where {T<:AbstractFloat}
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+function smooth_lp_irf(model::SmoothLPModel{T}; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
+    z = T(_conf_z(lv))
     ci_lower = model.irf_values .- z .* model.irf_se
     ci_upper = model.irf_values .+ z .* model.irf_se
 
@@ -309,7 +310,7 @@ function smooth_lp_irf(model::SmoothLPModel{T}; conf_level::Real=0.95) where {T<
     cov_type_sym = model.cov_estimator isa NeweyWestEstimator ? :newey_west : :white
 
     LPImpulseResponse{T}(model.irf_values, ci_lower, ci_upper, model.irf_se, model.horizon,
-                         response_names, model.varnames[model.shock_var], cov_type_sym, T(conf_level))
+                         response_names, model.varnames[model.shock_var], cov_type_sym, T(lv))
 end
 
 """

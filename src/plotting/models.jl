@@ -1300,15 +1300,20 @@ end
 # =============================================================================
 
 """
-    plot_result(ss::StateSpaceModel; obs=1, state=nothing, title="", save_path=nothing)
+    plot_result(ss::StateSpaceModel; obs=1, state=nothing, conf_level=DEFAULT_CI_MACRO,
+                title="", save_path=nothing)
 
 Overlay the observed series (`obs`-th observable) with the filtered and smoothed level
-of a fitted state-space model, plus a ±1.96·√`smoothed_cov` band around the smoothed
-path. `state` selects which state component to overlay (defaults to the state that the
-`obs`-th observation loads on, or state 1).
+of a fitted state-space model, plus a `conf_level` (`±z·√smoothed_cov`, default `0.68`,
+`DEFAULT_CI_MACRO`) band around the smoothed path. `state` selects which state component
+to overlay (defaults to the state that the `obs`-th observation loads on, or state 1).
 """
 function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothing}=nothing,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    z_ci = T(_conf_z(lv))
+    pct = _ci_pct(lv)
     isfitted(ss) || throw(ArgumentError("plot_result requires a fitted StateSpaceModel"))
     (1 <= obs <= ss.n_obs) || throw(ArgumentError("obs must be in 1:$(ss.n_obs)"))
     # Default state: the first state the obs-th observation loads on.
@@ -1328,8 +1333,8 @@ function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothin
             "obs"  => isnan(yv) ? "null" : _json(yv),
             "filt" => _json(filt),
             "smth" => _json(smth),
-            "lo"   => _json(smth - T(1.96) * sd),
-            "hi"   => _json(smth + T(1.96) * sd),
+            "lo"   => _json(smth - z_ci * sd),
+            "hi"   => _json(smth + z_ci * sd),
         ])
     end
     data_json = _json_array_of_objects(rows)
@@ -1337,10 +1342,10 @@ function plot_result(ss::StateSpaceModel{T}; obs::Int=1, state::Union{Int,Nothin
     series = _series_json(["Observed", "Filtered", "Smoothed"],
                           [_PLOT_COLORS[1], _PLOT_COLORS[3], _PLOT_COLORS[2]];
                           keys=["obs", "filt", "smth"], dash=["", "4,3", ""])
-    bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[2])\"}]"
+    bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":\"$(_PLOT_COLORS[2])\",\"name\":\"$(pct)% CI\"}]"
     js = _render_line_js(id, data_json, series; bands_json=bands,
                          xlabel="Period", ylabel=ss.n_obs == 1 ? "Value" : "Series $obs")
-    panel = _PanelSpec(id, "Filtered vs smoothed level (95% band)", js)
+    panel = _PanelSpec(id, "Filtered vs smoothed level ($(pct)% band)", js)
     isempty(title) && (title = "State-Space Model — level estimates")
     p = _make_plot([panel]; title=title, ncols=1)
     save_path !== nothing && save_plot(p, save_path)
@@ -1356,9 +1361,13 @@ const _QFM_PLOT_VIEWS = (:factors, :loadings, :variance, :scree)
 # Internal helper: factors view for QuantileFactorModel (no docstring per visualization.md).
 function _plot_qfm_factors(m::QuantileFactorModel{T};
                            var::Union{Int,String,Nothing}=nothing,
+                           conf_level::Real=DEFAULT_CI_MACRO,
                            max_factors::Int=5,
                            ncols::Int=0,
                            title::String="") where {T}
+    lv = _validate_conf_level(conf_level)
+    z_ci = _conf_z(lv)
+    pct = _ci_pct(lv)
     T_obs, r = size(m.factors)
     n_plot = min(r, max(1, max_factors))
     panels = _PanelSpec[]
@@ -1369,16 +1378,16 @@ function _plot_qfm_factors(m::QuantileFactorModel{T};
             id = _next_plot_id("qfm_f")
             est = Float64.(m.factors[:, k])
             se = Float64.(m.se_factors[:, k])
-            lo = est .- 1.96 .* se
-            hi = est .+ 1.96 .* se
+            lo = est .- z_ci .* se
+            hi = est .+ z_ci .* se
             data_json = _keyed_rows_json(xs, ["est" => est, "lo" => lo, "hi" => hi])
             col_k = _PLOT_SERIES[mod1(k, length(_PLOT_SERIES))]
             s_json = _series_json(["Factor $k"], [col_k]; keys=["est"])
-            bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(col_k)),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"95% CI\"}]"
+            bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(col_k)),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"$(pct)% CI\"}]"
             refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
             js = _render_line_js(id, data_json, s_json; bands_json=bands, ref_lines_json=refs,
                                  integer_x=true, xlabel="Period", ylabel="Factor $k")
-            push!(panels, _PanelSpec(id, "Factor $k (±1.96 SE)", js))
+            push!(panels, _PanelSpec(id, "Factor $k ($(pct)% CI)", js))
         end
     else
         id = _next_plot_id("qfm_fac")
@@ -1413,10 +1422,14 @@ end
 # Internal helper: loadings view for QuantileFactorModel.
 function _plot_qfm_loadings(m::QuantileFactorModel{T};
                             var::Union{Int,String,Nothing}=nothing,
+                            conf_level::Real=DEFAULT_CI_MACRO,
                             max_factors::Int=5,
                             max_vars::Int=20,
                             ncols::Int=0,
                             title::String="") where {T}
+    lv = _validate_conf_level(conf_level)
+    z_ci = _conf_z(lv)
+    pct = _ci_pct(lv)
     N, r = size(m.loadings)
     panels = _PanelSpec[]
     note = ""
@@ -1431,8 +1444,8 @@ function _plot_qfm_loadings(m::QuantileFactorModel{T};
             for k in 1:n_fac
                 est = m.loadings[vi, k]
                 se = m.se_loadings[vi, k]
-                lo = isfinite(est) && isfinite(se) ? est - 1.96 * se : est
-                hi = isfinite(est) && isfinite(se) ? est + 1.96 * se : est
+                lo = isfinite(est) && isfinite(se) ? est - z_ci * se : est
+                hi = isfinite(est) && isfinite(se) ? est + z_ci * se : est
                 push!(rows, "{\"name\":$(_json("Factor $k")),\"effect\":$(_json(est)),\"ci_lo\":$(_json(lo)),\"ci_hi\":$(_json(hi))}")
             end
             js = _render_coef_plot_js(id, "[" * join(rows, ",\n") * "]";
@@ -1445,7 +1458,8 @@ function _plot_qfm_loadings(m::QuantileFactorModel{T};
             js = _render_bar_js(id, _json_array_of_objects(rows), s_json;
                                 mode="grouped", orientation="h", xlabel="Loading λ(τ)", ylabel="")
         end
-        push!(panels, _PanelSpec(id, _cap_title("Loadings: $(vname)", n_fac, r), js))
+        ci_tag = m.se_loadings !== nothing ? " ($(pct)% CI)" : ""
+        push!(panels, _PanelSpec(id, _cap_title("Loadings: $(vname)$(ci_tag)", n_fac, r), js))
         note = _cap_note("factors", n_fac, r, "max_factors")
     else
         shown_v = min(N, max(1, max_vars))
@@ -1457,15 +1471,15 @@ function _plot_qfm_loadings(m::QuantileFactorModel{T};
                 for i in 1:shown_v
                     est = m.loadings[i, k]
                     se = m.se_loadings[i, k]
-                    lo = isfinite(est) && isfinite(se) ? est - 1.96 * se : est
-                    hi = isfinite(est) && isfinite(se) ? est + 1.96 * se : est
+                    lo = isfinite(est) && isfinite(se) ? est - z_ci * se : est
+                    hi = isfinite(est) && isfinite(se) ? est + z_ci * se : est
                     push!(rows, "{\"name\":$(_json(m.varnames[i])),\"effect\":$(_json(est)),\"ci_lo\":$(_json(lo)),\"ci_hi\":$(_json(hi))}")
                 end
                 col_k = _PLOT_SERIES[mod1(k, length(_PLOT_SERIES))]
                 js = _render_coef_plot_js(id, "[" * join(rows, ",\n") * "]";
                                           color=col_k, ref_value=0,
                                           xlabel="Loading λ_$k(τ)", ylabel="")
-                push!(panels, _PanelSpec(id, _cap_title("Factor $k Loadings", shown_v, N), js))
+                push!(panels, _PanelSpec(id, _cap_title("Factor $k Loadings ($(pct)% CI)", shown_v, N), js))
             end
         else
             id = _next_plot_id("qfm_lbar")
@@ -1528,14 +1542,15 @@ function _plot_qfm_variance(m::QuantileFactorModel{T};
 end
 
 """
-    plot_result(m::QuantileFactorModel; view=:factors, var=nothing, max_factors=5,
+    plot_result(m::QuantileFactorModel; view=:factors, var=nothing,
+                conf_level=DEFAULT_CI_MACRO, max_factors=5,
                 max_vars=20, ncols=0, title="", save_path=nothing)
 
 Plot an estimated [`QuantileFactorModel`](@ref).
 
 # Views
-- `:factors` — time series of estimated quantile factors `m.factors` (with `±1.96 SE`
-  bands when `m.se_factors !== nothing`), plus observed vs common component for `var` if given.
+- `:factors` — time series of estimated quantile factors `m.factors` (with `conf_level`
+  CI bands, default `0.68`, when `m.se_factors !== nothing`), plus observed vs common component for `var` if given.
 - `:loadings` — horizontal bar or CI whisker plot of factor loadings `m.loadings` across
   variables (or across factors for a selected variable `var`).
 - `:variance` / `:scree` — factor strength scree `m.sigma_sq` alongside per-series
@@ -1544,6 +1559,7 @@ Plot an estimated [`QuantileFactorModel`](@ref).
 # Keyword Arguments
 - `view::Symbol = :factors` — exhibit view (`:factors`, `:loadings`, `:variance`, or `:scree`)
 - `var::Union{Int,String,Nothing} = nothing` — optional variable index or name
+- `conf_level::Real = DEFAULT_CI_MACRO` — confidence level in `(0, 1)` for SE bands (default `0.68`)
 - `max_factors::Int = 5` — maximum number of factors displayed (C7 note if capped)
 - `max_vars::Int = 20` — maximum number of panel series displayed (C7 note if capped)
 - `ncols::Int = 0` — number of grid columns (`0` = auto)
@@ -1553,18 +1569,20 @@ Plot an estimated [`QuantileFactorModel`](@ref).
 function plot_result(m::QuantileFactorModel{T};
                      view::Symbol=:factors,
                      var::Union{Int,String,Nothing}=nothing,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      max_factors::Int=5,
                      max_vars::Int=20,
                      ncols::Int=0,
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
     view in _QFM_PLOT_VIEWS || throw(ArgumentError(
         "Unknown view :$view for QuantileFactorModel. Valid views: $(_QFM_PLOT_VIEWS)"))
 
     p = if view === :factors
-        _plot_qfm_factors(m; var=var, max_factors=max_factors, ncols=ncols, title=title)
+        _plot_qfm_factors(m; var=var, conf_level=lv, max_factors=max_factors, ncols=ncols, title=title)
     elseif view === :loadings
-        _plot_qfm_loadings(m; var=var, max_factors=max_factors, max_vars=max_vars, ncols=ncols, title=title)
+        _plot_qfm_loadings(m; var=var, conf_level=lv, max_factors=max_factors, max_vars=max_vars, ncols=ncols, title=title)
     else
         _plot_qfm_variance(m; var=var, max_vars=max_vars, ncols=ncols, title=title)
     end
@@ -1579,7 +1597,8 @@ end
 const _QFM_GRID_PLOT_VIEWS = (:factors, :loadings, :ic, :rank)
 
 """
-    plot_result(g::QuantileFactorGrid; view=:factors, factor=1, var=1, max_taus=10,
+    plot_result(g::QuantileFactorGrid; view=:factors, factor=1, var=1,
+                conf_level=DEFAULT_CI_MACRO, max_taus=10,
                 max_factors=5, ncols=0, title="", save_path=nothing)
 
 Plot a multi-quantile [`QuantileFactorGrid`](@ref).
@@ -1587,7 +1606,7 @@ Plot a multi-quantile [`QuantileFactorGrid`](@ref).
 # Views
 - `:factors` — overlay estimated quantile factor paths `F̂_factor(τ)` across `g.taus`.
 - `:loadings` — `τ`-profile of estimated loadings across `g.taus` for variable `var`
-  (with `±1.96 SE` band on `factor` when standard errors were computed).
+  (with `conf_level` CI band, default `0.68`, on `factor` when standard errors were computed).
 - `:ic` / `:rank` — quantile-specific factor count `r(τ)` (`r_by_tau`) and check-loss
   objective across `g.taus`.
 
@@ -1595,6 +1614,7 @@ Plot a multi-quantile [`QuantileFactorGrid`](@ref).
 - `view::Symbol = :factors` — exhibit view (`:factors`, `:loadings`, `:ic`, or `:rank`)
 - `factor::Int = 1` — 1-based factor index for `:factors` (and CI band in `:loadings`)
 - `var::Union{Int,String} = 1` — variable index or name for `:loadings`
+- `conf_level::Real = DEFAULT_CI_MACRO` — confidence level in `(0, 1)` for `:loadings` SE band (default `0.68`)
 - `max_taus::Int = 10` — maximum quantiles overlaid in `:factors` (C7 note if capped)
 - `max_factors::Int = 5` — maximum factor curves drawn in `:loadings` (C7 note if capped)
 - `ncols::Int = 0` — number of grid columns (`0` = auto)
@@ -1605,11 +1625,15 @@ function plot_result(g::QuantileFactorGrid{T};
                      view::Symbol=:factors,
                      factor::Int=1,
                      var::Union{Int,String}=1,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      max_taus::Int=10,
                      max_factors::Int=5,
                      ncols::Int=0,
                      title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    z_ci = _conf_z(lv)
+    pct = _ci_pct(lv)
     !isempty(g.models) || throw(ArgumentError("Cannot plot an empty QuantileFactorGrid"))
     view in _QFM_GRID_PLOT_VIEWS || throw(ArgumentError(
         "Unknown view :$view for QuantileFactorGrid. Valid views: $(_QFM_GRID_PLOT_VIEWS)"))
@@ -1667,8 +1691,8 @@ function plot_result(g::QuantileFactorGrid{T};
                     if mj.se_loadings !== nothing && factor <= mj.r
                         est = Float64(mj.loadings[vi, factor])
                         se = Float64(mj.se_loadings[vi, factor])
-                        push!(row, "lo" => _json(est - 1.96 * se))
-                        push!(row, "hi" => _json(est + 1.96 * se))
+                        push!(row, "lo" => _json(est - z_ci * se))
+                        push!(row, "hi" => _json(est + z_ci * se))
                     else
                         push!(row, "lo" => "null")
                         push!(row, "hi" => "null")
@@ -1680,7 +1704,7 @@ function plot_result(g::QuantileFactorGrid{T};
             fac_cols = _colors_for(fac_names)
             s_json = _series_json(fac_names, fac_cols; keys=["f$k" for k in 1:n_fac])
             bands = has_se ?
-                "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(fac_cols[min(factor, length(fac_cols))])),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"Factor $factor 95% CI\"}]" : "[]"
+                "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"color\":$(_json(fac_cols[min(factor, length(fac_cols))])),\"alpha\":$(_PLOT_CI_ALPHA),\"name\":\"Factor $factor $(pct)% CI\"}]" : "[]"
             refs = "[{\"value\":0,\"color\":\"#999\",\"dash\":\"4,3\"}]"
             js = _render_line_js(id, _json_array_of_objects(rows), s_json;
                                  bands_json=bands, ref_lines_json=refs,
@@ -1953,7 +1977,7 @@ end
 const _QFM_PANEL_PLOT_VIEWS = (:coef, :factors, :loadings)
 
 """
-    plot_result(m::QuantileFactorPanelModel; view=:coef, conf_level=0.95,
+    plot_result(m::QuantileFactorPanelModel; view=:coef, conf_level=DEFAULT_CI_MICRO,
                 max_factors=5, max_vars=20, ncols=0, title="", save_path=nothing)
 
 Plot a panel quantile regression with interactive quantile factor effects
@@ -1968,7 +1992,7 @@ Plot a panel quantile regression with interactive quantile factor effects
 
 # Keyword Arguments
 - `view::Symbol = :coef` — exhibit view (`:coef`, `:factors`, or `:loadings`)
-- `conf_level::Real = 0.95` — confidence level in `(0, 1)` for `:coef` intervals
+- `conf_level::Real = DEFAULT_CI_MICRO` — confidence level in `(0, 1)` for `:coef` intervals (default `0.90`)
 - `max_factors::Int = 5` — maximum number of factors shown in `:factors`/`:loadings` (C7 note if capped)
 - `max_vars::Int = 20` — maximum number of cross-sectional units shown in `:loadings` (C7 note if capped)
 - `ncols::Int = 0` — number of grid columns (`0` = auto)
@@ -1977,7 +2001,7 @@ Plot a panel quantile regression with interactive quantile factor effects
 """
 function plot_result(m::QuantileFactorPanelModel{T};
                      view::Symbol=:coef,
-                     conf_level::Real=0.95,
+                     conf_level::Real=DEFAULT_CI_MICRO,
                      max_factors::Int=5,
                      max_vars::Int=20,
                      ncols::Int=0,
@@ -1985,11 +2009,10 @@ function plot_result(m::QuantileFactorPanelModel{T};
                      save_path::Union{String,Nothing}=nothing) where {T}
     view in _QFM_PANEL_PLOT_VIEWS || throw(ArgumentError(
         "Unknown view :$view for QuantileFactorPanelModel. Valid views: $(_QFM_PANEL_PLOT_VIEWS)"))
-    (!(conf_level isa Bool) && isfinite(conf_level) && 0 < conf_level < 1) ||
-        throw(ArgumentError("conf_level must lie strictly in (0, 1), got $conf_level"))
+    lv = _validate_conf_level(conf_level)
 
     p = if view === :coef
-        ci = StatsAPI.confint(m; level=conf_level)
+        ci = StatsAPI.confint(m; level=lv)
         rows = String[]
         for j in eachindex(m.beta)
             push!(rows, "{\"name\":$(_json(m.varnames[j])),\"effect\":$(_json(m.beta[j])),\"ci_lo\":$(_json(ci[j, 1])),\"ci_hi\":$(_json(ci[j, 2]))}")
@@ -1998,7 +2021,7 @@ function plot_result(m::QuantileFactorPanelModel{T};
         js1 = _render_coef_plot_js(id1, "[" * join(rows, ",\n") * "]";
                                    color=_PLOT_SERIES[1], ref_value=0,
                                    xlabel="Coefficient (τ=$(_fmt(m.tau; digits=2)))", ylabel="")
-        pct = round(Int, 100 * Float64(conf_level))
+        pct = _ci_pct(lv)
         slope_lbl = m.slope === :heterogeneous ? "Mean Group Slopes" : "Slope Coefficients"
         panels = _PanelSpec[_PanelSpec(id1, "$(slope_lbl) ($(pct)% CI)", js1)]
 

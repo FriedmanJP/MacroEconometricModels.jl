@@ -93,7 +93,7 @@ end
 
 """
     estimate_threshold(y, X, q; trim=0.15, linearity=true, reps=1000,
-                       ci_level=0.95, het=false, rng=Random.default_rng())
+                       ci_level=DEFAULT_CI_MICRO, het=false, rng=Random.default_rng())
 
 Estimate a two-regime threshold regression by conditional least squares.
 
@@ -110,7 +110,7 @@ concentrated SSR `S(γ) = SSR₁(γ) + SSR₂(γ)`; each regime is then fit by O
 - `trim`: fraction of extreme `q` values excluded from the γ grid (default `0.15`).
 - `linearity`: run [`hansen_linearity_test`](@ref) and attach the result (default `true`).
 - `reps`: bootstrap replications for the linearity test.
-- `ci_level`: confidence level for the Hansen (2000) threshold CI (`0.90`/`0.95`/`0.99`).
+- `ci_level`: confidence level in `(0, 1)` for the Hansen (2000) threshold CI (default `0.90`, `DEFAULT_CI_MICRO`).
 - `het`: heteroskedasticity-correct the threshold CI (default `false`).
 - `rng`: random number generator for the linearity bootstrap.
 
@@ -118,13 +118,14 @@ Returns a [`ThresholdModel`](@ref).
 """
 function estimate_threshold(y::AbstractVector, X::AbstractMatrix, q::AbstractVector;
                             trim::Real=0.15, linearity::Bool=true, reps::Int=1000,
-                            ci_level::Real=0.95, het::Bool=false,
+                            ci_level::Real=DEFAULT_CI_MICRO, het::Bool=false,
                             rng::Random.AbstractRNG=Random.default_rng(),
                             seed::Union{Integer,Nothing}=nothing,
                             xnames::Union{Nothing,Vector{String}}=nothing,
                             qname::String="q",
                             p::Int=0, d::Int=0, is_setar::Bool=false)
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(ci_level)
     T = float(promote_type(eltype(y), eltype(X), eltype(q)))
     yv = Vector{T}(y)
     Xm = Matrix{T}(X)
@@ -219,10 +220,11 @@ Returns a [`ThresholdModel`](@ref) with `is_setar = true`.
 """
 function estimate_setar(y::AbstractVector, p::Int, d=1;
                         trim::Real=0.15, linearity::Bool=true, reps::Int=1000,
-                        ci_level::Real=0.95, het::Bool=false,
+                        ci_level::Real=DEFAULT_CI_MACRO, het::Bool=false,
                         seed::Union{Integer,Nothing}=nothing,
                         rng::Random.AbstractRNG=Random.default_rng())
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(ci_level)
     p >= 1 || throw(ArgumentError("SETAR order p must be ≥ 1; got $p."))
     Tf = float(eltype(y))
     yv = Vector{Tf}(y)
@@ -423,9 +425,9 @@ end
     _hansen2000_ci(y, X, q, grid, γ̂, S_hat, β₁, β₂, resid; level, het) -> (lo, hi)
 
 Confidence interval for the threshold γ by inverting the likelihood-ratio
-statistic `LR(γ) = n·(S(γ) − S(γ̂))/S(γ̂)` (Hansen 2000). The no-rejection region
-is `{γ : LR(γ) ≤ c(level)}` with the tabulated non-standard critical values
-`c(.90)=5.94`, `c(.95)=7.35`, `c(.99)=10.59`.
+statistic `LR(γ) = n·(S(γ) − S(γ̂))/S(γ̂)` (Hansen 2000, Theorem 1). The no-rejection region
+is `{γ : LR(γ) ≤ c(level)}` with exact closed-form critical value
+`c(level) = -2 ln(1 - √level)` for any `level ∈ (0, 1)`.
 
 With `het=true` the statistic is scaled by an estimate `η̂²` of the
 heteroskedasticity ratio at the threshold (Hansen 2000 §3.4), evaluated with a
@@ -435,7 +437,7 @@ function _hansen2000_ci(y::AbstractVector{T}, X::AbstractMatrix{T}, q::AbstractV
                         grid::AbstractVector{T}, gamma_hat::T, S_hat::T,
                         beta1::AbstractVector{T}, beta2::AbstractVector{T},
                         resid::AbstractVector{T};
-                        level::Real=0.95, het::Bool=false) where {T<:AbstractFloat}
+                        level::Real=DEFAULT_CI_MICRO, het::Bool=false) where {T<:AbstractFloat}
     n = length(y)
     crit = T(_hansen2000_crit(level))
     min_obs = size(X, 2) + 1
@@ -497,24 +499,25 @@ end
 # =============================================================================
 
 """
-    forecast(m::ThresholdModel, h; reps=1000, level=0.90, rng=Random.default_rng())
+    forecast(m::ThresholdModel, h; reps=1000, level=DEFAULT_CI_MACRO, rng=Random.default_rng())
 
 Multi-step bootstrap-simulation forecast of a SETAR [`ThresholdModel`](@ref).
 
 Iterates the fitted piecewise-linear model forward `h` steps, resampling
 residuals **within the realised regime** at each step, over `reps` simulated
 paths. Returns a [`ThresholdForecast`](@ref) with the mean path, per-horizon
-standard deviations, and central `level` percentile bands. Only SETAR models are
+standard deviations, and central `level` percentile bands (default 68%). Only SETAR models are
 supported (a generic threshold model would require future exogenous `X`/`q`).
 """
-function forecast(m::ThresholdModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+function forecast(m::ThresholdModel{T}, h::Int; reps::Int=1000,
+                  level::Real=DEFAULT_CI_MACRO,
                   seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     m.is_setar || throw(ArgumentError(
         "forecast is only defined for SETAR models (from estimate_setar)."))
     h >= 1 || throw(ArgumentError("horizon h must be ≥ 1."))
-    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+    _validate_conf_level(level)
 
     p = m.p; d = m.d
     # Reconstruct the full observed series: X[:,1] is the constant, X[:,2] = y[t-1],

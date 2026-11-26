@@ -368,7 +368,7 @@ Panel forecasts contain only the factor-mediated and policy-mediated components;
 |---------|------|---------|-------------|
 | `ci_method` | `Symbol` | `:bootstrap` | Interval method: `:none` or `:bootstrap` |
 | `reps` | `Int` | `500` | Bootstrap replications |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.68` | Confidence level |
 
 ---
 

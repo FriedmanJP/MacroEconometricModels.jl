@@ -248,7 +248,7 @@ function Base.show(io::IO, b::LPIVARBand{T}) where {T}
 end
 
 """
-    lp_iv_ar_band(model::LPIVModel; level=0.95, n_grid=401, span=20, bandwidth=0,
+    lp_iv_ar_band(model::LPIVModel; level=DEFAULT_CI_MACRO, n_grid=401, span=20, bandwidth=0,
                   responses=nothing) -> LPIVARBand
 
 Anderson-Rubin confidence sets for the LP-IV impulse response, horizon by horizon.
@@ -268,7 +268,7 @@ Sets that reach the edge of the search range are reported as unbounded rather th
 truncated; the search range spans `θ̂ ± span·se` around the 2SLS estimate at each cell.
 
 # Keywords
-- `level::Real=0.95` — nominal coverage
+- `level::Real=0.68` — nominal coverage (`DEFAULT_CI_MACRO`)
 - `n_grid::Int=401` — grid points per cell
 - `span::Real=20` — half-width of the search range, in 2SLS standard errors
 - `bandwidth::Int=0` — fixed HAC lag length; `0` uses `max(auto, h+1)`
@@ -277,10 +277,11 @@ truncated; the search range spans `θ̂ ± span·se` around the 2SLS estimate at
 # Returns
 [`LPIVARBand`](@ref).
 """
-function lp_iv_ar_band(model::LPIVModel{T}; level::Real=0.95, n_grid::Int=401,
+function lp_iv_ar_band(model::LPIVModel{T}; level::Real=DEFAULT_CI_MACRO,
+                       n_grid::Int=401,
                        span::Real=20, bandwidth::Int=0,
                        responses::Union{Nothing,Vector{Int}}=nothing) where {T<:AbstractFloat}
-    (0 < level < 1) || throw(ArgumentError("level must be in (0, 1)"))
+    lv = _validate_conf_level(level)
     n_grid >= 5 || throw(ArgumentError("n_grid must be at least 5"))
     H = model.horizon
     n_resp_all = length(model.response_vars)

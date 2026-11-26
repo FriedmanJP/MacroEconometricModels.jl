@@ -392,7 +392,7 @@ end
 """
     estimate_sv(y; n_samples=2000, burnin=1000,
                 dist=:normal, leverage=false,
-                quantile_levels=[0.025, 0.5, 0.975]) -> SVModel
+                quantile_levels=DEFAULT_QUANTILES_MACRO) -> SVModel
 
 Estimate a Stochastic Volatility model via Kim-Shephard-Chib (1998) Gibbs sampler
 with Omori et al. (2007) 10-component mixture approximation.
@@ -407,7 +407,7 @@ with Omori et al. (2007) 10-component mixture approximation.
 - `burnin`: Number of burn-in iterations to discard (default 1000)
 - `dist`: Error distribution (`:normal` or `:studentt`)
 - `leverage`: Whether to include leverage effect (correlated innovations)
-- `quantile_levels`: Quantile levels for volatility posterior
+- `quantile_levels`: Quantile levels for volatility posterior (default `DEFAULT_QUANTILES_MACRO = [0.16, 0.5, 0.84]`)
 
 # Example
 ```julia
@@ -419,7 +419,7 @@ println("φ = ", mean(model.phi_post))
 function estimate_sv(y::AbstractVector{T};
                      n_samples::Int=2000, burnin::Int=1000,
                      dist::Symbol=:normal, leverage::Bool=false,
-                     quantile_levels::Vector{<:Real}=[0.025, 0.5, 0.975],
+                     quantile_levels::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
                      seed::Union{Integer,Nothing}=nothing,
                      rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
@@ -427,7 +427,7 @@ function estimate_sv(y::AbstractVector{T};
     n = length(y)
     n < 20 && throw(ArgumentError("Need at least 20 observations for SV model, got $n"))
     y_vec = Vector{T}(y)
-    ql = T.(quantile_levels)
+    ql = T.(_validate_quantiles(quantile_levels))
 
     # Offset constant for log transformation (avoid log(0))
     c = T(1e-5)

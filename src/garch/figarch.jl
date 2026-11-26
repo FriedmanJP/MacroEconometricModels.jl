@@ -560,17 +560,17 @@ d_stderror(m::FIEGARCHModel) = stderror(m)[end]
 # =============================================================================
 
 """
-    forecast(m::FIGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::FIGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Multi-step variance forecasts by iterating the truncated ARCH(∞) recursion. Future
 `ε²` are simulated (`ε = σz`, `z ~ N(0,1)`); each simulated path feeds its squared
 innovations back into `σ²_{t} = ω* + Σ λ_i ε²_{t-i}`. Point forecasts are path
-means; CI bounds are empirical quantiles.
+means; CI bounds are empirical quantiles (default 68%).
 """
-function forecast(m::FIGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::FIGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     K = length(m.lambda)
     omega_star = m.omega / (one(T) - sum(m.beta))
     backcast = mean(m.residuals .^ 2)
@@ -594,16 +594,16 @@ function forecast(m::FIGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=
 end
 
 """
-    forecast(m::FIEGARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::FIEGARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Multi-step variance forecasts by iterating the truncated log-variance MA(∞); future
 standardized innovations `z ~ N(0,1)` are simulated and fed through the news
-function `g(z)`.
+function `g(z)` (default 68% CIs).
 """
-function forecast(m::FIEGARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::FIEGARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     K = length(m.psi) - 1
     E_abs_z = sqrt(T(2) / T(π))
     # in-sample news g(z_t) history
@@ -697,7 +697,7 @@ function _show_figarch(io::IO, m::FIGARCHModel{T}) where {T}
     for j in 1:m.p; push!(names, "β[$j]"); push!(vals, m.beta[j]); end
     push!(names, "d (frac. int.)"); push!(vals, m.d)
     _coef_table(io, "FIGARCH($(m.p),d,$(m.q)) Model  [ARCH(∞) truncation K=$(m.truncation)]",
-                names, vals, se; dist=:z)
+                names, vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     fit_data = Any[
         "Observations"       length(m.y);
@@ -727,7 +727,7 @@ function _show_fiegarch(io::IO, m::FIEGARCHModel{T}) where {T}
     for j in 1:m.p; push!(names, "β[$j]"); push!(vals, m.beta[j]); end
     push!(names, "d (frac. int.)"); push!(vals, m.d)
     _coef_table(io, "FIEGARCH($(m.p),d,$(m.q)) Model  [MA(∞) truncation K=$(m.truncation)]",
-                names, vals, se; dist=:z)
+                names, vals, se; dist=:z, level=DEFAULT_CI_MACRO)
 
     fit_data = Any[
         "Observations"       length(m.y);

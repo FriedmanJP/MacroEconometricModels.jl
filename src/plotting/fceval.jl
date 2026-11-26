@@ -139,10 +139,12 @@ end
 # dot-whisker with a zero reference (a single test number is an annotation-backed dot,
 # not a bar chart of one value — form table).
 function _single_stat_dotwhisker(name::String, point::Real, se::Real, ann::String,
-                                 title::String, save_path)
+                                 title::String, save_path;
+                                 conf_level::Real=DEFAULT_CI_MACRO)
+    z = _conf_z(conf_level)
     id = _next_plot_id("fc_dm")
-    lo = Float64(point) - 1.96 * Float64(se)
-    hi = Float64(point) + 1.96 * Float64(se)
+    lo = Float64(point) - z * Float64(se)
+    hi = Float64(point) + z * Float64(se)
     data = "[{\"name\":$(_json(name)),\"effect\":$(_json(Float64(point)))," *
            "\"ci_lo\":$(_json(lo)),\"ci_hi\":$(_json(hi))}]"
     js = _render_coef_plot_js(id, data; ref_value=0, xlabel="Loss differential", ylabel="")
@@ -152,31 +154,35 @@ function _single_stat_dotwhisker(name::String, point::Real, se::Real, ann::Strin
 end
 
 """
-    plot_result(r::DMTestResult; title="", save_path=nothing)
+    plot_result(r::DMTestResult; conf_level=DEFAULT_CI_MACRO, title="", save_path=nothing)
 
 Plot the Diebold–Mariano test as a single dot-whisker: the mean loss differential `dbar`
-± its 95% interval (`√(lrvar/T_obs)`) against a zero line, with the DM statistic and
-p-value annotated (C9).
+± its `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) interval (`√(lrvar/T_obs)`) against
+a zero line, with the DM statistic and p-value annotated (C9).
 """
 function plot_result(r::DMTestResult{T};
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
     se = sqrt(max(Float64(r.lrvar) / max(r.T_obs, 1), 0.0))
-    ann = "DM: d̄=$(_fmt(r.dbar)), stat=$(_fmt(r.statistic)), p=$(_format_pvalue(r.pvalue))"
-    _single_stat_dotwhisker("DM loss diff.", r.dbar, se, ann, title, save_path)
+    ann = "DM ($(_ci_pct(lv))% CI): d̄=$(_fmt(r.dbar)), stat=$(_fmt(r.statistic)), p=$(_format_pvalue(r.pvalue))"
+    _single_stat_dotwhisker("DM loss diff.", r.dbar, se, ann, title, save_path; conf_level=lv)
 end
 
 """
-    plot_result(r::ClarkWestResult; title="", save_path=nothing)
+    plot_result(r::ClarkWestResult; conf_level=DEFAULT_CI_MACRO, title="", save_path=nothing)
 
 Plot the Clark–West test as a single dot-whisker: the adjusted mean differential `fbar`
-± its 95% interval (`√(lrvar/T_obs)`) against a zero line, with the CW statistic and
-p-value annotated (C9).
+± its `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`) interval (`√(lrvar/T_obs)`) against
+a zero line, with the CW statistic and p-value annotated (C9).
 """
 function plot_result(r::ClarkWestResult{T};
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
     se = sqrt(max(Float64(r.lrvar) / max(r.T_obs, 1), 0.0))
-    ann = "CW: f̄=$(_fmt(r.fbar)), stat=$(_fmt(r.statistic)), p=$(_format_pvalue(r.pvalue))"
-    _single_stat_dotwhisker("CW adj. diff.", r.fbar, se, ann, title, save_path)
+    ann = "CW ($(_ci_pct(lv))% CI): f̄=$(_fmt(r.fbar)), stat=$(_fmt(r.statistic)), p=$(_format_pvalue(r.pvalue))"
+    _single_stat_dotwhisker("CW adj. diff.", r.fbar, se, ann, title, save_path; conf_level=lv)
 end
 
 # =============================================================================
@@ -228,19 +234,21 @@ end
 # =============================================================================
 
 """
-    plot_result(m::StateLPModel; regime=:both, var=nothing, conf_level=0.95, ncols=0,
+    plot_result(m::StateLPModel; regime=:both, var=nothing, conf_level=DEFAULT_CI_MACRO, ncols=0,
                 title="", save_path=nothing)
 
 Plot state-dependent Local-Projection IRFs. With `regime=:both` (default) the expansion
-and recession responses (with CI bands, colour- and dash-distinct) are overlaid per
+and recession responses (with CI bands, default 68%, colour- and dash-distinct) are overlaid per
 response variable; `regime=:expansion`/`:recession` draws a single regime. `var` selects
 the response by index or name (Int/String, `_resolve_var`, C3). Integer horizon ticks,
 zero reference line.
 """
 function plot_result(m::StateLPModel{T};
                      regime::Symbol=:both, var::Union{Int,String,Nothing}=nothing,
-                     conf_level::Real=0.95, ncols::Int=0, title::String="",
+                     conf_level::Real=DEFAULT_CI_MACRO, ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    pct = _ci_pct(lv)
     regime in (:both, :expansion, :recession) ||
         throw(ArgumentError("regime must be :both, :expansion, or :recession, got :$regime"))
     resp_names = String[m.varnames[m.response_vars[j]] for j in 1:length(m.response_vars)]
@@ -253,7 +261,7 @@ function plot_result(m::StateLPModel{T};
         id = _next_plot_id("state_lp")
         rows = Vector{Pair{String,String}}[]
         if regime === :both
-            ir = state_irf(m; regime=:both, conf_level=conf_level)
+            ir = state_irf(m; regime=:both, conf_level=lv)
             for h in 1:H1
                 push!(rows, ["x" => _json(h - 1),
                              "exp" => _json(ir.expansion.values[h, vi]),
@@ -267,12 +275,12 @@ function plot_result(m::StateLPModel{T};
             s = _series_json(["Expansion", "Recession"],
                              [_PLOT_SERIES[1], _PLOT_SERIES[2]];
                              keys=["exp", "rec"], dash=["", "6,3"])
-            bands = "[{\"lo_key\":\"exp_lo\",\"hi_key\":\"exp_hi\",\"name\":\"Expansion CI\"," *
+            bands = "[{\"lo_key\":\"exp_lo\",\"hi_key\":\"exp_hi\",\"name\":\"Expansion $(pct)% CI\"," *
                     "\"color\":\"$(_PLOT_SERIES[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}," *
-                    "{\"lo_key\":\"rec_lo\",\"hi_key\":\"rec_hi\",\"name\":\"Recession CI\"," *
+                    "{\"lo_key\":\"rec_lo\",\"hi_key\":\"rec_hi\",\"name\":\"Recession $(pct)% CI\"," *
                     "\"color\":\"$(_PLOT_SERIES[2])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
         else
-            ir = state_irf(m; regime=regime, conf_level=conf_level)
+            ir = state_irf(m; regime=regime, conf_level=lv)
             for h in 1:H1
                 push!(rows, ["x" => _json(h - 1),
                              "irf" => _json(ir.values[h, vi]),
@@ -282,7 +290,7 @@ function plot_result(m::StateLPModel{T};
             data = _json_array_of_objects(rows)
             rlabel = regime === :expansion ? "Expansion" : "Recession"
             s = _series_json([rlabel], [_PLOT_SERIES[1]]; keys=["irf"])
-            bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"name\":\"$(rlabel) CI\"," *
+            bands = "[{\"lo_key\":\"lo\",\"hi_key\":\"hi\",\"name\":\"$(rlabel) $(pct)% CI\"," *
                     "\"color\":\"$(_PLOT_SERIES[1])\",\"alpha\":$(_PLOT_CI_ALPHA)}]"
         end
         js = _render_line_js(id, data, s; bands_json=bands, ref_lines_json=refs,
@@ -328,16 +336,16 @@ function _lp_diag_plot(m, resid_obj, h::Int, resp_names, var, acf_lags, title, s
 end
 
 """
-    plot_result(m::LPModel; view=:irf, var=nothing, h=0, conf_level=0.95, ncols=0,
+    plot_result(m::LPModel; view=:irf, var=nothing, h=0, conf_level=DEFAULT_CI_MACRO, ncols=0,
                 title="", save_path=nothing)
 
-Plot a Local Projection. `view=:irf` (default) builds `lp_irf(m)` and delegates to the
+Plot a Local Projection. `view=:irf` (default) builds `lp_irf(m)` (default 68% CI) and delegates to the
 `LPImpulseResponse` plot; `view=:diagnostics` draws the four-panel residual figure for
 horizon `h` and response variable `var` (PLT-24).
 """
 function plot_result(m::LPModel{T}; view::Symbol=:irf,
                      var::Union{Int,String,Nothing}=nothing, h::Int=0,
-                     conf_level::Real=0.95, ncols::Int=0, acf_lags::Int=0,
+                     conf_level::Real=DEFAULT_CI_MACRO, ncols::Int=0, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     if view === :irf
         return plot_result(lp_irf(m; conf_level=conf_level); var=var, ncols=ncols,
@@ -350,15 +358,15 @@ function plot_result(m::LPModel{T}; view::Symbol=:irf,
 end
 
 """
-    plot_result(m::LPIVModel; view=:irf, var=nothing, h=0, conf_level=0.95, ncols=0,
+    plot_result(m::LPIVModel; view=:irf, var=nothing, h=0, conf_level=DEFAULT_CI_MACRO, ncols=0,
                 title="", save_path=nothing)
 
 Plot an IV Local Projection. `view=:irf` (default) delegates to the `lp_iv_irf`
-`LPImpulseResponse` plot; `view=:diagnostics` draws the residual figure (PLT-24).
+`LPImpulseResponse` plot (default 68% CI); `view=:diagnostics` draws the residual figure (PLT-24).
 """
 function plot_result(m::LPIVModel{T}; view::Symbol=:irf,
                      var::Union{Int,String,Nothing}=nothing, h::Int=0,
-                     conf_level::Real=0.95, ncols::Int=0, acf_lags::Int=0,
+                     conf_level::Real=DEFAULT_CI_MACRO, ncols::Int=0, acf_lags::Int=0,
                      title::String="", save_path::Union{String,Nothing}=nothing) where {T}
     if view === :irf
         return plot_result(lp_iv_irf(m; conf_level=conf_level); var=var, ncols=ncols,
@@ -371,13 +379,13 @@ function plot_result(m::LPIVModel{T}; view::Symbol=:irf,
 end
 
 """
-    plot_result(m::SmoothLPModel; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(m::SmoothLPModel; var=nothing, conf_level=DEFAULT_CI_MACRO, ncols=0, title="", save_path=nothing)
 
 Plot a smooth (penalized) Local Projection — delegates to the `smooth_lp_irf`
-`LPImpulseResponse` plot (PLT-38).
+`LPImpulseResponse` plot (default 68% CI, PLT-38).
 """
 function plot_result(m::SmoothLPModel{T};
-                     var::Union{Int,String,Nothing}=nothing, conf_level::Real=0.95,
+                     var::Union{Int,String,Nothing}=nothing, conf_level::Real=DEFAULT_CI_MACRO,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     plot_result(smooth_lp_irf(m; conf_level=conf_level); var=var, ncols=ncols,
@@ -385,13 +393,13 @@ function plot_result(m::SmoothLPModel{T};
 end
 
 """
-    plot_result(m::PropensityLPModel; var=nothing, ncols=0, title="", save_path=nothing)
+    plot_result(m::PropensityLPModel; var=nothing, conf_level=DEFAULT_CI_MACRO, ncols=0, title="", save_path=nothing)
 
 Plot a propensity-score (doubly-robust) Local Projection — delegates to the
-`propensity_irf` `LPImpulseResponse` plot (PLT-38).
+`propensity_irf` `LPImpulseResponse` plot (default 68% CI, PLT-38).
 """
 function plot_result(m::PropensityLPModel{T};
-                     var::Union{Int,String,Nothing}=nothing, conf_level::Real=0.95,
+                     var::Union{Int,String,Nothing}=nothing, conf_level::Real=DEFAULT_CI_MACRO,
                      ncols::Int=0, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
     plot_result(propensity_irf(m; conf_level=conf_level); var=var, ncols=ncols,

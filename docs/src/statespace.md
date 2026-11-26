@@ -132,7 +132,7 @@ round.(m.theta, digits=1)
 The irregular variance ``\hat\sigma^2_\varepsilon = 15109.2`` and the level variance ``\hat\sigma^2_\eta = 1463.5`` reproduce the Durbin & Koopman (2012, §2) benchmark values 15099 and 1469 to within 0.1% and 0.4% — the residual gap is the large-``\kappa`` prior standing in for exact diffuse initialization. The **signal-to-noise ratio** ``\hat\sigma^2_\eta / \hat\sigma^2_\varepsilon = 0.097`` is small, so the smoothed level ``\mu_{t|T}`` is a heavily damped version of the data: it tracks the well-known drop after the 1899 Aswan dam construction — the smoothed level falls from 1107 at the start of the sample to 799 at the end — without chasing high-frequency noise.
 
 ```julia
-plot_result(m)   # observed vs filtered vs smoothed level with 95% band
+plot_result(m)   # observed vs filtered vs smoothed level with 68% band
 ```
 
 ### Return values

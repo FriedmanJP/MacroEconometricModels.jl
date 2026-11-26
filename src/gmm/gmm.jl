@@ -173,9 +173,10 @@ StatsAPI.dof(model::GMMModel) = model.n_params
 StatsAPI.islinear(::GMMModel) = false
 StatsAPI.stderror(model::GMMModel) = sqrt.(diag(model.vcov))
 
-function StatsAPI.confint(model::GMMModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(model::GMMModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(model)
-    z = T(quantile(Normal(), 1 - (1 - level) / 2))
+    z = T(_conf_z(lv))
     hcat(model.theta .- z .* se, model.theta .+ z .* se)
 end
 

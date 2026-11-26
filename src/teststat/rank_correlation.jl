@@ -151,12 +151,13 @@ end
 # =============================================================================
 
 """
-    cor_test(x, y; method=:pearson, alpha=0.05) -> CorTestResult
+    cor_test(x, y; method=:pearson, alpha=0.05, conf_level=nothing) -> CorTestResult
 
 Test the null of no association (`H₀: coefficient = 0`) between paired series `x`
 and `y`. `method` ∈ {`:pearson`, `:spearman`, `:kendall`}.
 
-- `:pearson` — Pearson `r`; `t = r√((n−2)/(1−r²)) ~ t(n−2)`; Fisher-z CI.
+- `:pearson` — Pearson `r`; `t = r√((n−2)/(1−r²)) ~ t(n−2)`; Fisher-z CI at
+  `conf_level` (defaults to `1 - alpha`).
 - `:spearman` — Pearson on ranks; `S = (1−ρ)(n³−n)/6`; `t(n−2)` approximation
   (matches R `exact=FALSE`).
 - `:kendall` — τ_a and τ_b via the `O(n log n)` merge-sort concordance counter;
@@ -172,25 +173,28 @@ cor_test(x, y; method=:kendall)   # reports τ_b
 ```
 """
 function cor_test(x::AbstractVector{<:Real}, y::AbstractVector{<:Real};
-                  method::Symbol=:pearson, alpha::Real=0.05)
+                  method::Symbol=:pearson, alpha::Real=0.05,
+                  conf_level::Union{Nothing,Real}=nothing)
     length(x) == length(y) || throw(ArgumentError("x and y must have equal length"))
     n = length(x)
     n >= 3 || throw(ArgumentError("need at least 3 observations, got $n"))
+    lv = conf_level === nothing ? _validate_conf_level(1 - (alpha isa Bool ? alpha : Float64(alpha))) :
+                                  _validate_conf_level(conf_level)
     xf = float.(collect(x)); yf = float.(collect(y))
     T = eltype(xf)
 
     if method == :pearson
-        return _pearson_cor(xf, yf, T(alpha))
+        return _pearson_cor(xf, yf, T(lv))
     elseif method == :spearman
-        return _spearman_cor(xf, yf)
+        return _spearman_cor(xf, yf, T(lv))
     elseif method == :kendall
-        return _kendall_cor(xf, yf)
+        return _kendall_cor(xf, yf, T(lv))
     else
         throw(ArgumentError("unknown method $method; use :pearson, :spearman, or :kendall"))
     end
 end
 
-function _pearson_cor(x::Vector{T}, y::Vector{T}, alpha::T) where {T<:AbstractFloat}
+function _pearson_cor(x::Vector{T}, y::Vector{T}, conf_level::T) where {T<:AbstractFloat}
     n = length(x)
     r = cor(x, y)
     r = clamp(r, -one(T), one(T))
@@ -201,16 +205,16 @@ function _pearson_cor(x::Vector{T}, y::Vector{T}, alpha::T) where {T<:AbstractFl
     if n > 3 && abs(r) < 1
         z = atanh(r)
         se = one(T) / sqrt(T(n - 3))
-        zc = T(quantile(Normal(), 1 - alpha / 2))
+        zc = T(_conf_z(conf_level))
         lo = tanh(z - zc * se); hi = tanh(z + zc * se)
     else
         lo = T(NaN); hi = T(NaN)
     end
     CorTestResult{T}(:pearson, r, stat, pval, n, df, lo, hi, false,
-                     "Pearson product-moment correlation")
+                     "Pearson product-moment correlation", conf_level)
 end
 
-function _spearman_cor(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+function _spearman_cor(x::Vector{T}, y::Vector{T}, conf_level::T=T(0.95)) where {T<:AbstractFloat}
     n = length(x)
     rx = T.(_tiedrank(x)); ry = T.(_tiedrank(y))
     rho = clamp(cor(rx, ry), -one(T), one(T))
@@ -221,10 +225,10 @@ function _spearman_cor(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
     stat = denom > 0 ? rho * sqrt(df / denom) : T(Inf) * sign(rho)
     pval = T(2 * ccdf(TDist(df), abs(stat)))
     CorTestResult{T}(:spearman, rho, S, pval, n, df, T(NaN), T(NaN), false,
-                     "Spearman's rank correlation ρ")
+                     "Spearman's rank correlation ρ", conf_level)
 end
 
-function _kendall_cor(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
+function _kendall_cor(x::Vector{T}, y::Vector{T}, conf_level::T=T(0.95)) where {T<:AbstractFloat}
     n = length(x)
     # lexicographic sort by (x, y)
     perm = sortperm(collect(zip(x, y)); by = t -> (t[1], t[2]))
@@ -252,7 +256,7 @@ function _kendall_cor(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         pval = T(min(2 * pv, 1.0))
         stat = T(q)                                    # R reports concordant count T
         return CorTestResult{T}(:kendall, tau_a, stat, pval, n, T(NaN), T(NaN), T(NaN),
-                                true, "Kendall's τ_a (exact null)")
+                                true, "Kendall's τ_a (exact null)", conf_level)
     else
         # tie-adjusted normal approximation (R cor.test method="kendall")
         xt = _tie_multiplicities(xs); yt = _tie_multiplicities(sort(y))
@@ -270,7 +274,7 @@ function _kendall_cor(x::Vector{T}, y::Vector{T}) where {T<:AbstractFloat}
         z = var > 0 ? T(con_minus_dis) / sqrt(var) : zero(T)
         pval = T(2 * ccdf(Normal(), abs(z)))
         return CorTestResult{T}(:kendall, tau_b, z, pval, n, T(NaN), T(NaN), T(NaN),
-                                false, "Kendall's τ_b (tie-adjusted normal approx.)")
+                                false, "Kendall's τ_b (tie-adjusted normal approx.)", conf_level)
     end
 end
 
