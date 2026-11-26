@@ -75,12 +75,14 @@ end
     fm = estimate_factors(X, 2)
     fc = forecast(fm, 5)
 
-    # Default is :theoretical — CIs should be non-zero
+    # Default is :theoretical at DEFAULT_CI_MACRO (0.68) — CIs should be non-zero
     @test fc.ci_method == :theoretical
+    @test fc.conf_level == 0.68
     @test all(isfinite, fc.factors_lower)
     @test all(isfinite, fc.factors_upper)
-    # T159: theoretical bands are point ± z_0.975·se exactly (observed maxdev 8e-15).
-    @test maximum(abs, (fc.factors_upper .- fc.factors_lower) .- 2 * 1.959963984540054 .* fc.factors_se) < 1e-10
+    # T159: theoretical bands are point ± z_0.84·se exactly at default 68% level.
+    z68 = MacroEconometricModels._conf_z(0.68)
+    @test maximum(abs, (fc.factors_upper .- fc.factors_lower) .- 2 * z68 .* fc.factors_se) < 1e-10
     @test all(fc.factors_se .>= 0)
     @test fc.factors_lower != fc.factors_upper  # CIs not degenerate
 
@@ -384,9 +386,10 @@ end
         @test all(fc12.observables_se[hh, :] .> fc12.observables_se[hh - 1, :])
         @test all(fc12.factors_se[hh, :] .> fc12.factors_se[hh - 1, :])
     end
-    z95 = 1.959963984540054
-    @test maximum(abs, (fc12.observables_upper .- fc12.observables_lower) .- 2 * z95 .* fc12.observables_se) < 1e-10
-    @test maximum(abs, (fc12.factors_upper .- fc12.factors_lower) .- 2 * z95 .* fc12.factors_se) < 1e-10
+    z68 = MacroEconometricModels._conf_z(0.68)
+    @test fc12.conf_level == 0.68
+    @test maximum(abs, (fc12.observables_upper .- fc12.observables_lower) .- 2 * z68 .* fc12.observables_se) < 1e-10
+    @test maximum(abs, (fc12.factors_upper .- fc12.factors_lower) .- 2 * z68 .* fc12.factors_se) < 1e-10
 
     fc40 = forecast(gdfm, 40; method=:one_sided, ci_method=:theoretical)
     x_sd = vec(std(X1; dims=1))

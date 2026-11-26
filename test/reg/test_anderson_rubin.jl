@@ -190,7 +190,7 @@ end
             estimate_iv(y, X, Z; endogenous=[2], varnames=["const", "x"], cov_type=:ols)
         end
         ci = _suppress_warnings() do
-            anderson_rubin_ci(m; cov_type=:ols, n_grid=401, span=200)
+            anderson_rubin_ci(m; cov_type=:ols, level=0.95, n_grid=401, span=200)
         end
         cov_ar += ci.is_whole_line || any(a <= beta_true <= b for (a, b) in ci.intervals)
         lo = coef(m)[2] - 1.959963985 * stderror(m)[2]
@@ -212,6 +212,7 @@ end
     y, X, Z = _ar_sim_overid(500; pi1=0.8, seed=13, n_z=3, invalid=3.0)
     m = estimate_iv(y, X, Z; endogenous=[2], varnames=["const", "x"], cov_type=:ols)
     ci = anderson_rubin_ci(m; cov_type=:ols, span=50)
+    @test ci.level == 0.90
     @test ci.is_empty
     @test isempty(ci.intervals)
     @test occursin("∅", sprint(show, ci))
