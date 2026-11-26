@@ -874,7 +874,7 @@ report(m_dk)
 
 The coefficients are the cluster-robust ones to four decimals — 0.4169 and 0.5161 — while the standard error on capital falls from 0.0521 to 0.0198. Driscoll-Kraay averages the moment contributions *across* entities within each period before applying a Newey-West kernel over time, so it buys robustness to the cross-sectional dependence the Pesaran CD test detected at the cost of relying on a long time dimension. With 70 years and 38 countries PWT is in the regime where that trade is favourable.
 
-Visualize the coefficients and the residual diagnostics with `plot_result`, which accepts `view=:coef` (default) for a coefficient plot with 95% intervals and `view=:diagnostics` for the four-panel residual display:
+Visualize the coefficients and the residual diagnostics with `plot_result`, which accepts `view=:coef` (default) for a coefficient plot with 90% intervals (configurable via `conf_level`) and `view=:diagnostics` for the four-panel residual display:
 
 ```julia
 plot_result(m_fe)
@@ -885,7 +885,7 @@ plot_result(m_fe; view=:diagnostics)
 <iframe src="../assets/plots/panel_reg_coef.html" width="100%" height="380" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The coefficient view omits the intercept — a within estimator's constant is an artefact of the demeaning, not a quantity to interpret — and draws each slope against a zero reference line. Both PWT slopes sit far from it: human capital at 0.417 on ``[0.261, 0.573]`` and capital per worker at 0.516 on ``[0.414, 0.618]``. The whiskers are ``\hat\beta \pm 1.96\,\mathrm{SE}`` taken from `vcov_mat`, so they inherit whichever covariance estimator the fit used — cluster-robust here, since that is the `estimate_xtreg` default. A figure drawn from the `cov_type=:driscoll_kraay` refit above puts the same two points on a visibly shorter whisker for capital per worker, whose standard error falls from 0.0521 to 0.0198.
+The coefficient view omits the intercept — a within estimator's constant is an artefact of the demeaning, not a quantity to interpret — and draws each slope against a zero reference line. Both PWT slopes sit far from it: human capital at 0.417 on ``[0.286, 0.548]`` and capital per worker at 0.516 on ``[0.430, 0.602]``. The whiskers are ``\hat\beta \pm z_{0.95}\,\mathrm{SE}`` (``z_{0.95} \approx 1.645`` at the 90% default) taken from `vcov_mat`, so they inherit whichever covariance estimator the fit used — cluster-robust here, since that is the `estimate_xtreg` default. A figure drawn from the `cov_type=:driscoll_kraay` refit above puts the same two points on a visibly shorter whisker for capital per worker, whose standard error falls from 0.0521 to 0.0198.
 
 ---
 

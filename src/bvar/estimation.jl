@@ -373,7 +373,7 @@ varnames(post::BVARPosterior) = post.varnames
 # =============================================================================
 
 """
-    forecast(post::BVARPosterior, h; reps=nothing, conf_level=0.95, point_estimate=:mean,
+    forecast(post::BVARPosterior, h; reps=nothing, conf_level=DEFAULT_CI_MACRO, point_estimate=:mean,
              store_draws=false) -> BVARForecast{T}
 
 Forecast from Bayesian VAR using posterior draws.
@@ -388,7 +388,7 @@ distribution of forecast paths across draws.
 
 # Keyword Arguments
 - `reps`: Number of posterior draws to use (default: all)
-- `conf_level`: Credible interval level (default: 0.95)
+- `conf_level`: Credible interval level (default: `0.68`, `DEFAULT_CI_MACRO`)
 - `point_estimate`: `:mean` (default) or `:median` for central tendency
 - `store_draws`: retain the raw posterior forecast draws in `_draws`
   (n_valid × h × n; default `false` — quantiles only). Consumed by
@@ -405,11 +405,12 @@ fc = forecast(post, 12)
 """
 function forecast(post::BVARPosterior{T}, h::Int;
                   reps::Union{Nothing,Int}=nothing,
-                  conf_level::Real=0.95,
+                  conf_level::Real=DEFAULT_CI_MACRO,
                   point_estimate::Symbol=:mean,
                   store_draws::Bool=false,
                   rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
+    _validate_conf_level(conf_level)
 
     n, p = post.n, post.p
     n_use = reps === nothing ? post.n_draws : min(reps, post.n_draws)

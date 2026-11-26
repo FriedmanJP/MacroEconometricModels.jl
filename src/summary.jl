@@ -168,12 +168,11 @@ function report(io::IO, model::VARModel{T}) where {T}
         end
     end
 
-    z_crit = T(quantile(TDist(dof_r), T(0.975)))
     for j in 1:n
         se_j = sqrt.(max.(diag(XtX_inv) .* model.Sigma[j, j], zero(T)))
         coef_vals = model.B[:, j]
         _coef_table(io, "Equation: $(model.varnames[j])", coef_names, coef_vals, se_j;
-                    dist=:t, dof_r=dof_r)
+                    dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
     end
 
     # --- Information Criteria ---
@@ -218,15 +217,17 @@ function report(io::IO, model::VARModel{T}) where {T}
 end
 
 """
-    report(post::BVARPosterior; repro = false)
+    report(post::BVARPosterior; repro = false, conf_level = DEFAULT_CI_MACRO)
 
-Print comprehensive Bayesian VAR posterior summary.
+Print comprehensive Bayesian VAR posterior summary (default 68% credible intervals).
 
 `repro = true` appends the reproducibility footer; see `report(::ImpulseResponse)`
 for why it is opt-in.
 """
-report(post::BVARPosterior; repro::Bool = false) =
-    show(IOContext(stdout, :repro => repro), post)
+report(io::IO, post::BVARPosterior; conf_level::Real = DEFAULT_CI_MACRO) =
+    _show_bvar_posterior(io, post; conf_level=conf_level)
+report(post::BVARPosterior; repro::Bool = false, conf_level::Real = DEFAULT_CI_MACRO) =
+    _show_bvar_posterior(IOContext(stdout, :repro => repro), post; conf_level=conf_level)
 
 """
     report(vecm::VECMModel)
@@ -487,7 +488,7 @@ function report(io::IO, ss::StateSpaceModel{T}) where {T}
         # Standard errors are not delta-propagated here; the "—" columns are intentional.
         se = fill(T(NaN), length(ss.theta))
         _coef_table(io, "Hyper-parameters", ss.param_names, Vector{T}(ss.theta), se;
-                    coef_label="Estimate")
+                    coef_label="Estimate", level=DEFAULT_CI_MACRO)
     end
     # One-step-ahead residual diagnostics (drop missing).
     r = vec(ss.std_residuals)
@@ -588,8 +589,10 @@ function report(io::IO, x::DSGEEstimation)
     show(io, x.solution)
     return nothing
 end
-report(io::IO, x::BayesianDSGE) = show(io, x)
-report(x::BayesianDSGE) = report(stdout, x)
+report(io::IO, x::BayesianDSGE; conf_level::Real=DEFAULT_CI_MACRO) =
+    _show_bayesian_dsge(io, x; conf_level=conf_level)
+report(x::BayesianDSGE; conf_level::Real=DEFAULT_CI_MACRO) =
+    report(stdout, x; conf_level=conf_level)
 report(io::IO, x::BayesianDSGESimulation) = show(io, x)
 report(x::BayesianDSGESimulation) = report(stdout, x)
 
@@ -662,7 +665,10 @@ report(x::ExportDecomposition) = show(stdout, x)
 # --- Show-existing types that lacked a report() dispatch (S3/T167) ---
 report(x::GrangerCausalityResult) = show(stdout, x)
 report(x::FAVARModel) = show(stdout, x)
-report(x::BayesianFAVAR) = show(stdout, x)
+report(io::IO, x::BayesianFAVAR; conf_level::Real=DEFAULT_CI_MACRO) =
+    _show_bayesian_favar(io, x; conf_level=conf_level)
+report(x::BayesianFAVAR; conf_level::Real=DEFAULT_CI_MACRO) =
+    report(stdout, x; conf_level=conf_level)
 report(x::ACFResult) = show(stdout, x)
 report(x::SpectralDensityResult) = show(stdout, x)
 report(x::CrossSpectrumResult) = show(stdout, x)

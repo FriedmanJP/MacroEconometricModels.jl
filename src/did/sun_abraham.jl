@@ -24,7 +24,7 @@ using LinearAlgebra, Statistics, Distributions
                           leads::Int=0, horizon::Int=5,
                           control_group::Symbol=:never_treated,
                           cluster::Symbol=:unit,
-                          conf_level::Real=0.95) where {T<:AbstractFloat}
+                          conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
 
 Internal Sun & Abraham (2021) interaction-weighted estimator.
 
@@ -47,7 +47,8 @@ function _estimate_sun_abraham(pd::PanelData{T}, outcome_col::Int, treat_col::In
                                 leads::Int=0, horizon::Int=5,
                                 control_group::Symbol=:never_treated,
                                 cluster::Symbol=:unit,
-                                conf_level::Real=0.95) where {T<:AbstractFloat}
+                                conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     timing = _extract_treatment_timing(pd, treat_col)
 
     # Override timing with cohort_id if present

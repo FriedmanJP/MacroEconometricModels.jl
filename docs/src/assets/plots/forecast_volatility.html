@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Volatility Forecast (garch, h=10, 95% CI)</title>
+<title>Volatility Forecast (garch, h=10, 68% CI)</title>
 <style>    /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
        light default, a prefers-color-scheme dark override, and an explicit
        data-theme override the docs toggle stamps on the root element. */
@@ -138,10 +138,10 @@
     </style>
 </head>
 <body>
-<div class="figure-title">Volatility Forecast (garch, h=10, 95% CI)</div>
+<div class="figure-title">Volatility Forecast (garch, h=10, 68% CI)</div>
 <div class="panel-grid" style="--mem-panel-width: 100%;">
 <div class="panel">
-<div class="panel-title">Volatility Forecast (garch, h=10, 95% CI)</div>
+<div class="panel-title">Volatility Forecast (garch, h=10, 68% CI)</div>
 <div id="vol_fc_104"></div>
 </div>
 </div>
@@ -266,15 +266,15 @@ var hideTip = window.__mem_core.hideTip;
 {"x":-1,"hist":4.611142284982161e-5,"fc":null,"ci_lo":null,"ci_hi":null},
 {"x":0,"hist":4.38199778707352e-5,"fc":4.38199778707352e-5,"ci_lo":null,"ci_hi":null},
 {"x":1,"hist":null,"fc":4.296827349422341e-5,"ci_lo":4.2968273494223456e-5,"ci_hi":4.2968273494223456e-5},
-{"x":2,"hist":null,"fc":4.3845460944550505e-5,"ci_lo":4.1079377473660054e-5,"ci_hi":5.518980736258307e-5},
-{"x":3,"hist":null,"fc":4.458549259313152e-5,"ci_lo":3.964440955612453e-5,"ci_hi":5.8860933601346515e-5},
-{"x":4,"hist":null,"fc":4.529815981795669e-5,"ci_lo":3.876318423328176e-5,"ci_hi":6.134377872270371e-5},
-{"x":5,"hist":null,"fc":4.588904636941273e-5,"ci_lo":3.816968459283431e-5,"ci_hi":6.335615773991257e-5},
-{"x":6,"hist":null,"fc":4.637333028104873e-5,"ci_lo":3.7888100939015495e-5,"ci_hi":6.483171133546468e-5},
-{"x":7,"hist":null,"fc":4.675410874541343e-5,"ci_lo":3.766637959620999e-5,"ci_hi":6.570450949855525e-5},
-{"x":8,"hist":null,"fc":4.708525620460764e-5,"ci_lo":3.753633038836045e-5,"ci_hi":6.705242394499912e-5},
-{"x":9,"hist":null,"fc":4.743899291121065e-5,"ci_lo":3.7565732346812266e-5,"ci_hi":6.843217503711909e-5},
-{"x":10,"hist":null,"fc":4.779309044447418e-5,"ci_lo":3.7536845309786464e-5,"ci_hi":6.899273391129958e-5}];
+{"x":2,"hist":null,"fc":4.3845460944550505e-5,"ci_lo":4.118319622290304e-5,"ci_hi":4.6538138274164593e-5},
+{"x":3,"hist":null,"fc":4.458549259313152e-5,"ci_lo":4.0379158165162114e-5,"ci_hi":4.87518075788255e-5},
+{"x":4,"hist":null,"fc":4.529815981795669e-5,"ci_lo":4.011331533108087e-5,"ci_hi":5.051385993613071e-5},
+{"x":5,"hist":null,"fc":4.588904636941273e-5,"ci_lo":4.0068685364466036e-5,"ci_hi":5.1631919058521e-5},
+{"x":6,"hist":null,"fc":4.637333028104873e-5,"ci_lo":4.0059497457492486e-5,"ci_hi":5.247207391716779e-5},
+{"x":7,"hist":null,"fc":4.675410874541343e-5,"ci_lo":4.014130511672917e-5,"ci_hi":5.305770340804187e-5},
+{"x":8,"hist":null,"fc":4.708525620460764e-5,"ci_lo":4.024684050402035e-5,"ci_hi":5.3588359025136886e-5},
+{"x":9,"hist":null,"fc":4.743899291121065e-5,"ci_lo":4.037096076813726e-5,"ci_hi":5.4289176179242976e-5},
+{"x":10,"hist":null,"fc":4.779309044447418e-5,"ci_lo":4.057555570535276e-5,"ci_hi":5.4865313662266784e-5}];
     const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast σ²","color":"#ff7f0e","key":"fc","dash":"6,3"}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];

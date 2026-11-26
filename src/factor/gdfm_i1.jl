@@ -987,23 +987,24 @@ function historical_decomposition(
 end
 
 """
-    forecast(m::CointegratedGDFM, h; ci_method=:none, reps=200, conf_level=0.95, rng=Random.default_rng(), seed=nothing) -> FactorForecast
+    forecast(m::CointegratedGDFM, h; ci_method=:none, reps=200, conf_level=DEFAULT_CI_MACRO, rng=Random.default_rng(), seed=nothing) -> FactorForecast
 
 Forecast panel variables `h` steps ahead in levels from a [`CointegratedGDFM`](@ref),
 preserving long-run cointegrating relationships by iterating differenced level MA
 revisions from the terminal common level ``\\hat{\\chi}_T`` and extrapolating the
-deterministic trend.
+deterministic trend (default 68% CIs).
 """
 function forecast(
     m::CointegratedGDFM{T},
     h::Int;
     ci_method::Symbol=:none,
     reps::Int=200,
-    conf_level::Real=0.95,
+    conf_level::Real=DEFAULT_CI_MACRO,
     rng::AbstractRNG=Random.default_rng(),
     seed::Union{Integer,Nothing}=nothing,
 ) where {T<:AbstractFloat}
     h >= 1 || throw(ArgumentError("forecast horizon h must be >= 1, got $h"))
+    _validate_conf_level(conf_level)
     ci_method in (:none, :theoretical, :bootstrap) || throw(ArgumentError(
         "ci_method must be :none, :theoretical, or :bootstrap, got :$ci_method"))
     rng = _resolve_repro_rng(rng, seed)

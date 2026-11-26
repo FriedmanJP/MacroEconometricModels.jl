@@ -96,7 +96,7 @@ AR, MA, ARMA, and ARIMA model estimation with automatic order selection. See [AR
 | `estimate_arma(y, p, q; method=:css_mle)` | ARMA(p,q) via CSS, MLE, or CSS-MLE |
 | `estimate_arima(y, p, d, q; method=:css_mle)` | ARIMA(p,d,q) via differencing + ARMA |
 | `estimate_sarima(y, p, d, q, P, D, Q, s)` | Seasonal ARIMA |
-| `forecast(model, h; conf_level=0.95)` | Multi-step forecasting with confidence intervals |
+| `forecast(model, h; conf_level=0.68)` | Multi-step forecasting with confidence intervals |
 | `select_arima_order(y, max_p, max_q)` | Grid search for optimal ARMA order |
 | `auto_arima(y)` / `auto_sarima(y)` | Automatic (seasonal) ARIMA order selection |
 | `ic_table(y, max_p, max_q)` | Information criteria comparison table |
@@ -385,7 +385,7 @@ Bayesian prior optimization, instrument strength tests, and Panel VAR specificat
 | `posterior_median_model(post; ...)` | VARModel from posterior median |
 | `weak_instrument_test(model; ...)` | Test for weak instruments |
 | `montiel_olea_pflueger_f(model)` | Montiel Olea-Pflueger effective first-stage F |
-| `lp_iv_ar_band(model; level=0.95)` | Anderson-Rubin weak-instrument-robust LP-IV band |
+| `lp_iv_ar_band(model; level=0.68)` | Anderson-Rubin weak-instrument-robust LP-IV band |
 | `compare_var_lp(Y, H; lags)` | Compare VAR and LP impulse responses |
 | `compare_smooth_lp(Y, shock_var, H; lambda)` | Compare smooth-LP fits across ``\lambda`` |
 | `cross_validate_lambda(Y, shock_var, H; lambda_grid)` | Cross-validate the smooth-LP penalty |
@@ -518,6 +518,9 @@ Publication-quality tables, display backend switching, and bibliographic referen
 | `set_display_backend(sym)` | Switch output format (`:text`/`:latex`/`:html`) |
 | `get_display_backend()` | Current display backend |
 | `report(result)` | Print comprehensive summary |
+| `coef_table(model; conf_level=...)` | Coefficient table as a `DataFrame` at any confidence level |
+| `default_ci_level(model)` | Domain-default CI level (`0.68` macro / `0.90` micro) |
+| `DEFAULT_CI_MACRO` / `DEFAULT_CI_MICRO` | Default coverage constants (`0.68` and `0.90`; quantiles `DEFAULT_QUANTILES_MACRO` / `DEFAULT_QUANTILES_MICRO`) |
 | `table(result, ...)` | Extract results as matrix |
 | `print_table([io], result, ...)` | Print formatted table |
 | `long_table(result)` | Tidy/long `DataFrame` of an array-valued result |

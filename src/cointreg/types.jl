@@ -99,10 +99,11 @@ StatsAPI.coefnames(m::CointRegModel) = m.varnames
 StatsAPI.islinear(::CointRegModel) = true
 StatsAPI.stderror(m::CointRegModel) = sqrt.(max.(diag(m.vcov), zero(eltype(m.vcov))))
 
-function StatsAPI.confint(m::CointRegModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::CointRegModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     df_r = dof_residual(m)
-    z = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    z = T(quantile(TDist(df_r), 1 - (1 - lv) / 2))
     return hcat(m.coef .- z .* se, m.coef .+ z .* se)
 end
 
@@ -135,7 +136,7 @@ function Base.show(io::IO, m::CointRegModel{T}) where {T}
     )
 
     _coef_table(io, "Long-run coefficients", m.varnames, m.coef, stderror(m);
-        dist = :t, dof_r = dof_residual(m))
+        dist = :t, dof_r = dof_residual(m), level = DEFAULT_CI_MACRO)
     _sig_legend(io)
 end
 
@@ -221,8 +222,9 @@ StatsAPI.coefnames(m::PanelCointRegModel) = m.varnames
 StatsAPI.islinear(::PanelCointRegModel) = true
 StatsAPI.stderror(m::PanelCointRegModel) = m.se
 
-function StatsAPI.confint(m::PanelCointRegModel{T}; level::Real=0.95) where {T}
-    z = T(quantile(Normal(), 1 - (1 - level) / 2))
+function StatsAPI.confint(m::PanelCointRegModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    z = T(_conf_z(lv))
     return hcat(m.coef .- z .* m.se, m.coef .+ z .* m.se)
 end
 
@@ -250,6 +252,6 @@ function Base.show(io::IO, m::PanelCointRegModel{T}) where {T}
 
     title = m.pooling == :group ? "Group-mean long-run coefficients" :
                                   "Pooled long-run coefficients"
-    _coef_table(io, title, m.varnames, m.coef, m.se; dist = :z)
+    _coef_table(io, title, m.varnames, m.coef, m.se; dist = :z, level = DEFAULT_CI_MACRO)
     _sig_legend(io)
 end

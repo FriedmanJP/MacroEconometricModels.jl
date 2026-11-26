@@ -9,7 +9,7 @@ ARCH(q) variance forecasting.
 """
 
 """
-    forecast(m::ARCHModel, h; conf_level=0.95, n_sim=10000) -> VolatilityForecast
+    forecast(m::ARCHModel, h; conf_level=DEFAULT_CI_MACRO, n_sim=10000) -> VolatilityForecast
 
 Forecast conditional variance from an ARCH(q) model.
 
@@ -19,12 +19,12 @@ Confidence intervals are computed via simulation.
 # Arguments
 - `m`: Fitted ARCHModel
 - `h`: Forecast horizon
-- `conf_level`: Confidence level for intervals (default 0.95)
+- `conf_level`: Confidence level for intervals (default `0.68`, `DEFAULT_CI_MACRO`)
 - `n_sim`: Number of simulation paths for CIs (default 10000)
 """
-function forecast(m::ARCHModel{T}, h::Int; conf_level::Real=0.95, n_sim::Int=10000,
+function forecast(m::ARCHModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO, n_sim::Int=10000,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     q = m.q

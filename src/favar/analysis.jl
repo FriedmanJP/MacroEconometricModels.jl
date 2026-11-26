@@ -506,7 +506,7 @@ function irf(sdfm::StructuralDFM{T}, horizon::Int;
     point::Symbol=:auto,
     ci_type::Symbol=:none,
     reps::Int=200,
-    conf_level::Real=0.95,
+    conf_level::Real=DEFAULT_CI_MACRO,
     bootstrap::Symbol=:iid,
     block_length::Int=0,
     wild_dist::Symbol=:rademacher,
@@ -515,6 +515,7 @@ function irf(sdfm::StructuralDFM{T}, horizon::Int;
     seed::Union{Integer,Nothing}=nothing,
     kwargs...) where {T}
     _reject_sdfm_ident_kwargs(kwargs, "irf(::StructuralDFM)")
+    _validate_conf_level(conf_level)
     horizon >= 1 || throw(ArgumentError("horizon must be >= 1"))
     ci_type in (:none, :bootstrap) || throw(ArgumentError(
         "ci_type must be :none or :bootstrap, got :$ci_type"))
@@ -936,15 +937,16 @@ end
 # =============================================================================
 
 """
-    forecast(sdfm::StructuralDFM, h; ci_method=:none, reps=200, conf_level=0.95, rng) -> FactorForecast
+    forecast(sdfm::StructuralDFM, h; ci_method=:none, reps=200, conf_level=DEFAULT_CI_MACRO, rng) -> FactorForecast
 
 Forecast the factor VAR and map to the panel through `Λ`. Bootstrap bands (when
 requested) are pointwise quantiles of draws pushed through `Λ`, never mapped
 interval endpoints. Identification is not re-run.
 """
 function forecast(sdfm::StructuralDFM{T}, h::Int;
-    ci_method::Symbol=:none, reps::Int=200, conf_level::Real=0.95,
+    ci_method::Symbol=:none, reps::Int=200, conf_level::Real=DEFAULT_CI_MACRO,
     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
     ci_method in (:none, :bootstrap) || throw(ArgumentError(
         "ci_method must be :none or :bootstrap, got :$ci_method"))

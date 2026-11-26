@@ -68,24 +68,30 @@ function plot_result(r::KernelDensity{T}; title::String="",
 end
 
 """
-    plot_result(r::KernelRegression; bands=true, title="", save_path=nothing)
+    plot_result(r::KernelRegression; bands=true, conf_level=DEFAULT_CI_MICRO,
+                title="", save_path=nothing)
 
 Plot the scatter of `(x, y)` with the nonparametric fit and (optionally) the
-pointwise standard-error band — the EViews-style nonparametric-fit chart.
+pointwise `conf_level` (default `0.90`, `DEFAULT_CI_MICRO`) confidence band —
+the EViews-style nonparametric-fit chart.
 """
-function plot_result(r::KernelRegression{T}; bands::Bool=true, title::String="",
+function plot_result(r::KernelRegression{T}; bands::Bool=true,
+                     conf_level::Real=DEFAULT_CI_MICRO, title::String="",
                      save_path::Union{String,Nothing}=nothing) where {T}
+    lv = _validate_conf_level(conf_level)
+    z = _conf_z(lv)
     id = _next_plot_id("kreg")
     scatter_json = _np_scatter_json(r.xdata, r.ydata, "Data")
     groups = _series_json(["Data"], [_PLOT_COLORS[1]])
-    lo = bands ? (r.fitted .- 1.96 .* r.se) : nothing
-    hi = bands ? (r.fitted .+ 1.96 .* r.se) : nothing
+    lo = bands ? (r.fitted .- z .* r.se) : nothing
+    hi = bands ? (r.fitted .+ z .* r.se) : nothing
     fit_json = _np_fit_json(r.x, r.fitted, lo, hi)
     curve = _np_curve_overlay_json(fit_json; color=_PLOT_COLORS[2], band=bands)
     js = _render_scatter_js(id, scatter_json, groups;
                             curve_overlays_json=curve, xlabel="x", ylabel="y")
     mlab = get(_NP_METHOD_LABEL, r.method, string(r.method))
-    panels = [_PanelSpec(id, "$mlab fit (h=$(_fmt(r.bandwidth)))", js)]
+    ci_note = bands ? ", $(_ci_pct(lv))% CI" : ""
+    panels = [_PanelSpec(id, "$mlab fit (h=$(_fmt(r.bandwidth))$(ci_note))", js)]
     if isempty(title)
         title = "Nonparametric Regression (n=$(r.nobs))"
     end

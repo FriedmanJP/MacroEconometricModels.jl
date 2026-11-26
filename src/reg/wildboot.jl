@@ -390,7 +390,7 @@ so the test carries no bootstrap simulation error at all.
   when `G` is very small)
 - `imposenull::Bool=true` — impose the null (WCR); `false` gives WCU
 - `ci::Bool=true` — compute the inverted-test confidence interval
-- `level::Real=0.95` — CI coverage
+- `level::Real=0.90` — CI coverage (`DEFAULT_CI_MICRO`)
 - `ci_gridpoints::Int=25` — grid used to bracket the CI crossings
 - `enumerate::Union{Nothing,Bool}=nothing` — force (`true`) or forbid (`false`) exact
   enumeration of the `2^G` Rademacher sign vectors; `nothing` enumerates whenever possible
@@ -471,7 +471,7 @@ function _wild_cluster_bootstrap(y::Vector{T}, X::Matrix{T}, varnames::Vector{St
                                  weights::Symbol=:rademacher,
                                  imposenull::Bool=true,
                                  ci::Bool=true,
-                                 level::Real=0.95,
+                                 level::Real=DEFAULT_CI_MICRO,
                                  ci_gridpoints::Int=25,
                                  enumerate::Union{Nothing,Bool}=nothing,
                                  seed::Union{Integer,Nothing}=nothing,
@@ -484,7 +484,7 @@ function _wild_cluster_bootstrap(y::Vector{T}, X::Matrix{T}, varnames::Vector{St
     weights in (:rademacher, :webb) ||
         throw(ArgumentError("weights must be :rademacher or :webb, got :$weights"))
     n_boot >= 1 || throw(ArgumentError("n_boot must be positive"))
-    (0 < level < 1) || throw(ArgumentError("level must be in (0, 1)"))
+    _validate_conf_level(level)
 
     j = _wcb_resolve_coef(coefficient, varnames, k)
 

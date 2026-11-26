@@ -331,7 +331,7 @@ A one-standard-deviation policy shock raises the funds rate by 0.082 percentage 
 | `method` | `Symbol` | `:cholesky` | Identification scheme; see [Structural Identification](@ref structural_identification_page) for the full list |
 | `ci_type` | `Symbol` | `:none` | `:none`, `:bootstrap` (residual bootstrap), or `:theoretical` (asymptotic delta method) |
 | `reps` | `Int` | `200` | Replications used for the bands |
-| `conf_level` | `Real` | `0.95` | Band coverage |
+| `conf_level` | `Real` | `0.68` | Band coverage |
 | `stationary_only` | `Bool` | `false` | Reject and redraw replications whose re-estimated companion matrix is explosive |
 | `check_func` | `Function` | `nothing` | Sign-restriction predicate (`method=:sign`) |
 | `narrative_check` | `Function` | `nothing` | Narrative-restriction predicate (`method=:narrative`) |
@@ -777,7 +777,7 @@ The point forecast reverts to the unconditional mean within a few months: indust
 |---------|------|---------|-------------|
 | `ci_method` | `Symbol` | `:bootstrap` | `:bootstrap` (Kilian bootstrap-B), `:analytic` (known-coefficient MSE), or `:none` |
 | `reps` | `Int` | `500` | Number of bootstrap replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for intervals |
+| `conf_level` | `Real` | `0.68` | Confidence level for intervals |
 | `stationary_only` | `Bool` | `false` | Discard bootstrap replications whose re-estimated companion matrix is explosive |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
@@ -831,7 +831,7 @@ cfc = conditional_forecast(model, scenario, 12; reps=200)
 report(cfc)
 ```
 
-Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Over the first four months the funds rate is pinned at exactly 2.0 with a degenerate ``[2.0, 2.0]`` band, against an unconditional path of roughly ``-0.06``; holding the rate two full percentage points above where the VAR would have put it is a very large shock, and the spillovers are correspondingly violent --- industrial production jumps to ``+4.5`` percent in the first month before overshooting to ``-2.7`` percent by the third. Unconstrained variables keep genuine uncertainty: at ``h = 1`` the 95% band for output is ``[3.43, 5.66]`` percent. Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
+Each variable's table places the conditional path next to the unconditional one, so the scenario's effect is read off directly. Over the first four months the funds rate is pinned at exactly 2.0 with a degenerate ``[2.0, 2.0]`` band, against an unconditional path of roughly ``-0.06``; holding the rate two full percentage points above where the VAR would have put it is a very large shock, and the spillovers are correspondingly violent --- industrial production jumps to ``+4.5`` percent in the first month before overshooting to ``-2.7`` percent by the third. Unconstrained variables keep genuine uncertainty with default 68% bands (configurable via `conf_level`). Conditions are built either as a `Dict` keyed by `(variable, horizon)` or with [`forecast_condition`](@ref), which also builds **soft** conditions — a target with a tolerance:
 
 ```@example var
 soft = [forecast_condition("FFR", h, 2.0; sd=0.25) for h in 1:4]
@@ -852,7 +852,7 @@ plot_result(cfc)
 |---------|------|---------|-------------|
 | `Q` | `AbstractMatrix` | `nothing` | Rotation matrix; `nothing` is Cholesky. Affects only the reported `shocks` |
 | `reps` | `Int` | `1000` | Draws used for the bands |
-| `conf_level` | `Real` | `0.95` | Band coverage |
+| `conf_level` | `Real` | `0.68` | Band coverage |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
 
 `ConditionalForecast{T}` return value:

@@ -9,7 +9,7 @@ Stochastic Volatility posterior predictive forecasting.
 """
 
 """
-    forecast(m::SVModel, h; conf_level=0.95) -> VolatilityForecast
+    forecast(m::SVModel, h; conf_level=DEFAULT_CI_MACRO) -> VolatilityForecast
 
 Posterior predictive forecast of volatility from an SV model.
 
@@ -19,11 +19,11 @@ h_{T+1}, ..., h_{T+h} and returns quantiles of exp(hₜ).
 # Arguments
 - `m`: Fitted SVModel
 - `h`: Forecast horizon
-- `conf_level`: Confidence level for intervals (default 0.95)
+- `conf_level`: Confidence level for intervals (default `0.68`, `DEFAULT_CI_MACRO`)
 """
-function forecast(m::SVModel{T}, h::Int; conf_level::Real=0.95,
+function forecast(m::SVModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO,
                   rng::AbstractRNG=Random.default_rng()) where {T}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon must be ≥ 1"))
 
     n_draws = m.n_samples

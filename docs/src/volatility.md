@@ -1024,7 +1024,7 @@ sv_t = estimate_sv(ret; dist=:studentt, n_samples=2000, burnin=1000)
 report(sv_t)
 ```
 
-The posterior mean of ``\varphi`` is ``\approx 0.90`` with a 95% credible interval that excludes one, so latent log-volatility is persistent and stationary. The volatility of volatility ``\sigma_\eta`` posterior sits near 0.28, and ``\mu \approx -9.42`` implies a long-run variance ``e^{\mu} \approx 0.000081``, matching the GARCH unconditional variance (0.000090). Adding leverage or Student-t errors shifts ``\varphi`` by at most 0.02 on this series: the extra flexibility is absorbed by the observation equation rather than the latent volatility dynamics.
+The posterior mean of ``\varphi`` is ``\approx 0.90`` with a 68% credible interval that excludes one, so latent log-volatility is persistent and stationary. The volatility of volatility ``\sigma_\eta`` posterior sits near 0.28, and ``\mu \approx -9.42`` implies a long-run variance ``e^{\mu} \approx 0.000081``, matching the GARCH unconditional variance (0.000090). Adding leverage or Student-t errors shifts ``\varphi`` by at most 0.02 on this series: the extra flexibility is absorbed by the observation equation rather than the latent volatility dynamics.
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
@@ -1032,7 +1032,7 @@ The posterior mean of ``\varphi`` is ``\approx 0.90`` with a 95% credible interv
 | `burnin` | `Int` | `1000` | Number of initial draws to discard |
 | `dist` | `Symbol` | `:normal` | Error distribution (`:normal` or `:studentt`) |
 | `leverage` | `Bool` | `false` | Whether to estimate leverage correlation ``\rho`` |
-| `quantile_levels` | `Vector{Real}` | `[0.025, 0.5, 0.975]` | Quantile levels for posterior volatility bands |
+| `quantile_levels` | `Vector{Real}` | `[0.16, 0.5, 0.84]` | Quantile levels for posterior volatility bands |
 
 ### SV Posterior Visualization
 
@@ -1047,7 +1047,7 @@ plot_result(sv)
 <iframe src="../assets/plots/model_sv.html" width="100%" height="400" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The plot displays the posterior mean of ``\exp(h_t)`` (the conditional standard deviation) with 95% credible bands. Wider bands during turbulent periods reflect greater posterior uncertainty about the latent volatility state.
+The plot displays the posterior mean of ``\exp(h_t)`` (the conditional standard deviation) with 68% credible bands (configurable via `quantile_levels`). Wider bands during turbulent periods reflect greater posterior uncertainty about the latent volatility state.
 
 ### SVModel Return Values
 
@@ -1060,7 +1060,7 @@ The plot displays the posterior mean of ``\exp(h_t)`` (the conditional standard 
 | `sigma_eta_post` | `Vector{T}` | Posterior draws of ``\sigma_\eta`` |
 | `volatility_mean` | `Vector{T}` | Posterior mean of ``\exp(h_t)`` at each ``t`` |
 | `volatility_quantiles` | `Matrix{T}` | ``T \times n_q`` quantiles of ``\exp(h_t)`` |
-| `quantile_levels` | `Vector{T}` | Quantile levels (e.g., ``[0.025, 0.5, 0.975]``) |
+| `quantile_levels` | `Vector{T}` | Quantile levels (default ``[0.16, 0.5, 0.84]``) |
 | `dist` | `Symbol` | Error distribution (`:normal` or `:studentt`) |
 | `leverage` | `Bool` | Whether leverage effect was estimated |
 | `n_samples` | `Int` | Number of posterior samples |
@@ -1178,7 +1178,7 @@ The plot shows the conditional variance forecast (blue line) with confidence ban
 | `ci_upper` | `Vector{T}` | Upper confidence/credible interval bound |
 | `se` | `Vector{T}` | Standard errors of forecasts |
 | `horizon` | `Int` | Forecast horizon |
-| `conf_level` | `T` | Confidence level (e.g., 0.95) |
+| `conf_level` | `T` | Confidence level (default `0.68`) |
 | `model_type` | `Symbol` | Source model (`:arch`, `:garch`, `:egarch`, `:gjr_garch`, `:sv`) |
 
 ---

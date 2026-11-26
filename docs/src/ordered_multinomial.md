@@ -399,7 +399,7 @@ The largest element of ``X'e`` is 4.5e-7, zero to the Newton convergence toleran
 
 ## Visualization
 
-`plot_result` renders both model families as horizontal dot-and-whisker plots at 95% intervals, and the multinomial marginal effects as one facet per non-base alternative:
+`plot_result` renders both model families as horizontal dot-and-whisker plots at 90% intervals (configurable via `conf_level`), and the multinomial marginal effects as one facet per non-base alternative:
 
 ```julia
 plot_result(m_ologit)     # slopes and cutpoints, two panels

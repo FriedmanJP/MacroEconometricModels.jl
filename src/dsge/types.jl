@@ -539,7 +539,8 @@ function Base.show(io::IO, est::DSGEEstimation{T}) where {T}
     # Coefficient table
     se = stderror(est)
     pnames = [string(s) for s in est.param_names]
-    _coef_table(io, "Estimated Parameters", pnames, est.theta, se; dist=:z)
+    _coef_table(io, "Estimated Parameters", pnames, est.theta, se;
+                dist=:z, level=DEFAULT_CI_MACRO)
     _sig_legend(io)
 end
 

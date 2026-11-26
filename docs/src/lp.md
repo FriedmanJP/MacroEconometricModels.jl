@@ -188,7 +188,7 @@ The `irf_result.values` matrix has dimension ``(H+1) \times n_{\text{resp}}``, w
 | `response_vars` | `Vector{Int}` | all columns | Indices of response variables |
 | `cov_type` | `Symbol` | `:newey_west` | Covariance estimator (`:newey_west`, `:white`, `:ols`) |
 | `bandwidth` | `Int` | `0` | HAC bandwidth (`0` = automatic) |
-| `conf_level` | `Real` | `0.95` | Confidence level carried into the IRF |
+| `conf_level` | `Real` | `0.68` | Confidence level carried into the IRF |
 | `varnames` | `Vector{String}` | `["y1", …]` | Variable labels used in `report` and plots |
 
 ### `lp_irf` Confidence Intervals
@@ -208,7 +208,7 @@ The two lower bands for `INDPRO` track each other closely over the first four ho
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `conf_level` | `Real` | `0.95` | Confidence level for CIs |
+| `conf_level` | `Real` | `0.68` | Confidence level for CIs |
 | `ci_type` | `Symbol` | `:analytical` | `:analytical` (HAC) or `:bootstrap` (percentile bands) |
 | `bootstrap` | `Symbol` | `:wild` | Resampling scheme: `:wild`, `:block`, `:iid` |
 | `block_length` | `Int` | `0` | Moving-block length; `0` selects ``\lceil T^{1/3} \rceil`` |
@@ -372,7 +372,7 @@ An AR set is not forced to be an interval: where the instrument is too weak to b
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `level` | `Real` | `0.95` | Nominal coverage |
+| `level` | `Real` | `0.68` | Nominal coverage |
 | `n_grid` | `Int` | `401` | Grid points per horizon/response cell |
 | `span` | `Real` | `20` | Half-width of the search range, in 2SLS standard errors |
 | `bandwidth` | `Int` | `0` | Fixed HAC lag length; `0` uses `max(auto, h+1)` |
@@ -945,7 +945,7 @@ hd = historical_decomposition(slp)
 | `lags` | `Int` | `4` | Number of LP control lags |
 | `var_lags` | `Union{Nothing,Int}` | `nothing` (uses `lags`) | Lag order of the identification VAR, if different |
 | `cov_type` | `Symbol` | `:newey_west` | HAC estimator type |
-| `conf_level` | `Real` | `0.95` | Confidence level for the reported bands |
+| `conf_level` | `Real` | `0.68` | Confidence level for the reported bands |
 | `ci_type` | `Symbol` | `:none` | CI method (`:none`, `:bootstrap`) |
 | `reps` | `Int` | `200` | Bootstrap replications |
 | `check_func` | `Function` | `nothing` | Sign restriction check function |
@@ -1000,7 +1000,7 @@ This direct approach avoids compounding misspecification errors across horizons,
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `ci_method` | `Symbol` | `:analytical` | CI construction (`:analytical`, `:bootstrap`, `:none`) |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.68` | Confidence level |
 | `n_boot` | `Int` | `500` | Bootstrap replications when `ci_method=:bootstrap` |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for the bootstrap |
 
@@ -1141,7 +1141,7 @@ Each variable's own shock dominates its forecast error at every horizon — 86.2
 | `method` | `Symbol` | `:r2` | Estimator (`:r2`, `:lp_a`, `:lp_b`) |
 | `bias_correct` | `Bool` | `true` | Apply bootstrap bias correction |
 | `n_boot` | `Int` | `500` | Number of bootstrap replications |
-| `conf_level` | `Real` | `0.95` | Confidence level for CIs |
+| `conf_level` | `Real` | `0.68` | Confidence level for CIs |
 | `var_lags` | `Union{Nothing,Int}` | `nothing` | Lag order of the bias-correction VAR; `nothing` selects by HQIC |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Draw source for the bootstrap |
 

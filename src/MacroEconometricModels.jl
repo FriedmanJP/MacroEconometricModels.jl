@@ -95,6 +95,7 @@ include("core/logging.jl")
 # ImpulseResponse/BVARPosterior, so it must load before those result types.
 include("core/repro.jl")
 include("core/tolerances.jl")
+include("core/ci_defaults.jl")
 include("core/types.jl")
 include("core/display.jl")
 include("core/kalman.jl")
@@ -672,6 +673,9 @@ include("counterfactual/historical.jl")
 include("counterfactual/diagnostics.jl")
 include("counterfactual/show.jl")
 
+# Domain CI defaults dispatch (after all model/result types, before display/tables/plotting)
+include("core/ci_dispatch.jl")
+
 # Display (after all types)
 include("summary.jl")
 
@@ -1156,6 +1160,8 @@ export contribution, total_shock_contribution, verify_decomposition
 export report, refs
 export table, print_table
 export long_table, write_csv                 # Tables.jl-compatible tidy exports (#346)
+export coef_table                            # Configurable CI coefficient table (#936)
+export DEFAULT_CI_MACRO, DEFAULT_CI_MICRO, DEFAULT_QUANTILES_MACRO, DEFAULT_QUANTILES_MICRO, default_ci_level
 export ReproManifest, capture_manifest, reproduce, ReproReport   # reproducibility manifest (#345)
 export save_model, load_model, model_info, SERIALIZATION_FORMAT_VERSION  # versioned serialization (#347, #785)
 export point_estimate, has_uncertainty, uncertainty_bounds

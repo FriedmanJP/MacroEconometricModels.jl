@@ -438,9 +438,9 @@ StatsAPI.stderror(m::SARIMAModel) = _sarima_mle_stderror(m)
 # =============================================================================
 
 """
-    forecast(model::SARIMAModel, h; conf_level=0.95) -> ARIMAForecast
+    forecast(model::SARIMAModel, h; conf_level=DEFAULT_CI_MACRO) -> ARIMAForecast
 
-Forecast a SARIMA model `h` steps ahead.
+Forecast a SARIMA model `h` steps ahead (default 68% prediction intervals).
 
 The expanded ARMA is projected on the differenced scale, then un-differenced through the
 full operator `(1-L)^d (1-Lˢ)^D` by the recursion `yₜ = wₜ − Σᵢ δᵢ yₜ₋ᵢ`, where the `δᵢ`
@@ -449,8 +449,8 @@ expanded non-differenced** AR operator `φ(L)Φ(Lˢ)(1-L)^d(1-Lˢ)^D`, so the ba
 the horizon at the rate the integrated seasonal process implies rather than at the
 stationary ARMA rate.
 """
-function forecast(model::SARIMAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+function forecast(model::SARIMAModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
 
     fc_diff = _forecast_arma(model.y_diff, model.residuals, model.c,

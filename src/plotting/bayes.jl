@@ -157,21 +157,21 @@ function plot_result(idg::IdentificationDiagnostics{T}; title::String="", ncols:
 end
 
 # -----------------------------------------------------------------------------
-# PosteriorMode — mode + Laplace 95% interval
+# PosteriorMode — mode + Laplace credible interval
 # -----------------------------------------------------------------------------
 
 """
-    plot_result(pm::PosteriorMode; title="", ncols=0, save_path=nothing)
+    plot_result(pm::PosteriorMode; title="", ncols=0, save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 Horizontal dot-and-whisker of each parameter's posterior mode with its Laplace interval
-(`mode ± z·√diag(inv_hessian)`) at confidence level `conf_level` (default 0.95),
+(`mode ± z·√diag(inv_hessian)`) at confidence level `conf_level` (default `0.68`, `DEFAULT_CI_MACRO`),
 zero reference line. A non-positive
 diagonal of the inverse Hessian yields a `NaN` (→ `null`) interval end rather than a
 crash.
 """
 function plot_result(pm::PosteriorMode{T}; title::String="", ncols::Int=0,
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     labels = String[string(p) for p in pm.param_names]
     mode = Float64[Float64(v) for v in pm.mode]
     dv = diag(pm.inv_hessian)

@@ -121,6 +121,29 @@ struct ThreeSLSModel{T<:AbstractFloat}
 end
 
 # =============================================================================
+# StatsAPI.confint — SURModel / ThreeSLSModel (per-equation t-distribution)
+# =============================================================================
+
+function _system_confint(m::Union{SURModel{T},ThreeSLSModel{T}}, level::Real) where {T}
+    lv = _validate_conf_level(level)
+    lo = T[]
+    hi = T[]
+    for j in eachindex(m.eqnames)
+        dof_r = max(m.nobs - length(m.betas[j]), 1)
+        crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+        append!(lo, m.betas[j] .- crit .* m.ses[j])
+        append!(hi, m.betas[j] .+ crit .* m.ses[j])
+    end
+    return hcat(lo, hi)
+end
+
+"""Confidence intervals for SURModel stacked equation coefficients (t-distribution, default 90%)."""
+StatsAPI.confint(m::SURModel{T}; level::Real=DEFAULT_CI_MICRO) where {T} = _system_confint(m, level)
+
+"""Confidence intervals for ThreeSLSModel stacked equation coefficients (t-distribution, default 90%)."""
+StatsAPI.confint(m::ThreeSLSModel{T}; level::Real=DEFAULT_CI_MICRO) where {T} = _system_confint(m, level)
+
+# =============================================================================
 # Base.show — SURModel / ThreeSLSModel (one _coef_table per equation + footer)
 # =============================================================================
 

@@ -262,7 +262,7 @@ Having any child under six lowers the participation probability by 31.5 points â
 |---------|------|---------|-------------|
 | `type` | `Symbol` | `:ame` | `:ame`, `:mem`, or `:mer` |
 | `at` | `Union{Nothing,Dict}` | `nothing` | Evaluation point for `:mer`, mapping column index to value (required when `type=:mer`) |
-| `conf_level` | `Real` | `0.95` | Confidence level for the reported intervals |
+| `conf_level` | `Real` | `0.90` | Confidence level for the reported intervals |
 
 ### Return Values
 
@@ -325,7 +325,7 @@ A year of schooling multiplies the odds of participation by 1.248 and a year of 
 | `ci_lower` | `Vector{T}` | Lower bounds ``\exp(\hat\beta_j - z_{\alpha/2}\,\text{SE})`` |
 | `ci_upper` | `Vector{T}` | Upper bounds ``\exp(\hat\beta_j + z_{\alpha/2}\,\text{SE})`` |
 | `varnames` | `Vector{String}` | Variable names |
-| `conf_level` | `T` | Confidence level used (keyword `conf_level`, default `0.95`) |
+| `conf_level` | `T` | Confidence level used (keyword `conf_level`, default `0.90`) |
 
 ---
 

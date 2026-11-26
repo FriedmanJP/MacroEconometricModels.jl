@@ -374,10 +374,11 @@ function Base.show(io::IO, m::ARDLModel{T}) where {T}
                   alignment=[:l, :r])
 
     _coef_table(io, "Coefficients (levels form)", m.coefnames, m.coef, stderror(m);
-                dist=:t, dof_r=max(m.n - m.K, 1))
+                dist=:t, dof_r=max(m.n - m.K, 1), level=DEFAULT_CI_MACRO)
 
     lr = long_run(m)
-    _coef_table(io, "Long-run coefficients", lr.varnames, lr.theta, lr.se; dist=:z)
+    _coef_table(io, "Long-run coefficients", lr.varnames, lr.theta, lr.se;
+                dist=:z, level=DEFAULT_CI_MACRO)
 
     ecm = ecm_form(m)
     ecm_data = Any[

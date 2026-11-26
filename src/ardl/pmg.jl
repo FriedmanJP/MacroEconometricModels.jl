@@ -563,7 +563,8 @@ function Base.show(io::IO, m::PMGModel{T}) where {T}
     _pretty_table(io, spec; title="Panel ARDL (PMG/MG/DFE)",
                   column_labels=["Specification", ""], alignment=[:l, :r])
 
-    _coef_table(io, "Long-run coefficients (θ)", m.xnames, m.theta, m.theta_se; dist=:z)
+    _coef_table(io, "Long-run coefficients (θ)", m.xnames, m.theta, m.theta_se;
+                dist=:z, level=DEFAULT_CI_MACRO)
 
     # Error-correction speed φ.
     ec = Any[
@@ -578,7 +579,7 @@ function Base.show(io::IO, m::PMGModel{T}) where {T}
     if !isempty(m.srnames)
         _coef_table(io, "Short-run coefficients" *
                     (m.method === :dfe ? " (common)" : " (mean)"),
-                    m.srnames, m.sr, m.sr_se; dist=:z)
+                    m.srnames, m.sr, m.sr_se; dist=:z, level=DEFAULT_CI_MACRO)
     end
 
     if m.n_nonconv > 0

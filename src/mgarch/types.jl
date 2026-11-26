@@ -166,7 +166,8 @@ function _show_mgarch(io::IO, m::MGARCHModel{T}) where {T}
             push!(mnames, "series $i: β₁"); push!(mvals, g.beta[1])
         end
         mse = fill(T(NaN), length(mvals))
-        _coef_table(io, "Margin GARCH(1,1) persistence", mnames, mvals, mse; dist=:z)
+        _coef_table(io, "Margin GARCH(1,1) persistence", mnames, mvals, mse;
+                    dist=:z, level=DEFAULT_CI_MACRO)
     end
 
     # Second-stage block
@@ -176,7 +177,8 @@ function _show_mgarch(io::IO, m::MGARCHModel{T}) where {T}
         catch
             fill(T(NaN), length(m.params))
         end
-        _coef_table(io, "Dynamics", m.param_names, m.params, se; dist=:z)
+        _coef_table(io, "Dynamics", m.param_names, m.params, se;
+                    dist=:z, level=DEFAULT_CI_MACRO)
     end
 
     fit_data = Any[

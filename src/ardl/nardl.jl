@@ -375,7 +375,7 @@ function _bootstrap_multipliers(m::NARDLModel{T}, H::Int, nreps::Int,
 end
 
 """
-    dynamic_multipliers(m::NARDLModel, H; bootstrap=true, nreps=500, level=0.95,
+    dynamic_multipliers(m::NARDLModel, H; bootstrap=true, nreps=500, level=DEFAULT_CI_MACRO,
                         rng=Random.default_rng()) -> NARDLMultipliers
 
 Cumulative dynamic multipliers `m⁺_{j,h}` / `m⁻_{j,h}` for `h = 0…H`: the response
@@ -388,17 +388,18 @@ long-run θ⁺_j / θ⁻_j.
 - `bootstrap::Bool=true` — attach pointwise percentile bands from a recursive-design
   (condition-on-`x`) residual bootstrap.
 - `nreps::Int=500` — bootstrap replications (≥ 500 recommended).
-- `level::Real=0.95` — band coverage.
+- `level::Real=0.68` — band coverage (`DEFAULT_CI_MACRO`).
 - `rng::AbstractRNG` — RNG for the bootstrap (pass a seeded RNG for reproducibility).
 
 # References
 - Shin, Y., Yu, B. & Greenwood-Nimmo, M. (2014).
 """
 function dynamic_multipliers(m::NARDLModel{T}, H::Int; bootstrap::Bool=true,
-                             nreps::Int=500, level::Real=0.95,
+                             nreps::Int=500, level::Real=DEFAULT_CI_MACRO,
                              seed::Union{Integer,Nothing}=nothing,
                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(level)
     H >= 0 || throw(ArgumentError("H must be ≥ 0; got $H"))
     na = length(m.asym)
     Hp1 = H + 1
@@ -467,11 +468,12 @@ function Base.show(io::IO, m::NARDLModel{T}) where {T}
                   column_labels=["Specification", ""], alignment=[:l, :r])
 
     _coef_table(io, "Coefficients (levels form, split regressors)",
-                a.coefnames, a.coef, stderror(a); dist=:t, dof_r=max(a.n - a.K, 1))
+                a.coefnames, a.coef, stderror(a); dist=:t, dof_r=max(a.n - a.K, 1),
+                level=DEFAULT_CI_MACRO)
 
     lr = long_run(a)
     _coef_table(io, "Asymmetric long-run coefficients (θ⁺ / θ⁻)",
-                lr.varnames, lr.theta, lr.se; dist=:z)
+                lr.varnames, lr.theta, lr.se; dist=:z, level=DEFAULT_CI_MACRO)
 
     # symmetry tests
     st = symmetry_test(m)

@@ -1140,7 +1140,7 @@ end
 # =============================================================================
 
 """
-    posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400) → Dict{Symbol, Dict{Symbol, T}}
+    posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400, conf_level::Real=DEFAULT_CI_MACRO) → Dict{Symbol, Dict{Symbol, T}}
 
 Compute posterior summary statistics for each estimated parameter.
 
@@ -1148,8 +1148,8 @@ Returns a dictionary keyed by parameter name, each containing:
 - `:mean` — posterior mean
 - `:median` — posterior median (50th percentile)
 - `:std` — posterior standard deviation
-- `:ci_lower` — 2.5th percentile (lower bound of 95% credible interval)
-- `:ci_upper` — 97.5th percentile (upper bound of 95% credible interval)
+- `:ci_lower` — lower quantile of the `conf_level` credible interval (16th percentile by default for 68%)
+- `:ci_upper` — upper quantile of the `conf_level` credible interval (84th percentile by default for 68%)
 
 For RWMH chains (`method == :rwmh`), each entry additionally carries
 - `:ess_bulk` — rank-normalized bulk effective sample size (Vehtari et al. 2021)
@@ -1159,7 +1159,11 @@ For RWMH chains (`method == :rwmh`), each entry additionally carries
 and a warning names the offending parameters — credible intervals from a chain
 with low ESS are not reliable. Pass a smaller `min_ess` to relax the check.
 """
-function posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400) where {T<:AbstractFloat}
+function posterior_summary(result::BayesianDSGE{T};
+                           min_ess::Real=400,
+                           conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
+    q_lo, q_med, q_hi = _conf_level_to_quantiles(lv)
     n_params = length(result.param_names)
     summary = Dict{Symbol, Dict{Symbol, T}}()
 
@@ -1172,10 +1176,10 @@ function posterior_summary(result::BayesianDSGE{T}; min_ess::Real=400) where {T<
         # resample (E-09 / #132), so a plain quantile is correct.
         summary[pn] = Dict{Symbol, T}(
             :mean => mean(draws_i),
-            :median => quantile(draws_i, 0.5),
+            :median => quantile(draws_i, q_med),
             :std => std(draws_i),
-            :ci_lower => quantile(draws_i, 0.025),
-            :ci_upper => quantile(draws_i, 0.975)
+            :ci_lower => quantile(draws_i, q_lo),
+            :ci_upper => quantile(draws_i, q_hi)
         )
     end
 
@@ -1423,13 +1427,15 @@ Each row contains:
 - `prior_std` — prior standard deviation
 - `post_mean` — posterior mean
 - `post_std` — posterior standard deviation
-- `ci_lower` — posterior 2.5th percentile
-- `ci_upper` — posterior 97.5th percentile
+- `ci_lower` — posterior lower credible quantile (16th percentile by default for 68%)
+- `ci_upper` — posterior upper credible quantile (84th percentile by default for 68%)
 - `low_ess` — `true` when the parameter's bulk ESS falls below `min_ess`
   (RWMH chains only; always `false` for SMC results)
 """
-function prior_posterior_table(result::BayesianDSGE{T}; min_ess::Real=400) where {T<:AbstractFloat}
-    ps = posterior_summary(result; min_ess=min_ess)
+function prior_posterior_table(result::BayesianDSGE{T};
+                               min_ess::Real=400,
+                               conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    ps = posterior_summary(result; min_ess=min_ess, conf_level=conf_level)
     n_params = length(result.param_names)
 
     rows = NamedTuple[]
@@ -1897,7 +1903,7 @@ end
 """
     irf(result::BayesianDSGE{T}, horizon::Int;
         n_draws::Int=200,
-        quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+        quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
         solver::Symbol=:gensys,
         solver_kwargs::NamedTuple=NamedTuple(),
         rng::AbstractRNG=Random.default_rng()) → BayesianImpulseResponse{T}
@@ -1908,7 +1914,7 @@ For each of `n_draws` randomly selected posterior parameter draws, re-solves
 the DSGE model and computes analytical IRFs. Reports pointwise posterior median
 and quantile bands.
 
-Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+Default quantiles give 68% credible bands (`[0.16, 0.5, 0.84]`, `DEFAULT_QUANTILES_MACRO`).
 
 # References
 - Herbst, E. & Schorfheide, F. (2015). *Bayesian Estimation of DSGE Models*.
@@ -1916,10 +1922,11 @@ Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible band
 """
 function irf(result::BayesianDSGE{T}, horizon::Int;
              n_draws::Int=200,
-             quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+             quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
              solver::Symbol=:gensys,
              solver_kwargs::NamedTuple=NamedTuple(),
              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    q_vec = T.(_validate_quantiles(quantiles))
     spec = result.spec
     n_draws_total = size(result.theta_draws, 1)
     n_sim = min(n_draws, n_draws_total)
@@ -1967,7 +1974,6 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
     end
 
     # Compute quantiles
-    q_vec = T.(quantiles)
     irf_q, irf_m = compute_posterior_quantiles(stacked, q_vec)
 
     BayesianImpulseResponse{T}(irf_q, irf_m, horizon, var_names, shock_names, q_vec, stacked,
@@ -1981,7 +1987,7 @@ end
 """
     fevd(result::BayesianDSGE{T}, horizon::Int;
          n_draws::Int=200,
-         quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+         quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
          solver::Symbol=:gensys,
          solver_kwargs::NamedTuple=NamedTuple(),
          rng::AbstractRNG=Random.default_rng()) → BayesianFEVD{T}
@@ -1992,14 +1998,15 @@ For each of `n_draws` randomly selected posterior parameter draws, re-solves
 the DSGE model and computes FEVD proportions. Reports pointwise posterior median
 and quantile bands.
 
-Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+Default quantiles give 68% credible bands (`[0.16, 0.5, 0.84]`, `DEFAULT_QUANTILES_MACRO`).
 """
 function fevd(result::BayesianDSGE{T}, horizon::Int;
               n_draws::Int=200,
-              quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+              quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
               solver::Symbol=:gensys,
               solver_kwargs::NamedTuple=NamedTuple(),
               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    q_vec = T.(_validate_quantiles(quantiles))
     spec = result.spec
     n_draws_total = size(result.theta_draws, 1)
     n_sim = min(n_draws, n_draws_total)
@@ -2049,7 +2056,6 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
         end
     end
 
-    q_vec = T.(quantiles)
     fevd_q, fevd_m = compute_posterior_quantiles(stacked, q_vec)
 
     BayesianFEVD{T}(fevd_q, fevd_m, horizon, var_names, shock_names, q_vec,
@@ -2063,7 +2069,7 @@ end
 """
     simulate(result::BayesianDSGE{T}, T_periods::Int;
              n_draws::Int=200,
-             quantiles::Vector{<:Real}=[0.05, 0.16, 0.84, 0.95],
+             quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
              solver::Symbol=:gensys,
              solver_kwargs::NamedTuple=NamedTuple(),
              rng::AbstractRNG=Random.default_rng()) → BayesianDSGESimulation{T}
@@ -2074,16 +2080,17 @@ For each of `n_draws` randomly selected posterior parameter draws, re-solves
 the DSGE model and simulates `T_periods` forward. Reports pointwise posterior
 median and quantile bands.
 
-Default quantiles give dual 68% (16th–84th) and 90% (5th–95th) credible bands.
+Default quantiles give 68% credible bands (`[0.16, 0.5, 0.84]`, `DEFAULT_QUANTILES_MACRO`).
 `seed` owns the RNG when given (wins over `rng`) and is recorded on `result.manifest`.
 """
 function simulate(result::BayesianDSGE{T}, T_periods::Int;
                    n_draws::Int=200,
-                   quantiles::Vector{<:Real}=T[0.05, 0.16, 0.84, 0.95],
+                   quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
                    solver::Symbol=:gensys,
                    solver_kwargs::NamedTuple=NamedTuple(),
                    seed::Union{Nothing,Integer}=nothing,
                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    _validate_quantiles(quantiles)
     rng = _resolve_repro_rng(rng, seed)
     spec = result.spec
     n_draws_total = size(result.theta_draws, 1)
@@ -2150,9 +2157,15 @@ StatsAPI.islinear(::BayesianDSGE) = false
 # Show
 # =============================================================================
 
-function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
+function _show_bayesian_dsge(io::IO, result::BayesianDSGE{T};
+                             conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(conf_level)
+    q_lo, _, q_hi = _conf_level_to_quantiles(lv)
+    lo_lbl = _quantile_pct_label(q_lo)
+    hi_lbl = _quantile_pct_label(q_hi)
+
     n_draws, n_params = size(result.theta_draws)
-    ps = posterior_summary(result)
+    ps = posterior_summary(result; conf_level=lv)
 
     # Summary table
     fail_share = result.n_lik_evals > 0 ?
@@ -2187,7 +2200,7 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
                      round.(ci_hi; digits=4))
     _pretty_table(io, post_data;
         title="Posterior Summary",
-        column_labels=["Parameter", "Mean", "Std", "Median", "2.5%", "97.5%"],
+        column_labels=["Parameter", "Mean", "Std", "Median", lo_lbl, hi_lbl],
         alignment=[:l, :r, :r, :r, :r, :r])
 
     if any(get(ps[s], :low_ess, zero(T)) == one(T) for s in result.param_names)
@@ -2195,7 +2208,7 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
     end
 
     # Prior vs posterior table (min_ess=0: the ESS warning already fired above)
-    pt = prior_posterior_table(result; min_ess=0)
+    pt = prior_posterior_table(result; min_ess=0, conf_level=lv)
     if !isempty(pt)
         n_rows = length(pt)
         pp_data = Matrix{Any}(undef, n_rows, 8)
@@ -2212,11 +2225,13 @@ function Base.show(io::IO, result::BayesianDSGE{T}) where {T}
         _pretty_table(io, pp_data;
             title="Prior vs Posterior",
             column_labels=["Parameter", "Prior", "Prior Mean", "Prior Std",
-                          "Post Mean", "Post Std", "2.5%", "97.5%"],
+                          "Post Mean", "Post Std", lo_lbl, hi_lbl],
             alignment=[:l, :l, :r, :r, :r, :r, :r, :r])
     end
     _manifest_footer(io, result.manifest)
 end
+
+Base.show(io::IO, result::BayesianDSGE) = _show_bayesian_dsge(io, result)
 
 function Base.show(io::IO, result::BayesianDSGESimulation{T}) where {T}
     println(io, "BayesianDSGESimulation{$T}")

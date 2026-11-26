@@ -159,14 +159,15 @@ _lp_robust_vcov(X_h::AbstractMatrix{T}, U_h::AbstractMatrix{T},
 """
     extract_shock_irf(B::Vector{Matrix{T}}, vcov::Vector{Matrix{T}},
                       response_vars::Vector{Int}, shock_coef_idx::Int;
-                      conf_level::Real=0.95) where T
+                      conf_level::Real=DEFAULT_CI_MACRO) where T
 
 Generic IRF extraction from coefficient and covariance vectors.
 Works for LPModel, LPIVModel, PropensityLPModel.
 """
 function extract_shock_irf(B::Vector{Matrix{T}}, vcov::Vector{Matrix{T}},
                            response_vars::Vector{Int}, shock_coef_idx::Int;
-                           conf_level::Real=0.95) where {T<:AbstractFloat}
+                           conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     H = length(B) - 1
     n_response = length(response_vars)
     k = size(B[1], 1)
@@ -184,7 +185,7 @@ function extract_shock_irf(B::Vector{Matrix{T}}, vcov::Vector{Matrix{T}},
         end
     end
 
-    z = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z = T(_conf_z(lv))
     ci_lower = values .- z .* se
     ci_upper = values .+ z .* se
 
@@ -237,7 +238,7 @@ end
     estimate_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
                 lags::Int=4, response_vars::Vector{Int}=collect(1:size(Y,2)),
                 cov_type::Symbol=:newey_west, bandwidth::Int=0,
-                conf_level::Real=0.95) -> LPModel{T}
+                conf_level::Real=DEFAULT_CI_MACRO) -> LPModel{T}
 
 Estimate Local Projection impulse response functions (Jordà 2005).
 
@@ -247,8 +248,9 @@ The LP regression for horizon h:
 function estimate_lp(Y::AbstractMatrix{T}, shock_var::Int, horizon::Int;
                      lags::Int=4, response_vars::Vector{Int}=collect(1:size(Y, 2)),
                      cov_type::Symbol=:newey_west, bandwidth::Int=0,
-                     conf_level::Real=0.95,
+                     conf_level::Real=DEFAULT_CI_MACRO,
                      varnames::Vector{String}=["y$i" for i in 1:size(Y, 2)]) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     _validate_data(Y, "Y")
     T_obs, n = size(Y)
 
@@ -364,7 +366,7 @@ end
 """
     structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                   method=:cholesky, lags=4, var_lags=nothing,
-                  cov_type=:newey_west, conf_level=0.95,
+                  cov_type=:newey_west, conf_level=DEFAULT_CI_MACRO,
                   ci_type=:none, reps=200,
                   check_func=nothing, narrative_check=nothing,
                   max_draws=1000,
@@ -388,7 +390,7 @@ Algorithm:
 - `lags`: Number of LP control lags (default: 4)
 - `var_lags`: VAR lag order for identification (default: same as `lags`)
 - `cov_type`: HAC estimator (:newey_west, :white)
-- `conf_level`: Confidence level for CIs (default: 0.95)
+- `conf_level`: Confidence level for CIs (default: `0.68`, `DEFAULT_CI_MACRO`)
 - `ci_type`: CI method (:none, :bootstrap)
 - `reps`: Number of bootstrap replications
 - `check_func`: Sign restriction check function (for :sign/:narrative)
@@ -416,7 +418,8 @@ Impulse Responses." *Econometrica*, 89(2), 955–980.
 function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        method::Symbol=:cholesky, lags::Int=4,
                        var_lags::Union{Nothing,Int}=nothing,
-                       cov_type::Symbol=:newey_west, conf_level::Real=0.95,
+                       cov_type::Symbol=:newey_west,
+                       conf_level::Real=DEFAULT_CI_MACRO,
                        ci_type::Symbol=:none, reps::Int=200,
                        check_func=nothing, narrative_check=nothing,
                        max_draws::Int=1000,
@@ -427,6 +430,7 @@ function structural_lp(Y::AbstractMatrix{T}, horizon::Int;
                        seed::Union{Integer,Nothing}=nothing,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(conf_level)
     T_obs, n = size(Y)
     p = isnothing(var_lags) ? lags : var_lags
 
@@ -503,7 +507,7 @@ structural_lp(Y::AbstractMatrix, horizon::Int; kwargs...) =
 """Extract 3D IRF, SE, and analytical CI arrays from per-shock LP models."""
 function _build_structural_lp_arrays(lp_models::Vector{LPModel{T}}, n::Int,
                                       horizon::Int, ::Type{T};
-                                      conf_level::Real=0.95) where {T<:AbstractFloat}
+                                      conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
     irfs = zeros(T, horizon, n, n)
     se_arr = zeros(T, horizon, n, n)
     ci_lower = zeros(T, horizon, n, n)

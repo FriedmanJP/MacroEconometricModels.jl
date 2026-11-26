@@ -6,6 +6,79 @@ output, not just documentation.
 
 ---
 
+## v1.1.2
+
+Default confidence and credible interval harmonization and universal configurability release
+(closes `#936`–`#942`), aligning default interval coverage with empirical macro and micro
+econometric conventions while making every interval across estimators, `confint`, `Tables.jl`,
+`report`, and `plot_result` configurable to any level in ``(0, 1)``.
+
+> **Default CI Policy Shift**: Default confidence and credible interval coverage shifts from
+> `0.95` to **`0.68`** (`DEFAULT_CI_MACRO`, quantiles `[0.16, 0.5, 0.84]`) across macroeconometric,
+> time-series, structural, Bayesian, and LP-DiD (`estimate_lp_did`) models, and to **`0.90`**
+> (`DEFAULT_CI_MICRO`, quantiles `[0.05, 0.5, 0.95]`) across microeconometric, cross-sectional,
+> discrete-choice, count, quantile, micro-panel, RDD, SUR/3SLS, GMM/SMM, cross-sectional
+> `estimate_threshold`, and non-LP DiD models. Hypothesis-test significance thresholds (`α = 0.05`)
+> and Growth-at-Risk / Expected Shortfall tail probabilities remain unchanged. To reproduce
+> pre-`v1.1.2` 95% intervals, pass `conf_level=0.95` (or `level=0.95` / `ci_level=0.95` /
+> `quantiles=[0.025, 0.5, 0.975]`, or `coef_table(model; conf_level=0.95)`).
+
+**New**
+
+- **Domain CI Policy Constants & Helpers (`#936`)**: Exported `DEFAULT_CI_MACRO` (`0.68`),
+  `DEFAULT_CI_MICRO` (`0.90`), `DEFAULT_QUANTILES_MACRO` (`[0.16, 0.5, 0.84]`),
+  `DEFAULT_QUANTILES_MICRO` (`[0.05, 0.5, 0.95]`), `default_ci_level(m)`, and
+  `coef_table(m; conf_level=default_ci_level(m))` for returning a coefficient `DataFrame` at any
+  confidence level in `(0, 1)`.
+- **Complete `StatsAPI.confint` Coverage (`#936`, `#939`)**: Added validated `confint(m; level=...)`
+  methods across 15 previously missing model/result types (`RobustRegModel`, `HeckmanModel`,
+  `TobitModel`, `TruncRegModel`, `PoissonModel`, `NegBinModel`, `MultinomialLogitModel`,
+  `RDDResult`, `SURModel`, `ThreeSLSModel`, `ARDLModel`, `NARDLModel`, `PMGModel`, `MidasModel`,
+  `ThresholdModel`, `STARModel`, `MSRegModel`, `PVARModel`) and added a `level` keyword to
+  `DIDResult`, `EventStudyLP`, and `LPDiDResult`.
+- **Universal Input Validation**: Every `conf_level`, `level`, `ci_level`, `ci`, and `quantiles`
+  keyword across estimation, forecasting, IRFs, `confint`, `report`, and `plot_result` validates
+  strict membership in `(0, 1)` (rejecting `Bool`, `NaN`, `Inf`, `<= 0`, `>= 1`, and unsorted
+  quantile vectors with `ArgumentError`).
+
+**Changed**
+
+- **Micro & Non-LP DiD 90% Defaults (`#937`)**: Updated default coverage to `DEFAULT_CI_MICRO`
+  (`0.90`) across cross-sectional regressions, discrete-choice, count, quantile (`estimate_qreg`
+  `alpha=0.10`), RDD, marginal effects, odds ratios, Anderson–Rubin sets, wild cluster bootstrap,
+  rational inattention discrete choice, cross-sectional `estimate_threshold`, micro-panel models,
+  SUR/3SLS, GMM/SMM, interactive quantile panel models, and non-LP DiD (`estimate_did`,
+  `estimate_event_study_lp`, `honest_did`).
+- **Macro, Time-Series, Structural, Bayesian & LP-DiD 68% Defaults (`#938`, `#939`)**: Updated
+  default coverage to `DEFAULT_CI_MACRO` (`0.68`) / `DEFAULT_QUANTILES_MACRO` (`[0.16, 0.5, 0.84]`)
+  across `estimate_lp_did`, all frequentist and Bayesian IRF/FEVD/dynamic-multiplier routines, all
+  forecasting routines (VAR, BVAR, DSGE-VAR, VECM, ARIMA/SARIMA, ARCH/GARCH/FIGARCH, SV, MIDAS,
+  static/dynamic/GDFM/quantile factor models, SETAR, STAR, Markov-switching), spectral/ACF/PACF/CCF
+  bands, Bayesian posterior summaries (`BVARPosterior`, `BayesianFAVAR`, `TVPVARPosterior`,
+  `BayesianDSGE`, `DSGEVARPosterior`, `SVModel`, `RIEstimationResult`, `CGTestResult`), and
+  `bai_perron_test` break-date intervals.
+- **Dynamic Display & D3 Plotting (`#940`)**: Replaced all hardcoded `1.96`, `0.025`/`0.975`, and
+  static `"95% CI"` labels in `report`/`show` tables and D3 visualizations with dynamic
+  `"$(pct)% CI Low"` / `"$(pct)% CI High"` headers, dynamic LP footnotes, and `conf_level`
+  configurability on every `plot_result` dispatch (including `RDDResult` honoring `r.level`).
+- **`BaiPerronResult` & `CorTestResult` (`#939`, `#940`)**: Added a trailing `conf_level` field
+  (with backward-compatible constructors and v1 JLD2 deserialization defaults) and configurable
+  `conf_level` keyword to `bai_perron_test` (default `0.68`) and `cor_test` (default `1 - alpha`).
+
+**Fixed**
+
+- **Closed-Form Hansen (2000) Threshold Critical Values (`#939`)**: Replaced the 3-point lookup
+  table (`0.90`, `0.95`, `0.99`) in `_hansen2000_crit` with the exact Hansen (2000, Theorem 1)
+  formula ``c(\alpha) = -2 \ln(1 - \sqrt{1 - \alpha})``, supporting any `ci_level` in `(0, 1)`.
+- **Degenerate ACF Confidence Bands (`#939`)**: `_zero_acf_result` now computes
+  ``z_{\alpha/2}/\sqrt{n}`` at the caller's `conf_level` instead of hardcoded `1.96 / sqrt(n)`.
+- **`QuantileRegModel` `alpha` Persistence (`#936`)**: Stored `alpha` on `QuantileRegModel`
+  (preserving `manifest` as the trailing field for `_with_manifest` and v1 JLD2 compatibility)
+  so `DataFrame(m)`, `confint(m)`, and `report(m)` reflect the estimated confidence level.
+- **`DSGEVARPosterior` `Tables.jl` Bounds (`#936`)**: Fixed `Tables.jl` / `DataFrame` output on
+  `DSGEVARPosterior` to compute posterior `ci_lower`/`median`/`ci_upper` at `DEFAULT_CI_MACRO`
+  (68%) rather than hardcoded 5%/95% quantiles.
+
 ## v1.1.1
 
 License compliance and solver dependency release (closes `#930`–`#933`), updating the package

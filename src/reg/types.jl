@@ -192,11 +192,12 @@ StatsAPI.dof_residual(m::RobustRegModel) = length(m.y) - length(m.beta)
 StatsAPI.islinear(::RobustRegModel) = true
 StatsAPI.stderror(m::RobustRegModel) = sqrt.(diag(m.vcov_mat))
 
-"""Confidence intervals for RobustRegModel coefficients (t-distribution)."""
-function StatsAPI.confint(m::RobustRegModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for RobustRegModel coefficients (t-distribution, default 90%)."""
+function StatsAPI.confint(m::RobustRegModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     df_r = dof_residual(m)
-    crit = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    crit = T(quantile(TDist(df_r), 1 - (1 - lv) / 2))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -673,11 +674,12 @@ StatsAPI.islinear(::RegModel) = true
 StatsAPI.r2(m::RegModel) = m.r2
 StatsAPI.stderror(m::RegModel) = sqrt.(diag(m.vcov_mat))
 
-"""Confidence intervals for RegModel coefficients (t-distribution)."""
-function StatsAPI.confint(m::RegModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for RegModel coefficients (t-distribution, default 90%)."""
+function StatsAPI.confint(m::RegModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     df_r = dof_residual(m)
-    crit = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    crit = T(quantile(TDist(df_r), 1 - (1 - lv) / 2))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -698,10 +700,11 @@ StatsAPI.bic(m::LogitModel) = m.bic
 StatsAPI.islinear(::LogitModel) = false
 StatsAPI.stderror(m::LogitModel) = sqrt.(diag(m.vcov_mat))
 
-"""Confidence intervals for LogitModel coefficients (normal distribution)."""
-function StatsAPI.confint(m::LogitModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for LogitModel coefficients (normal distribution, default 90%)."""
+function StatsAPI.confint(m::LogitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -722,11 +725,23 @@ StatsAPI.bic(m::ProbitModel) = m.bic
 StatsAPI.islinear(::ProbitModel) = false
 StatsAPI.stderror(m::ProbitModel) = sqrt.(diag(m.vcov_mat))
 
-"""Confidence intervals for ProbitModel coefficients (normal distribution)."""
-function StatsAPI.confint(m::ProbitModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for ProbitModel coefficients (normal distribution, default 90%)."""
+function StatsAPI.confint(m::ProbitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
+end
+
+"""Confidence intervals for MarginalEffects (normal distribution; defaults to stored `conf_level`)."""
+function StatsAPI.confint(me::MarginalEffects{T};
+                          level::Real=default_ci_level(me)) where {T}
+    lv = _validate_conf_level(level)
+    if isapprox(lv, Float64(me.conf_level); atol=1e-12)
+        return hcat(me.ci_lower, me.ci_upper)
+    end
+    crit = T(_conf_z(lv))
+    return hcat(me.effects .- crit .* me.se, me.effects .+ crit .* me.se)
 end
 
 # =============================================================================
@@ -915,6 +930,17 @@ end
 OddsRatio(or::Vector{T}, se::Vector{T}, ci_lower::Vector{T}, ci_upper::Vector{T},
           varnames::Vector{String}, conf_level::T) where {T<:AbstractFloat} =
     OddsRatio{T}(or, se, ci_lower, ci_upper, varnames, conf_level, "Odds Ratios", "Odds Ratio")
+
+"""Confidence intervals for OddsRatio (log-scale normal intervals; defaults to stored `conf_level`)."""
+function StatsAPI.confint(r::OddsRatio{T}; level::Real=default_ci_level(r)) where {T}
+    lv = _validate_conf_level(level)
+    if isapprox(lv, Float64(r.conf_level); atol=1e-12)
+        return hcat(r.ci_lower, r.ci_upper)
+    end
+    crit = T(_conf_z(lv))
+    se_log = r.se ./ r.or
+    return hcat(r.or .* exp.(-crit .* se_log), r.or .* exp.(crit .* se_log))
+end
 
 function Base.show(io::IO, r::OddsRatio{T}) where {T}
     ci_pct = round(Int, 100 * r.conf_level)

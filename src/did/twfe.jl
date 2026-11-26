@@ -95,7 +95,7 @@ end
     _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                    leads::Int=0, horizon::Int=5, covariate_cols::Vector{Int}=Int[],
                    control_group::Symbol=:never_treated,
-                   cluster::Symbol=:unit, conf_level::Real=0.95) where {T}
+                   cluster::Symbol=:unit, conf_level::Real=DEFAULT_CI_MICRO) where {T}
 
 Internal TWFE event-study regression.
 
@@ -110,7 +110,8 @@ function _estimate_twfe(pd::PanelData{T}, outcome_col::Int, treat_col::Int;
                         covariate_cols::Vector{Int}=Int[],
                         control_group::Symbol=:never_treated,
                         cluster::Symbol=:unit,
-                        conf_level::Real=0.95) where {T<:AbstractFloat}
+                        conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     N_obs = pd.T_obs
     timing = _extract_treatment_timing(pd, treat_col)
 

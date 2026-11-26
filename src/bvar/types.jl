@@ -116,7 +116,14 @@ end
 Base.size(post::BVARPosterior, dim::Int) = dim == 1 ? post.n_draws : error("BVARPosterior has 1 dimension (n_draws)")
 Base.length(post::BVARPosterior) = post.n_draws
 
-function Base.show(io::IO, post::BVARPosterior{T}) where {T}
+function _show_bvar_posterior(io::IO, post::BVARPosterior{T};
+                              conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(conf_level)
+    q_lo, q_med, q_hi = _conf_level_to_quantiles(lv)
+    lo_lbl = _quantile_pct_label(q_lo)
+    med_lbl = _quantile_pct_label(q_med)
+    hi_lbl = _quantile_pct_label(q_hi)
+
     k = size(post.B_draws, 2)  # parameters per equation
 
     # Specification table
@@ -155,19 +162,19 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
             col_draws = @view draws_eq[:, i]
             m = mean(col_draws)
             s = std(col_draws)
-            q025 = T(quantile(col_draws, 0.025))
-            q500 = T(quantile(col_draws, 0.50))
-            q975 = T(quantile(col_draws, 0.975))
+            ql = T(quantile(col_draws, q_lo))
+            qm = T(quantile(col_draws, q_med))
+            qh = T(quantile(col_draws, q_hi))
             data[i, 1] = coef_names[i]
             data[i, 2] = _fmt(m)
             data[i, 3] = _fmt(s)
-            data[i, 4] = _fmt(q025)
-            data[i, 5] = _fmt(q500)
-            data[i, 6] = _fmt(q975)
+            data[i, 4] = _fmt(ql)
+            data[i, 5] = _fmt(qm)
+            data[i, 6] = _fmt(qh)
         end
         _pretty_table(io, data;
             title = "Equation: $(vn[eq])",
-            column_labels = ["", "Mean", "Std", "2.5%", "50%", "97.5%"],
+            column_labels = ["", "Mean", "Std", lo_lbl, med_lbl, hi_lbl],
             alignment = [:l, :r, :r, :r, :r, :r],
         )
     end
@@ -180,3 +187,5 @@ function Base.show(io::IO, post::BVARPosterior{T}) where {T}
 
     _manifest_footer(io, post.manifest)   # reproducibility footer (T246/#345), no-op if unset
 end
+
+Base.show(io::IO, post::BVARPosterior) = _show_bvar_posterior(io, post)

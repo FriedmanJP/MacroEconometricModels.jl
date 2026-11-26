@@ -273,9 +273,10 @@ StatsAPI.islinear(::HeckmanModel) = false
 StatsAPI.predict(m::HeckmanModel) = m.X * m.beta
 StatsAPI.residuals(m::HeckmanModel) = m.y .- m.X * m.beta
 
-function StatsAPI.confint(m::HeckmanModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::HeckmanModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 

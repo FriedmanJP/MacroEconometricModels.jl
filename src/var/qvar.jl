@@ -438,17 +438,16 @@ function StatsAPI.vcov(m::QuantileVARModel{T}) where {T}
 end
 
 """
-    StatsAPI.confint(m::QuantileVARModel{T}; level::Real=0.95)
+    StatsAPI.confint(m::QuantileVARModel{T}; level::Real=DEFAULT_CI_MACRO)
 
-Two-sided Student-`t` confidence intervals (`df = dof_residual(m)`) for the
+Two-sided Student-`t` confidence intervals (`df = dof_residual(m)`, default 68%) for the
 vectorized coefficients of `m`, returning a `(k * n) × 2` matrix for a single
 quantile or a `(k * n) × 2 × M` array across `M` quantiles.
 """
-function StatsAPI.confint(m::QuantileVARModel{T}; level::Real=0.95) where {T}
-    (!(level isa Bool) && isfinite(level) && zero(T) < T(level) < one(T)) ||
-        throw(ArgumentError("level must lie strictly in (0, 1), got $level"))
+function StatsAPI.confint(m::QuantileVARModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
     df_r = StatsAPI.dof_residual(m)
-    crit = T(Distributions.quantile(Distributions.TDist(df_r), one(T) - (one(T) - T(level)) / 2))
+    crit = T(Distributions.quantile(Distributions.TDist(df_r), one(T) - (one(T) - T(lv)) / 2))
     if length(m.B_list) == 1
         b = vec(m.B_list[1])
         s = vec(m.se_list[1])
@@ -623,7 +622,7 @@ end
 
 """
     qirf(qvar, H; shock=nothing, shock_size=1.0, tau_profile=0.10, baseline_tau=0.50,
-         method=:analytical, ci_type=:none, n_boot=199, conf_level=0.95,
+         method=:analytical, ci_type=:none, n_boot=199, conf_level=DEFAULT_CI_MACRO,
          rng=Random.default_rng(), seed=nothing) -> QuantileImpulseResponse
 
 Compute Quantile Impulse Response Functions (QIRFs) from a [`QuantileVARModel`](@ref)
@@ -660,7 +659,7 @@ common uniform quantile draws across the recursive structural equations and eval
 - `method::Symbol = :analytical` — `:analytical` or `:simulation`
 - `ci_type::Symbol = :none` — `:none` or `:bootstrap` (moving-block pairs bootstrap)
 - `n_boot::Int = 199` — bootstrap replications (also controls simulation draws when `method == :simulation`)
-- `conf_level::Real = 0.95` — confidence level strictly in ``(0, 1)``
+- `conf_level::Real = 0.68` — confidence level strictly in ``(0, 1)`` (`DEFAULT_CI_MACRO`)
 - `rng::AbstractRNG = Random.default_rng()` — random number generator
 - `seed::Union{Integer,Nothing} = nothing` — optional integer seed
 
@@ -681,7 +680,7 @@ function qirf(qvar::QuantileVARModel{T}, H::Int;
               method::Symbol=:analytical,
               ci_type::Symbol=:none,
               n_boot::Int=199,
-              conf_level::Real=0.95,
+              conf_level::Real=DEFAULT_CI_MACRO,
               rng::AbstractRNG=Random.default_rng(),
               seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
     H >= 1 || throw(ArgumentError("horizon H must be >= 1, got $H"))
@@ -693,9 +692,7 @@ function qirf(qvar::QuantileVARModel{T}, H::Int;
     isfinite(shock_size) || throw(ArgumentError("shock_size must be finite, got $shock_size"))
     validate_option(method, "method", (:analytical, :simulation))
     validate_option(ci_type, "ci_type", (:none, :bootstrap))
-    conf_T = T(conf_level)
-    (isfinite(conf_level) && zero(T) < conf_T < one(T)) ||
-        throw(ArgumentError("conf_level must lie strictly in (0, 1), got $conf_level"))
+    conf_T = T(_validate_conf_level(conf_level))
     if ci_type === :bootstrap
         n_boot >= 2 || throw(ArgumentError("n_boot must be >= 2 when ci_type == :bootstrap, got $n_boot"))
     else
@@ -835,7 +832,7 @@ function Base.show(io::IO, m::QuantileVARModel{T}) where {T}
         for eq in 1:n
             _coef_table(io, "Eq. $(m.varnames[eq]) (τ = $(_fmt(tau; digits=2)))",
                         coef_names, Vector{T}(m.B_list[mi][:, eq]), Vector{T}(m.se_list[mi][:, eq]);
-                        dist=:t, dof_r=dof_r)
+                        dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
         end
     end
     _sig_legend(io)

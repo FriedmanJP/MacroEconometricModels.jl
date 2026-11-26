@@ -436,10 +436,11 @@ function StatsAPI.stderror(m::MultinomialLogitModel{T}) where {T}
     sqrt.(max.(diag(m.vcov_mat), zero(T)))
 end
 
-function StatsAPI.confint(m::MultinomialLogitModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::MultinomialLogitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se_all = stderror(m)
     theta = vec(m.beta)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(theta .- crit .* se_all, theta .+ crit .* se_all)
 end
 
@@ -657,6 +658,16 @@ struct MultinomialMarginalEffects{T<:AbstractFloat}
     se::Union{Matrix{T},Nothing}
     varnames::Vector{String}
     categories::Vector{String}
+end
+
+"""Confidence intervals for MultinomialMarginalEffects (normal distribution, default 90%)."""
+function StatsAPI.confint(me::MultinomialMarginalEffects{T};
+                          level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
+    crit = T(_conf_z(lv))
+    est = vec(me.effects)
+    se = me.se === nothing ? fill(T(NaN), length(est)) : vec(me.se)
+    return hcat(est .- crit .* se, est .+ crit .* se)
 end
 
 function Base.show(io::IO, me::MultinomialMarginalEffects{T}) where {T}

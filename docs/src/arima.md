@@ -588,7 +588,7 @@ The forecast fan widens with the horizon as cumulative ``\psi``-weight variance 
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `conf_level` | `Real` | `0.95` | Confidence level for interval construction |
+| `conf_level` | `Real` | `0.68` | Confidence level for interval construction |
 
 ### ARIMAForecast Return Values
 
@@ -599,7 +599,7 @@ The forecast fan widens with the horizon as cumulative ``\psi``-weight variance 
 | `ci_upper` | `Vector{T}` | Upper confidence bound |
 | `se` | `Vector{T}` | Forecast standard errors (from ``\psi``-weights) |
 | `horizon` | `Int` | Forecast horizon ``h`` |
-| `conf_level` | `T` | Confidence level (e.g., 0.95) |
+| `conf_level` | `T` | Confidence level (default `0.68`) |
 
 ---
 

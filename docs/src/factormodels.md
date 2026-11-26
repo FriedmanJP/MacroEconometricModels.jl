@@ -400,7 +400,7 @@ Factor forecast standard errors widen with the horizon and then flatten: for thi
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `ci_method` | `Symbol` | `:theoretical` | Interval method, see the table above |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.68` | Confidence level |
 | `n_boot` | `Int` | `1000` | Replications for `:bootstrap` and `:simulation` |
 | `p` | `Int` | `1` | Factor VAR lag order (`FactorModel` only) |
 

@@ -193,10 +193,10 @@ StatsAPI.dof(r::RIEstimationResult) = length(r.params)
 StatsAPI.dof_residual(r::RIEstimationResult) = r.n_obs - length(r.params)
 StatsAPI.islinear(::RIEstimationResult) = false
 
-function StatsAPI.confint(r::RIEstimationResult{T}; level::Real=0.95) where {T<:AbstractFloat}
-    (zero(T) < T(level) < one(T)) || throw(ArgumentError("level must be in (0, 1), got $level"))
+function StatsAPI.confint(r::RIEstimationResult{T}; level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(level)
     k = length(r.params)
-    alpha_lv = one(T) - T(level)
+    alpha_lv = one(T) - T(lv)
     if r.method === :bayes && size(r.draws, 1) >= 2
         lo = Vector{T}(undef, k)
         hi = Vector{T}(undef, k)
@@ -207,7 +207,7 @@ function StatsAPI.confint(r::RIEstimationResult{T}; level::Real=0.95) where {T<:
         end
         return hcat(lo, hi)
     end
-    crit = T(quantile(Normal(), one(T) - alpha_lv / 2))
+    crit = T(_conf_z(lv))
     return hcat(r.params .- crit .* r.stderr, r.params .+ crit .* r.stderr)
 end
 
@@ -1291,14 +1291,18 @@ function Base.show(io::IO, r::RIEstimationResult{T}) where {T}
     return nothing
 end
 
-function report(io::IO, r::RIEstimationResult{T}) where {T}
+function report(io::IO, r::RIEstimationResult{T}; conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(conf_level)
     show(io, r)
     println(io)
     if r.method === :mle
         _coef_table(io, "Parameter Estimates (Delta-Method SEs)",
-                    r.param_names, r.params, r.stderr; dist=:z)
+                    r.param_names, r.params, r.stderr; dist=:z, level=lv)
         _sig_legend(io)
     else
+        q_lo, _, q_hi = _conf_level_to_quantiles(lv)
+        lo_lbl = "$(_quantile_pct_label(q_lo)) CI"
+        hi_lbl = "$(_quantile_pct_label(q_hi)) CI"
         k = length(r.params)
         post_tbl = Matrix{Any}(undef, k, 6)
         for j in 1:k
@@ -1307,19 +1311,20 @@ function report(io::IO, r::RIEstimationResult{T}) where {T}
             post_tbl[j, 2] = _fmt(r.params[j])
             post_tbl[j, 3] = _fmt(T(median(col)))
             post_tbl[j, 4] = _fmt(r.stderr[j])
-            post_tbl[j, 5] = _fmt(T(quantile(col, 0.025)))
-            post_tbl[j, 6] = _fmt(T(quantile(col, 0.975)))
+            post_tbl[j, 5] = _fmt(T(quantile(col, q_lo)))
+            post_tbl[j, 6] = _fmt(T(quantile(col, q_hi)))
         end
         _pretty_table(io, post_tbl;
             title = "Posterior Parameter Summary",
-            column_labels = ["Parameter", "Mean", "Median", "Std.Dev.", "2.5% CI", "97.5% CI"],
+            column_labels = ["Parameter", "Mean", "Median", "Std.Dev.", lo_lbl, hi_lbl],
             alignment = [:l, :r, :r, :r, :r, :r],
         )
         _manifest_footer(io, r.manifest)
     end
     return nothing
 end
-report(r::RIEstimationResult; repro::Bool=false) = report(IOContext(stdout, :repro => repro), r)
+report(r::RIEstimationResult; repro::Bool=false, conf_level::Real=DEFAULT_CI_MACRO) =
+    report(IOContext(stdout, :repro => repro), r; conf_level=conf_level)
 
 function Base.show(io::IO, r::CGTestResult{T}) where {T}
     spec = Any[
@@ -1340,15 +1345,16 @@ function Base.show(io::IO, r::CGTestResult{T}) where {T}
     return nothing
 end
 
-function report(io::IO, r::CGTestResult{T}) where {T}
+function report(io::IO, r::CGTestResult{T}; conf_level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(conf_level)
     show(io, r)
     println(io)
     _coef_table(io, "CG Regression: y_{t+h} - F_t y_{t+h} = α + β_CG (F_t y_{t+h} - F_{t-1} y_{t+h}) + e_{t+h}",
                 ["(Intercept)", "Revision (β_CG)"],
                 T[r.alpha, r.beta_cg],
                 T[r.se_alpha, r.se_cg];
-                dist=:t, dof_r=r.n_obs - 2)
+                dist=:t, dof_r=r.n_obs - 2, level=lv)
     _sig_legend(io)
     return nothing
 end
-report(r::CGTestResult) = report(stdout, r)
+report(r::CGTestResult; conf_level::Real=DEFAULT_CI_MACRO) = report(stdout, r; conf_level=conf_level)

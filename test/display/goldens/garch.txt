@@ -1,6 +1,6 @@
 GARCH(N,N) Model
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 μ (mean) N N N N N N
 ω (intercept) N N N N N N

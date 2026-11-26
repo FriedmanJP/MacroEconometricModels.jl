@@ -263,7 +263,7 @@ where:
 Both criteria are always computed; `criterion` chooses which one sets the reported `n_breaks`.
 
 !!! note "Technical Note"
-    The dynamic program has complexity ``O(T^2 \cdot m_{\max})``. A segment SSR matrix is pre-computed once and reused across all candidate configurations. Each segment needs at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, so `max_breaks` is silently reduced to ``\lfloor T/h \rfloor - 1`` when the requested value is infeasible. Break-date confidence intervals follow Bai (1997), with a half-width of ``1.96^2 \hat{\sigma}^2 / (\delta' \hat{Q} \delta)`` where ``\delta`` is the coefficient change at the break.
+    The dynamic program has complexity ``O(T^2 \cdot m_{\max})``. A segment SSR matrix is pre-computed once and reused across all candidate configurations. Each segment needs at least ``h = \max(k+1, \lceil \pi T \rceil)`` observations, so `max_breaks` is silently reduced to ``\lfloor T/h \rfloor - 1`` when the requested value is infeasible. Break-date confidence intervals follow Bai (1997), with a half-width of ``z_{\alpha/2}^2 \hat{\sigma}^2 / (\delta' \hat{Q} \delta)`` where ``\delta`` is the coefficient change at the break and ``z_{\alpha/2} = \Phi^{-1}((1 + \text{conf\_level})/2)`` (default `conf_level=0.68`).
 
 ```@example test_breaks
 Random.seed!(103)
@@ -276,7 +276,7 @@ bp = bai_perron_test(y_2, X_2; max_breaks=5, criterion=:bic)
 report(bp)
 ```
 
-The procedure recovers the design exactly: two breaks at observations 100 and 200, each with a 95% confidence interval two observations wide. The sequential column tells the same story --- sup-F(2|1) is 1142.21 with a p-value at the 0.001 floor, while sup-F(3|2) falls to 3.21 with a p-value of 0.765 --- so the sequential rule stops at two breaks. BIC and LWZ both mark ``m = 2`` as the minimum, so all three selection devices agree; disagreement between them is the normal signal that the break structure is weakly identified.
+The procedure recovers the design exactly: two breaks at observations 100 and 200, each with a tight 68% confidence interval around the break date. The sequential column tells the same story --- sup-F(2|1) is 1142.21 with a p-value at the 0.001 floor, while sup-F(3|2) falls to 3.21 with a p-value of 0.765 --- so the sequential rule stops at two breaks. BIC and LWZ both mark ``m = 2`` as the minimum, so all three selection devices agree; disagreement between them is the normal signal that the break structure is weakly identified.
 
 The regime coefficients recover the true parameter vectors to within two standard errors:
 
@@ -298,6 +298,7 @@ P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexe
 | `max_breaks` | `Int` | `5` | Maximum number of breaks searched, reduced automatically when segments are too short |
 | `trimming` | `Real` | `0.15` | Minimum fraction of observations per segment |
 | `criterion` | `Symbol` | `:bic` | Criterion that sets `n_breaks`: `:bic` or `:lwz` |
+| `conf_level` | `Real` | `0.68` | Confidence level for Bai (1997) break-date intervals |
 
 ### Return values
 
@@ -305,7 +306,7 @@ P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexe
 |-------|------|-------------|
 | `n_breaks` | `Int` | Number of breaks selected by `criterion` |
 | `break_dates` | `Vector{Int}` | Estimated break date indices |
-| `break_cis` | `Vector{Tuple{Int,Int}}` | 95% confidence intervals for the break dates (Bai 1997) |
+| `break_cis` | `Vector{Tuple{Int,Int}}` | Break-date confidence intervals at `conf_level` (Bai 1997; default 68%) |
 | `regime_coefs` | `Vector{Vector{T}}` | OLS coefficients for each of the ``m+1`` regimes |
 | `regime_ses` | `Vector{Vector{T}}` | Standard errors for each regime |
 | `supf_stats` | `Vector{T}` | sup-F(l) statistics for ``l = 1, \ldots, m_{\max}`` |
@@ -316,6 +317,7 @@ P-values interpolate the Bai & Perron (1998, 2003) critical-value tables, indexe
 | `lwz_values` | `Vector{T}` | LWZ for 0 through ``m_{\max}`` breaks |
 | `trimming` | `T` | Trimming fraction used |
 | `nobs` | `Int` | Number of observations |
+| `conf_level` | `T` | Confidence level used for `break_cis` |
 
 `plot_result(bp)` draws the BIC and LWZ paths against the number of breaks with the selection marked; `plot_result(bp; view=:breaks)` draws the estimated break dates as a timeline with their confidence bands shaded.
 
@@ -666,7 +668,7 @@ bp_gdp = bai_perron_test(y_ar, X_ar; max_breaks=5)
 report(bp_gdp)
 ```
 
-Bai-Perron confirms a single break and dates it at observation 201 with a 95% confidence interval of ``[193, 209]`` --- four years wide on quarterly data, which is about as sharp as break dating gets in macroeconomic samples. All three selection devices agree: sup-F(1) is 12.88 with a p-value of 0.026, the sequential test sup-F(2|1) falls to 2.74 with a p-value of 0.784, and BIC and LWZ both bottom out at one break. Agreement of the sequential rule with both information criteria is the strongest evidence the procedure can deliver.
+Bai-Perron confirms a single break and dates it at observation 201 with a 68% confidence interval of ``[199, 203]`` (or ``[193, 209]`` at `conf_level=0.95`) --- sharp break dating for a quarterly macroeconomic sample. All three selection devices agree: sup-F(1) is 12.88 with a p-value of 0.026, the sequential test sup-F(2|1) falls to 2.74 with a p-value of 0.784, and BIC and LWZ both bottom out at one break. Agreement of the sequential rule with both information criteria is the strongest evidence the procedure can deliver.
 
 ```@example test_breaks
 [(regime = j,

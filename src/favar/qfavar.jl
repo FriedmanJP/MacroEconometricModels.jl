@@ -1181,7 +1181,7 @@ end
 """
     qfavar_panel_irf(m, H; shock=nothing, shock_size=1.0, tau_profile=0.10,
                      baseline_tau=0.50, method=:analytical, ci_type=:none,
-                     n_boot=199, conf_level=0.95, rng=Random.default_rng(),
+                     n_boot=199, conf_level=DEFAULT_CI_MACRO, rng=Random.default_rng(),
                      seed=nothing) -> QuantileImpulseResponse
 
 Compute panel-wide Quantile Impulse Response Functions across all ``N`` panel series
@@ -1211,7 +1211,7 @@ where:
 - `method::Symbol = :analytical` — QIRF propagation method (`:analytical` or `:simulation`)
 - `ci_type::Symbol = :none` — interval type (`:none`, `:bootstrap`, or `:credible` for [`VBQuantileFAVAR`](@ref))
 - `n_boot::Int = 199` — bootstrap replications when `ci_type == :bootstrap`
-- `conf_level::Real = 0.95` — confidence / credible level strictly in ``(0, 1)``
+- `conf_level::Real = 0.68` — confidence / credible level strictly in ``(0, 1)`` (`DEFAULT_CI_MACRO`)
 - `rng::AbstractRNG = Random.default_rng()` — random number generator
 - `seed::Union{Integer,Nothing} = nothing` — optional integer seed
 
@@ -1226,7 +1226,7 @@ function qfavar_panel_irf(m::Union{QuantileFAVAR{T},VBQuantileFAVAR{T}}, H::Int;
                           method::Symbol=:analytical,
                           ci_type::Symbol=:none,
                           n_boot::Int=199,
-                          conf_level::Real=0.95,
+                          conf_level::Real=DEFAULT_CI_MACRO,
                           rng::AbstractRNG=Random.default_rng(),
                           seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
     H >= 1 || throw(ArgumentError("horizon H must be >= 1, got $H"))
@@ -1235,9 +1235,7 @@ function qfavar_panel_irf(m::Union{QuantileFAVAR{T},VBQuantileFAVAR{T}}, H::Int;
     if ci_type === :credible && !(m isa VBQuantileFAVAR)
         throw(ArgumentError("ci_type=:credible is only supported for VBQuantileFAVAR; use :bootstrap or :none"))
     end
-    conf_T = T(conf_level)
-    (isfinite(conf_level) && zero(T) < conf_T < one(T)) ||
-        throw(ArgumentError("conf_level must lie strictly in (0, 1), got $conf_level"))
+    conf_T = T(_validate_conf_level(conf_level))
 
     r = m.n_factors
     n_key = m.n_key

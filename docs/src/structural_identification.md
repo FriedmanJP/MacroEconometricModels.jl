@@ -182,7 +182,7 @@ check = resp -> resp[1, 3, 3] > 0 && resp[1, 1, 3] < 0 && resp[1, 2, 3] < 0
 result_sign = irf(model, 20; method=:sign, check_func=check, rng=MersenneTwister(3))
 (impact = round.(result_sign.values[1, :, 3], digits=4),
  ci_type = result_sign.ci_type,
- impact_95 = round.((result_sign.ci_lower[1, 1, 3], result_sign.ci_upper[1, 1, 3]), digits=4))
+ impact_68 = round.((result_sign.ci_lower[1, 1, 3], result_sign.ci_upper[1, 1, 3]), digits=4))
 ```
 
 ```julia
@@ -193,7 +193,7 @@ plot_result(result_sign)
 <iframe src="../assets/plots/irf_sign.html" width="100%" height="500" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe>
 ```
 
-The reported path is the pointwise median of the identified set (`ci_type = :identified_set`): industrial production falls ``0.0037`` log points on impact against a ``0.0346`` percentage-point rise in the funds rate, with a 95% identified-set band of ``[-0.0066, -0.0003]``. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF --- no single admissible ``Q`` is required to match it at every horizon (Fry & Pagan 2011).
+The reported path is the pointwise median of the identified set (`ci_type = :identified_set`): industrial production falls ``0.0037`` log points on impact against a ``0.0346`` percentage-point rise in the funds rate, with a 68% identified-set band (configurable via `conf_level`) that excludes zero. `max_draws` defaults to 1000. The pointwise median is a set summary, not an IRF --- no single admissible ``Q`` is required to match it at every horizon (Fry & Pagan 2011).
 
 With `store_all=true`, `identify_sign` returns a `SignIdentifiedSet` holding every accepted rotation and its IRFs:
 

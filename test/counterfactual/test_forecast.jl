@@ -31,11 +31,11 @@ end
         @test fc._draws isa Array{Float64,3}
         @test size(fc._draws, 2) == 8
         @test size(fc._draws, 3) == 3
-        # quantile-consistency: stored bands are exact quantiles of the stored draws
+        # quantile-consistency: stored bands are exact 68% default quantiles of the stored draws
         for hi in (1, 5), j in 1:3
             d = fc._draws[:, hi, j]
-            @test quantile(d, 0.025) ≈ fc.ci_lower[hi, j] atol = 1e-12
-            @test quantile(d, 0.975) ≈ fc.ci_upper[hi, j] atol = 1e-12
+            @test quantile(d, 0.16) ≈ fc.ci_lower[hi, j] atol = 1e-12
+            @test quantile(d, 0.84) ≈ fc.ci_upper[hi, j] atol = 1e-12
         end
     end
 

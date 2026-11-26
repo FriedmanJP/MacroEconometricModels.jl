@@ -16,4 +16,4 @@ yN N N N N
 yN N N N N
 yN N N N N
 
-significant at N% (|IRF/SE| > N)
+N% CI excludes zero (|IRF/SE| > N)

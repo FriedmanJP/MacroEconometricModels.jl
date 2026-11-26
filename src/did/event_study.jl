@@ -24,7 +24,7 @@ using LinearAlgebra, Statistics, Distributions
                             leads::Int=3, lags::Int=4,
                             covariates::Vector{String}=String[],
                             cluster::Symbol=:unit,
-                            conf_level::Real=0.95) where {T}
+                            conf_level::Real=DEFAULT_CI_MICRO) where {T}
 
 Estimate event study impulse responses using local projections with panel FE.
 
@@ -40,7 +40,7 @@ and time-only FE. Already-treated observations are excluded from the sample.
 - `lags`: Number of outcome lags as controls
 - `covariates`: Additional control variable names
 - `cluster`: Clustering level (:unit, :time, :twoway)
-- `conf_level`: Confidence level (default: 0.95)
+- `conf_level`: Confidence level (default: `0.90`, `DEFAULT_CI_MICRO`)
 
 # Returns
 `EventStudyLP{T}` with dynamic treatment effect coefficients.
@@ -54,7 +54,8 @@ function estimate_event_study_lp(pd::PanelData{T}, outcome::Union{String,Symbol}
                                  leads::Int=3, lags::Int=4,
                                  covariates::Vector{String}=String[],
                                  cluster::Symbol=:unit,
-                                 conf_level::Real=0.95) where {T<:AbstractFloat}
+                                 conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
     outcome_col = _resolve_varindex(pd, outcome)
     treat_col = _resolve_varindex(pd, treatment)
     cov_cols = [_resolve_varindex(pd, c) for c in covariates]

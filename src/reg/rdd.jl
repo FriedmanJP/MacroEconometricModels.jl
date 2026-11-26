@@ -280,7 +280,7 @@ end
 
 """
     estimate_rdd(y, running; cutoff=0.0, fuzzy=nothing, kernel=:triangular, p=1,
-                 h=nothing, b=nothing, level=0.95) → RDDResult
+                 h=nothing, b=nothing, level=DEFAULT_CI_MICRO) → RDDResult
 
 Sharp or fuzzy regression discontinuity by local polynomial regression, with
 Calonico-Cattaneo-Titiunik (2014) robust bias-corrected inference.
@@ -304,7 +304,7 @@ ratio, the outcome jump divided by the treatment jump.
 - `kernel::Symbol = :triangular` — `:triangular`, `:epanechnikov`, or `:uniform`
 - `p::Int = 1` — polynomial order (1 = local linear, the standard choice)
 - `h`, `b` — main and pilot bandwidths; omit for the MSE-optimal plug-in
-- `level::Real = 0.95` — confidence level
+- `level::Real = 0.90` — confidence level (`DEFAULT_CI_MICRO`)
 
 # Returns
 An [`RDDResult`](@ref). **Use `ci_robust`**, not `ci_conventional` — see the type's docstring.
@@ -326,7 +326,7 @@ function estimate_rdd(y::AbstractVector{T}, running::AbstractVector{T};
                       kernel::Symbol=:triangular, p::Int=1,
                       h::Union{Nothing,Real}=nothing,
                       b::Union{Nothing,Real}=nothing,
-                      level::Real=0.95) where {T<:AbstractFloat}
+                      level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
     _validate_data(y, "y")
     _validate_data(running, "running")
     n = length(y)
@@ -334,7 +334,7 @@ function estimate_rdd(y::AbstractVector{T}, running::AbstractVector{T};
     kernel in (:triangular, :epanechnikov, :uniform) ||
         throw(ArgumentError("kernel must be :triangular, :epanechnikov, or :uniform; got :$kernel"))
     p >= 1 || throw(ArgumentError("p must be >= 1, got $p"))
-    zero(T) < T(level) < one(T) || throw(ArgumentError("level must lie in (0,1), got $level"))
+    lv = _validate_conf_level(level)
     if fuzzy !== nothing
         length(fuzzy) == n || throw(ArgumentError("fuzzy must have length $n"))
     end
@@ -414,6 +414,19 @@ end
 
 function estimate_rdd(y::AbstractVector, running::AbstractVector; kwargs...)
     estimate_rdd(Float64.(y), Float64.(running); kwargs...)
+end
+
+"""Confidence intervals (`2 × 2`, rows: conventional, robust bias-corrected) for RDDResult."""
+function StatsAPI.confint(r::RDDResult{T}; level::Real=default_ci_level(r)) where {T}
+    lv = _validate_conf_level(level)
+    if isapprox(lv, Float64(r.level); atol=1e-12)
+        return T[r.ci_conventional[1] r.ci_conventional[2];
+                 r.ci_robust[1]       r.ci_robust[2]]
+    end
+    z = T(_conf_z(lv))
+    est = T[r.tau_conventional, r.tau_bias_corrected]
+    se = T[r.se_conventional, r.se_robust]
+    return hcat(est .- z .* se, est .+ z .* se)
 end
 
 # =============================================================================

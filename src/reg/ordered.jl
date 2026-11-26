@@ -685,12 +685,13 @@ for MT in (:OrderedLogitModel, :OrderedProbitModel)
             sqrt.(max.(diag(m.vcov_mat), zero(T)))
         end
 
-        function StatsAPI.confint(m::$MT{T}; level::Real=0.95) where {T}
+        function StatsAPI.confint(m::$MT{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+            lv = _validate_conf_level(level)
             se_all = stderror(m)
             K = length(m.beta)
             # Return CI for all parameters [beta; cutpoints]
             theta = vcat(m.beta, m.cutpoints)
-            crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+            crit = T(_conf_z(lv))
             hcat(theta .- crit .* se_all, theta .+ crit .* se_all)
         end
     end

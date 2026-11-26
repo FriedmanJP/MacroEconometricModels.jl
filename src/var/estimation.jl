@@ -150,10 +150,11 @@ end
 
 StatsAPI.stderror(model::VARModel) = sqrt.(diag(vcov(model)))
 
-"""Confidence intervals at given level (default 95%)."""
-function StatsAPI.confint(model::VARModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals at given level (default 68%, `DEFAULT_CI_MACRO`)."""
+function StatsAPI.confint(model::VARModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
     B_vec, se = vec(model.B), stderror(model)
-    crit = T(quantile(TDist(dof_residual(model)), 1 - (1 - level) / 2))
+    crit = T(quantile(TDist(dof_residual(model)), 1 - (1 - lv) / 2))
     hcat(B_vec .- crit .* se, B_vec .+ crit .* se)
 end
 
@@ -166,7 +167,7 @@ end
 # =============================================================================
 
 """
-    forecast(model::VARModel, h; ci_method=:bootstrap, reps=500, conf_level=0.95,
+    forecast(model::VARModel, h; ci_method=:bootstrap, reps=500, conf_level=DEFAULT_CI_MACRO,
              stationary_only=false, rng=Random.default_rng()) -> VARForecast{T}
 
 Forecast from VAR model for `h` steps ahead with optional confidence intervals.
@@ -194,7 +195,7 @@ of:
 - `h`: Forecast horizon (number of steps ahead)
 - `ci_method`: `:bootstrap` (default), `:analytic`, or `:none`
 - `reps`: Number of bootstrap replications (default 500)
-- `conf_level`: Confidence level for intervals (default 0.95)
+- `conf_level`: Confidence level for intervals (default `0.68`, `DEFAULT_CI_MACRO`)
 - `stationary_only`: reject bootstrap draws whose re-estimated companion matrix is
   non-stationary (default `false`)
 - `rng`: random number generator for the bootstrap (default `Random.default_rng()`)
@@ -211,10 +212,11 @@ fc = forecast(model, 12)  # 12-step ahead forecast with bootstrap-B CIs
 function forecast(model::VARModel{T}, h::Int;
                   ci_method::Symbol=:bootstrap,
                   reps::Int=500,
-                  conf_level::Real=0.95,
+                  conf_level::Real=DEFAULT_CI_MACRO,
                   stationary_only::Bool=false,
                   rng::AbstractRNG=Random.default_rng()) where {T}
     h < 1 && throw(ArgumentError("Forecast horizon must be positive"))
+    _validate_conf_level(conf_level)
     ci_method ∈ (:none, :bootstrap, :analytic) ||
         throw(ArgumentError("ci_method must be :none, :bootstrap, or :analytic"))
 

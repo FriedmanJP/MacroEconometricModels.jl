@@ -34,11 +34,13 @@
 
 # Build the tidy NamedTuple of coefficient columns from the same (names, coef, se)
 # inputs a type's `report()` feeds `_coef_table`, computing stat/p/CI numerically.
-function _coef_nt_simple(names, coefs, se, dist::Symbol, dof_r::Int; level::Real=0.95)
+function _coef_nt_simple(names, coefs, se, dist::Symbol, dof_r::Int;
+                         level::Real=DEFAULT_CI_MICRO)
+    lv = _validate_conf_level(level)
     est = Float64.(collect(coefs))
     s = Float64.(collect(se))
     stat = est ./ s
-    a = 1 - level
+    a = 1.0 - lv
     use_t = dist === :t && dof_r >= 1          # fall back to z when dof is degenerate
     if use_t
         zc = quantile(TDist(dof_r), 1 - a / 2)
@@ -59,41 +61,66 @@ function _coef_nt_simple(names, coefs, se, dist::Symbol, dof_r::Int; level::Real
 end
 
 # Single-block StatsAPI models — reuse coef/stderror/dof_residual + varnames.
-function _coef_nt(m::RegModel)
-    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m))
+function _coef_nt(m::RegModel; level::Real=default_ci_level(m))
+    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m); level=level)
 end
-function _coef_nt(m::PanelRegModel)
-    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m))
+function _coef_nt(m::PanelRegModel; level::Real=default_ci_level(m))
+    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m); level=level)
 end
-function _coef_nt(m::PanelIVModel)
-    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m))
+function _coef_nt(m::PanelIVModel; level::Real=default_ci_level(m))
+    return _coef_nt_simple(m.varnames, coef(m), stderror(m), :t, dof_residual(m); level=level)
 end
-_coef_nt(m::LogitModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
-_coef_nt(m::ProbitModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
-_coef_nt(m::PanelLogitModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
-_coef_nt(m::PanelProbitModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
+_coef_nt(m::LogitModel; level::Real=default_ci_level(m)) =
+    _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0; level=level)
+_coef_nt(m::ProbitModel; level::Real=default_ci_level(m)) =
+    _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0; level=level)
+_coef_nt(m::PanelLogitModel; level::Real=default_ci_level(m)) =
+    _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0; level=level)
+_coef_nt(m::PanelProbitModel; level::Real=default_ci_level(m)) =
+    _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0; level=level)
 
 # MarginalEffects — every column is precomputed; drop the non-finite (intercept) rows
-# exactly as `report()` does.
-function _coef_nt(me::MarginalEffects)
+# exactly as `report()` does. Recompute bounds when a different `level` is requested.
+function _coef_nt(me::MarginalEffects; level::Real=default_ci_level(me))
+    lv = _validate_conf_level(level)
     keep = findall(isfinite, me.effects)
+    est = Float64.(me.effects[keep])
+    s = Float64.(me.se[keep])
+    if isapprox(lv, Float64(me.conf_level); atol=1e-12)
+        lo = Float64.(me.ci_lower[keep])
+        hi = Float64.(me.ci_upper[keep])
+    else
+        zc = _conf_z(lv)
+        lo = est .- zc .* s
+        hi = est .+ zc .* s
+    end
     return (
         term=me.varnames[keep],
-        estimate=Float64.(me.effects[keep]),
-        std_error=Float64.(me.se[keep]),
+        estimate=est,
+        std_error=s,
         stat=Float64.(me.z_stat[keep]),
         p_value=Float64.(me.p_values[keep]),
-        ci_lower=Float64.(me.ci_lower[keep]),
-        ci_upper=Float64.(me.ci_upper[keep]),
+        ci_lower=lo,
+        ci_upper=hi,
     )
 end
 
-# DIDResult — event-study coefficients keyed by event time; CI bounds are stored.
-function _coef_nt(r::DIDResult)
+# DIDResult — event-study coefficients keyed by event time; CI bounds are stored,
+# and rescaled analytically when a different `level` is requested.
+function _coef_nt(r::DIDResult; level::Real=default_ci_level(r))
+    lv = _validate_conf_level(level)
     est = Float64.(collect(r.att))
     s = Float64.(collect(r.se))
     stat = est ./ s
     pval = Float64[2 * (1 - cdf(Normal(), abs(z))) for z in stat]
+    if isapprox(lv, Float64(r.conf_level); atol=1e-12)
+        lo = Float64.(collect(r.ci_lower))
+        hi = Float64.(collect(r.ci_upper))
+    else
+        ci = StatsAPI.confint(r; level=lv)
+        lo = Float64.(ci[:, 1])
+        hi = Float64.(ci[:, 2])
+    end
     return (
         event_time=collect(r.event_times),
         term=["e=$(e)" for e in r.event_times],
@@ -101,27 +128,27 @@ function _coef_nt(r::DIDResult)
         std_error=s,
         stat=stat,
         p_value=pval,
-        ci_lower=Float64.(collect(r.ci_lower)),
-        ci_upper=Float64.(collect(r.ci_upper)),
+        ci_lower=lo,
+        ci_upper=hi,
     )
 end
 
 # Ordered logit/probit — two blocks (slopes + cutpoints) tagged by a `block` column.
-_coef_nt(m::OrderedLogitModel) = _coef_nt_ordered(m)
-_coef_nt(m::OrderedProbitModel) = _coef_nt_ordered(m)
-function _coef_nt_ordered(m)
+_coef_nt(m::OrderedLogitModel; level::Real=default_ci_level(m)) = _coef_nt_ordered(m; level=level)
+_coef_nt(m::OrderedProbitModel; level::Real=default_ci_level(m)) = _coef_nt_ordered(m; level=level)
+function _coef_nt_ordered(m; level::Real=default_ci_level(m))
     K = length(m.beta)
     J = length(m.cutpoints)
     names = vcat(String.(m.varnames), ["cut$j" for j in 1:J])
     coefs = vcat(collect(m.beta), collect(m.cutpoints))
     se = stderror(m)                       # joint SE vector, length K + J
     block = vcat(fill("coef", K), fill("cutpoint", J))
-    base = _coef_nt_simple(names, coefs, se, :z, 0)
+    base = _coef_nt_simple(names, coefs, se, :z, 0; level=level)
     return merge((block=block,), base)
 end
 
 # Multinomial logit — one block of K rows per non-base alternative, tagged by `alternative`.
-function _coef_nt(m::MultinomialLogitModel)
+function _coef_nt(m::MultinomialLogitModel; level::Real=default_ci_level(m))
     K = length(m.varnames)
     # length K*(J-1), column-major over alternatives
     se_all = stderror(m)
@@ -139,13 +166,13 @@ function _coef_nt(m::MultinomialLogitModel)
         append!(est, Float64.(m.beta[:, j]))
         append!(s, Float64.(se_all[(off + 1):(off + K)]))
     end
-    base = _coef_nt_simple(terms, est, s, :z, 0)
+    base = _coef_nt_simple(terms, est, s, :z, 0; level=level)
     return merge((alternative=alt,), base)
 end
 
 # VARModel — one row per (equation, term); SEs from the equation-by-equation OLS vcov,
 # mirroring `report(::VARModel)`.
-function _coef_nt(model::VARModel)
+function _coef_nt(model::VARModel; level::Real=default_ci_level(model))
     n = nvars(model)
     p = model.p
     coef_names = vcat(
@@ -166,7 +193,7 @@ function _coef_nt(model::VARModel)
         append!(est, Float64.(model.B[:, j]))
         append!(s, Float64.(se_j))
     end
-    base = _coef_nt_simple(terms, est, s, :t, dof_r)
+    base = _coef_nt_simple(terms, est, s, :t, dof_r; level=level)
     return merge((equation=eqs,), base)
 end
 
@@ -174,23 +201,25 @@ end
 
 # Count models — z-based, mirroring `report()`. NegBin appends the dispersion
 # row tagged by `block`, like the ordered two-block shape. (#854)
-_coef_nt(m::PoissonModel) = _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0)
-function _coef_nt(m::NegBinModel)
+_coef_nt(m::PoissonModel; level::Real=default_ci_level(m)) =
+    _coef_nt_simple(m.varnames, coef(m), stderror(m), :z, 0; level=level)
+function _coef_nt(m::NegBinModel; level::Real=default_ci_level(m))
     k = length(m.beta)
     base = _coef_nt_simple(
         vcat(String.(m.varnames), ["alpha"]),
         vcat(Float64.(m.beta), [Float64(m.alpha)]),
         vcat(Float64.(stderror(m)), [Float64(m.alpha_se)]),
         :z,
-        0,
+        0;
+        level=level,
     )
     block = vcat(fill("coef", k), ["dispersion"])
     return merge((block=block,), base)
 end
 
 # Quantile regression — one block per tau tagged by a `tau` column; same
-# t-distributed inference (dof n-k) as each per-quantile `report()` table. (#855)
-function _coef_nt(m::QuantileRegModel)
+# t-distributed inference (dof n-k) as each per-quantile `report()` table. (#855, #936)
+function _coef_nt(m::QuantileRegModel; level::Real=default_ci_level(m))
     dof_r = size(m.X, 1) - size(m.X, 2)
     taus = Float64[]
     terms = String[]
@@ -202,27 +231,28 @@ function _coef_nt(m::QuantileRegModel)
         append!(est, Float64.(m.beta[:, j]))
         append!(s, Float64.(m.stderr[:, j]))
     end
-    base = _coef_nt_simple(terms, est, s, :t, dof_r)
+    base = _coef_nt_simple(terms, est, s, :t, dof_r; level=level)
     return merge((tau=taus,), base)
 end
 
 # RDD — conventional + robust treatment-effect rows at the stored level, with
 # the main/pilot bandwidths attached. (#855)
-function _coef_nt(r::RDDResult)
+function _coef_nt(r::RDDResult; level::Real=default_ci_level(r))
     base = _coef_nt_simple(
         ["Conventional", "Robust (bias-corrected)"],
         [r.tau_conventional, r.tau_bias_corrected],
         [r.se_conventional, r.se_robust],
         :z,
         0;
-        level=r.level,
+        level=level,
     )
     return merge(base, (h=fill(Float64(r.h), 2), b=fill(Float64(r.b), 2)))
 end
 
 # SUR / 3SLS — one row per (equation, term); dof varies per equation so each
 # block is built separately, mirroring the per-equation `report()` tables. (#856)
-function _coef_nt_eqstack(eqnames, varnames, betas, ses, nobs)
+function _coef_nt_eqstack(eqnames, varnames, betas, ses, nobs;
+                          level::Real=DEFAULT_CI_MICRO)
     eqs = String[]
     terms = String[]
     est = Float64[]
@@ -233,7 +263,8 @@ function _coef_nt_eqstack(eqnames, varnames, betas, ses, nobs)
     hi = Float64[]
     for j in eachindex(eqnames)
         blk = _coef_nt_simple(
-            varnames[j], betas[j], ses[j], :t, max(nobs - length(betas[j]), 1),
+            varnames[j], betas[j], ses[j], :t, max(nobs - length(betas[j]), 1);
+            level=level,
         )
         append!(eqs, fill(eqnames[j], length(blk.term)))
         append!(terms, blk.term)
@@ -250,8 +281,8 @@ function _coef_nt_eqstack(eqnames, varnames, betas, ses, nobs)
     )
 end
 
-function _coef_nt(m::SURModel)
-    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs)
+function _coef_nt(m::SURModel; level::Real=default_ci_level(m))
+    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs; level=level)
     n = length(base.term)
     return merge(
         base,
@@ -264,8 +295,8 @@ function _coef_nt(m::SURModel)
     )
 end
 
-function _coef_nt(m::ThreeSLSModel)
-    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs)
+function _coef_nt(m::ThreeSLSModel; level::Real=default_ci_level(m))
+    base = _coef_nt_eqstack(m.eqnames, m.varnames, m.betas, m.ses, m.nobs; level=level)
     n = length(base.term)
     ni = Int[]
     for j in eachindex(m.eqnames)
@@ -284,11 +315,20 @@ end
 
 # EventStudyLP — event-time coefficients keyed by event time; CIs are stored,
 # like `DIDResult`. (#866)
-function _coef_nt(r::EventStudyLP)
+function _coef_nt(r::EventStudyLP; level::Real=default_ci_level(r))
+    lv = _validate_conf_level(level)
     est = Float64.(collect(r.coefficients))
     s = Float64.(collect(r.se))
     stat = est ./ s
     pval = Float64[2 * (1 - cdf(Normal(), abs(z))) for z in stat]
+    if isapprox(lv, Float64(r.conf_level); atol=1e-12)
+        lo = Float64.(collect(r.ci_lower))
+        hi = Float64.(collect(r.ci_upper))
+    else
+        ci = StatsAPI.confint(r; level=lv)
+        lo = Float64.(ci[:, 1])
+        hi = Float64.(ci[:, 2])
+    end
     return (
         event_time=collect(r.event_times),
         term=["h=$(e)" for e in r.event_times],
@@ -296,29 +336,45 @@ function _coef_nt(r::EventStudyLP)
         std_error=s,
         stat=stat,
         p_value=pval,
-        ci_lower=Float64.(collect(r.ci_lower)),
-        ci_upper=Float64.(collect(r.ci_upper)),
+        ci_lower=lo,
+        ci_upper=hi,
     )
 end
 
 # LPDiDResult — dynamic rows plus pooled rows tagged by `block`; pooled rows
 # carry `missing` event times. (#866)
-function _coef_nt(r::LPDiDResult)
+function _coef_nt(r::LPDiDResult; level::Real=default_ci_level(r))
+    lv = _validate_conf_level(level)
     et = Union{Missing,Int}[e for e in r.event_times]
     term = ["h=$(e)" for e in r.event_times]
     est = Float64.(collect(r.coefficients))
     s = Float64.(collect(r.se))
-    lo = Float64.(collect(r.ci_lower))
-    hi = Float64.(collect(r.ci_upper))
+    same_lvl = isapprox(lv, Float64(r.conf_level); atol=1e-12)
+    zc = same_lvl ? 0.0 : _conf_z(lv)
+    if same_lvl
+        lo = Float64.(collect(r.ci_lower))
+        hi = Float64.(collect(r.ci_upper))
+    else
+        ci = StatsAPI.confint(r; level=lv)
+        lo = Float64.(ci[:, 1])
+        hi = Float64.(ci[:, 2])
+    end
     block = fill("dynamic", length(term))
     for (nm, pool) in (("Pre-pooled", r.pooled_pre), ("Post-pooled", r.pooled_post))
         pool === nothing && continue
         push!(et, missing)
         push!(term, nm)
-        push!(est, Float64(pool.coef))
-        push!(s, Float64(pool.se))
-        push!(lo, Float64(pool.ci_lower))
-        push!(hi, Float64(pool.ci_upper))
+        p_est = Float64(pool.coef)
+        p_se = Float64(pool.se)
+        push!(est, p_est)
+        push!(s, p_se)
+        if same_lvl
+            push!(lo, Float64(pool.ci_lower))
+            push!(hi, Float64(pool.ci_upper))
+        else
+            push!(lo, p_est - zc * p_se)
+            push!(hi, p_est + zc * p_se)
+        end
         push!(block, "pooled")
     end
     stat = est ./ s
@@ -345,6 +401,7 @@ end
 # inference columns, matching the NaN fallback of the ordered AME. (#863)
 function _marginal_effects_long(
     effects::AbstractMatrix, se, varnames, categories; skip_first::Bool,
+    level::Real=DEFAULT_CI_MICRO,
 )
     keep = findall(v -> _display_intercept(v) != _INTERCEPT_LABEL, varnames)
     isempty(keep) && (keep = collect(1:size(effects, 1)))
@@ -359,7 +416,7 @@ function _marginal_effects_long(
         push!(est, Float64(effects[i, j]))
         push!(s, se === nothing ? NaN : Float64(se[i, j]))
     end
-    base = _coef_nt_simple(variable, est, s, :z, 0)
+    base = _coef_nt_simple(variable, est, s, :z, 0; level=level)
     return (
         variable=base.term, category=category, estimate=base.estimate,
         std_error=base.std_error, stat=base.stat, p_value=base.p_value,
@@ -368,9 +425,9 @@ function _marginal_effects_long(
 end
 
 # Multinomial AME skips the base category (column 1), mirroring `show()`.
-function _coef_nt(me::MultinomialMarginalEffects)
+function _coef_nt(me::MultinomialMarginalEffects; level::Real=default_ci_level(me))
     return _marginal_effects_long(
-        me.effects, me.se, me.varnames, me.categories; skip_first=true,
+        me.effects, me.se, me.varnames, me.categories; skip_first=true, level=level,
     )
 end
 
@@ -2021,7 +2078,9 @@ function _coef_nt(pr::DSGEVARLambdaProfile)
     )
 end
 
-function _coef_nt(post::DSGEVARPosterior)
+function _coef_nt(post::DSGEVARPosterior; level::Real=default_ci_level(post))
+    qs = _conf_level_to_quantiles(level)
+    q_lo, q_med, q_hi = qs[1], qs[2], qs[3]
     if post.theta_draws !== nothing && !isempty(post.param_names) && size(post.theta_draws, 2) == length(post.param_names)
         pnames = String[string(s) for s in post.param_names]
         vals = [Float64.(vec(post.theta_draws[:, j])) for j in 1:length(pnames)]
@@ -2029,21 +2088,21 @@ function _coef_nt(post::DSGEVARPosterior)
             parameter=pnames,
             mean=Float64[mean(v) for v in vals],
             std=Float64[std(v) for v in vals],
-            q05=Float64[quantile(v, 0.05) for v in vals],
-            median=Float64[quantile(v, 0.5) for v in vals],
-            q95=Float64[quantile(v, 0.95) for v in vals],
+            ci_lower=Float64[quantile(v, q_lo) for v in vals],
+            median=Float64[quantile(v, q_med) for v in vals],
+            ci_upper=Float64[quantile(v, q_hi) for v in vals],
         )
     end
     k, n, nd = size(post.B_draws)
     on = _safe_labels(post.varnames, n, "y")
-    param = String[]; mn = Float64[]; sd = Float64[]; q05 = Float64[]; med = Float64[]; q95 = Float64[]
+    param = String[]; mn = Float64[]; sd = Float64[]; lo = Float64[]; med = Float64[]; hi = Float64[]
     for j in 1:n, i in 1:k
         v = Float64.(vec(post.B_draws[i, j, :]))
         push!(param, "B[$i,$(on[j])]")
         push!(mn, mean(v)); push!(sd, std(v))
-        push!(q05, quantile(v, 0.05)); push!(med, quantile(v, 0.5)); push!(q95, quantile(v, 0.95))
+        push!(lo, quantile(v, q_lo)); push!(med, quantile(v, q_med)); push!(hi, quantile(v, q_hi))
     end
-    return (parameter=param, mean=mn, std=sd, q05=q05, median=med, q95=q95)
+    return (parameter=param, mean=mn, std=sd, ci_lower=lo, median=med, ci_upper=hi)
 end
 
 # -- Rational Inattention & SteadyStateKalman series --
@@ -2104,12 +2163,13 @@ function _coef_nt(sol::DynamicRISolution)
     )
 end
 
-function _coef_nt(r::RIEstimationResult)
+function _coef_nt(r::RIEstimationResult; level::Real=default_ci_level(r))
+    _validate_conf_level(level)
     isempty(r.params) && return (
         term=["omega"], estimate=[Float64(r.omega)], std_error=[NaN],
         stat=[NaN], p_value=[NaN], ci_lower=[NaN], ci_upper=[NaN],
     )
-    return _coef_nt_simple(r.param_names, r.params, r.stderr, :z, 0)
+    return _coef_nt_simple(r.param_names, r.params, r.stderr, :z, 0; level=level)
 end
 
 function _coef_nt(r::CGTestResult)
@@ -2159,7 +2219,8 @@ function _coef_nt(d::RIIIADiagnostic)
     )
 end
 
-function _coef_nt(m::RILogitModel)
+function _coef_nt(m::RILogitModel; level::Real=default_ci_level(m))
+    _validate_conf_level(level)
     K = length(m.beta)
     if K == 0
         return (
@@ -2169,7 +2230,66 @@ function _coef_nt(m::RILogitModel)
     end
     se = size(m.vcov_mat) == (K, K) ? Float64[sqrt(max(Float64(m.vcov_mat[i, i]), 0.0)) for i in 1:K] : fill(NaN, K)
     vn = _safe_labels(m.varnames, K, "x")
-    return _coef_nt_simple(vn, m.beta, se, :z, 0)
+    return _coef_nt_simple(vn, m.beta, se, :z, 0; level=level)
+end
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public configurable coefficient table (CI-01 / #936)
+# ─────────────────────────────────────────────────────────────────────────────
+
+"""
+    coef_table(m; conf_level=default_ci_level(m)) -> NamedTuple
+
+Return a `Tables.jl`-compatible `NamedTuple` (convertible directly via
+`DataFrame(coef_table(m; conf_level=...))`) of parameter estimates, standard errors,
+test statistics, p-values, and confidence/credible interval bounds `(ci_lower, ci_upper)`
+evaluated at `conf_level ∈ (0, 1)`.
+
+By default `conf_level = default_ci_level(m)`:
+- `0.68` ([`DEFAULT_CI_MACRO`](@ref)) for macroeconometric, time-series, dynamic,
+  Bayesian, and LP-DiD results.
+- `0.90` ([`DEFAULT_CI_MICRO`](@ref)) for microeconometric, cross-sectional, discrete-choice,
+  count, quantile, micro-panel, RDD, systems, and non-LP DiD results (or the estimation-time
+  confidence level stored on the result).
+
+# Examples
+```julia
+m = estimate_reg(y, X)
+DataFrame(coef_table(m))                    # 90% CIs (default for RegModel)
+DataFrame(coef_table(m; conf_level=0.95))   # 95% CIs
+```
+"""
+function coef_table(m; conf_level::Real=default_ci_level(m))
+    lv = _validate_conf_level(conf_level)
+    if m isa QuantileFactorPanelModel
+        return _qfm_pan_coef_nt(m; level=lv)
+    elseif applicable(_coef_nt, m)
+        # Prefer the level-parameterized method when available
+        if hasmethod(_coef_nt, Tuple{typeof(m)}, (:level,))
+            return _coef_nt(m; level=lv)
+        end
+        return _coef_nt(m)
+    else
+        # Fallback for any StatsAPI model implementing coef/stderror/confint
+        b = Float64.(vec(collect(coef(m))))
+        s = Float64.(vec(collect(stderror(m))))
+        ci = StatsAPI.confint(m; level=lv)
+        stat = b ./ s
+        pval = Float64[2 * (1 - cdf(Normal(), abs(z))) for z in stat]
+        names = hasproperty(m, :varnames) && getproperty(m, :varnames) isa AbstractVector{<:AbstractString} &&
+                length(getproperty(m, :varnames)) == length(b) ?
+                String.(getproperty(m, :varnames)) :
+                ["x$i" for i in eachindex(b)]
+        return (
+            term=names,
+            estimate=b,
+            std_error=s,
+            stat=stat,
+            p_value=pval,
+            ci_lower=Float64.(ci[:, 1]),
+            ci_upper=Float64.(ci[:, 2]),
+        )
+    end
 end
 
 const _V110_TABLE_TYPES = (

@@ -218,10 +218,14 @@ end
     )
     ci = confint(smm)
     @test size(ci) == (2, 2)
-    # DGP-08 (#797): exact interval, not just containment — se = (0.1, 0.2),
-    # z_0.975 = 1.9599… (atol covers the 1.96 rounding, 4e-6 on the bounds).
-    @test ci[1, :] ≈ [0.5 - 1.96 * 0.1, 0.5 + 1.96 * 0.1] atol=1e-4
-    @test ci[2, :] ≈ [0.3 - 1.96 * 0.2, 0.3 + 1.96 * 0.2] atol=1e-4
+    # Default 90% CI (DEFAULT_CI_MICRO): se = (0.1, 0.2), z_0.95 ≈ 1.64485
+    z90 = quantile(Normal(), 0.95)
+    @test ci[1, :] ≈ [0.5 - z90 * 0.1, 0.5 + z90 * 0.1] atol=1e-4
+    @test ci[2, :] ≈ [0.3 - z90 * 0.2, 0.3 + z90 * 0.2] atol=1e-4
+    # Explicit 95% CI: z_0.975 = 1.9599…
+    ci95 = confint(smm; level=0.95)
+    @test ci95[1, :] ≈ [0.5 - 1.96 * 0.1, 0.5 + 1.96 * 0.1] atol=1e-4
+    @test ci95[2, :] ≈ [0.3 - 1.96 * 0.2, 0.3 + 1.96 * 0.2] atol=1e-4
 end
 
 @testset "autocovariance_moment_contributions — mean identity" begin

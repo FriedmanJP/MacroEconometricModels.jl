@@ -219,18 +219,20 @@ end
 
     # Inside the interval the null is not rejected; just outside it is. With G=6 the
     # enumerated p-value is a step function on multiples of 1/65, so the endpoint p sits
-    # at the smallest attainable step at or above 0.05 rather than exactly 0.05.
-    @test pat(b.ci_lower) >= 0.05
-    @test pat(b.ci_upper) >= 0.05
+    # at the smallest attainable step at or above alpha = 1 - level (0.10 at default 90% CI).
+    @test b.level == 0.90
+    alpha = 1 - b.level
+    @test pat(b.ci_lower) >= alpha
+    @test pat(b.ci_upper) >= alpha
     width = b.ci_upper - b.ci_lower
-    @test pat(b.ci_lower - 0.05 * width) < 0.05
-    @test pat(b.ci_upper + 0.05 * width) < 0.05
+    @test pat(b.ci_lower - 0.05 * width) < alpha
+    @test pat(b.ci_upper + 0.05 * width) < alpha
 
     # A wider level gives a wider interval
-    b90 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, level=0.90,
+    b95 = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, level=0.95,
                                  rng=Random.Xoshiro(1))
-    @test b90.ci_upper - b90.ci_lower <= width + 1e-8
-    @test b90.level == 0.90
+    @test b95.ci_upper - b95.ci_lower >= width - 1e-8
+    @test b95.level == 0.95
 
     # ci=false leaves the bounds unset
     bn = wild_cluster_bootstrap(m, "x", 0.0; clusters=cl, ci=false,

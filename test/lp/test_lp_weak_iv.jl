@@ -203,7 +203,7 @@ end
             estimate_lp_iv(Y, 1, Z, 1; lags=2)
         end
         band = _suppress_warnings() do
-            lp_iv_ar_band(m; responses=[2], n_grid=101, span=60)
+            lp_iv_ar_band(m; responses=[2], level=0.95, n_grid=101, span=60)
         end
         # Impact response only — the horizon at which theta_true is exactly identified
         cov_ar += any(a <= theta_true <= b for (a, b) in band.sets[1, 1])
@@ -219,6 +219,7 @@ end
     m = estimate_lp_iv(Y, 1, Z, 3; lags=2, varnames=["s", "y", "x2"])
 
     band_all = lp_iv_ar_band(m; n_grid=51)
+    @test band_all.level == 0.68
     @test size(band_all.lower) == (4, 3)
     @test length(band_all.response_names) == 3
     # Selecting a subset reproduces the corresponding column

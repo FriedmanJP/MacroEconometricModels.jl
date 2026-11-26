@@ -18,7 +18,7 @@ using LinearAlgebra, Statistics, Distributions
                                 leads::Int=0, horizon::Int=5,
                                 control_group::Symbol=:never_treated,
                                 cluster::Symbol=:unit,
-                                conf_level::Real=0.95,
+                                conf_level::Real=DEFAULT_CI_MICRO,
                                 base_period::Symbol=:varying) where {T}
 
 Internal Callaway-Sant'Anna estimator.
@@ -35,8 +35,9 @@ function _estimate_callaway_santanna(pd::PanelData{T}, outcome_col::Int, treat_c
                                      leads::Int=0, horizon::Int=5,
                                      control_group::Symbol=:never_treated,
                                      cluster::Symbol=:unit,
-                                     conf_level::Real=0.95,
+                                     conf_level::Real=DEFAULT_CI_MICRO,
                                      base_period::Symbol=:varying) where {T<:AbstractFloat}
+    _validate_conf_level(conf_level)
 
     base_period in (:varying, :universal) ||
         throw(ArgumentError("base_period must be :varying or :universal, got :$base_period"))

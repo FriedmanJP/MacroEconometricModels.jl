@@ -105,6 +105,16 @@ StatsAPI.r2(m::MidasModel) = m.r2
 StatsAPI.islinear(::MidasModel) = false
 StatsAPI.stderror(m::MidasModel) = sqrt.(abs.(diag(m.vcov_mat)))
 
+"""Confidence intervals for MidasModel parameters `[β; θ]` (t-distribution, default 68%)."""
+function StatsAPI.confint(m::MidasModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    dof_r = max(StatsAPI.dof_residual(m), 1)
+    crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+    b = StatsAPI.coef(m)
+    se = StatsAPI.stderror(m)
+    return hcat(b .- crit .* se, b .+ crit .* se)
+end
+
 """
     midas_weights(m::MidasModel) -> Vector
 

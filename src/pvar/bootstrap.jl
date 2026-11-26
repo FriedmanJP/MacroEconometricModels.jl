@@ -18,7 +18,8 @@ IRFs, and constructs pointwise quantile-based confidence intervals.
 """
     pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
                         irf_type::Symbol=:oirf, n_draws::Int=500,
-                        ci::Real=0.95, rng::AbstractRNG=Random.default_rng()) -> NamedTuple
+                        ci::Real=DEFAULT_CI_MACRO, conf_level=nothing,
+                        rng::AbstractRNG=Random.default_rng()) -> NamedTuple
 
 Group-level block bootstrap for PVAR impulse response confidence intervals.
 
@@ -32,7 +33,8 @@ pointwise quantiles.
 # Keywords
 - `irf_type::Symbol=:oirf` — `:oirf` or `:girf`
 - `n_draws::Int=500` — number of bootstrap replications
-- `ci::Real=0.95` — confidence level
+- `ci::Real=0.68` — confidence level (`DEFAULT_CI_MACRO`)
+- `conf_level::Union{Nothing,Real}=nothing` — optional alias overriding `ci`
 - `rng::AbstractRNG` — random number generator
 
 # Returns
@@ -45,13 +47,14 @@ NamedTuple with:
 function pvar_bootstrap_irf(model::PVARModel{T}, H::Int;
                              irf_type::Symbol=:oirf,
                              n_draws::Int=500,
-                             ci::Real=0.95,
+                             ci::Real=DEFAULT_CI_MACRO,
+                             conf_level::Union{Nothing,Real}=nothing,
                              seed::Union{Integer,Nothing}=nothing,
                              rng::AbstractRNG=Random.default_rng()) where {T}
     rng = _resolve_repro_rng(rng, seed)
     H < 0 && throw(ArgumentError("Horizon H must be non-negative"))
     irf_type ∈ (:oirf, :girf) || throw(ArgumentError("irf_type must be :oirf or :girf"))
-    0 < ci < 1 || throw(ArgumentError("ci must be in (0, 1)"))
+    ci = _validate_conf_level(conf_level === nothing ? ci : conf_level)
 
     m_dim = model.m
     N = model.n_groups

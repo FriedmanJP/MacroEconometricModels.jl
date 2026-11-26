@@ -381,6 +381,8 @@ function Base.show(io::IO, slp::StructuralLP{T}) where {T}
 
     # Show IRF summary at selected horizons
     horizons_show = _select_horizons(H)
+    has_ci = slp.irf.ci_type != :none
+    z_fallback = _conf_z(DEFAULT_CI_MACRO)
     for j in 1:n
         data = Matrix{Any}(undef, n, length(horizons_show) + 1)
         for v in 1:n
@@ -388,7 +390,11 @@ function Base.show(io::IO, slp::StructuralLP{T}) where {T}
             for (hi, h) in enumerate(horizons_show)
                 val = slp.irf.values[h, v, j]
                 se_val = slp.se[h, v, j]
-                sig = abs(val) > 1.96 * se_val ? "*" : ""
+                sig = if has_ci
+                    (slp.irf.ci_lower[h, v, j] > zero(T) || slp.irf.ci_upper[h, v, j] < zero(T)) ? "*" : ""
+                else
+                    abs(val) > z_fallback * se_val ? "*" : ""
+                end
                 data[v, hi + 1] = string(_fmt(val), sig)
             end
         end
@@ -400,7 +406,7 @@ function Base.show(io::IO, slp::StructuralLP{T}) where {T}
         )
     end
 
-    _show_note(io, "* significant at 5% (|IRF/SE| > 1.96)")
+    _show_note(io, has_ci ? "* CI excludes zero" : _lp_irf_note())
 end
 
 point_estimate(r::StructuralLP) = r.irf.values
@@ -720,7 +726,8 @@ print_table(irf::LPImpulseResponse, var_name::String) =
 _lp_resp_labels(m) = hasproperty(m, :varnames) ? String.(m.varnames[m.response_vars]) :
                      ["y$i" for i in m.response_vars]
 _lp_shock_label(m) = hasproperty(m, :varnames) ? string(m.varnames[m.shock_var]) : "var $(m.shock_var)"
-const _LP_IRF_NOTE = "* significant at 5% (|IRF/SE| > 1.96)"
+_lp_irf_note(conf_level::Real=DEFAULT_CI_MACRO) =
+    "* $(_ci_pct(conf_level))% CI excludes zero (|IRF/SE| > $(_fmt(_conf_z(conf_level); digits=2)))"
 
 function Base.show(io::IO, m::LPModel)
     cov_name = m.cov_estimator isa NeweyWestEstimator ? "Newey-West" :
@@ -732,7 +739,7 @@ function Base.show(io::IO, m::LPModel)
     ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
     _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
         "Impulse Responses (shock: $(_lp_shock_label(m)))")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 function Base.show(io::IO, m::LPIVModel)
@@ -749,7 +756,7 @@ function Base.show(io::IO, m::LPIVModel)
     ir = extract_shock_irf(m.B, m.vcov, m.response_vars, 2)
     _irf_horizon_table(io, ir.values, ir.se, _lp_resp_labels(m),
         "Impulse Responses (shock: $(_lp_shock_label(m)))")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 nvars(m::LPIVModel) = size(m.Y, 2)
@@ -767,7 +774,7 @@ function Base.show(io::IO, m::SmoothLPModel)
          "Observations" => size(m.Y, 1), "Covariance" => cov_name])
     _irf_horizon_table(io, m.irf_values, m.irf_se, _lp_resp_labels(m),
         "Impulse Responses (shock: $(_lp_shock_label(m)))")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 function Base.show(io::IO, m::StateLPModel)
@@ -789,7 +796,7 @@ function Base.show(io::IO, m::StateLPModel)
     ir_r = extract_shock_irf(m.B_recession, m.vcov_recession, m.response_vars, 2)
     _irf_horizon_table(io, ir_r.values, ir_r.se, rows,
         "Impulse Responses — Recession (shock: $shock)")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 function Base.show(io::IO, m::PropensityLPModel)
@@ -813,7 +820,7 @@ function Base.show(io::IO, m::PropensityLPModel)
     # Header tracks estimator field so DR is not mislabeled as IPW (#533).
     _irf_horizon_table(io, m.ate, m.ate_se, _lp_resp_labels(m),
         "Average Treatment Effects ($est_label)")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 function Base.show(io::IO, irf::LPImpulseResponse)
@@ -824,7 +831,7 @@ function Base.show(io::IO, irf::LPImpulseResponse)
          "Confidence level" => string(ci_pct, "%")])
     _irf_horizon_table(io, irf.values, irf.se, irf.response_vars,
         "Impulse Responses (shock: $(irf.shock_var))")
-    _show_note(io, _LP_IRF_NOTE)
+    _show_note(io, _lp_irf_note())
 end
 
 function Base.show(io::IO, b::BSplineBasis)

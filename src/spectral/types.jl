@@ -22,7 +22,7 @@ Result from autocorrelation, partial autocorrelation, or cross-correlation analy
 - `lags::Vector{Int}` — lag indices
 - `acf::Vector{T}` — autocorrelation values
 - `pacf::Vector{T}` — partial autocorrelation values
-- `ci::T` — confidence interval half-width (±1.96/√n by default)
+- `ci::T` — confidence interval half-width (`±z/√n`, 68% by default)
 - `ccf::Union{Nothing,Vector{T}}` — cross-correlation values (for `ccf()`)
 - `q_stats::Vector{T}` — cumulative Ljung-Box Q-statistics
 - `q_pvalues::Vector{T}` — p-values of Q-statistics

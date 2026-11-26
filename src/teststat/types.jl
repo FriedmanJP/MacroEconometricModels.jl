@@ -252,6 +252,7 @@ Fields:
 - `lwz_values`: LWZ (modified Schwarz) for each number of breaks
 - `trimming`: Trimming fraction (e.g., 0.15)
 - `nobs`: Number of observations
+- `conf_level`: Confidence level used for break-date confidence intervals (default `0.68`, `DEFAULT_CI_MACRO`)
 """
 struct BaiPerronResult{T<:AbstractFloat} <: AbstractUnitRootTest
     n_breaks::Int
@@ -267,7 +268,26 @@ struct BaiPerronResult{T<:AbstractFloat} <: AbstractUnitRootTest
     lwz_values::Vector{T}
     trimming::T
     nobs::Int
+    conf_level::T
 end
+
+# Backward-compatible 13-arg positional constructors (default conf_level to DEFAULT_CI_MACRO)
+BaiPerronResult{T}(n_breaks, break_dates, break_cis, regime_coefs, regime_ses,
+                   supf_stats, supf_pvalues, sequential_stats, sequential_pvalues,
+                   bic_values, lwz_values, trimming, nobs) where {T<:AbstractFloat} =
+    BaiPerronResult{T}(n_breaks, break_dates, break_cis, regime_coefs, regime_ses,
+                       supf_stats, supf_pvalues, sequential_stats, sequential_pvalues,
+                       bic_values, lwz_values, trimming, nobs, T(DEFAULT_CI_MACRO))
+
+BaiPerronResult(n_breaks::Int, break_dates::Vector{Int}, break_cis::Vector{Tuple{Int,Int}},
+                regime_coefs::Vector{Vector{T}}, regime_ses::Vector{Vector{T}},
+                supf_stats::Vector{T}, supf_pvalues::Vector{T},
+                sequential_stats::Vector{T}, sequential_pvalues::Vector{T},
+                bic_values::Vector{T}, lwz_values::Vector{T},
+                trimming::T, nobs::Int) where {T<:AbstractFloat} =
+    BaiPerronResult{T}(n_breaks, break_dates, break_cis, regime_coefs, regime_ses,
+                       supf_stats, supf_pvalues, sequential_stats, sequential_pvalues,
+                       bic_values, lwz_values, trimming, nobs, T(DEFAULT_CI_MACRO))
 
 # =============================================================================
 # Panel Unit Root Test Types
@@ -1333,6 +1353,7 @@ Fields:
 - `ci_lower::T`, `ci_upper::T` — Fisher-z CI (Pearson only; `NaN` otherwise)
 - `exact::Bool` — whether the exact null was used
 - `detail::String` — method annotation
+- `conf_level::T` — confidence level for the Fisher-z CI (`1 - alpha` by default)
 """
 struct CorTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
     method::Symbol
@@ -1345,7 +1366,19 @@ struct CorTestResult{T<:AbstractFloat} <: StatsAPI.HypothesisTest
     ci_upper::T
     exact::Bool
     detail::String
+    conf_level::T
 end
+
+# Backward-compatible 10-arg positional constructors
+CorTestResult{T}(method, estimate, statistic, pvalue, n, df, ci_lower, ci_upper,
+                 exact, detail) where {T<:AbstractFloat} =
+    CorTestResult{T}(method, estimate, statistic, pvalue, n, df, ci_lower, ci_upper,
+                     exact, detail, T(0.95))
+
+CorTestResult(method::Symbol, estimate::T, statistic::T, pvalue::T, n::Int, df::T,
+              ci_lower::T, ci_upper::T, exact::Bool, detail::String) where {T<:AbstractFloat} =
+    CorTestResult{T}(method, estimate, statistic, pvalue, n, df, ci_lower, ci_upper,
+                     exact, detail, T(0.95))
 
 # --- StatsAPI interface (EV-34) ---
 StatsAPI.nobs(r::EqualityTestResult) = sum(r.group_sizes)

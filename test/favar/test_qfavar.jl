@@ -58,12 +58,15 @@ const M_QF = MacroEconometricModels
         @test size(V_multi[1]) == (7 * 3, 7 * 3)
         @test isdiag(V_multi[1])
         @test diag(V_multi[1]) ≈ vec(qv.se_list[1]) .^ 2
-        ci95 = StatsAPI.confint(qv)
+        ci68 = StatsAPI.confint(qv)
         ci90 = StatsAPI.confint(qv; level=0.90)
-        @test size(ci95) == (7 * 3, 2, 3)
+        ci95 = StatsAPI.confint(qv; level=0.95)
+        @test size(ci68) == (7 * 3, 2, 3)
         @test size(ci90) == (7 * 3, 2, 3)
+        @test size(ci95) == (7 * 3, 2, 3)
         for m in 1:3
-            @test all(ci95[:, 1, m] .<= vec(qv.B_list[m]) .<= ci95[:, 2, m])
+            @test all(ci68[:, 1, m] .<= vec(qv.B_list[m]) .<= ci68[:, 2, m])
+            @test all(ci68[:, 2, m] .- ci68[:, 1, m] .< ci90[:, 2, m] .- ci90[:, 1, m])
             @test all(ci95[:, 2, m] .- ci95[:, 1, m] .> ci90[:, 2, m] .- ci90[:, 1, m])
         end
         @test_throws ArgumentError StatsAPI.confint(qv; level=0.0)

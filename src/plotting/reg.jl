@@ -358,16 +358,16 @@ end
 # =============================================================================
 
 """
-    plot_result(m::PoissonModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::PoissonModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Poisson regression coefficients as a horizontal dot-and-whisker plot
-(`β ± z·SE` at confidence level `conf_level`, default 0.95; SE from
+(`β ± z·SE` at confidence level `conf_level`, default `0.90`, `DEFAULT_CI_MICRO`; SE from
 `diag(vcov_mat)`), with a zero reference line. Covariance type and
 pseudo-R² are stated in the panel subtitle.
 """
 function plot_result(m::PoissonModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("pois_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
                         z=z, ptitle="Coefficients ($(_ci_pct(conf_level))% CI)")
@@ -378,16 +378,16 @@ function plot_result(m::PoissonModel{T}; title::String="",
 end
 
 """
-    plot_result(m::NegBinModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::NegBinModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Negative-binomial regression coefficients as a horizontal dot-and-whisker plot
-(`β ± z·SE` at `conf_level`, default 0.95; SE from the β block of the joint
+(`β ± z·SE` at `conf_level`, default `0.90`, `DEFAULT_CI_MICRO`; SE from the β block of the joint
 `(k+1)×(k+1)` `vcov_mat`, α last), with a zero reference line. The dispersion
 parameter and pseudo-R² are stated in the panel subtitle.
 """
 function plot_result(m::NegBinModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     K = length(m.beta)
     se_beta = _diag_se(m.vcov_mat)[1:K]
@@ -433,16 +433,16 @@ function plot_result(m::QuantileRegModel{T}; title::String="",
 end
 
 """
-    plot_result(m::RobustRegModel; title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::RobustRegModel; title="", save_path=nothing, conf_level=DEFAULT_CI_MICRO)
 
 Robust regression: coefficient dot-and-whisker (`β ± z·SE` at `conf_level`,
-default 0.95) plus the estimation-weight profile over observations
+default `0.90`, `DEFAULT_CI_MICRO`) plus the estimation-weight profile over observations
 (downweighted points sit near zero). ψ function, method, and robust R² are
 stated in the coefficient subtitle.
 """
 function plot_result(m::RobustRegModel{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MICRO) where {T}
     z = _conf_z(conf_level)
     p1 = _coef_panel("rob_coef", m.varnames, m.beta, _diag_se(m.vcov_mat);
                      z=z, ptitle="Coefficients ($(m.psi)/$(m.method), " *
@@ -465,17 +465,17 @@ end
 # =============================================================================
 
 """
-    plot_result(r::RDDResult; title="", save_path=nothing, conf_level=0.95)
+    plot_result(r::RDDResult; title="", save_path=nothing, conf_level=r.level)
 
 Regression-discontinuity treatment effect: conventional and bias-corrected
 estimates as a two-row dot-and-whisker (`τ ± z·SE` at confidence level
-`conf_level`, default 0.95), with a zero reference line. Cutoff, bandwidths,
+`conf_level`, defaulting to `r.level`), with a zero reference line. Cutoff, bandwidths,
 kernel, polynomial order, and both-side sample sizes are stated in the panel
 subtitle (first-stage estimate appended for fuzzy designs).
 """
 function plot_result(r::RDDResult{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=r.level) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("rdd_tau", ["Conventional", "Bias-corrected"],
                         [r.tau_conventional, r.tau_bias_corrected],

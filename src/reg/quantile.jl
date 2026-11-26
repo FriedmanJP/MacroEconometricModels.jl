@@ -721,14 +721,42 @@ struct QuantileRegModel{T<:AbstractFloat} <: StatsAPI.RegressionModel
     se_type::Symbol
     n_obs::Int
     converged::Vector{Bool}
+    alpha::T
     manifest::Union{ReproManifest,Nothing}
 end
 
 QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
                     pseudo_r2, varnames, se_type, n_obs, converged;
-                    manifest=nothing) where {T<:AbstractFloat} =
+                    alpha::Real=1 - DEFAULT_CI_MICRO, manifest=nothing) where {T<:AbstractFloat} =
     QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
-                        pseudo_r2, varnames, se_type, n_obs, converged, manifest)
+                        pseudo_r2, varnames, se_type, n_obs, converged, T(alpha), manifest)
+
+QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                    pseudo_r2, varnames, se_type, n_obs, converged,
+                    manifest::Union{ReproManifest,Nothing}) where {T<:AbstractFloat} =
+    QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                        pseudo_r2, varnames, se_type, n_obs, converged,
+                        T(1 - DEFAULT_CI_MICRO), manifest)
+
+QuantileRegModel(y::Vector{T}, X::Matrix{T}, taus::Vector{T}, beta::Matrix{T},
+                 vcov_mats::Vector{Matrix{T}}, stderr::Matrix{T}, residuals::Matrix{T},
+                 fitted::Matrix{T}, objective::Vector{T}, pseudo_r2::Vector{T},
+                 varnames::Vector{String}, se_type::Symbol, n_obs::Int,
+                 converged::Vector{Bool};
+                 alpha::Real=1 - DEFAULT_CI_MICRO,
+                 manifest::Union{ReproManifest,Nothing}=nothing) where {T<:AbstractFloat} =
+    QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                        pseudo_r2, varnames, se_type, n_obs, converged, T(alpha), manifest)
+
+QuantileRegModel(y::Vector{T}, X::Matrix{T}, taus::Vector{T}, beta::Matrix{T},
+                 vcov_mats::Vector{Matrix{T}}, stderr::Matrix{T}, residuals::Matrix{T},
+                 fitted::Matrix{T}, objective::Vector{T}, pseudo_r2::Vector{T},
+                 varnames::Vector{String}, se_type::Symbol, n_obs::Int,
+                 converged::Vector{Bool},
+                 manifest::Union{ReproManifest,Nothing}) where {T<:AbstractFloat} =
+    QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, objective,
+                        pseudo_r2, varnames, se_type, n_obs, converged,
+                        T(1 - DEFAULT_CI_MICRO), manifest)
 
 # =============================================================================
 # Estimation
@@ -736,7 +764,7 @@ QuantileRegModel{T}(y, X, taus, beta, vcov_mats, stderr, residuals, fitted, obje
 
 """
     estimate_qreg(y, X, tau=0.5; se=:iid, solver=:ipm, varnames=nothing, n_boot=500,
-                  seed=nothing, rng=Random.default_rng(), alpha=0.05) → QuantileRegModel
+                  seed=nothing, rng=Random.default_rng(), alpha=0.10) → QuantileRegModel
 
 Quantile regression (Koenker & Bassett 1978): estimate `β(τ)` by minimizing the
 check-function loss
@@ -763,7 +791,8 @@ the upper tail. `tau` may be a scalar or a vector; one fit is returned per quant
 - `n_boot::Int = 500` — bootstrap replications when `se = :boot`
 - `seed::Union{Integer,Nothing} = nothing` — random seed for reproducible bootstrap draws
 - `rng` — random number generator for the bootstrap
-- `alpha::Real = 0.05` — level used by the Hall-Sheather bandwidth
+- `alpha::Real = 0.10` — significance level (`1 - conf_level`, default `0.10` for 90% CIs)
+  used for the Hall-Sheather bandwidth, `Tables.jl` / `DataFrame(m)`, `confint(m)`, and `report(m)`
 - `varnames` — coefficient names
 
 # Returns
@@ -793,8 +822,9 @@ function estimate_qreg(y::AbstractVector{T}, X::AbstractMatrix{T},
                        n_boot::Int=500,
                        seed::Union{Integer,Nothing}=nothing,
                        rng=Random.default_rng(),
-                       alpha::Real=0.05) where {T<:AbstractFloat}
+                       alpha::Real=1 - DEFAULT_CI_MICRO) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
+    _validate_conf_level(1 - (alpha isa Bool ? alpha : Float64(alpha)))
     _validate_data(y, "y")
     _validate_data(X, "X")
     n = length(y)
@@ -862,7 +892,7 @@ function estimate_qreg(y::AbstractVector{T}, X::AbstractMatrix{T},
     length(names) == k || throw(ArgumentError("varnames must have length $k"))
 
     result = QuantileRegModel{T}(yv, Xm, taus, beta, vcovs, stderr, resid, fit,
-                                 obj, pr2, names, se, n, conv)
+                                 obj, pr2, names, se, n, conv; alpha=T(alpha))
     return _with_manifest(result, capture_manifest(; seed=seed,
         settings=Dict{String,Any}("n_boot" => n_boot, "se" => String(se),
                                   "solver" => String(solver),
@@ -941,6 +971,25 @@ StatsAPI.residuals(m::QuantileRegModel) = size(m.residuals, 2) == 1 ? vec(m.resi
 StatsAPI.nobs(m::QuantileRegModel) = m.n_obs
 StatsAPI.vcov(m::QuantileRegModel) = length(m.vcov_mats) == 1 ? m.vcov_mats[1] : m.vcov_mats
 StatsAPI.stderror(m::QuantileRegModel) = size(m.stderr, 2) == 1 ? vec(m.stderr) : m.stderr
+StatsAPI.dof(m::QuantileRegModel) = size(m.X, 2)
+StatsAPI.dof_residual(m::QuantileRegModel) = max(m.n_obs - size(m.X, 2), 1)
+
+"""
+    StatsAPI.confint(m::QuantileRegModel; level=1 - m.alpha) -> Matrix{T}
+
+Confidence intervals (`(k * n_tau) × 2` matrix `[lower upper]`, stacked column-major
+across quantiles matching `vec(m.beta)` and `DataFrame(m)`) using the `t(n - k)` distribution.
+Defaults to `1 - m.alpha` (`0.90` under default `alpha = 0.10`).
+"""
+function StatsAPI.confint(m::QuantileRegModel{T};
+                          level::Real=default_ci_level(m)) where {T}
+    lv = _validate_conf_level(level)
+    dof_r = max(size(m.X, 1) - size(m.X, 2), 1)
+    crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+    b = vec(m.beta)
+    s = vec(m.stderr)
+    return hcat(b .- crit .* s, b .+ crit .* s)
+end
 
 """
     predict(m::QuantileRegModel, X_new) → Vector or Matrix
@@ -983,7 +1032,7 @@ function report(io::IO, m::QuantileRegModel{T}) where {T}
         _coef_table(io, "tau = $(round(t; digits=3))  (loss = $(_fmt(m.objective[j]; digits=4)), " *
                         "pseudo R1 = $(_fmt(m.pseudo_r2[j]; digits=4)))",
                     m.varnames, Vector{T}(m.beta[:, j]), Vector{T}(m.stderr[:, j]);
-                    dist=:t, dof_r=n - k)
+                    dist=:t, dof_r=n - k, level=default_ci_level(m))
     end
     return nothing
 end

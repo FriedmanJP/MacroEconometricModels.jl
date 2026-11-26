@@ -648,7 +648,7 @@ res_est = estimate_dsge_bayes(spec_g, y_level, Dict(:rho => 0.9, :g => 0.0);
 report(res_est)
 ```
 
-The 95% credible interval for `g` covers the data-generating drift of 0.02. The short chain used here is flagged for low effective sample size --- see [Convergence Diagnostics](@ref). Symbolic trend coefficients require a Kalman method (`:smc` or `:mh`); the `:smc2` particle filter cannot re-evaluate the trend per draw and raises an error naming the offending symbols.
+The 68% credible interval for `g` covers the data-generating drift of 0.02. The short chain used here is flagged for low effective sample size --- see [Convergence Diagnostics](@ref). Symbolic trend coefficients require a Kalman method (`:smc` or `:mh`); the `:smc2` particle filter cannot re-evaluate the trend per draw and raises an error naming the offending symbols.
 
 When neither remedy is used and an observable shows a strong trend, estimation emits a guidance warning. [`detect_trend`](@ref) implements the check standalone and uses a Newey-West HAC standard error for the slope, so persistent-but-stationary observables are not flagged spuriously:
 
@@ -711,13 +711,13 @@ The OLS slope recovers the drift, but `trending` is `false`: the HAC t-statistic
 After estimation, three functions extract information from the `BayesianDSGE` result:
 
 ```@example dsge_estimation
-# Posterior summary: mean, median, std, 95% credible interval per parameter
+# Posterior summary: mean, median, std, 68% credible interval per parameter
 ps = posterior_summary(result_smc)
 ps[:rho][:mean]       # posterior mean of rho
 ```
 
 ```@example dsge_estimation
-ps[:rho][:ci_lower]   # lower bound of 95% CI for rho
+ps[:rho][:ci_lower]   # lower bound of 68% CI for rho
 ```
 
 ```@example dsge_estimation
@@ -899,7 +899,7 @@ Bayesian DSGE estimation quantifies parameter uncertainty; `irf`, `fevd`, and `s
 
 ### Posterior IRFs and FEVD (Herbst & Schorfheide 2015)
 
-For each of `n_draws` randomly selected posterior draws, the model is re-solved at those parameter values and the analytical IRF (or FEVD) is computed. The results are stacked and summarized with pointwise quantile bands. The default quantiles ``[0.05, 0.16, 0.84, 0.95]`` produce dual 68% and 90% credible bands --- the standard reporting convention in the Bayesian DSGE literature.
+For each of `n_draws` randomly selected posterior draws, the model is re-solved at those parameter values and the analytical IRF (or FEVD) is computed. The results are stacked and summarized with pointwise quantile bands. The default quantiles ``[0.16, 0.5, 0.84]`` produce 68% credible bands --- the standard reporting convention in the Bayesian DSGE literature (pass `quantiles=[0.05, 0.16, 0.84, 0.95]` for dual 68%/90% bands).
 
 ```@example dsge_estimation
 # Bayesian IRFs with dual credible bands
@@ -949,7 +949,7 @@ The result is a `BayesianDSGESimulation{T}` containing the pointwise median, qua
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
 | `n_draws` | `Int` | `200` | Number of posterior draws to subsample |
-| `quantiles` | `Vector{<:Real}` | `[0.05, 0.16, 0.84, 0.95]` | Quantile levels for credible bands |
+| `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Quantile levels for credible bands |
 | `solver` | `Symbol` | `:gensys` | DSGE solver for re-solving at each draw |
 | `solver_kwargs` | `NamedTuple` | `NamedTuple()` | Additional solver keyword arguments |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Random number generator |

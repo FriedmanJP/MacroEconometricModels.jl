@@ -599,25 +599,26 @@ end
 # =============================================================================
 
 """
-    incidence_rate_ratio(m; conf_level=0.95) -> OddsRatio{T}
+    incidence_rate_ratio(m; conf_level=DEFAULT_CI_MICRO) -> OddsRatio{T}
 
 Incidence-rate ratios `exp(βⱼ)` for a count model — the multiplicative effect of a one-unit
 increase in `xⱼ` on the conditional mean — with delta-method standard errors
-`SE(IRR) = IRR · SE(β)` and confidence intervals formed on the log scale.
+`SE(IRR) = IRR · SE(β)` and confidence intervals formed on the log scale (default 90%).
 
 Mirrors [`odds_ratio`](@ref) for binary models and returns the same [`OddsRatio`](@ref)
 container. Accepts [`PoissonModel`](@ref) and [`NegBinModel`](@ref).
 """
 function incidence_rate_ratio(m::Union{PoissonModel{T},NegBinModel{T}};
-                              conf_level::Real=0.95) where {T<:AbstractFloat}
+                              conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     beta = m.beta
     se_beta = stderror(m)
     irr = exp.(beta)
-    z_crit = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_crit = T(_conf_z(lv))
     OddsRatio{T}(irr, irr .* se_beta,
                  exp.(beta .- z_crit .* se_beta),
                  exp.(beta .+ z_crit .* se_beta),
-                 copy(m.varnames), T(conf_level),
+                 copy(m.varnames), T(lv),
                  "Incidence Rate Ratios", "IRR")
 end
 
@@ -651,10 +652,10 @@ function _count_ame(beta::AbstractVector{S}, X::Matrix{T}, off::Vector{T},
 end
 
 """
-    marginal_effects(m::PoissonModel; conf_level=0.95) -> MarginalEffects{T}
-    marginal_effects(m::NegBinModel; conf_level=0.95) -> MarginalEffects{T}
+    marginal_effects(m::PoissonModel; conf_level=DEFAULT_CI_MICRO) -> MarginalEffects{T}
+    marginal_effects(m::NegBinModel; conf_level=DEFAULT_CI_MICRO) -> MarginalEffects{T}
 
-Average marginal effects on the conditional mean, with delta-method standard errors.
+Average marginal effects on the conditional mean, with delta-method standard errors (default 90% CIs).
 
 Because `E[y|x] = exp(x'β + offset)` for both models, the effects depend only on `β` — the
 NegBin2 dispersion `α` does not enter the mean, so only the `β` block of the covariance is
@@ -666,7 +667,8 @@ used.
 - The intercept column carries `NaN` (no marginal effect).
 """
 function marginal_effects(m::Union{PoissonModel{T},NegBinModel{T}};
-                          conf_level::Real=0.95) where {T<:AbstractFloat}
+                          conf_level::Real=DEFAULT_CI_MICRO) where {T<:AbstractFloat}
+    lv = _validate_conf_level(conf_level)
     k = length(m.beta)
     off = m.offset === nothing ? zeros(T, size(m.X, 1)) : m.offset
     kinds = _me_column_kinds(m.X)
@@ -682,7 +684,7 @@ function marginal_effects(m::Union{PoissonModel{T},NegBinModel{T}};
         z_stat[j] = se[j] > zero(T) ? me[j] / se[j] : zero(T)
         p_values[j] = T(2 * ccdf(Normal(), abs(z_stat[j])))
     end
-    z_crit = T(quantile(Normal(), 1 - (1 - conf_level) / 2))
+    z_crit = T(_conf_z(lv))
     ci_lower = me .- z_crit .* se
     ci_upper = me .+ z_crit .* se
     @inbounds for j in 1:k
@@ -692,7 +694,7 @@ function marginal_effects(m::Union{PoissonModel{T},NegBinModel{T}};
         end
     end
     MarginalEffects{T}(me, se, z_stat, p_values, ci_lower, ci_upper,
-                       copy(m.varnames), :ame, T(conf_level))
+                       copy(m.varnames), :ame, T(lv))
 end
 
 # =============================================================================
@@ -729,9 +731,11 @@ StatsAPI.stderror(m::NegBinModel{T}) where {T} =
 StatsAPI.dof(m::NegBinModel) = length(m.beta) + 1
 StatsAPI.dof_residual(m::NegBinModel) = length(m.y) - length(m.beta) - 1
 
-function StatsAPI.confint(m::Union{PoissonModel{T},NegBinModel{T}}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::Union{PoissonModel{T},NegBinModel{T}};
+                          level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 

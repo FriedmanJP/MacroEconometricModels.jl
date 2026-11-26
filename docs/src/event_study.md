@@ -144,7 +144,7 @@ plot_result(eslp)
 | `lags` | `Int` | `4` | Lagged outcome controls |
 | `covariates` | `Vector{String}` | `String[]` | Additional control variables |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.90` | Confidence level |
 
 ### Return Value (`EventStudyLP{T}`)
 
@@ -289,7 +289,7 @@ Averaged over the first eleven years, a democratic transition raises log GDP per
 | `reweight` | `Bool` | `false` | IPW reweighting toward the equally weighted ATE |
 | `nocomp` | `Bool` | `false` | Restrict to obs in CCS at all horizons |
 | `cluster` | `Symbol` | `:unit` | SE clustering: `:unit`, `:time`, or `:twoway` |
-| `conf_level` | `Real` | `0.95` | Confidence level |
+| `conf_level` | `Real` | `0.68` | Confidence level (`DEFAULT_CI_MACRO` for LP-DiD) |
 | `post_pooled` | `Union{Nothing,Tuple{Int,Int}}` | `nothing` | ``(start, end)`` for pooled post-treatment |
 | `pre_pooled` | `Union{Nothing,Tuple{Int,Int}}` | `nothing` | ``(start, end)`` for pooled pre-treatment |
 | `only_pooled` | `Bool` | `false` | Skip event study, compute only pooled |

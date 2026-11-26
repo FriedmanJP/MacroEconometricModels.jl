@@ -13,7 +13,7 @@ interval.
 using LinearAlgebra, Distributions
 
 """
-    forecast(m::MidasModel, X_new; y_lags=nothing, level=0.95) -> MidasForecast
+    forecast(m::MidasModel, X_new; y_lags=nothing, level=DEFAULT_CI_MACRO) -> MidasForecast
 
 Direct `h`-step forecast (horizon stored in `m.h`) using the most recent `K`
 high-frequency observations in `X_new` (most-recent-first). Autoregressive terms
@@ -25,11 +25,13 @@ uncertainty through the Gauss–Newton gradient `x_f`:
 
     Var(ŷ_f) = σ̂² + x_fᵀ V x_f,
 
-where `V` is the coefficient variance-covariance matrix.
+where `V` is the coefficient variance-covariance matrix. Prediction intervals
+default to `level = 0.68` (`DEFAULT_CI_MACRO`).
 """
 function forecast(m::MidasModel{T}, X_new::AbstractVector;
                   y_lags::Union{Nothing,AbstractVector}=nothing,
-                  level::Real=0.95) where {T<:AbstractFloat}
+                  level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    _validate_conf_level(level)
     xn = convert(Vector{T}, collect(X_new))
     length(xn) >= m.K || throw(ArgumentError(
         "X_new needs ≥ K=$(m.K) high-frequency observations (got $(length(xn)))"))

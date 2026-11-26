@@ -87,9 +87,10 @@ StatsAPI.stderror(m::SMMModel) = sqrt.(max.(diag(m.vcov), zero(eltype(m.theta)))
 is_overidentified(m::SMMModel) = m.n_moments > m.n_params
 overid_df(m::SMMModel) = m.n_moments - m.n_params
 
-function StatsAPI.confint(m::SMMModel{T}; level::Real=0.95) where {T}
+function StatsAPI.confint(m::SMMModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    z = T(quantile(Normal(), 1 - (1 - level) / 2))
+    z = T(_conf_z(lv))
     hcat(m.theta .- z .* se, m.theta .+ z .* se)
 end
 

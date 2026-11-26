@@ -103,16 +103,16 @@ end
 # =============================================================================
 
 """
-    plot_result(m::ARDLModel; view=:coef, title="", save_path=nothing, conf_level=0.95)
+    plot_result(m::ARDLModel; view=:coef, title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 ARDL levels-model coefficients as a horizontal dot-and-whisker plot
-(`β ± z·SE` at confidence level `conf_level`, default 0.95; SE from
+(`β ± z·SE` at confidence level `conf_level`, default `0.68`, `DEFAULT_CI_MACRO`; SE from
 `diag(vcov)`), with a zero reference line. Lag orders and case are stated in
 the panel subtitle. Only `view=:coef` is defined.
 """
 function plot_result(m::ARDLModel{T}; view::Symbol=:coef, title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     view === :coef ||
         throw(ArgumentError("unknown view :$view; valid views: :coef"))
     z = _conf_z(conf_level)
@@ -160,15 +160,15 @@ function plot_result(b::ARDLBoundsTest{T}; title::String="",
 end
 
 """
-    plot_result(lr::ARDLLongRun; title="", save_path=nothing, conf_level=0.95)
+    plot_result(lr::ARDLLongRun; title="", save_path=nothing, conf_level=DEFAULT_CI_MACRO)
 
 ARDL long-run multipliers as a horizontal dot-and-whisker plot
-(`θ ± z·SE` at confidence level `conf_level`, default 0.95), with a zero
+(`θ ± z·SE` at confidence level `conf_level`, default `0.68`, `DEFAULT_CI_MACRO`), with a zero
 reference line.
 """
 function plot_result(lr::ARDLLongRun{T}; title::String="",
                      save_path::Union{String,Nothing}=nothing,
-                     conf_level::Real=0.95) where {T}
+                     conf_level::Real=DEFAULT_CI_MACRO) where {T}
     z = _conf_z(conf_level)
     panel = _coef_panel("ardl_lr", lr.varnames, lr.theta, lr.se;
                         z=z, ptitle="Long-Run Multipliers ($(_ci_pct(conf_level))% CI)")

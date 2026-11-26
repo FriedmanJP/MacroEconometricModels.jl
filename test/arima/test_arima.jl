@@ -349,12 +349,14 @@ end
         y2 = dgp_arima(rng; phi=[0.4], d=1, T=300).y
         m2 = estimate_arima(y2, 1, 1, 0; include_intercept=false)
         fc2 = forecast(m2, 8)
+        @test fc2.conf_level == 0.68
         phistar = MacroEconometricModels._expand_ar_with_differencing(m2.phi, 1)
         @test phistar ≈ [1 + m2.phi[1], -m2.phi[1]] atol=1e-12
         psi = MacroEconometricModels._compute_psi_weights(phistar, m2.theta, 8)
         se_expected = sqrt.(MacroEconometricModels._forecast_variance(m2.sigma2, psi, 8))
         @test fc2.se ≈ se_expected atol=1e-10
-        @test fc2.ci_lower ≈ fc2.forecast .- z .* fc2.se atol=1e-10
+        z68 = MacroEconometricModels._conf_z(0.68)
+        @test fc2.ci_lower ≈ fc2.forecast .- z68 .* fc2.se atol=1e-10
         @test fc2.ci_upper .- fc2.forecast ≈ fc2.forecast .- fc2.ci_lower atol=1e-12
     end
 

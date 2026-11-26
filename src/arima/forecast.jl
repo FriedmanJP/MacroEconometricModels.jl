@@ -165,47 +165,47 @@ end
 # =============================================================================
 
 """
-    forecast(model::ARModel, h; conf_level=0.95) -> ARIMAForecast
+    forecast(model::ARModel, h; conf_level=DEFAULT_CI_MACRO) -> ARIMAForecast
 
-Compute h-step ahead forecasts with confidence intervals for AR model.
+Compute h-step ahead forecasts with confidence intervals (default 68%) for AR model.
 """
-function forecast(model::ARModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+function forecast(model::ARModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, model.phi, T[], model.sigma2, h, conf_level)
 end
 
 """
-    forecast(model::MAModel, h; conf_level=0.95) -> ARIMAForecast
+    forecast(model::MAModel, h; conf_level=DEFAULT_CI_MACRO) -> ARIMAForecast
 
-Compute h-step ahead forecasts with confidence intervals for MA model.
+Compute h-step ahead forecasts with confidence intervals (default 68%) for MA model.
 """
-function forecast(model::MAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+function forecast(model::MAModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, T[], model.theta, model.sigma2, h, conf_level)
 end
 
 """
-    forecast(model::ARMAModel, h; conf_level=0.95) -> ARIMAForecast
+    forecast(model::ARMAModel, h; conf_level=DEFAULT_CI_MACRO) -> ARIMAForecast
 
-Compute h-step ahead forecasts with confidence intervals for ARMA model.
+Compute h-step ahead forecasts with confidence intervals (default 68%) for ARMA model.
 """
-function forecast(model::ARMAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+function forecast(model::ARMAModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     _forecast_arma(model.y, model.residuals, model.c, model.phi, model.theta, model.sigma2, h, conf_level)
 end
 
 """
-    forecast(model::ARIMAModel, h; conf_level=0.95) -> ARIMAForecast
+    forecast(model::ARIMAModel, h; conf_level=DEFAULT_CI_MACRO) -> ARIMAForecast
 
-Compute h-step ahead forecasts with confidence intervals for ARIMA model.
+Compute h-step ahead forecasts with confidence intervals (default 68%) for ARIMA model.
 Forecasts are computed on the differenced series and then integrated back
 to the original scale.
 """
-function forecast(model::ARIMAModel{T}, h::Int; conf_level::Real=0.95) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+function forecast(model::ARIMAModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
 
     fc_diff = _forecast_arma(model.y_diff, model.residuals, model.c,
@@ -310,7 +310,7 @@ function _arfima_poly_ratio(num::Vector{T}, den::Vector{T}, K::Int) where {T<:Ab
 end
 
 """
-    forecast(model::ARFIMAModel, h; conf_level=0.95, trunc_lag=200) -> ARIMAForecast
+    forecast(model::ARFIMAModel, h; conf_level=DEFAULT_CI_MACRO, trunc_lag=200) -> ARIMAForecast
 
 `h`-step forecasts for an ARFIMA(p,d,q) model via the truncated AR(∞)/ψ(∞)
 representation. The AR(∞) operator π(L) = φ(L)(1−L)^d/θ(L) drives the point
@@ -318,9 +318,9 @@ recursion on the mean-adjusted series; forecast-error variances use the MA(∞)
 ψ-weights ψ(L) = θ(L)(1−L)^{−d}/φ(L), so Var(e_{n+k}) = σ² Σ_{j=0}^{k−1} ψ_j².
 `trunc_lag` sets the AR(∞) truncation (the fractional weights decay ∝ k^{−1−d}).
 """
-function forecast(model::ARFIMAModel{T}, h::Int; conf_level::Real=0.95,
+function forecast(model::ARFIMAModel{T}, h::Int; conf_level::Real=DEFAULT_CI_MACRO,
                   trunc_lag::Int=200) where {T<:AbstractFloat}
-    conf_level = T(conf_level)
+    conf_level = T(_validate_conf_level(conf_level))
     h < 1 && throw(ArgumentError("Forecast horizon h must be positive"))
     n = length(model.y)
     d = model.d

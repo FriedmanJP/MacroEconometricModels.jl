@@ -453,7 +453,7 @@ The returned named tuple contains `boot.irf` (point estimate), `boot.lower` and 
 |---------|------|---------|-------------|
 | `irf_type` | `Symbol` | `:oirf` | `:oirf` (orthogonalized) or `:girf` (generalized) |
 | `n_draws` | `Int` | `500` | Number of bootstrap replications |
-| `ci` | `Real` | `0.95` | Confidence level |
+| `ci` | `Real` | `0.68` | Confidence level |
 | `rng` | `AbstractRNG` | `Random.default_rng()` | Generator for the per-draw seeds |
 
 | Field | Type | Description |

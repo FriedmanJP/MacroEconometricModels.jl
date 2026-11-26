@@ -13,7 +13,8 @@ Bai-Perron (1998, 2003) multiple structural break test.
 # =============================================================================
 
 """
-    bai_perron_test(y, X; max_breaks=5, trimming=0.15, criterion=:bic) -> BaiPerronResult
+    bai_perron_test(y, X; max_breaks=5, trimming=0.15, criterion=:bic,
+                    conf_level=DEFAULT_CI_MACRO) -> BaiPerronResult
 
 Bai-Perron (1998, 2003) test for multiple structural breaks in a linear regression.
 
@@ -28,6 +29,7 @@ residuals. Break number is selected by BIC or LWZ information criteria.
 - `max_breaks::Int=5`: Maximum number of breaks to consider
 - `trimming::Real=0.15`: Minimum fraction of observations per segment
 - `criterion::Symbol=:bic`: Information criterion for break selection (`:bic` or `:lwz`)
+- `conf_level::Real=DEFAULT_CI_MACRO`: Confidence level in `(0, 1)` for break-date CIs (default `0.68`)
 
 # Returns
 `BaiPerronResult{T}` containing estimated break dates, regime coefficients,
@@ -51,11 +53,13 @@ result.break_dates # Approximately [100]
 """
 function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
                          max_breaks::Int=5, trimming::Real=0.15,
-                         criterion::Symbol=:bic) where {T<:AbstractFloat}
+                         criterion::Symbol=:bic,
+                         conf_level::Real=DEFAULT_CI_MACRO) where {T<:AbstractFloat}
 
     # -------------------------------------------------------------------------
     # Input validation
     # -------------------------------------------------------------------------
+    lv = _validate_conf_level(conf_level)
     n = length(y)
     k = size(X, 2)
     n >= 20 || throw(ArgumentError("Need at least 20 observations (got n=$n)"))
@@ -81,7 +85,7 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
             [coefs_0], [ses_0],
             T[], T[], T[], T[],
             [bic_0], [lwz_0],
-            T(trimming), n
+            T(trimming), n, T(lv)
         )
     end
 
@@ -215,9 +219,10 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
         sigma2 = (dot(r_before, r_before) + dot(r_after, r_after)) / (n_before + n_after - 2*k)
 
         # CI width: Bai (1997) formula
+        z_crit = T(_conf_z(lv))
         dQd = dot(delta_coef, Q_hat * delta_coef)
         if dQd > zero(T)
-            ci_width = ceil(Int, T(1.96)^2 * sigma2 / dQd)
+            ci_width = ceil(Int, z_crit^2 * sigma2 / dQd)
         else
             ci_width = max(1, ceil(Int, 0.10 * n))
         end
@@ -233,7 +238,7 @@ function bai_perron_test(y::AbstractVector{T}, X::AbstractMatrix{T};
         supf_stats, supf_pvalues,
         sequential_stats, sequential_pvalues,
         bic_values, lwz_values,
-        T(trimming), n
+        T(trimming), n, T(lv)
     )
 end
 
@@ -549,7 +554,7 @@ function Base.show(io::IO, r::BaiPerronResult{T}) where {T}
         end
         _pretty_table(io, bd_data;
             title = "Estimated Break Dates",
-            column_labels = ["Break", "Date", "95% CI"],
+            column_labels = ["Break", "Date", "$(_ci_pct(r.conf_level))% CI"],
             alignment = [:r, :r, :r],
         )
     end

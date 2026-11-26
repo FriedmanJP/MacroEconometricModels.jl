@@ -340,7 +340,7 @@ StatsAPI.bic(m::DynamicFactorModel) = -2m.loglik + dof(m) * log(nobs(m))
 # =============================================================================
 
 """
-    forecast(model::DynamicFactorModel, h; ci_method=:theoretical, conf_level=0.95, n_boot=1000, ci=false, ci_level=0.95)
+    forecast(model::DynamicFactorModel, h; ci_method=:theoretical, conf_level=DEFAULT_CI_MACRO, n_boot=1000, ci=false)
 
 Forecast factors and observables h steps ahead.
 
@@ -350,10 +350,9 @@ Forecast factors and observables h steps ahead.
 
 # Keyword Arguments
 - `ci_method::Symbol=:theoretical`: CI method — `:none`, `:theoretical`, `:bootstrap`, or `:simulation`
-- `conf_level::Real=0.95`: Confidence level for intervals
+- `conf_level::Real=0.68`: Confidence level for intervals (`DEFAULT_CI_MACRO`)
 - `n_boot::Int=1000`: Bootstrap replications (for `:bootstrap` and `:simulation`)
 - `ci::Bool=false`: Legacy keyword — `ci=true` maps to `ci_method=:simulation`
-- `ci_level::Real=0.95`: Legacy keyword — maps to `conf_level`
 
 # Returns
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
@@ -366,10 +365,11 @@ fc.observables_lower # h×N lower CI bounds
 ```
 """
 function forecast(m::DynamicFactorModel{T}, h::Int; ci_method::Symbol=:theoretical,
-    conf_level::Real=0.95, n_boot::Int=1000,
+    conf_level::Real=DEFAULT_CI_MACRO, n_boot::Int=1000,
     ci::Bool=false, rng::AbstractRNG=Random.default_rng()) where {T}
 
     h < 1 && throw(ArgumentError("h must be ≥ 1"))
+    _validate_conf_level(conf_level)
 
     # Legacy compat: ci=true maps to :simulation
     if ci && ci_method == :none

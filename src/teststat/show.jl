@@ -1514,7 +1514,7 @@ function Base.show(io::IO, ::MIME"text/plain", r::CorTestResult{T}) where {T}
     ]
     if r.method === :pearson && isfinite(r.ci_lower)
         results_data = vcat(results_data,
-            Any["95% CI" string("[", _fmt(r.ci_lower), ", ", _fmt(r.ci_upper), "]")])
+            Any["$(_ci_pct(r.conf_level))% CI" string("[", _fmt(r.ci_lower), ", ", _fmt(r.ci_upper), "]")])
     end
     _pretty_table(io, results_data;
         title = "Results", column_labels = ["", "Value"], alignment = [:l, :r])

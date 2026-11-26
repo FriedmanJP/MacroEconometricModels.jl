@@ -209,11 +209,13 @@ const M_PAN = MacroEconometricModels
         W_cross = randn(rng, 10, p)
         @test StatsAPI.predict(m_asym, W_cross) ≈ W_cross * m_asym.beta
 
-        ci = StatsAPI.confint(m_asym; level=0.95)
+        ci = StatsAPI.confint(m_asym)
+        ci95 = StatsAPI.confint(m_asym; level=0.95)
         @test size(ci) == (p, 2)
         @test all(ci[:, 1] .< m_asym.beta .< ci[:, 2])
+        @test all((ci95[:, 2] .- ci95[:, 1]) .> (ci[:, 2] .- ci[:, 1]))
 
-        # Tables.jl / DataFrame(m)
+        # Tables.jl / DataFrame(m) (default 90% micro CI) & coef_table(m; conf_level=0.95)
         df_tbl = DataFrame(m_asym)
         @test nrow(df_tbl) == p
         @test df_tbl.term == ["x1", "x2"]
@@ -221,6 +223,9 @@ const M_PAN = MacroEconometricModels
         @test df_tbl.std_error ≈ Float64.(StatsAPI.stderror(m_asym))
         @test df_tbl.ci_lower ≈ Float64.(ci[:, 1])
         @test df_tbl.ci_upper ≈ Float64.(ci[:, 2])
+        df_tbl95 = DataFrame(coef_table(m_asym; conf_level=0.95))
+        @test df_tbl95.ci_lower ≈ Float64.(ci95[:, 1])
+        @test df_tbl95.ci_upper ≈ Float64.(ci95[:, 2])
 
         # RSER-01 positional constructor matching fieldnames order
         m_copy = QuantileFactorPanelModel{Float64}(

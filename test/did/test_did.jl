@@ -93,7 +93,7 @@ const _MPDTA = load_example(:mpdta)
         @test did.treatment_var == "treat_time"
         @test did.control_group == :never_treated
         @test did.cluster == :unit
-        @test did.conf_level == 0.95
+        @test did.conf_level == 0.90
         @test did.n_obs == 50 * 20
         @test did.n_groups == 50
 
@@ -1739,7 +1739,7 @@ const _MPDTA = load_example(:mpdta)
                              0.05 => (-0.1778374773, 0.3638093457))
             for (M, (lb, ub)) in r_flci_e1
                 r = honest_did(betahat, sigma; num_pre=3, num_post=3,
-                               restriction=:sd, M=M)
+                               restriction=:sd, M=M, conf_level=0.95)
                 @test r.ci_lower ≈ lb atol = 5e-3
                 @test r.ci_upper ≈ ub atol = 5e-3
                 @test r.method == :flci
@@ -1748,7 +1748,8 @@ const _MPDTA = load_example(:mpdta)
                              0.02 => (-0.0655127233, 0.5344024372))
             for (M, (lb, ub)) in r_flci_e2
                 r = honest_did(betahat, sigma; num_pre=3, num_post=3,
-                               restriction=:sd, M=M, l_vec=[0.0, 1.0, 0.0])
+                               restriction=:sd, M=M, l_vec=[0.0, 1.0, 0.0],
+                               conf_level=0.95)
                 @test r.ci_lower ≈ lb atol = 5e-3
                 @test r.ci_upper ≈ ub atol = 5e-3
             end
@@ -1777,13 +1778,20 @@ const _MPDTA = load_example(:mpdta)
         end
 
         @testset "Conventional CI matches R constructOriginalCS" begin
-            r = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            r = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0, conf_level=0.95)
             @test r.original_ci_lower ≈ -0.0459963985 atol = 1e-8
             @test r.original_ci_upper ≈ 0.3459963985 atol = 1e-8
             # The delta-CI interim must CONTAIN the identified set
             MEM = MacroEconometricModels
             idlb, idub = MEM._deltarm_identified_set(betahat, 3, 3; Mbar=1.0)
             @test r.ci_lower <= idlb && r.ci_upper >= idub
+            # Default conf_level is 0.90 (DEFAULT_CI_MICRO)
+            r90 = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0)
+            r90_explicit = honest_did(betahat, sigma; num_pre=3, num_post=3, restriction=:rm, Mbar=1.0, conf_level=0.90)
+            @test r90.original_ci_lower ≈ r90_explicit.original_ci_lower atol = 1e-12
+            @test r90.original_ci_upper ≈ r90_explicit.original_ci_upper atol = 1e-12
+            @test r90.original_ci_lower > r.original_ci_lower
+            @test r90.original_ci_upper < r.original_ci_upper
         end
 
         @testset "Pre-period dependence (M-01 regression catcher)" begin

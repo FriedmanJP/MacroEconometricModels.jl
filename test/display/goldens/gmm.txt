@@ -9,7 +9,7 @@ Iterations N
 
 Coefficients
 
-Coef. Std.Err. z P>|z| CI lower CI upper
+Coef. Std.Err. z P>|z| N% CI Low N% CI High
 
 θ[N] N N N N N N
 θ[N] N N N N N N

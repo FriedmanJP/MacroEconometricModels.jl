@@ -732,8 +732,8 @@ function _ms_predicted_regimes(m::MSRegModel{T}, h::Int) where {T<:AbstractFloat
 end
 
 """
-    forecast(m::MSRegModel, h; reps=1000, level=0.90, rng=Random.default_rng()) -> MSForecast
-    forecast(m::MSRegModel, X_new; reps=1000, level=0.90, rng=Random.default_rng()) -> MSForecast
+    forecast(m::MSRegModel, h; reps=1000, level=DEFAULT_CI_MACRO, rng=Random.default_rng()) -> MSForecast
+    forecast(m::MSRegModel, X_new; reps=1000, level=DEFAULT_CI_MACRO, rng=Random.default_rng()) -> MSForecast
 
 Multi-step forecast of a Markov-switching model (Hamilton 1994, ch. 22; Krolzig 1997).
 
@@ -774,7 +774,8 @@ f.regime_prob       # 8 x 2 predicted regime probabilities
 - Hamilton, J. D. (1994). *Time Series Analysis*, ch. 22. Princeton University Press.
 - Krolzig, H.-M. (1997). *Markov-Switching Vector Autoregressions*. Springer.
 """
-function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
+function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000,
+                  level::Real=DEFAULT_CI_MACRO,
                   seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
@@ -782,7 +783,7 @@ function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
         "forecast(m, h) is defined for :ms_ar models. A switching REGRESSION needs future " *
         "regressors — call forecast(m, X_new) with an h x k matrix instead."))
     h >= 1 || throw(ArgumentError("horizon h must be >= 1."))
-    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+    _validate_conf_level(level)
 
     K = m.k_regimes; p = m.p
     mu = m.mu; phi = m.ar; sig = sqrt.(m.sigma2)
@@ -834,7 +835,7 @@ function forecast(m::MSRegModel{T}, h::Int; reps::Int=1000, level::Real=0.90,
 end
 
 function forecast(m::MSRegModel{T}, X_new::AbstractMatrix; reps::Int=1000,
-                  level::Real=0.90,
+                  level::Real=DEFAULT_CI_MACRO,
                   seed::Union{Integer,Nothing}=nothing,
                   rng::Random.AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
@@ -846,7 +847,7 @@ function forecast(m::MSRegModel{T}, X_new::AbstractMatrix; reps::Int=1000,
         "X_new must have $(size(m.coefs, 1)) columns (got $(size(Xf, 2)))."))
     h = size(Xf, 1)
     h >= 1 || throw(ArgumentError("X_new must have at least one row."))
-    (0 < level < 1) || throw(ArgumentError("level must satisfy 0 < level < 1."))
+    _validate_conf_level(level)
 
     K = m.k_regimes
     B = m.coefs; sig = sqrt.(m.sigma2)

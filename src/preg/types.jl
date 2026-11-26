@@ -326,11 +326,12 @@ function StatsAPI.stderror(m::PanelRegModel{T}) where {T}
     sqrt.(max.(diag(m.vcov_mat), zero(T)))
 end
 
-"""Confidence intervals for PanelRegModel coefficients (t-distribution)."""
-function StatsAPI.confint(m::PanelRegModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for PanelRegModel coefficients (t-distribution, default 90%)."""
+function StatsAPI.confint(m::PanelRegModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     df_r = dof_residual(m)
-    crit = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    crit = T(quantile(TDist(df_r), 1 - (1 - lv) / 2))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -355,11 +356,12 @@ function StatsAPI.stderror(m::PanelIVModel{T}) where {T}
     sqrt.(max.(diag(m.vcov_mat), zero(T)))
 end
 
-"""Confidence intervals for PanelIVModel coefficients (t-distribution)."""
-function StatsAPI.confint(m::PanelIVModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for PanelIVModel coefficients (t-distribution, default 90%)."""
+function StatsAPI.confint(m::PanelIVModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
     df_r = dof_residual(m)
-    crit = T(quantile(TDist(df_r), 1 - (1 - level) / 2))
+    crit = T(quantile(TDist(df_r), 1 - (1 - lv) / 2))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -382,10 +384,11 @@ function StatsAPI.stderror(m::PanelLogitModel{T}) where {T}
     sqrt.(max.(diag(m.vcov_mat), zero(T)))
 end
 
-"""Confidence intervals for PanelLogitModel coefficients (normal distribution)."""
-function StatsAPI.confint(m::PanelLogitModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for PanelLogitModel coefficients (normal distribution, default 90%)."""
+function StatsAPI.confint(m::PanelLogitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 
@@ -408,10 +411,11 @@ function StatsAPI.stderror(m::PanelProbitModel{T}) where {T}
     sqrt.(max.(diag(m.vcov_mat), zero(T)))
 end
 
-"""Confidence intervals for PanelProbitModel coefficients (normal distribution)."""
-function StatsAPI.confint(m::PanelProbitModel{T}; level::Real=0.95) where {T}
+"""Confidence intervals for PanelProbitModel coefficients (normal distribution, default 90%)."""
+function StatsAPI.confint(m::PanelProbitModel{T}; level::Real=DEFAULT_CI_MICRO) where {T}
+    lv = _validate_conf_level(level)
     se = stderror(m)
-    crit = T(quantile(Normal(), 1 - (1 - level) / 2))
+    crit = T(_conf_z(lv))
     hcat(m.beta .- crit .* se, m.beta .+ crit .* se)
 end
 

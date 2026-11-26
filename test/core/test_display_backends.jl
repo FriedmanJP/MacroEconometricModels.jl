@@ -116,7 +116,7 @@ end
         # Verify publication-quality columns in text mode
         buf = IOBuffer(); show(buf, ar); out = String(take!(buf))
         @test occursin("Std.Err.", out)
-        @test occursin("CI upper", out)  # CI header merged from split "[95%|CI]" (S10/T175)
+        @test occursin("68% CI High", out)  # CI header reflects macro default 68% (#940)
     end
 
     @testset "Unit root tests render in all backends" begin
@@ -620,10 +620,12 @@ end
     # band-label formula: a 95% CI reads 2.5%/97.5%, not round(Int, 2.5000…)=3%
     @test MEM._fmt_pct((1 - 0.95) / 2) == "2.5%"
     @test MEM._fmt_pct((1 + 0.95) / 2) == "97.5%"
-    # end-to-end: the BVAR forecast table now labels the band 2.5%/97.5%
+    # end-to-end: the BVAR forecast table labels 68% default as 16.0%/84.0% and 95% as 2.5%/97.5%
     rng = Random.Xoshiro(9)
     bp = estimate_bvar(randn(rng, 80, 2), 2; n_draws=100, seed=9)
-    s = sprint(show, forecast(bp, 4))
+    s_def = sprint(show, forecast(bp, 4))
+    @test occursin("16.0%", s_def) && occursin("84.0%", s_def)
+    s = sprint(show, forecast(bp, 4; conf_level=0.95))
     @test occursin("2.5%", s) && occursin("97.5%", s)
 end
 

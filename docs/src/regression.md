@@ -496,7 +496,7 @@ wild_cluster_bootstrap(pm, "x", 0.0)
 | `weights` | `Symbol` | `:rademacher` | `:rademacher` or `:webb` |
 | `imposenull` | `Bool` | `true` | Impose the null (WCR); `false` gives the unrestricted WCU |
 | `ci` | `Bool` | `true` | Compute the inverted-test confidence interval |
-| `level` | `Real` | `0.95` | CI coverage |
+| `level` | `Real` | `0.90` | CI coverage |
 | `ci_gridpoints` | `Int` | `25` | Grid used to bracket the CI crossings |
 | `enumerate` | `Union{Nothing,Bool}` | `nothing` | Force or forbid exact enumeration of the ``2^G`` sign vectors; `nothing` decides automatically |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
@@ -675,7 +675,7 @@ The estimated jump in treatment probability is 0.393 against a true 0.5, and the
 | `kernel` | `Symbol` | `:triangular` | `:triangular`, `:epanechnikov`, or `:uniform` |
 | `p` | `Int` | `1` | Polynomial order (1 = local linear) |
 | `h`, `b` | `Real` | `nothing` | Main and pilot bandwidths; omit for the MSE-optimal plug-in |
-| `level` | `Real` | `0.95` | Confidence level |
+| `level` | `Real` | `0.90` | Confidence level |
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -950,7 +950,7 @@ When the reported first-stage F falls below the Stock-Yogo 10% critical value, `
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `level` | `Real` | `0.95` | Nominal coverage of the confidence set |
+| `level` | `Real` | `0.90` | Nominal coverage of the confidence set |
 | `n_grid` | `Int` | `1001` | Grid points over the search range |
 | `span` | `Real` | `20` | Half-width of the default range, in 2SLS standard errors |
 | `grid` | `AbstractVector` | `nothing` | Explicit grid, overriding `span`/`n_grid` |
@@ -1543,7 +1543,7 @@ The `dist` keyword also supports `:logistic` and `:extreme_value` latent-error l
 | `varnames` | `Union{Nothing,Vector{String}}` | `nothing` | Coefficient names |
 | `maxiter` / `tol` | `Int` / `Real` | `1000` / ``10^{-10}`` | Optimiser controls |
 
-`marginal_effects` on a `TobitModel` takes `which` (`:unconditional`, `:conditional`, `:probability`) and `conf_level` (default `0.95`).
+`marginal_effects` on a `TobitModel` takes `which` (`:unconditional`, `:conditional`, `:probability`) and `conf_level` (default `0.90`).
 
 ---
 

@@ -43,7 +43,8 @@ function Base.show(io::IO, r::ACFResult{T}) where {T}
             column_labels = ["Lag", "CCF"],
             alignment = [:r, :r],
         )
-        note = Any["CI ($(round(Int, 100*(1-2*ccdf(Normal(), r.ci * sqrt(T(r.nobs))))))%)" "$(string(round(r.ci, digits=4)))"]
+        ci_lv = 1 - 2 * ccdf(Normal(), Float64(r.ci) * sqrt(Float64(r.nobs)))
+        note = Any["CI ($(_ci_pct(ci_lv))%)" "$(string(round(r.ci, digits=4)))"]
         _pretty_table(io, note; column_labels=["",""], alignment=[:l,:r])
         return
     end
@@ -111,7 +112,8 @@ function Base.show(io::IO, r::ACFResult{T}) where {T}
         )
     end
 
-    note_data = Any["CI (95%)" "$(string(round(r.ci, digits=4)))"]
+    ci_lv = 1 - 2 * ccdf(Normal(), Float64(r.ci) * sqrt(Float64(r.nobs)))
+    note_data = Any["CI ($(_ci_pct(ci_lv))%)" "$(string(round(r.ci, digits=4)))"]
     _pretty_table(io, note_data; column_labels=["",""], alignment=[:l,:r])
 end
 

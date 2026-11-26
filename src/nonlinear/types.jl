@@ -82,7 +82,7 @@ residuals `S(γ) = SSR₁(γ) + SSR₂(γ)`. For SETAR, `q_t = y_{t−d}` and
 - `q::Vector{T}`: threshold variable (length `n`).
 - `gamma::T`: estimated threshold γ̂.
 - `gamma_ci::Tuple{T,T}`: Hansen (2000) LR-inversion confidence interval for γ.
-- `gamma_ci_level::T`: confidence level of `gamma_ci` (e.g. 0.95).
+- `gamma_ci_level::T`: confidence level of `gamma_ci` (e.g. 0.90 for threshold regression, 0.68 for SETAR).
 - `beta1::Vector{T}`, `beta2::Vector{T}`: per-regime coefficients (`q ≤ γ̂` / `q > γ̂`).
 - `se1::Vector{T}`, `se2::Vector{T}`: per-regime classical standard errors.
 - `regime::Vector{Bool}`: regime-1 indicator `1{q_t ≤ γ̂}`.
@@ -150,7 +150,7 @@ Bootstrap-simulation forecast from a SETAR [`ThresholdModel`](@ref).
 - `ci_lower::Vector{T}`, `ci_upper::Vector{T}`: percentile bands.
 - `se::Vector{T}`: standard deviation of the simulated paths at each horizon.
 - `horizon::Int`: forecast horizon.
-- `conf_level::T`: nominal band coverage (e.g. 0.90).
+- `conf_level::T`: nominal band coverage (default `0.68`, `DEFAULT_CI_MACRO`).
 - `reps::Int`: number of simulated paths.
 """
 struct ThresholdForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
@@ -173,28 +173,22 @@ ThresholdForecast{T}(forecast, ci_lower, ci_upper, se, horizon, conf_level, reps
 # =============================================================================
 
 # Non-standard critical values for the likelihood-ratio statistic
-# LR(γ) = n·(S(γ)−S(γ̂))/S(γ̂) under homoskedasticity (Hansen 2000, Table 1).
-# They are the quantiles of the distribution with CDF (1 − exp(−x/2))²:
-#   solving (1 − exp(−c/2))² = α gives c(.90)=5.94, c(.95)=7.35, c(.99)=10.59.
+# LR(γ) = n·(S(γ)−S(γ̂))/S(γ̂) under homoskedasticity (Hansen 2000, Theorem 1).
+# Exact quantile function of the distribution with CDF (1 − exp(−x/2))²:
+#   solving (1 − exp(−c/2))² = α gives c(α) = −2 ln(1 − √α)
+#   (c(.68)≈3.49, c(.90)≈5.94, c(.95)≈7.36, c(.99)≈10.59).
 const HANSEN2000_CRIT = (var"0.90" = 5.94, var"0.95" = 7.35, var"0.99" = 10.59)
 
 """
     _hansen2000_crit(level::Real) -> Float64
 
-Return the Hansen (2000, Table 1) critical value for the threshold-CI
-likelihood-ratio statistic at confidence `level` (`0.90`, `0.95`, or `0.99`).
+Return the Hansen (2000, Theorem 1) asymptotic critical value for the threshold-CI
+likelihood-ratio statistic at any confidence `level ∈ (0, 1)`:
+`c(level) = -2 * log(1 - sqrt(level))`.
 """
 function _hansen2000_crit(level::Real)
-    if level ≈ 0.90
-        return 5.94
-    elseif level ≈ 0.95
-        return 7.35
-    elseif level ≈ 0.99
-        return 10.59
-    else
-        throw(ArgumentError("Hansen (2000) critical values are tabulated only for " *
-                            "level ∈ {0.90, 0.95, 0.99}; got $level."))
-    end
+    lv = _validate_conf_level(level)
+    return -2.0 * log(1.0 - sqrt(lv))
 end
 
 # =============================================================================
@@ -204,14 +198,15 @@ end
 function Base.show(io::IO, m::ThresholdModel{T}) where {T}
     header = m.is_setar ? "SETAR(2; $(m.p), $(m.p)) Model  [delay d=$(m.d)]" :
                           "Two-Regime Threshold Regression"
-    lvl = round(Int, 100 * m.gamma_ci_level)
+    lvl = _ci_pct(m.gamma_ci_level)
+    ci_lv = default_ci_level(m)
 
     # Regime 1: q ≤ γ̂
     _coef_table(io, "$header — Regime 1: $(m.qname) ≤ $(_fmt(m.gamma)) (n=$(m.n1))",
-                m.xnames, m.beta1, m.se1; dist=:t, dof_r=max(m.n1 - m.k, 1))
+                m.xnames, m.beta1, m.se1; dist=:t, dof_r=max(m.n1 - m.k, 1), level=ci_lv)
     # Regime 2: q > γ̂
     _coef_table(io, "Regime 2: $(m.qname) > $(_fmt(m.gamma)) (n=$(m.n2))",
-                m.xnames, m.beta2, m.se2; dist=:t, dof_r=max(m.n2 - m.k, 1))
+                m.xnames, m.beta2, m.se2; dist=:t, dof_r=max(m.n2 - m.k, 1), level=ci_lv)
 
     fit_data = Any[
         "Threshold γ̂"          _fmt(m.gamma);
@@ -234,8 +229,8 @@ function Base.show(io::IO, m::ThresholdModel{T}) where {T}
     _pretty_table(io, fit_data; column_labels=["Threshold & Fit", "Value"],
                   alignment=[:l, :r])
 
-    _show_note(io, "Hansen (2000) $(lvl)% CI inverts LR(γ)=n·(S(γ)−S(γ̂))/S(γ̂); " *
-                   "c(.90)=5.94, c(.95)=7.35, c(.99)=10.59.")
+    _show_note(io, "Hansen (2000) $(lvl)% CI inverts LR(γ)=n·(S(γ)−S(γ̂))/S(γ̂) " *
+                   "with c(α)=−2·ln(1−√α) = $(_fmt(_hansen2000_crit(m.gamma_ci_level); digits=2)).")
     _sig_legend(io)
 end
 
@@ -278,6 +273,16 @@ StatsAPI.coef(m::ThresholdModel) = vcat(m.beta1, m.beta2)
 StatsAPI.dof(m::ThresholdModel) = 2 * m.k + 1
 StatsAPI.aic(m::ThresholdModel) = m.aic
 StatsAPI.bic(m::ThresholdModel) = m.bic
+
+"""Confidence intervals for ThresholdModel regime coefficients (t-distribution; defaults to `m.gamma_ci_level`)."""
+function StatsAPI.confint(m::ThresholdModel{T}; level::Real=default_ci_level(m)) where {T}
+    lv = _validate_conf_level(level)
+    c1 = T(quantile(TDist(max(m.n1 - m.k, 1)), 1 - (1 - lv) / 2))
+    c2 = T(quantile(TDist(max(m.n2 - m.k, 1)), 1 - (1 - lv) / 2))
+    lo = vcat(m.beta1 .- c1 .* m.se1, m.beta2 .- c2 .* m.se2)
+    hi = vcat(m.beta1 .+ c1 .* m.se1, m.beta2 .+ c2 .* m.se2)
+    return hcat(lo, hi)
+end
 
 # =============================================================================
 # Smooth-transition autoregression (STAR / LSTR1 / LSTR2 / ESTR) — EV-06 / #414
@@ -383,7 +388,7 @@ Bootstrap-simulation forecast from a fitted [`STARModel`](@ref).
 - `ci_lower::Vector{T}`, `ci_upper::Vector{T}`: percentile bands.
 - `se::Vector{T}`: standard deviation of the simulated paths at each horizon.
 - `horizon::Int`: forecast horizon.
-- `conf_level::T`: nominal band coverage (e.g. 0.90).
+- `conf_level::T`: nominal band coverage (default `0.68`, `DEFAULT_CI_MACRO`).
 - `reps::Int`: number of simulated paths.
 """
 struct STARForecast{T<:AbstractFloat} <: AbstractForecastResult{T}
@@ -442,14 +447,15 @@ function Base.show(io::IO, m::STARModel{T}) where {T}
     dof_r = max(m.n - (2 * m.k + 1 + length(m.c)), 1)
 
     _coef_table(io, "STAR($(m.p)) — Regime 1 weight (1 − G): $(m.sname) low  (n=$(m.n))",
-                m.znames, m.phi1, m.se_phi1; dist=:t, dof_r=dof_r)
+                m.znames, m.phi1, m.se_phi1; dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
     _coef_table(io, "Regime 2 weight (G): $(m.sname) high",
-                m.znames, m.phi2, m.se_phi2; dist=:t, dof_r=dof_r)
+                m.znames, m.phi2, m.se_phi2; dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
 
     # Transition block: γ̂, ĉ (delta-method SEs), selected type, LM3 p-value.
     cnames = length(m.c) == 1 ? ["c"] : ["c₁", "c₂"]
     _coef_table(io, "Transition parameters", vcat("γ", cnames),
-                vcat(m.gamma, m.c), vcat(m.se_gamma, m.se_c); dist=:t, dof_r=dof_r)
+                vcat(m.gamma, m.c), vcat(m.se_gamma, m.se_c);
+                dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
 
     fit_data = Any[
         "Transition"           _star_type_label(m.trans_type);
@@ -517,6 +523,16 @@ StatsAPI.coef(m::STARModel) = vcat(m.phi1, m.phi2, m.gamma, m.c)
 StatsAPI.dof(m::STARModel) = 2 * m.k + 1 + length(m.c)
 StatsAPI.aic(m::STARModel) = m.aic
 StatsAPI.bic(m::STARModel) = m.bic
+
+"""Confidence intervals for STARModel parameters `[φ₁; φ₂; γ; c]` (t-distribution, default 68%)."""
+function StatsAPI.confint(m::STARModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    dof_r = max(m.n - (2 * m.k + 1 + length(m.c)), 1)
+    crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+    b = StatsAPI.coef(m)
+    se = vcat(m.se_phi1, m.se_phi2, m.se_gamma, m.se_c)
+    return hcat(b .- crit .* se, b .+ crit .* se)
+end
 
 # =============================================================================
 # Markov-switching regression / MS-AR (Hamilton 1989; Kim 1994) — EV-07 / #415
@@ -645,23 +661,25 @@ function Base.show(io::IO, m::MSRegModel{T}) where {T}
         for k in 1:K
             lbl = k == 1 ? "low" : (k == K ? "high" : "mid-$k")
             _coef_table(io, "$header — Regime $k ($lbl):  μ (level)",
-                        ["μ"], [m.mu[k]], [m.se_coefs[1, k]]; dist=:z)
+                        ["μ"], [m.mu[k]], [m.se_coefs[1, k]]; dist=:z, level=DEFAULT_CI_MACRO)
         end
         if m.p > 0
             _coef_table(io, "Common AR coefficients (φ)",
-                        ["φ$i" for i in 1:m.p], m.ar, m.se_ar; dist=:z)
+                        ["φ$i" for i in 1:m.p], m.ar, m.se_ar; dist=:z, level=DEFAULT_CI_MACRO)
         end
     else
         for k in 1:K
             lbl = k == 1 ? "low" : (k == K ? "high" : "mid-$k")
             _coef_table(io, "$header — Regime $k ($lbl)",
-                        m.xnames, m.coefs[:, k], m.se_coefs[:, k]; dist=:t, dof_r=dof_r)
+                        m.xnames, m.coefs[:, k], m.se_coefs[:, k];
+                        dist=:t, dof_r=dof_r, level=DEFAULT_CI_MACRO)
         end
     end
 
     # Regime variances.
     _coef_table(io, "Regime variances (σ²)",
-                ["σ²[$k]" for k in 1:K], m.sigma2, m.se_sigma2; dist=:z)
+                ["σ²[$k]" for k in 1:K], m.sigma2, m.se_sigma2;
+                dist=:z, level=DEFAULT_CI_MACRO)
 
     # Transition matrix + ergodic + durations.
     _matrix_table(io, m.P, "Transition matrix P (rows = from, cols = to)";
@@ -749,3 +767,18 @@ StatsAPI.bic(m::MSRegModel) = m.bic
 StatsAPI.dof(m::MSRegModel) = m.n_params
 StatsAPI.coef(m::MSRegModel) =
     m.model_type === :ms_ar ? vcat(m.mu, m.ar) : vec(m.coefs)
+
+"""Confidence intervals for MSRegModel coefficients (default 68%)."""
+function StatsAPI.confint(m::MSRegModel{T}; level::Real=DEFAULT_CI_MACRO) where {T}
+    lv = _validate_conf_level(level)
+    b = StatsAPI.coef(m)
+    if m.model_type === :ms_ar
+        se = vcat(vec(m.se_coefs[1, :]), m.se_ar)
+        crit = T(_conf_z(lv))
+    else
+        se = vec(m.se_coefs)
+        dof_r = max(m.n - m.n_params, 1)
+        crit = T(quantile(TDist(dof_r), 1 - (1 - lv) / 2))
+    end
+    return hcat(b .- crit .* se, b .+ crit .* se)
+end

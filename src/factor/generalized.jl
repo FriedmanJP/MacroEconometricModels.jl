@@ -1706,7 +1706,7 @@ end
 
 """
     forecast(model::GeneralizedDynamicFactorModel, h; method=:ar, ci_method=:theoretical,
-             conf_level=0.95, n_boot=1000, rng=Random.default_rng(), seed=nothing,
+             conf_level=DEFAULT_CI_MACRO, n_boot=1000, rng=Random.default_rng(), seed=nothing,
              n_lags_proj=nothing)
 
 Forecast `h` steps ahead from an estimated [`GeneralizedDynamicFactorModel`](@ref).
@@ -1742,7 +1742,7 @@ where:
   error ``\\hat{\\Gamma}_\\chi(0) - W_h G_z W_h^{\\top}`` with idiosyncratic variance (and
   ``h``-step factor projection error for `factors_se`), and `:bootstrap` simulates
   factor VAR(1) innovations alongside resampled idiosyncratic residuals
-- `conf_level::Real=0.95`: Confidence level for intervals
+- `conf_level::Real=0.68`: Confidence level for intervals (`DEFAULT_CI_MACRO`)
 - `n_boot::Int=1000`: Bootstrap replications (for `:bootstrap`)
 - `rng::AbstractRNG=Random.default_rng()`: Random number generator for bootstrap draws
 - `seed::Union{Integer,Nothing}=nothing`: Optional integer seed overriding `rng` via `Xoshiro(seed)`
@@ -1753,12 +1753,13 @@ where:
 `FactorForecast` with factor and observable forecasts (and CIs if requested).
 """
 function forecast(model::GeneralizedDynamicFactorModel{T}, h::Int; method::Symbol=:ar,
-    ci_method::Symbol=:theoretical, conf_level::Real=0.95, n_boot::Int=1000,
+    ci_method::Symbol=:theoretical, conf_level::Real=DEFAULT_CI_MACRO, n_boot::Int=1000,
     rng::AbstractRNG=Random.default_rng(),
     seed::Union{Integer,Nothing}=nothing,
     n_lags_proj::Union{Nothing,Int}=nothing) where {T}
 
     h < 1 && throw(ArgumentError("h must be positive"))
+    _validate_conf_level(conf_level)
     method ∈ (:ar, :one_sided, :spectral) || throw(ArgumentError(
         "method must be :ar, :one_sided, or :spectral, got :$method"))
     ci_method ∈ (:none, :theoretical, :bootstrap) || throw(ArgumentError("ci_method must be :none, :theoretical, or :bootstrap"))
