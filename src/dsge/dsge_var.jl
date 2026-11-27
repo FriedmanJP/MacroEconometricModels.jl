@@ -993,6 +993,7 @@ function estimate_dsge_var(
     n_draws::Int=1000,
     rng::AbstractRNG=Random.default_rng(),
     seed::Union{Integer,Nothing}=nothing,
+    threaded::Bool=true,
 )
     _validate_data(Y, "Y")
     p >= 1 || throw(ArgumentError("Lag order p must be >= 1; got $p"))
@@ -1070,18 +1071,36 @@ function estimate_dsge_var(
             )
         L_V = Matrix{WT}(safe_cholesky(Hermitian(V_post); silent=true))
         L_S = Matrix{WT}(safe_cholesky(Hermitian(S_post); silent=true))
-        Z_buf = Matrix{WT}(undef, k, n)
 
-        @inbounds for s in 1:n_draws
-            Sigma_s = _dsgevar_draw_iw(nu_post, L_S, rng)
+        draw_seeds = rand(rng, UInt64, n_draws)
+        use_threads = threaded && Threads.nthreads() > 1 && n_draws > 1
+        n_workers = use_threads ? min(Threads.nthreads(), n_draws) : 1
+        Z_bufs = [Matrix{WT}(undef, k, n) for _ in 1:n_workers]
+
+        function _draw_fixed_niw!(s::Int, w::Int)
+            local_rng = Xoshiro(draw_seeds[s])
+            Z_buf = Z_bufs[w]
+            Sigma_s = _dsgevar_draw_iw(nu_post, L_S, local_rng)
             L_Sigma = Matrix{WT}(safe_cholesky(Hermitian(Sigma_s); silent=true))
-            randn!(rng, Z_buf)
+            randn!(local_rng, Z_buf)
             Phi_s = B_post + L_V * Z_buf * transpose(L_Sigma)
             B0_s = L_Sigma * Omega_w
+            @inbounds begin
+                B_draws[s, :, :] = Matrix{T}(Phi_s)
+                Sigma_draws[s, :, :] = Matrix{T}(Sigma_s)
+                B0_draws[s, :, :] = Matrix{T}(B0_s)
+            end
+            return nothing
+        end
 
-            B_draws[s, :, :] = Matrix{T}(Phi_s)
-            Sigma_draws[s, :, :] = Matrix{T}(Sigma_s)
-            B0_draws[s, :, :] = Matrix{T}(B0_s)
+        _with_single_blas_thread() do
+            if use_threads
+                _parallel_for_worksteal(_draw_fixed_niw!, n_draws; n_workers=n_workers)
+            else
+                for s in 1:n_draws
+                    _draw_fixed_niw!(s, 1)
+                end
+            end
         end
         method_sym = :direct
     end
@@ -1213,6 +1232,7 @@ function estimate_dsge_var(
     solver_kwargs::NamedTuple=NamedTuple(),
     rng::AbstractRNG=Random.default_rng(),
     seed::Union{Integer,Nothing}=nothing,
+    threaded::Bool=true,
 ) where {Ts<:AbstractFloat}
     _dsgevar_check_spec_estimable(spec)
     _validate_data(Y, "Y")
@@ -1412,67 +1432,120 @@ function estimate_dsge_var(
         end
     end
 
-    # Conditional draws (Φ^(s), Σ_u^(s), B0^(s)) | θ^(s), Y, λ (caching consecutive equal θ^(s))
-    first_eval = _dsgevar_eval_theta(spec, param_names, theta_draws_w[1, :], obs_syms, p, lam_w,
-                                     include_intercept, measurement_jitter,
-                                     Y_eff, X, XtY, XtX, T_eff, solver, solver_kwargs)
+    # Conditional draws (Φ^(s), Σ_u^(s), B0^(s)) | θ^(s), Y, λ
+    # Deduplicate unique θ^(s) rows in first-seen order and evaluate them in parallel.
+    uniq_thetas = Vector{Vector{WT}}()
+    theta_to_uid = Dict{Vector{WT},Int}()
+    draw_to_uid = Vector{Int}(undef, n_draws)
+    for s in 1:n_draws
+        th_vec = Vector{WT}(@view theta_draws_w[s, :])
+        uid = get!(theta_to_uid, th_vec) do
+            push!(uniq_thetas, th_vec)
+            length(uniq_thetas)
+        end
+        draw_to_uid[s] = uid
+    end
+    n_uniq = length(uniq_thetas)
+
+    uniq_evals = Vector{Any}(nothing, n_uniq)
+    uniq_params = Vector{Any}(nothing, n_uniq)
+
+    function _eval_unique_theta!(u::Int)
+        ev = _dsgevar_eval_theta(spec, param_names, uniq_thetas[u], obs_syms, p, lam_w,
+                                 include_intercept, measurement_jitter,
+                                 Y_eff, X, XtY, XtX, T_eff, solver, solver_kwargs)
+        ev === nothing && return nothing
+        uniq_evals[u] = ev
+        if isinf(lam_w)
+            L_u = Matrix{WT}(safe_cholesky(Hermitian(ev.Sigma_u_star); silent=true))
+            uniq_params[u] = (Phi_T=Matrix{T}(ev.Phi_star),
+                              Sigma_T=Matrix{T}(ev.Sigma_u_star),
+                              B0_T=Matrix{T}(L_u * ev.Omega_star))
+        else
+            Bp, Vp, _, _, _, Sp, _, nup, _, _ =
+                _dsgevar_posterior_params(
+                    ev.Gyy, ev.Gxy, ev.Gxx, ev.Phi_star, ev.Sigma_u_star,
+                    T_eff, lam_w, Y_eff, X, XtY, XtX, T_eff,
+                )
+            uniq_params[u] = (B_post=Bp,
+                              L_V=Matrix{WT}(safe_cholesky(Hermitian(Vp); silent=true)),
+                              L_S=Matrix{WT}(safe_cholesky(Hermitian(Sp); silent=true)),
+                              nu_post=nup,
+                              Omega=ev.Omega_star)
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_uniq > 1
+            Threads.@threads :dynamic for u in 1:n_uniq
+                _eval_unique_theta!(u)
+            end
+        else
+            for u in 1:n_uniq
+                _eval_unique_theta!(u)
+            end
+        end
+    end
+
+    first_eval = uniq_evals[1]
     first_eval === nothing && throw(ArgumentError(
         "Unexpected solve failure at accepted posterior draw"))
     m = size(first_eval.Omega_star, 2)
 
+    # Map any failed draw deterministically to the most recent prior valid draw (or draw 1)
+    resolved_uid = Vector{Int}(undef, n_draws)
+    last_valid_uid = 1
+    for s in 1:n_draws
+        u = draw_to_uid[s]
+        if uniq_params[u] !== nothing
+            last_valid_uid = u
+        end
+        resolved_uid[s] = last_valid_uid
+    end
+
     B_draws = Array{T,3}(undef, n_draws, k, n)
     Sigma_draws = Array{T,3}(undef, n_draws, n, n)
     B0_draws = Array{T,3}(undef, n_draws, n, m)
-    Z_buf = Matrix{WT}(undef, k, n)
 
-    cached_theta = Vector{WT}(undef, d)
-    fill!(cached_theta, WT(NaN))
-    cached_eval = first_eval
-    cached_B_post = Matrix{WT}(undef, 0, 0)
-    cached_L_V = Matrix{WT}(undef, 0, 0)
-    cached_L_S = Matrix{WT}(undef, 0, 0)
-    cached_nu_post = zero(WT)
-    cached_Omega = Matrix{WT}(undef, 0, 0)
+    if isinf(lam_w)
+        @inbounds for s in 1:n_draws
+            par = uniq_params[resolved_uid[s]]
+            B_draws[s, :, :] = par.Phi_T
+            Sigma_draws[s, :, :] = par.Sigma_T
+            B0_draws[s, :, :] = par.B0_T
+        end
+    else
+        draw_seeds = rand(rng, UInt64, n_draws)
+        use_threads_draw = threaded && Threads.nthreads() > 1 && n_draws > 1
+        n_workers = use_threads_draw ? min(Threads.nthreads(), n_draws) : 1
+        Z_bufs = [Matrix{WT}(undef, k, n) for _ in 1:n_workers]
 
-    for s in 1:n_draws
-        th_s = @view theta_draws_w[s, :]
-        if th_s != cached_theta
-            ev = _dsgevar_eval_theta(spec, param_names, th_s, obs_syms, p, lam_w,
-                                     include_intercept, measurement_jitter,
-                                     Y_eff, X, XtY, XtX, T_eff, solver, solver_kwargs)
-            if ev !== nothing
-                cached_eval = ev
-                copyto!(cached_theta, th_s)
-                cached_Omega = ev.Omega_star
-                if !isinf(lam_w)
-                    Bp, Vp, _, _, _, Sp, _, nup, _, _ =
-                        _dsgevar_posterior_params(
-                            ev.Gyy, ev.Gxy, ev.Gxx, ev.Phi_star, ev.Sigma_u_star,
-                            T_eff, lam_w, Y_eff, X, XtY, XtX, T_eff,
-                        )
-                    cached_B_post = Bp
-                    cached_L_V = Matrix{WT}(safe_cholesky(Hermitian(Vp); silent=true))
-                    cached_L_S = Matrix{WT}(safe_cholesky(Hermitian(Sp); silent=true))
-                    cached_nu_post = nup
-                end
+        function _draw_joint_niw!(s::Int, w::Int)
+            local_rng = Xoshiro(draw_seeds[s])
+            Z_buf = Z_bufs[w]
+            par = uniq_params[resolved_uid[s]]
+            Sigma_s = _dsgevar_draw_iw(par.nu_post, par.L_S, local_rng)
+            L_Sigma = Matrix{WT}(safe_cholesky(Hermitian(Sigma_s); silent=true))
+            randn!(local_rng, Z_buf)
+            Phi_s = par.B_post + par.L_V * Z_buf * transpose(L_Sigma)
+            B0_s = L_Sigma * par.Omega
+            @inbounds begin
+                B_draws[s, :, :] = Matrix{T}(Phi_s)
+                Sigma_draws[s, :, :] = Matrix{T}(Sigma_s)
+                B0_draws[s, :, :] = Matrix{T}(B0_s)
             end
+            return nothing
         end
 
-        if isinf(lam_w)
-            L_u = Matrix{WT}(safe_cholesky(Hermitian(cached_eval.Sigma_u_star); silent=true))
-            B_draws[s, :, :] = Matrix{T}(cached_eval.Phi_star)
-            Sigma_draws[s, :, :] = Matrix{T}(cached_eval.Sigma_u_star)
-            B0_draws[s, :, :] = Matrix{T}(L_u * cached_Omega)
-        else
-            Sigma_s = _dsgevar_draw_iw(cached_nu_post, cached_L_S, rng)
-            L_Sigma = Matrix{WT}(safe_cholesky(Hermitian(Sigma_s); silent=true))
-            randn!(rng, Z_buf)
-            Phi_s = cached_B_post + cached_L_V * Z_buf * transpose(L_Sigma)
-            B0_s = L_Sigma * cached_Omega
-
-            B_draws[s, :, :] = Matrix{T}(Phi_s)
-            Sigma_draws[s, :, :] = Matrix{T}(Sigma_s)
-            B0_draws[s, :, :] = Matrix{T}(B0_s)
+        _with_single_blas_thread() do
+            if use_threads_draw
+                _parallel_for_worksteal(_draw_joint_niw!, n_draws; n_workers=n_workers)
+            else
+                for s in 1:n_draws
+                    _draw_joint_niw!(s, 1)
+                end
+            end
         end
     end
 
@@ -1593,7 +1666,7 @@ end
 """
     irf(post::DSGEVARPosterior, horizon::Int;
         method::Symbol=:dsge_qr, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-        point_estimate::Symbol=:mean, shock_names=nothing, threaded::Bool=false,
+        point_estimate::Symbol=:mean, shock_names=nothing, threaded::Bool=true,
         normalize=nothing, shock_size=nothing, kwargs...) -> BayesianImpulseResponse
 
 Compute Bayesian impulse response functions from a [`DSGEVARPosterior`](@ref).
@@ -1607,7 +1680,7 @@ function irf(post::DSGEVARPosterior{T}, horizon::Int;
              quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
              point_estimate::Symbol=:mean,
              shock_names::Union{Nothing,Vector{String}}=nothing,
-             threaded::Bool=false,
+             threaded::Bool=true,
              normalize::Union{Nothing,Symbol}=nothing,
              shock_size::Union{Nothing,Pair}=nothing,
              kwargs...) where {T<:AbstractFloat}
@@ -1636,17 +1709,44 @@ function irf(post::DSGEVARPosterior{T}, horizon::Int;
     end
 
     B_padded = _dsgevar_pad_intercept(post.B_draws, p, n)
-    all_irfs = Array{T,4}(undef, n_req, horizon, n, m)
-    valid = 0
-    @inbounds for s in 1:n_req
+    slot_irfs = Array{T,4}(undef, n_req, horizon, n, m)
+    slot_valid = fill(false, n_req)
+
+    function _eval_irf_draw!(s::Int)
         ir_s = _dsgevar_structural_irf(@view(B_padded[s, :, :]), @view(post.B0_draws[s, :, :]), n, p, horizon)
         if all(isfinite, ir_s)
-            valid += 1
-            all_irfs[valid, :, :, :] = ir_s
+            @inbounds slot_irfs[s, :, :, :] = ir_s
+            @inbounds slot_valid[s] = true
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_req > 1
+            Threads.@threads :dynamic for s in 1:n_req
+                _eval_irf_draw!(s)
+            end
+        else
+            for s in 1:n_req
+                _eval_irf_draw!(s)
+            end
         end
     end
+
+    valid = count(slot_valid)
     valid == 0 && throw(IdentificationError("All DSGE-VAR posterior draws yielded non-finite IRFs"))
-    irfs_valid = valid == n_req ? all_irfs : all_irfs[1:valid, :, :, :]
+    irfs_valid = if valid == n_req
+        slot_irfs
+    else
+        out = Array{T,4}(undef, valid, horizon, n, m)
+        idx = 0
+        @inbounds for s in 1:n_req
+            slot_valid[s] || continue
+            idx += 1
+            out[idx, :, :, :] = @view slot_irfs[s, :, :, :]
+        end
+        out
+    end
 
     if _unit_effect_requested(normalize) && n == m
         irf_ref = dropdims(mean(irfs_valid; dims=1); dims=1)
@@ -1655,9 +1755,8 @@ function irf(post::DSGEVARPosterior{T}, horizon::Int;
     end
 
     q_vec = T.(quantiles)
-    use_threaded = threaded || (valid * horizon * n * m > 100000)
     irf_q, irf_m = compute_posterior_quantiles(irfs_valid, q_vec;
-                                               threaded=use_threaded, central=point_estimate)
+                                               threaded=threaded, central=point_estimate)
 
     return BayesianImpulseResponse{T}(
         irf_q, irf_m, horizon, copy(post.varnames), snames, q_vec, irfs_valid,
@@ -1669,7 +1768,7 @@ end
     fevd(post::DSGEVARPosterior, horizon::Int;
          method::Symbol=:dsge_qr, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
          point_estimate::Symbol=:mean, shock_names=nothing,
-         threaded::Bool=false, kwargs...) -> BayesianFEVD
+         threaded::Bool=true, kwargs...) -> BayesianFEVD
 
 Compute Bayesian forecast error variance decomposition from a [`DSGEVARPosterior`](@ref).
 
@@ -1681,7 +1780,7 @@ function fevd(post::DSGEVARPosterior{T}, horizon::Int;
               quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
               point_estimate::Symbol=:mean,
               shock_names::Union{Nothing,Vector{String}}=nothing,
-              threaded::Bool=false,
+              threaded::Bool=true,
               kwargs...) where {T<:AbstractFloat}
     horizon >= 1 || throw(ArgumentError("horizon must be >= 1; got $horizon"))
     _validate_quantiles(quantiles)
@@ -1707,22 +1806,48 @@ function fevd(post::DSGEVARPosterior{T}, horizon::Int;
     end
 
     B_padded = _dsgevar_pad_intercept(post.B_draws, p, n)
-    all_fevds = Array{T,4}(undef, n_req, n, m, horizon)
-    valid = 0
-    @inbounds for s in 1:n_req
+    slot_fevds = Array{T,4}(undef, n_req, n, m, horizon)
+    slot_valid = fill(false, n_req)
+
+    function _eval_fevd_draw!(s::Int)
         ir_s = _dsgevar_structural_irf(@view(B_padded[s, :, :]), @view(post.B0_draws[s, :, :]), n, p, horizon)
-        all(isfinite, ir_s) || continue
+        all(isfinite, ir_s) || return nothing
         _, props = n == m ? _compute_fevd(ir_s, n, horizon) : _compute_fevd_rect(ir_s, n, m, horizon)
-        valid += 1
-        all_fevds[valid, :, :, :] = props
+        @inbounds slot_fevds[s, :, :, :] = props
+        @inbounds slot_valid[s] = true
+        return nothing
     end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_req > 1
+            Threads.@threads :dynamic for s in 1:n_req
+                _eval_fevd_draw!(s)
+            end
+        else
+            for s in 1:n_req
+                _eval_fevd_draw!(s)
+            end
+        end
+    end
+
+    valid = count(slot_valid)
     valid == 0 && throw(IdentificationError("All DSGE-VAR posterior draws yielded non-finite FEVDs"))
-    fevds_valid = valid == n_req ? all_fevds : all_fevds[1:valid, :, :, :]
+    fevds_valid = if valid == n_req
+        slot_fevds
+    else
+        out = Array{T,4}(undef, valid, n, m, horizon)
+        idx = 0
+        @inbounds for s in 1:n_req
+            slot_valid[s] || continue
+            idx += 1
+            out[idx, :, :, :] = @view slot_fevds[s, :, :, :]
+        end
+        out
+    end
 
     q_vec = T.(quantiles)
-    use_threaded = threaded || (valid * horizon * n * m > 100000)
     fevd_q, fevd_m = compute_posterior_quantiles(fevds_valid, q_vec;
-                                                 threaded=use_threaded, central=point_estimate)
+                                                 threaded=threaded, central=point_estimate)
 
     return BayesianFEVD{T}(
         fevd_q, fevd_m, horizon, copy(post.varnames), snames, q_vec,
@@ -1734,7 +1859,7 @@ end
     historical_decomposition(post::DSGEVARPosterior, horizon::Int=0;
                              method::Symbol=..., quantiles=[0.16, 0.5, 0.84],
                              point_estimate::Symbol=:mean, shock_names=nothing,
-                             seed=nothing, kwargs...) -> BayesianHistoricalDecomposition
+                             seed=nothing, threaded::Bool=true, kwargs...) -> BayesianHistoricalDecomposition
 
 Compute Bayesian historical decomposition from a [`DSGEVARPosterior`](@ref).
 
@@ -1750,6 +1875,7 @@ function historical_decomposition(
     point_estimate::Symbol=:mean,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     seed::Union{Integer,Nothing}=nothing,
+    threaded::Bool=true,
     kwargs...,
 ) where {T<:AbstractFloat}
     _validate_quantiles(quantiles)
@@ -1757,7 +1883,8 @@ function historical_decomposition(
         return historical_decomposition(_to_bvar_posterior(post), horizon;
                                         data=data, method=method, quantiles=quantiles,
                                         point_estimate=point_estimate,
-                                        shock_names=shock_names, seed=seed, kwargs...)
+                                        shock_names=shock_names, seed=seed,
+                                        threaded=threaded, kwargs...)
     end
 
     m = size(post.B0_draws, 3)
@@ -1773,20 +1900,22 @@ function historical_decomposition(
     h_eff = horizon <= 0 ? T_eff : min(horizon, T_eff)
     actual = Matrix{T}(use_data[(p + 1):end, :])
 
+    # Hoist VAR design matrix construction outside the posterior draw loop
+    _, X_s = construct_var_matrices(use_data, p)
+    Y_eff_s = actual
+
     n_req = post.n_draws
     B_padded = _dsgevar_pad_intercept(post.B_draws, p, n)
 
-    all_contributions = zeros(T, n_req, T_eff, n, n)
-    all_initial = zeros(T, n_req, T_eff, n)
-    all_shocks = zeros(T, n_req, T_eff, n)
-    valid = 0
+    slot_contributions = Array{T,4}(undef, n_req, T_eff, n, n)
+    slot_initial = Array{T,3}(undef, n_req, T_eff, n)
+    slot_shocks = Array{T,3}(undef, n_req, T_eff, n)
+    slot_valid = fill(false, n_req)
 
-    for s in 1:n_req
+    function _eval_hd_draw!(s::Int)
         B_s = Matrix{T}(@view B_padded[s, :, :])
         S_s = Matrix{T}(@view post.Sigma_draws[s, :, :])
         B0_s = Matrix{T}(@view post.B0_draws[s, :, :])
-        _, X_s = construct_var_matrices(use_data, p)
-        Y_eff_s = @view use_data[(p + 1):end, :]
         U_s = Y_eff_s - X_s * B_s
 
         m_s = VARModel(use_data, p, B_s, Matrix{T}(U_s), S_s, zero(T), zero(T), zero(T), post.varnames)
@@ -1798,13 +1927,48 @@ function historical_decomposition(
         init_c = _compute_initial_conditions(actual, contrib)
 
         if all(isfinite, contrib) && all(isfinite, shocks)
-            valid += 1
-            all_contributions[valid, :, :, :] = contrib
-            all_initial[valid, :, :] = init_c
-            all_shocks[valid, :, :] = shocks
+            @inbounds begin
+                slot_contributions[s, :, :, :] = contrib
+                slot_initial[s, :, :] = init_c
+                slot_shocks[s, :, :] = shocks
+                slot_valid[s] = true
+            end
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_req > 1
+            Threads.@threads :dynamic for s in 1:n_req
+                _eval_hd_draw!(s)
+            end
+        else
+            for s in 1:n_req
+                _eval_hd_draw!(s)
+            end
         end
     end
+
+    valid = count(slot_valid)
     valid == 0 && throw(IdentificationError("All DSGE-VAR posterior draws failed historical decomposition"))
+
+    if valid == n_req
+        all_contributions = slot_contributions
+        all_initial = slot_initial
+        all_shocks = slot_shocks
+    else
+        all_contributions = Array{T,4}(undef, valid, T_eff, n, n)
+        all_initial = Array{T,3}(undef, valid, T_eff, n)
+        all_shocks = Array{T,3}(undef, valid, T_eff, n)
+        idx = 0
+        @inbounds for s in 1:n_req
+            slot_valid[s] || continue
+            idx += 1
+            all_contributions[idx, :, :, :] = @view slot_contributions[s, :, :, :]
+            all_initial[idx, :, :] = @view slot_initial[s, :, :]
+            all_shocks[idx, :, :] = @view slot_shocks[s, :, :]
+        end
+    end
 
     q_vec = T.(quantiles)
     nq = length(q_vec)
@@ -1815,18 +1979,31 @@ function historical_decomposition(
     shocks_m = zeros(T, T_eff, n)
     _central = point_estimate == :median ? median : mean
 
-    @inbounds for t in 1:T_eff, i in 1:n
-        d_init = @view all_initial[1:valid, t, i]
-        initial_q[t, i, :] = quantile(d_init, q_vec)
-        initial_m[t, i] = _central(d_init)
+    function _reduce_dsgevar_hd_t!(t::Int)
+        @inbounds for i in 1:n
+            d_init = @view all_initial[1:valid, t, i]
+            initial_q[t, i, :] = quantile(d_init, q_vec)
+            initial_m[t, i] = _central(d_init)
 
-        d_shock = @view all_shocks[1:valid, t, i]
-        shocks_m[t, i] = _central(d_shock)
+            d_shock = @view all_shocks[1:valid, t, i]
+            shocks_m[t, i] = _central(d_shock)
 
-        for j in 1:n
-            d_c = @view all_contributions[1:valid, t, i, j]
-            contrib_q[t, i, j, :] = quantile(d_c, q_vec)
-            contrib_m[t, i, j] = _central(d_c)
+            for j in 1:n
+                d_c = @view all_contributions[1:valid, t, i, j]
+                contrib_q[t, i, j, :] = quantile(d_c, q_vec)
+                contrib_m[t, i, j] = _central(d_c)
+            end
+        end
+        return nothing
+    end
+
+    if threaded && Threads.nthreads() > 1 && T_eff * n > 64
+        Threads.@threads :dynamic for t in 1:T_eff
+            _reduce_dsgevar_hd_t!(t)
+        end
+    else
+        for t in 1:T_eff
+            _reduce_dsgevar_hd_t!(t)
         end
     end
 

@@ -75,6 +75,29 @@ function _split_chain(x::AbstractVector{T}) where {T<:AbstractFloat}
     return hcat(x[1:N], x[end-N+1:end])
 end
 
+"""
+    _split_chains(x::AbstractVector{T}, n_chains::Int) → Matrix{T}
+
+Split `n_chains` concatenated equal-length chains into `2 * n_chains` half-chains
+(Vehtari et al. 2021). Falls back to `_split_chain(x)` when `n_chains <= 1` or
+chain lengths are incompatible.
+"""
+function _split_chains(x::AbstractVector{T}, n_chains::Int) where {T<:AbstractFloat}
+    if n_chains <= 1 || length(x) % n_chains != 0
+        return _split_chain(x)
+    end
+    per_chain = length(x) ÷ n_chains
+    half = per_chain ÷ 2
+    half < 4 && return _split_chain(x)
+    out = Matrix{T}(undef, half, 2 * n_chains)
+    @inbounds for c in 1:n_chains
+        off = (c - 1) * per_chain
+        out[:, 2 * c - 1] = @view x[(off + 1):(off + half)]
+        out[:, 2 * c] = @view x[(off + per_chain - half + 1):(off + per_chain)]
+    end
+    return out
+end
+
 # =============================================================================
 # Split-R̂ and ESS on prepared (split, possibly rank-normalized) chains
 # =============================================================================
@@ -172,35 +195,35 @@ Rank-normalized split-R̂ of a single chain: the maximum of the split-R̂ on the
 rank-normalized draws and on the rank-normalized folded draws `|x − median|`
 (catches scale, not just location, non-convergence).
 """
-function _rhat_rank(x::AbstractVector{T}) where {T<:AbstractFloat}
+function _rhat_rank(x::AbstractVector{T}; n_chains::Int=1) where {T<:AbstractFloat}
     length(x) < 8 && return T(NaN)
-    z_bulk = _rank_normalize(_split_chain(x))
+    z_bulk = _rank_normalize(_split_chains(x, n_chains))
     folded = abs.(x .- median(x))
-    z_fold = _rank_normalize(_split_chain(folded))
+    z_fold = _rank_normalize(_split_chains(folded, n_chains))
     return max(_rhat_chains(z_bulk), _rhat_chains(z_fold))
 end
 
 """
-    _ess_bulk(x::AbstractVector{T}) → T
+    _ess_bulk(x::AbstractVector{T}; n_chains::Int=1) → T
 
-Bulk-ESS: ESS of the rank-normalized split chain (Vehtari et al. 2021).
+Bulk-ESS: ESS of the rank-normalized split chain(s) (Vehtari et al. 2021).
 """
-function _ess_bulk(x::AbstractVector{T}) where {T<:AbstractFloat}
+function _ess_bulk(x::AbstractVector{T}; n_chains::Int=1) where {T<:AbstractFloat}
     length(x) < 8 && return T(NaN)
-    return _ess_chains(_rank_normalize(_split_chain(x)))
+    return _ess_chains(_rank_normalize(_split_chains(x, n_chains)))
 end
 
 """
-    _ess_tail(x::AbstractVector{T}) → T
+    _ess_tail(x::AbstractVector{T}; n_chains::Int=1) → T
 
 Tail-ESS: minimum ESS of the 5% and 95% quantile-exceedance indicators
 (Vehtari et al. 2021).
 """
-function _ess_tail(x::AbstractVector{T}) where {T<:AbstractFloat}
+function _ess_tail(x::AbstractVector{T}; n_chains::Int=1) where {T<:AbstractFloat}
     length(x) < 8 && return T(NaN)
     ess_q = map((T(0.05), T(0.95))) do q
         cutoff = quantile(x, q)
-        _ess_chains(_split_chain(T.(x .<= cutoff)))
+        _ess_chains(_split_chains(T.(x .<= cutoff), n_chains))
     end
     return min(ess_q...)
 end
@@ -331,12 +354,14 @@ function mcmc_diagnostics(result::BayesianDSGE{T}) where {T<:AbstractFloat}
     mu = zeros(T, n_params)
     sd = zeros(T, n_params)
 
+    n_chains = result.n_chains
+    per_chain = (n_chains > 1 && n_draws % n_chains == 0) ? (n_draws ÷ n_chains) : n_draws
     for i in 1:n_params
         x = result.theta_draws[:, i]
-        rhat_v[i] = _rhat_rank(x)
-        essb[i] = _ess_bulk(x)
-        esst[i] = _ess_tail(x)
-        gz[i] = _geweke_z(x)
+        rhat_v[i] = _rhat_rank(x; n_chains=n_chains)
+        essb[i] = _ess_bulk(x; n_chains=n_chains)
+        esst[i] = _ess_tail(x; n_chains=n_chains)
+        gz[i] = n_chains > 1 ? _geweke_z(@view x[1:per_chain]) : _geweke_z(x)
         gp[i] = isfinite(gz[i]) ? 2 * (1 - cdf(Normal(), abs(gz[i]))) : T(NaN)
         mu[i] = mean(x)
         sd[i] = std(x)

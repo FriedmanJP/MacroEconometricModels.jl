@@ -602,6 +602,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     solver_kwargs::NamedTuple
     prefilter::Union{Nothing,PrefilterSpec{T}}
     trends::Union{Nothing,ObservationTrends{T}}
+    n_chains::Int
     manifest::Union{Nothing,ReproManifest}
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
@@ -613,19 +614,21 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                               measurement_error=nothing, solver=:gensys,
                               solver_kwargs=NamedTuple(),
                               prefilter=nothing, trends=nothing;
+                              n_chains::Int=1,
                               manifest=nothing) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
         @assert method in (:smc, :rwmh, :csmc, :smc2, :importance) "unknown method: $method"
         @assert solved_at in (:posterior_mean, :highest_posterior_draw) "solved_at must be :posterior_mean or :highest_posterior_draw"
+        @assert n_chains >= 1 "n_chains must be >= 1"
         me = measurement_error === nothing ? nothing : Vector{T}(measurement_error)
         new{T}(theta_draws, log_posterior, param_names, priors,
                log_marginal_likelihood, method, acceptance_rate,
                ess_history, phi_schedule, spec, solution, state_space,
                n_failed_draws, n_lik_evals, solved_at,
                Matrix{T}(data), Vector{Symbol}(observables), me,
-               solver, solver_kwargs, prefilter, trends, manifest)
+               solver, solver_kwargs, prefilter, trends, n_chains, manifest)
     end
 end
 

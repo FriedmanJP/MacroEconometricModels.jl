@@ -489,6 +489,7 @@ function _from_serializable(::Type{BayesianDSGE}, p::AbstractDict, ::Int)
         _deser_field(p["solver_kwargs"]),
         _deser_field(p["prefilter"]),
         _deser_field(p["trends"]);
+        n_chains=Int(get(p, "n_chains", 1)),
         manifest=mani,
     )
 end

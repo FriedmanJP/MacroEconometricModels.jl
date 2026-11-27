@@ -411,6 +411,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               n_mh_steps::Int=1,
                               n_draws::Union{Nothing,Int}=nothing,
                               burnin::Union{Nothing,Int}=nothing,
+                              n_chains::Int=1,
                               keep_burnin::Bool=false,
                               ess_target::Float64=0.5,
                               measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
@@ -432,6 +433,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     # Empty-residual / non-RA families have no gensys state space; falling
     # through to the RA Kalman path is a silent wrong likelihood (#649 / MSR-07).
     _require_estimable_spec(:estimate_dsge_bayes, spec)
+    n_chains >= 1 || throw(ArgumentError("n_chains must be >= 1, got $n_chains"))
     rng = _resolve_repro_rng(rng, seed)
 
     if has_kind(spec, HouseholdSystem)
@@ -465,8 +467,8 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
             "estimate_dsge_bayes: `transform=false` is not supported for HA specs."))
         return _ha_estimate_dsge_bayes(spec, data, theta0;
             priors=priors, method=ha_method_est, observables=observables,
-            n_draws=defs.n_draws, burnin=defs.burnin, n_smc=defs.n_smc,
-            n_mh_steps=n_mh_steps,
+            n_draws=defs.n_draws, burnin=defs.burnin, n_chains=n_chains,
+            n_smc=defs.n_smc, n_mh_steps=n_mh_steps,
             ess_target=ess_target, measurement_error=measurement_error,
             max_stages=max_stages, min_dphi=min_dphi, rng=rng, seed=seed, kwargs...)
     end
@@ -537,6 +539,9 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     # ── 5. Validate method / proposal ────────────────────────────────────
     if method ∉ (:smc, :smc2, :mh)
         throw(ArgumentError("method must be :smc, :smc2, or :mh, got :$method"))
+    end
+    if method != :mh && n_chains > 1
+        throw(ArgumentError("n_chains > 1 is only supported for method=:mh, got method=:$method"))
     end
     if proposal ∉ (:adaptive, :mode)
         throw(ArgumentError("proposal must be :adaptive or :mode, got :$proposal"))
@@ -616,28 +621,97 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                 init_proposal_cov = Matrix{T}(Dinv * init_proposal_cov * Dinv)
             end
         end
-        draws, log_posterior, acceptance_rate, _mh_diag = _mh_sample(
-            spec, data_mat, param_names, prior, theta_init;
-            n_draws=n_draws, burnin=burnin,
-            observables=observables,
-            measurement_error=measurement_error,
-            solver=solver, solver_kwargs=solver_kwargs, trends=trends,
-            init_proposal_cov=init_proposal_cov, transform=transform, rng=rng)
-        # Discard burn-in so posterior summaries exclude the transient. The burnin kwarg was
-        # previously a no-op for :mh (all draws stored). keep_burnin=true retains the full
-        # chain (e.g. for trace plots) without affecting the default summaries (E-03 / #122).
-        if !keep_burnin && burnin > 0
-            keep = min(burnin, n_draws - 1)          # always retain ≥1 posterior draw
-            draws = draws[keep+1:end, :]
-            log_posterior = log_posterior[keep+1:end]
+        if n_chains == 1
+            draws, log_posterior, acceptance_rate, _mh_diag = _mh_sample(
+                spec, data_mat, param_names, prior, theta_init;
+                n_draws=n_draws, burnin=burnin,
+                observables=observables,
+                measurement_error=measurement_error,
+                solver=solver, solver_kwargs=solver_kwargs, trends=trends,
+                init_proposal_cov=init_proposal_cov, transform=transform, rng=rng)
+            if !keep_burnin && burnin > 0
+                keep = min(burnin, n_draws - 1)          # always retain ≥1 posterior draw
+                draws = draws[keep+1:end, :]
+                log_posterior = log_posterior[keep+1:end]
+            end
+            return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
+                                         prior, param_names, spec,
+                                         observables, measurement_error,
+                                         solver, solver_kwargs,
+                                         _mh_diag.n_failed, _mh_diag.n_evals, data_mat,
+                                         prefilter_spec, trends_record;
+                                         n_chains=1, manifest=manifest)
+        else
+            # Multi-chain parallel RWMH with deterministic per-chain seeding (#948)
+            chain_seeds = rand(rng, UInt64, n_chains)
+            n_p = length(param_names)
+            chain_draws = Vector{Matrix{T}}(undef, n_chains)
+            chain_lps = Vector{Vector{T}}(undef, n_chains)
+            chain_accs = Vector{T}(undef, n_chains)
+            chain_fails = zeros(Int, n_chains)
+            chain_evals = zeros(Int, n_chains)
+
+            function _run_mh_chain!(c::Int)
+                c_rng = Random.Xoshiro(chain_seeds[c])
+                th_c = copy(theta_init)
+                if c > 1
+                    for i in 1:n_p
+                        lo, hi = prior.lower[i], prior.upper[i]
+                        span = isfinite(lo) && isfinite(hi) ? (hi - lo) : max(abs(theta_init[i]), one(T))
+                        delta = T(0.02) * span * randn(c_rng, T)
+                        cand = theta_init[i] + delta
+                        margin = T(1e-6) * span
+                        if isfinite(lo)
+                            cand = max(cand, lo + margin)
+                        end
+                        if isfinite(hi)
+                            cand = min(cand, hi - margin)
+                        end
+                        th_c[i] = cand
+                    end
+                end
+                d_c, lp_c, acc_c, diag_c = _mh_sample(
+                    spec, data_mat, param_names, prior, th_c;
+                    n_draws=n_draws, burnin=burnin,
+                    observables=observables,
+                    measurement_error=measurement_error,
+                    solver=solver, solver_kwargs=solver_kwargs, trends=trends,
+                    init_proposal_cov=init_proposal_cov, transform=transform, rng=c_rng)
+                if !keep_burnin && burnin > 0
+                    keep = min(burnin, n_draws - 1)
+                    d_c = d_c[keep+1:end, :]
+                    lp_c = lp_c[keep+1:end]
+                end
+                chain_draws[c] = d_c
+                chain_lps[c] = lp_c
+                chain_accs[c] = acc_c
+                chain_fails[c] = diag_c.n_failed
+                chain_evals[c] = diag_c.n_evals
+            end
+
+            _with_single_blas_thread() do
+                if Threads.nthreads() > 1
+                    Threads.@threads :dynamic for c in 1:n_chains
+                        _run_mh_chain!(c)
+                    end
+                else
+                    for c in 1:n_chains
+                        _run_mh_chain!(c)
+                    end
+                end
+            end
+
+            draws = reduce(vcat, chain_draws)
+            log_posterior = reduce(vcat, chain_lps)
+            acceptance_rate = mean(chain_accs)
+            return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
+                                         prior, param_names, spec,
+                                         observables, measurement_error,
+                                         solver, solver_kwargs,
+                                         sum(chain_fails), sum(chain_evals), data_mat,
+                                         prefilter_spec, trends_record;
+                                         n_chains=n_chains, manifest=manifest)
         end
-        return _mh_to_bayesian_dsge(draws, log_posterior, acceptance_rate,
-                                     prior, param_names, spec,
-                                     observables, measurement_error,
-                                     solver, solver_kwargs,
-                                     _mh_diag.n_failed, _mh_diag.n_evals, data_mat,
-                                     prefilter_spec, trends_record;
-                                     manifest=manifest)
     end
 end
 
@@ -781,7 +855,7 @@ function posterior_mode(spec::ModelSpec{T}, data::AbstractMatrix,
     H = try
         ForwardDiff.hessian(negpost, theta_star)
     catch
-        _numerical_hessian(negpost, theta_star; eps_step=T(1e-4))
+        _numerical_hessian(negpost, theta_star; eps_step=T(1e-4), threaded=true)
     end
     H = Matrix{T}((H + H') / 2)
 
@@ -999,6 +1073,7 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
                                 data::Matrix{T}=zeros(T, 0, 0),
                                 prefilter=nothing,
                                 trends=nothing;
+                                n_chains::Int=1,
                                 manifest=nothing) where {T<:AbstractFloat}
     # Posterior mean from draws
     theta_mean = vec(mean(draws; dims=1))
@@ -1022,7 +1097,7 @@ function _mh_to_bayesian_dsge(draws::Matrix{T}, log_posterior::Vector{T},
         spec, sol, ss,
         n_failed, n_evals, solved_at,
         data, observables, measurement_error, solver, solver_kwargs,
-        prefilter, trends; manifest=manifest
+        prefilter, trends; n_chains=n_chains, manifest=manifest
     )
 end
 
@@ -1189,7 +1264,7 @@ function posterior_summary(result::BayesianDSGE{T};
         low = Symbol[]
         for i in 1:n_params
             pn = result.param_names[i]
-            ess_i = _ess_bulk(result.theta_draws[:, i])
+            ess_i = _ess_bulk(result.theta_draws[:, i]; n_chains=result.n_chains)
             summary[pn][:ess_bulk] = ess_i
             is_low = isfinite(ess_i) && ess_i < min_ess
             summary[pn][:low_ess] = is_low ? one(T) : zero(T)
@@ -1299,6 +1374,7 @@ function bridge_sampling_ml(result::BayesianDSGE{T};
                             n_proposal::Int=0,
                             max_iter::Int=1000,
                             tol::Real=1e-10,
+                            threaded::Bool=true,
                             rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     proposal in (:normal, :t) ||
         throw(ArgumentError("proposal must be :normal or :t, got :$proposal"))
@@ -1366,14 +1442,26 @@ function bridge_sampling_ml(result::BayesianDSGE{T};
                                  result.solver, result.solver_kwargs)
     phi_g = rand(rng, g, n2)                       # d × n2
     l2 = fill(T(-Inf), n2)
-    for j in 1:n2
+    function _eval_bridge_j!(j::Int)
         phiv = Vector{T}(phi_g[:, j])
         theta_j = to_constrained(pt, phiv)
         lp = _log_prior(theta_j, prior)
-        isfinite(lp) || continue
+        isfinite(lp) || return nothing
         ll = ll_fn(theta_j)
-        isfinite(ll) || continue
+        isfinite(ll) || return nothing
         l2[j] = ll + lp + log_jac(phiv) - T(logpdf(g, phiv))
+        return nothing
+    end
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n2 > 1
+            Threads.@threads :dynamic for j in 1:n2
+                _eval_bridge_j!(j)
+            end
+        else
+            for j in 1:n2
+                _eval_bridge_j!(j)
+            end
+        end
     end
     n2_finite = count(isfinite, l2)
     if n2_finite < max(10, n2 ÷ 20)
@@ -1483,46 +1571,55 @@ parameter values and simulates forward `T_periods` periods.
 """
 function posterior_predictive(result::BayesianDSGE{T}, n_sim::Int;
                                T_periods::Int=100,
+                               threaded::Bool=true,
                                seed::Union{Nothing,Integer}=nothing,
                                rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     n_draws_total = size(result.theta_draws, 1)
-    n_params = length(result.param_names)
     spec = result.spec
 
     # Determine number of variables from spec
     n_vars = spec.augmented ? length(spec.original_endog) : spec.n_endog
 
-    # Collect one path per SUCCESSFUL draw; failed draws are DROPPED (not zero-filled,
-    # which would bias the predictive distribution toward zero).
-    paths_list = Vector{Matrix{T}}()
+    # Pre-draw indices and per-draw seeds sequentially so threaded=false == threaded=true and 1T == NT (#948)
+    draw_indices = Int[rand(rng, 1:n_draws_total) for _ in 1:n_sim]
+    sim_seeds = rand(rng, UInt64, n_sim)
+    slots = Vector{Union{Nothing,Matrix{T}}}(nothing, n_sim)
 
-    for s in 1:n_sim
-        # Randomly select a posterior draw
-        draw_idx = rand(rng, 1:n_draws_total)
-        theta = result.theta_draws[draw_idx, :]
-
-        # Update spec parameters
+    function _run_pp_draw!(s::Int)
+        local_rng = Random.Xoshiro(sim_seeds[s])
+        theta = result.theta_draws[draw_indices[s], :]
         new_pv = copy(spec.param_values)
         for (i, pn) in enumerate(result.param_names)
             new_pv[pn] = theta[i]
         end
-
         new_spec = _respec(spec, new_pv)
-
         try
             new_spec = compute_steady_state(new_spec)
             sol = solve(new_spec; method=:gensys)
             if is_determined(sol)
-                sim = simulate(sol, T_periods; rng=rng)  # T_periods × n_vars
-                push!(paths_list, Matrix{T}(sim))
+                sim = simulate(sol, T_periods; rng=local_rng)  # T_periods × n_vars
+                slots[s] = Matrix{T}(sim)
             end
         catch e
             _benign_solve_error(e) || rethrow(e)
-            continue
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_sim > 1
+            Threads.@threads :dynamic for s in 1:n_sim
+                _run_pp_draw!(s)
+            end
+        else
+            for s in 1:n_sim
+                _run_pp_draw!(s)
+            end
         end
     end
 
+    paths_list = Matrix{T}[p for p in slots if p !== nothing]
     n_valid = length(paths_list)
     n_dropped = n_sim - n_valid
     n_dropped > 0 && @warn "posterior_predictive: dropped $(n_dropped)/$(n_sim) draws " *
@@ -1638,7 +1735,8 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
                                 observables::Vector{Symbol}, T_periods::Int,
                                 stats_fn, solver::Symbol,
                                 solver_kwargs::NamedTuple,
-                                rng::AbstractRNG) where {T<:AbstractFloat}
+                                rng::AbstractRNG;
+                                threaded::Bool=true) where {T<:AbstractFloat}
     var_syms = spec.augmented ? spec.original_endog : spec.endog
     obs_idx = [findfirst(==(o), var_syms) for o in observables]
     any(isnothing, obs_idx) &&
@@ -1646,10 +1744,19 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
     obs_idx = Vector{Int}(obs_idx)
 
     n = size(thetas, 1)
-    stat_names = String[]
-    rows = Vector{Vector{Float64}}()
-    last_err = nothing
-    for s in 1:n
+    sim_seeds = rand(rng, UInt64, n)
+    slot_names = Vector{Union{Nothing,Vector{String}}}(nothing, n)
+    slot_vals = Vector{Union{Nothing,Vector{Float64}}}(nothing, n)
+    slot_errs = Vector{Any}(nothing, n)
+
+    eff_solver_kwargs = if solver in (:projection, :pfi) && threaded && Threads.nthreads() > 1
+        merge(solver_kwargs, (threaded=false,))
+    else
+        solver_kwargs
+    end
+
+    function _run_pred_stat!(s::Int)
+        local_rng = Random.Xoshiro(sim_seeds[s])
         theta = Vector{T}(thetas[s, :])
         try
             new_pv = copy(spec.param_values)
@@ -1658,24 +1765,47 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
             end
             new_spec = _respec(spec, new_pv)
             new_spec = compute_steady_state(new_spec)
-            sol = solve(new_spec; method=solver, solver_kwargs...)
+            sol = solve(new_spec; method=solver, eff_solver_kwargs...)
             if sol isa DSGESolution && !is_determined(sol)
-                continue
+                return nothing
             end
-            sim = simulate(sol, T_periods; rng=rng)      # T_periods × n_vars
+            sim = simulate(sol, T_periods; rng=local_rng)      # T_periods × n_vars
             Y = sim[:, obs_idx]
-            all(isfinite, Y) || continue
+            all(isfinite, Y) || return nothing
             names, vals = _stat_pairs(stats_fn(Y))
-            if isempty(stat_names)
-                append!(stat_names, names)
-            end
-            length(vals) == length(stat_names) || continue
-            push!(rows, vals)
+            slot_names[s] = names
+            slot_vals[s] = vals
         catch e
             (e isa LinearAlgebra.SingularException || e isa DomainError ||
              e isa ArgumentError || e isa ErrorException) || rethrow(e)
-            last_err = e
-            continue
+            slot_errs[s] = e
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n > 1
+            Threads.@threads :dynamic for s in 1:n
+                _run_pred_stat!(s)
+            end
+        else
+            for s in 1:n
+                _run_pred_stat!(s)
+            end
+        end
+    end
+
+    stat_names = String[]
+    rows = Vector{Vector{Float64}}()
+    last_err = nothing
+    for s in 1:n
+        if slot_vals[s] !== nothing
+            if isempty(stat_names)
+                append!(stat_names, slot_names[s])
+            end
+            length(slot_vals[s]) == length(stat_names) && push!(rows, slot_vals[s])
+        elseif slot_errs[s] !== nothing
+            last_err = slot_errs[s]
         end
     end
 
@@ -1683,8 +1813,7 @@ function _predictive_stats_loop(spec::ModelSpec{T}, thetas::AbstractMatrix{T},
     n_eff == 0 && throw(ArgumentError(
         "0/$(n) prior-predictive draws succeeded; last error: " *
         (last_err === nothing ? "(none captured)" : sprint(showerror, last_err))))
-    stats_mat = n_eff == 0 ? zeros(T, 0, length(stat_names)) :
-                Matrix{T}(reduce(vcat, (permutedims(r) for r in rows)))
+    stats_mat = Matrix{T}(reduce(vcat, (permutedims(r) for r in rows)))
     return stat_names, stats_mat, n_eff
 end
 
@@ -1720,6 +1849,7 @@ function prior_predictive(spec::ModelSpec{T},
                           stats=nothing,
                           solver::Symbol=:gensys,
                           solver_kwargs::NamedTuple=NamedTuple(),
+                          threaded::Bool=true,
                           seed::Union{Nothing,Integer}=nothing,
                           rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
@@ -1750,7 +1880,7 @@ function prior_predictive(spec::ModelSpec{T},
 
     stat_names, stats_mat, n_eff = _predictive_stats_loop(
         spec, thetas, param_names, observables, T_periods, stats_fn,
-        solver, solver_kwargs, rng)
+        solver, solver_kwargs, rng; threaded=threaded)
 
     skipped = n_draws - n_eff
     if skipped > n_draws ÷ 10
@@ -1792,6 +1922,7 @@ function posterior_predictive_check(result::BayesianDSGE{T};
                                     data::Union{Nothing,AbstractMatrix}=nothing,
                                     n_draws::Int=200,
                                     stats=nothing,
+                                    threaded::Bool=true,
                                     seed::Union{Nothing,Integer}=nothing,
                                     rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
@@ -1818,7 +1949,7 @@ function posterior_predictive_check(result::BayesianDSGE{T};
 
     stat_names, rep_mat, n_eff = _predictive_stats_loop(
         result.spec, thetas, result.param_names, observables, T_obs, stats_fn,
-        result.solver, result.solver_kwargs, rng)
+        result.solver, result.solver_kwargs, rng; threaded=threaded)
 
     skipped = n_use - n_eff
     skipped > n_use ÷ 10 &&
@@ -1925,6 +2056,7 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
              quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
              solver::Symbol=:gensys,
              solver_kwargs::NamedTuple=NamedTuple(),
+             threaded::Bool=true,
              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     q_vec = T.(_validate_quantiles(quantiles))
     spec = result.spec
@@ -1938,29 +2070,47 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
     var_names = ref_irf.variables
     shock_names = ref_irf.shocks
 
-    # Collect IRF arrays from posterior draws
-    all_irfs = Vector{Array{T,3}}()
+    # Pre-draw indices sequentially, evaluate in parallel into indexed slots (#948)
     draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+    slots = Vector{Union{Nothing,Array{T,3}}}(nothing, n_sim)
+    eff_solver_kwargs = if solver in (:projection, :pfi) && threaded && Threads.nthreads() > 1
+        merge(solver_kwargs, (threaded=false,))
+    else
+        solver_kwargs
+    end
 
-    for idx in draw_indices
-        theta = Vector{T}(result.theta_draws[idx, :])
+    function _run_irf_draw!(s::Int)
+        theta = Vector{T}(result.theta_draws[draw_indices[s], :])
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   spec.endog, nothing, solver, eff_solver_kwargs;
                                                    build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
-                    return  # skip indeterminate
+                    return
                 end
                 irf_i = irf(sol, horizon)
-                push!(all_irfs, irf_i.values)
+                slots[s] = irf_i.values
             end
         catch e
             _benign_solve_error(e) || rethrow(e)
-            continue
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_sim > 1
+            Threads.@threads :dynamic for s in 1:n_sim
+                _run_irf_draw!(s)
+            end
+        else
+            for s in 1:n_sim
+                _run_irf_draw!(s)
+            end
         end
     end
 
+    all_irfs = Array{T,3}[arr for arr in slots if arr !== nothing]
     n_valid = length(all_irfs)
     n_skipped = n_sim - n_valid
     n_skipped > 0 && @warn "Bayesian IRF: skipped $(n_skipped)/$(n_sim) posterior draws " *
@@ -1974,7 +2124,7 @@ function irf(result::BayesianDSGE{T}, horizon::Int;
     end
 
     # Compute quantiles
-    irf_q, irf_m = compute_posterior_quantiles(stacked, q_vec)
+    irf_q, irf_m = compute_posterior_quantiles(stacked, q_vec; threaded=(threaded && Threads.nthreads() > 1))
 
     BayesianImpulseResponse{T}(irf_q, irf_m, horizon, var_names, shock_names, q_vec, stacked,
                                n_sim, n_valid, n_skipped)
@@ -1990,6 +2140,7 @@ end
          quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
          solver::Symbol=:gensys,
          solver_kwargs::NamedTuple=NamedTuple(),
+         threaded::Bool=true,
          rng::AbstractRNG=Random.default_rng()) → BayesianFEVD{T}
 
 Compute Bayesian forecast error variance decomposition with posterior credible bands.
@@ -2005,6 +2156,7 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
               quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
               solver::Symbol=:gensys,
               solver_kwargs::NamedTuple=NamedTuple(),
+              threaded::Bool=true,
               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     q_vec = T.(_validate_quantiles(quantiles))
     spec = result.spec
@@ -2018,29 +2170,47 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
     var_names = ref_fevd.variables
     shock_names = ref_fevd.shocks
 
-    # Collect FEVD proportions from posterior draws
-    all_fevds = Vector{Array{T,3}}()
+    # Pre-draw indices sequentially, evaluate in parallel into indexed slots (#948)
     draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+    slots = Vector{Union{Nothing,Array{T,3}}}(nothing, n_sim)
+    eff_solver_kwargs = if solver in (:projection, :pfi) && threaded && Threads.nthreads() > 1
+        merge(solver_kwargs, (threaded=false,))
+    else
+        solver_kwargs
+    end
 
-    for idx in draw_indices
-        theta = Vector{T}(result.theta_draws[idx, :])
+    function _run_fevd_draw!(s::Int)
+        theta = Vector{T}(result.theta_draws[draw_indices[s], :])
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   spec.endog, nothing, solver, eff_solver_kwargs;
                                                    build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
                     return
                 end
                 fevd_i = fevd(sol, horizon)
-                push!(all_fevds, fevd_i.proportions)
+                slots[s] = fevd_i.proportions
             end
         catch e
             _benign_solve_error(e) || rethrow(e)
-            continue
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_sim > 1
+            Threads.@threads :dynamic for s in 1:n_sim
+                _run_fevd_draw!(s)
+            end
+        else
+            for s in 1:n_sim
+                _run_fevd_draw!(s)
+            end
         end
     end
 
+    all_fevds = Array{T,3}[arr for arr in slots if arr !== nothing]
     n_valid = length(all_fevds)
     n_skipped = n_sim - n_valid
     n_skipped > 0 && @warn "Bayesian FEVD: skipped $(n_skipped)/$(n_sim) posterior draws " *
@@ -2056,7 +2226,7 @@ function fevd(result::BayesianDSGE{T}, horizon::Int;
         end
     end
 
-    fevd_q, fevd_m = compute_posterior_quantiles(stacked, q_vec)
+    fevd_q, fevd_m = compute_posterior_quantiles(stacked, q_vec; threaded=(threaded && Threads.nthreads() > 1))
 
     BayesianFEVD{T}(fevd_q, fevd_m, horizon, var_names, shock_names, q_vec,
                     n_sim, n_valid, n_skipped)
@@ -2072,6 +2242,7 @@ end
              quantiles::Vector{<:Real}=DEFAULT_QUANTILES_MACRO,
              solver::Symbol=:gensys,
              solver_kwargs::NamedTuple=NamedTuple(),
+             threaded::Bool=true,
              rng::AbstractRNG=Random.default_rng()) → BayesianDSGESimulation{T}
 
 Simulate from the posterior predictive distribution with credible bands.
@@ -2088,6 +2259,7 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
                    quantiles::Vector{<:Real}=T.(DEFAULT_QUANTILES_MACRO),
                    solver::Symbol=:gensys,
                    solver_kwargs::NamedTuple=NamedTuple(),
+                   threaded::Bool=true,
                    seed::Union{Nothing,Integer}=nothing,
                    rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     _validate_quantiles(quantiles)
@@ -2101,29 +2273,48 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
     var_names = spec.augmented ? [string(s) for s in spec.original_endog] :
                                  [string(s) for s in spec.endog]
 
-    # Collect simulation paths
-    all_paths_list = Vector{Matrix{T}}()
+    # Pre-draw indices and per-draw seeds sequentially so threaded=false == threaded=true and 1T == NT (#948)
     draw_indices = randperm(rng, n_draws_total)[1:n_sim]
+    sim_seeds = rand(rng, UInt64, n_sim)
+    slots = Vector{Union{Nothing,Matrix{T}}}(nothing, n_sim)
+    eff_solver_kwargs = if solver in (:projection, :pfi) && threaded && Threads.nthreads() > 1
+        merge(solver_kwargs, (threaded=false,))
+    else
+        solver_kwargs
+    end
 
-    for idx in draw_indices
-        theta = Vector{T}(result.theta_draws[idx, :])
+    function _run_sim_draw!(s::Int)
+        local_rng = Random.Xoshiro(sim_seeds[s])
+        theta = Vector{T}(result.theta_draws[draw_indices[s], :])
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, result.param_names, theta,
-                                                   spec.endog, nothing, solver, solver_kwargs;
+                                                   spec.endog, nothing, solver, eff_solver_kwargs;
                                                    build_observation=false)
                 if sol isa DSGESolution && (!is_determined(sol))
                     return
                 end
-                sim = simulate(sol, T_periods; rng=rng)
-                push!(all_paths_list, sim)
+                slots[s] = Matrix{T}(simulate(sol, T_periods; rng=local_rng))
             end
         catch e
             _benign_solve_error(e) || rethrow(e)
-            continue
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_sim > 1
+            Threads.@threads :dynamic for s in 1:n_sim
+                _run_sim_draw!(s)
+            end
+        else
+            for s in 1:n_sim
+                _run_sim_draw!(s)
+            end
         end
     end
 
+    all_paths_list = Matrix{T}[p for p in slots if p !== nothing]
     n_valid = length(all_paths_list)
     n_skipped = n_sim - n_valid
     n_skipped > 0 && @warn "Bayesian simulate: skipped $(n_skipped)/$(n_sim) posterior draws " *
@@ -2137,7 +2328,7 @@ function simulate(result::BayesianDSGE{T}, T_periods::Int;
     end
 
     q_vec = T.(quantiles)
-    sim_q, sim_m = compute_posterior_quantiles(stacked, q_vec)
+    sim_q, sim_m = compute_posterior_quantiles(stacked, q_vec; threaded=(threaded && Threads.nthreads() > 1))
 
     sim_manifest = capture_manifest(; seed=seed, settings=Dict{String,Any}(
         "T_periods" => T_periods, "n_draws" => n_sim, "solver" => String(solver),

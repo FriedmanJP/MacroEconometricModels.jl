@@ -236,6 +236,7 @@ Contribution of shock j = baseline - counterfactual_without_j.
 - `N::Int=1000`: Number of forward particles for the smoother
 - `N_back::Int=100`: Number of backward trajectories for the smoother
 - `rng::AbstractRNG`: Random number generator
+- `threaded::Bool=true`: Parallelize the backward simulation pass of the particle smoother
 
 # Returns
 `HistoricalDecomposition{T}` with `method=:dsge_nonlinear`.
@@ -245,7 +246,8 @@ function historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMa
                                    states::Symbol=:observables,
                                    measurement_error=nothing,
                                    N::Int=1000, N_back::Int=100,
-                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                                   rng::AbstractRNG=Random.default_rng(),
+                                   threaded::Bool=true) where {T<:AbstractFloat}
     spec = sol.spec
     n_endog = spec.n_endog
     n_shocks = spec.n_exog
@@ -279,7 +281,8 @@ function historical_decomposition(sol::PerturbationSolution{T}, data::AbstractMa
     # =========================================================================
     # Step 3: Run particle smoother to get smoothed shocks
     # =========================================================================
-    smoother_result = dsge_particle_smoother(nss, data_dev; N=N, N_back=N_back, rng=rng)
+    smoother_result = dsge_particle_smoother(nss, data_dev; N=N, N_back=N_back,
+                                              rng=rng, threaded=threaded)
     # smoothed_shocks is n_shocks × T_obs
     shocks_mat = Matrix{T}(smoother_result.smoothed_shocks')  # T_obs × n_shocks
 
@@ -367,7 +370,9 @@ end
                               n_draws::Int=200,
                               quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
                               measurement_error=nothing,
-                              states::Symbol=:observables) where {T}
+                              states::Symbol=:observables,
+                              threaded::Bool=true,
+                              rng::AbstractRNG=Random.default_rng()) where {T}
 
 Compute Bayesian historical decomposition for a DSGE model with posterior credible bands.
 
@@ -387,6 +392,10 @@ computes the historical decomposition. Reports pointwise posterior mean and quan
 - `measurement_error`: Vector of measurement error std devs, `:auto` (per-observable,
   10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`)
 - `states::Symbol=:observables`: Decompose `:observables` (default) or `:all` states
+- `threaded::Bool=true`: Evaluate posterior draws and quantile reductions across threads
+  with thread-count-invariant per-draw RNG streams (produces bit-identical output to
+  `threaded=false`)
+- `rng::AbstractRNG=Random.default_rng()`: Random number generator for nonlinear particle smoother draws
 
 # Returns
 - If `mode_only=true`: `HistoricalDecomposition{T}` with `method=:dsge_bayes_mode`
@@ -402,7 +411,9 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
                                    n_draws::Int=200,
                                    quantiles::Vector{<:Real}=T[0.16, 0.5, 0.84],
                                    measurement_error=nothing,
-                                   states::Symbol=:observables) where {T<:AbstractFloat}
+                                   states::Symbol=:observables,
+                                   threaded::Bool=true,
+                                   rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
     # Resolve :auto once here so per-draw inner calls receive a plain vector
     # (and the resolver's warning fires once, not once per draw).
     measurement_error = _resolve_me_hd(measurement_error, post.spec, data, observables)
@@ -417,7 +428,8 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
                                            states=states, measurement_error=measurement_error)
         elseif sol isa PerturbationSolution
             hd = historical_decomposition(sol, data, observables;
-                                           states=states, measurement_error=measurement_error)
+                                           states=states, measurement_error=measurement_error,
+                                           rng=rng, threaded=threaded)
         else
             error("Unsupported solution type $(typeof(sol)) for mode_only HD")
         end
@@ -445,46 +457,90 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
     draw_indices = clamp.(draw_indices, 1, n_draws_total)
 
     # Get reference dimensions from mode solution
-    ref_hd = historical_decomposition(post.solution, data, observables;
-                                       states=states, measurement_error=measurement_error)
+    ref_hd = if post.solution isa PerturbationSolution
+        historical_decomposition(post.solution, data, observables;
+                                 states=states, measurement_error=measurement_error,
+                                 rng=rng, threaded=threaded)
+    else
+        historical_decomposition(post.solution, data, observables;
+                                 states=states, measurement_error=measurement_error)
+    end
     T_obs = ref_hd.T_eff
     n_vars = length(ref_hd.variables)
     n_shocks = length(ref_hd.shock_names)
     var_names = ref_hd.variables
     shock_names = ref_hd.shock_names
 
-    # Storage for all draws
-    all_contributions = Vector{Array{T,3}}()
-    all_initial = Vector{Matrix{T}}()
-    all_shocks = Vector{Matrix{T}}()
+    solver = post.solution isa DSGESolution ? post.solution.method :
+             post.solution isa PerturbationSolution ? :perturbation : :gensys
+    solver_kwargs = post.solution isa PerturbationSolution ?
+                    merge((order=post.solution.order,), post.solver_kwargs) : NamedTuple()
 
-    solver = post.solution isa DSGESolution ? post.solution.method : :gensys
+    # Pre-generate deterministic per-draw seeds before parallel dispatch so
+    # threaded=false and threaded=true (and 1T vs 4T) yield bit-identical results.
+    hd_seeds = rand(rng, UInt64, n_sim)
+    slot_contrib = Vector{Union{Nothing,Array{T,3}}}(nothing, n_sim)
+    slot_init = Vector{Union{Nothing,Matrix{T}}}(nothing, n_sim)
+    slot_shocks = Vector{Union{Nothing,Matrix{T}}}(nothing, n_sim)
 
-    for idx in draw_indices
-        theta = Vector{T}(post.theta_draws[idx, :])
+    function _eval_one_hd(k::Int)
+        local_rng = Xoshiro(hd_seeds[k])
+        idx = draw_indices[k]
+        theta = Vector{T}(@view post.theta_draws[idx, :])
         try
             _suppress_warnings() do
                 sol, _ = _build_solution_at_theta(spec, post.param_names, theta,
                                                    observables, measurement_error,
-                                                   solver, NamedTuple())
+                                                   solver, solver_kwargs)
                 if sol isa DSGESolution && !is_determined(sol)
                     return  # skip indeterminate
                 end
 
-                hd_i = historical_decomposition(sol, data, observables;
-                                                 states=states,
-                                                 measurement_error=measurement_error)
+                hd_i = if sol isa PerturbationSolution
+                    historical_decomposition(sol, data, observables;
+                                             states=states,
+                                             measurement_error=measurement_error,
+                                             rng=local_rng, threaded=false)
+                else
+                    historical_decomposition(sol, data, observables;
+                                             states=states,
+                                             measurement_error=measurement_error)
+                end
 
-                push!(all_contributions, hd_i.contributions)
-                push!(all_initial, hd_i.initial_conditions)
-                push!(all_shocks, hd_i.shocks)
+                slot_contrib[k] = hd_i.contributions
+                slot_init[k] = hd_i.initial_conditions
+                slot_shocks[k] = hd_i.shocks
             end
         catch e
             # A recoverable failed posterior HD draw is skipped; a programming error
             # (MethodError/BoundsError/…) propagates rather than being swallowed (T145/#244).
             _is_recoverable_draw_error(e) || rethrow(e)
-            continue
         end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if threaded && Threads.nthreads() > 1 && n_sim > 1
+            Threads.@threads :dynamic for k in 1:n_sim
+                _eval_one_hd(k)
+            end
+        else
+            for k in 1:n_sim
+                _eval_one_hd(k)
+            end
+        end
+    end
+
+    # Compact valid draws in deterministic index order 1:n_sim
+    all_contributions = Array{T,3}[]
+    all_initial = Matrix{T}[]
+    all_shocks = Matrix{T}[]
+    for k in 1:n_sim
+        c_k = slot_contrib[k]
+        c_k === nothing && continue
+        push!(all_contributions, c_k)
+        push!(all_initial, slot_init[k]::Matrix{T})
+        push!(all_shocks, slot_shocks[k]::Matrix{T})
     end
 
     n_valid = length(all_contributions)
@@ -505,8 +561,8 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
     # Reconstruct actual from reference
     actual = ref_hd.actual
 
-    @inbounds for t in 1:T_obs
-        for i in 1:n_vars
+    function _reduce_hd_t!(t::Int)
+        @inbounds for i in 1:n_vars
             # Initial conditions across draws
             d_init = T[all_initial[s][t, i] for s in 1:n_valid]
             initial_m[t, i] = Statistics.mean(d_init)
@@ -523,9 +579,20 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
             end
         end
 
-        for j in 1:n_shocks
+        @inbounds for j in 1:n_shocks
             d_shock = T[all_shocks[s][t, j] for s in 1:n_valid]
             shocks_m[t, j] = Statistics.mean(d_shock)
+        end
+        return nothing
+    end
+
+    if threaded && Threads.nthreads() > 1 && T_obs * n_vars > 64
+        Threads.@threads :dynamic for t in 1:T_obs
+            _reduce_hd_t!(t)
+        end
+    else
+        for t in 1:T_obs
+            _reduce_hd_t!(t)
         end
     end
 
