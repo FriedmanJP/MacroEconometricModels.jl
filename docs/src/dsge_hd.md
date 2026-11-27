@@ -189,6 +189,7 @@ Since the RBC model has a single shock, the counterfactual approach reduces to z
 | `N` | `Int` | `1000` | Number of forward particles |
 | `N_back` | `Int` | `100` | Number of backward simulation trajectories |
 | `rng` | `AbstractRNG` | `default_rng()` | Random number generator |
+| `threaded` | `Bool` | `true` | Parallelize backward simulation trajectories across threads with per-trajectory RNG streams (bit-identical to `threaded=false`) |
 
 ---
 
@@ -240,6 +241,8 @@ Note that both calls pass explicit measurement-error standard deviations even th
 | `quantiles` | `Vector{<:Real}` | `[0.16, 0.5, 0.84]` | Quantile levels for credible bands |
 | `measurement_error` | `Vector`/`Symbol` | `nothing` | Measurement error std devs, `:auto`, or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
 | `states` | `Symbol` | `:observables` | Decompose `:observables` only or `:all` states |
+| `threaded` | `Bool` | `true` | Evaluate posterior draws and quantile reductions across threads with per-draw RNG streams (bit-identical to `threaded=false`) |
+| `rng` | `AbstractRNG` | `default_rng()` | Random number generator for nonlinear particle smoother draws |
 
 ---
 
@@ -286,7 +289,7 @@ psmoother = dsge_particle_smoother(nss, data_dev; N=200, N_back=50)
 psmoother
 ```
 
-The particle smoother returns the same `KalmanSmootherResult` type, so downstream code is unchanged, but the covariances are particle approximations rather than exact Riccati recursions and the whole result is stochastic. Pass an explicit `rng` whenever the smoothed shocks feed a reported number, and raise `N` and `N_back` until repeated runs agree to the precision being reported.
+The particle smoother returns the same `KalmanSmootherResult` type, so downstream code is unchanged, but the covariances are particle approximations rather than exact Riccati recursions and the whole result is stochastic. Pass an explicit `rng` whenever the smoothed shocks feed a reported number, and raise `N` and `N_back` until repeated runs agree to the precision being reported. By default (`threaded=true`), the backward simulation pass runs across Julia threads with pre-generated per-trajectory seeds so results are bit-identical across thread counts.
 
 ### KalmanSmootherResult Fields
 

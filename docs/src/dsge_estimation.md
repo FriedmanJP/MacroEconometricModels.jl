@@ -44,8 +44,8 @@ report(fit_smc)
 ```@example dsge_estimation
 fit_smc2 = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
-    method=:smc2, observables=[:y], n_smc=15, n_particles=15,
-    solver=:gensys)
+    method=:smc2, observables=[:y], measurement_error=[0.1],
+    n_smc=15, n_particles=15, solver=:gensys)
 report(fit_smc2)
 ```
 
@@ -348,10 +348,10 @@ The algorithm proceeds in six steps:
 2. **Temper**: Set the adaptive schedule ``0 = \phi_0 < \phi_1 < \cdots < \phi_S = 1`` targeting a fixed ESS fraction
 3. **Reweight**: At stage ``s``, compute incremental weights ``w^{(i)} \propto \mathcal{L}(Y|\theta^{(i)})^{\phi_s - \phi_{s-1}}``
 4. **Resample**: If ESS falls below the threshold, resample particles via systematic resampling
-5. **Mutate**: Apply ``n_{\text{mh}}`` Metropolis-Hastings steps with proposal ``q(\theta^*|\theta) = \mathcal{N}(\theta, \hat{\Sigma})``
+5. **Mutate**: Apply ``n_{\text{mh}}`` Metropolis-Hastings steps with adaptive proposal ``q(\theta^*|\theta) = \mathcal{N}(\theta, c_s^2 \hat{\Sigma})`` (adapting ``c_s`` toward 25% acceptance per Herbst & Schorfheide 2014, 2015, and optionally partitioning parameters into `n_blocks` randomized conditional-covariance blocks)
 6. **Marginal likelihood**: Estimate the normalizing constant: ``\hat{p}(Y) = \prod_{s=1}^{S} \frac{1}{N} \sum_{i=1}^{N} w_s^{(i)}``
 
-The adaptive tempering schedule selects ``\phi_s`` to maintain the effective sample size at the target fraction (default: 50%). This avoids both degenerate weights (too large a step) and unnecessary computation (too small a step).
+The adaptive tempering schedule selects ``\phi_s`` to maintain the effective sample size at the target fraction (default: 50%). This avoids both degenerate weights (too large a step) and unnecessary computation (too small a step). For medium- or large-scale models, pass `n_blocks > 1` (e.g., `n_blocks=3`) to partition parameters randomly each stage and mutate block-by-block with conditional covariance ``\Sigma_{b|-b}``.
 
 ```@example dsge_estimation
 result_smc = estimate_dsge_bayes(spec, y_obs, [0.9];
@@ -387,20 +387,20 @@ where:
 # SMC² nests an inner particle filter (15 particles, 15 SMC draws for documentation build)
 fit_smc2 = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
-    method=:smc2, observables=[:y],
+    method=:smc2, observables=[:y], measurement_error=[0.1],
     n_smc=15, n_particles=15,
     solver=:gensys)
 report(fit_smc2)
 ```
 
-The mutation step uses Conditional SMC (CSMC) to update both the parameter ``\theta`` and the latent state trajectory jointly, maintaining a valid reference trajectory that prevents particle degeneracy.
+The mutation step uses particle marginal Metropolis-Hastings (PMMH) and Chopin et al. (2013) exchange steps whenever the inner particle count ``M`` adapts. Because a bootstrap particle filter evaluates Gaussian observation densities ``\mathcal{N}(y_t \mid Z s_t + d, H)``, `:smc2` requires strictly positive `measurement_error` (explicit SDs or `:auto`).
 
 !!! note "Technical Note"
     For linear solvers (`:gensys`, `:blanchard_kahn`, `:klein`), use `:smc` with the Kalman filter likelihood --- it is exact and orders of magnitude faster than the particle filter. Reserve `:smc2` for nonlinear solvers (`:projection`, `:pfi`, `:perturbation` with `order >= 2`) where the Kalman approximation breaks down.
 
 ### Delayed Acceptance (Christen & Fox 2005)
 
-**Two-stage delayed acceptance** pre-screens Metropolis-Hastings proposals with a cheap particle filter before running the expensive Conditional SMC. This preserves detailed balance while avoiding wasted computation on proposals that would be rejected.
+**Single-solve two-stage delayed acceptance** solves the DSGE model and builds the state space at most once per proposal, then pre-screens Metropolis-Hastings proposals with a cheap bootstrap particle filter (`n_screen` particles) before running the full particle filter (`n_particles`) on the same state space. This preserves exact posterior detailed balance while avoiding wasted full-filter evaluations on proposals that would be rejected.
 
 **Stage 1** (screening): Accept the proposal ``\theta^*`` with probability
 
@@ -424,26 +424,26 @@ where:
 
 where:
 - ``\hat{\ell}_{\text{screen}}`` is the log-likelihood from a bootstrap PF with ``n_{\text{screen}}`` particles (cheap)
-- ``\hat{\ell}_{\text{full}}`` is the log-likelihood from CSMC with ``n_{\text{particles}}`` particles (expensive)
+- ``\hat{\ell}_{\text{full}}`` is the log-likelihood from the full PF with ``n_{\text{particles}}`` particles (reusing the same solved state space)
 - ``\phi`` is the current tempering parameter
 
-The product ``\alpha_1 \cdot \alpha_2`` equals the standard MH acceptance probability in expectation, so the chain targets the exact posterior. The computational savings come from rejecting bad proposals cheaply at Stage 1 without ever running the full CSMC.
+The product ``\alpha_1 \cdot \alpha_2`` equals the standard MH acceptance probability in expectation, so the chain targets the exact posterior. By default, `n_screen=nothing` auto-sizes to `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)` for `n_particles > 20` (and `max(5, n_particles ÷ 2)` otherwise).
 
 ```julia
 fit_da = estimate_dsge_bayes(spec, y_obs, [0.9];
     priors=Dict(:rho => Beta(5, 2)),
-    method=:smc2, observables=[:y],
+    method=:smc2, observables=[:y], measurement_error=[0.1],
     n_smc=200, n_particles=500,
     solver=:projection, solver_kwargs=(degree=5,),
-    delayed_acceptance=true, n_screen=200)
+    delayed_acceptance=true)
 ```
 
 !!! warning "Particle Count Tuning"
-    Set ``n_{\text{screen}}`` large enough that the screening likelihood is informative (typically 100--300), but small relative to ``n_{\text{particles}}`` (which should be 500+). If ``n_{\text{screen}} \approx n_{\text{particles}}``, there is no computational benefit.
+    Leave `n_screen=nothing` (the default) to auto-size the screening filter to roughly one-fifth of `n_particles`. Passing an explicit `n_screen >= n_particles` emits a warning because the screening filter is then at least as expensive as the full filter.
 
 ### Random-Walk Metropolis-Hastings
 
-Standard Random-Walk Metropolis-Hastings with adaptive proposal scaling targeting the optimal 23.4% acceptance rate (Roberts & Rosenthal 2001). The proposal is a multivariate normal centered at the current draw:
+Standard Random-Walk Metropolis-Hastings with adaptive proposal scaling targeting the optimal 23.4% acceptance rate (Roberts & Rosenthal 2001). Pass `n_chains > 1` (e.g., `n_chains=4`) to run independent chains in parallel from dispersed in-bounds starting points with deterministic per-chain RNG streams; `mcmc_diagnostics` then computes true multi-chain split-``\hat{R}`` and bulk/tail ESS across ``2 \cdot n_{\text{chains}}`` half-chains. The proposal is a multivariate normal centered at the current draw:
 
 ```math
 \theta^* \sim \mathcal{N}\!\big(\theta^{(s)}, \; c \cdot \hat{\Sigma}\big)
@@ -678,15 +678,17 @@ The OLS slope recovers the drift, but `trending` is `false`: the HAC t-statistic
 | `n_smc` | `Int` | `5000` | Number of SMC/SMC``^2`` particles |
 | `n_particles` | `Int` | `500` | Number of PF particles (SMC``^2`` only) |
 | `n_mh_steps` | `Int` | `1` | MH mutation steps per SMC stage |
-| `n_draws` | `Int` | `10000` | Total draws for RWMH (including burnin) |
-| `burnin` | `Int` | `5000` | Burnin draws for RWMH |
+| `n_blocks` | `Int` | `1` | Randomized parameter blocks per SMC/SMC``^2`` mutation stage (Herbst & Schorfheide 2014) |
+| `n_draws` | `Int` | `10000` | Total draws for RWMH per chain (including burnin) |
+| `burnin` | `Int` | `5000` | Burnin draws discarded per RWMH chain |
+| `n_chains` | `Int` | `1` | Independent parallel RWMH chains (`method=:mh` only; enables multi-chain split-``\hat{R}``) |
 | `ess_target` | `Float64` | `0.5` | Target ESS fraction for adaptive tempering |
-| `measurement_error` | `Vector{<:Real}`/`Symbol` | `nothing` | Measurement error std devs, `:auto` (10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`) |
+| `measurement_error` | `Vector{<:Real}`/`Symbol` | `nothing` | Measurement error std devs, `:auto` (10% of each series' variance), or `nothing` for zero ME (requires `n_obs ≤ n_shocks`; `:smc2` requires positive ME) |
 | `likelihood` | `Symbol` | `:auto` | Likelihood evaluation method (currently always Kalman) |
 | `solver` | `Symbol` | `:gensys` | DSGE solver method |
 | `solver_kwargs` | `NamedTuple` | `NamedTuple()` | Additional solver keyword arguments |
-| `delayed_acceptance` | `Bool` | `false` | Two-stage delayed acceptance (SMC``^2`` only) |
-| `n_screen` | `Int` | `200` | Screening PF particles (delayed acceptance only) |
+| `delayed_acceptance` | `Bool` | `false` | Single-solve two-stage delayed acceptance (SMC``^2`` only) |
+| `n_screen` | `Union{Nothing,Int}` | `nothing` | Screening PF particles (delayed acceptance only; `nothing` auto-sizes to `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)`) |
 | `max_stages` | `Int` | `500` | Hard cap on adaptive-tempering stages (`:smc`/`:smc2`); exceeding it raises an error |
 | `min_dphi` | `Real` | `1e-10` | Minimum tempering step; a smaller adaptive ``\Delta\phi`` while ``\phi < 1`` aborts rather than spins |
 | `keep_burnin` | `Bool` | `false` | Retain the full RWMH chain including burnin (e.g. for trace plots) |
@@ -995,6 +997,7 @@ The result is a `BayesianDSGESimulation{T}` containing the pointwise median, qua
 | `solver_kwargs` | `NamedTuple` | Solver keyword arguments used |
 | `prefilter` | `PrefilterSpec{T}` or `nothing` | Observable transform applied before estimation |
 | `trends` | `ObservationTrends{T}` or `nothing` | Deterministic trends carried in the measurement equation |
+| `n_chains` | `Int` | Number of independent RWMH chains stacked in `theta_draws` (`1` for SMC/SMC``^2`` and single-chain RWMH) |
 
 When called with `method=:mh`, the stored `method` field reports `:rwmh` --- the random-walk Metropolis-Hastings sampler that `:mh` selects. The stored `data`, `observables`, `solver`, and `solver_kwargs` are what let `bridge_sampling_ml`, `learning_rate_check`, and `posterior_predictive_check` re-evaluate the likelihood without being handed the sample again.
 
