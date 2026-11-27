@@ -394,9 +394,11 @@ end
 """
     _update_proposal_cov!(state::SMCState{T}) where {T}
 
-Update the SMC proposal covariance as `c² * Σ_weighted` where
-`c = 2.38 / sqrt(n_params)` (Roberts & Rosenthal 2001 optimal scaling)
-and `Σ_weighted` is the weighted covariance of the theta particles.
+Update the SMC proposal covariance as `state.c_scale² * Σ_weighted` where
+`state.c_scale` starts at `2.38 / sqrt(n_params)` (Roberts & Rosenthal 2001) and
+adapts across tempering stages via [`_adapt_proposal_scale!`](@ref) (Herbst &
+Schorfheide 2014, 2015), and `Σ_weighted` is the weighted covariance of the theta
+particles.
 
 Modifies `state.proposal_cov` in-place.
 """
@@ -431,8 +433,8 @@ function _update_proposal_cov!(state::SMCState{T}) where {T<:AbstractFloat}
     # Symmetrize
     cov_mat = (cov_mat + cov_mat') / 2
 
-    # Scale by optimal factor c² = (2.38)² / n_params
-    c2 = T(2.38)^2 / T(n_params)
+    # Scale by adaptive factor c_n² (initialized to (2.38)² / n_params; #951)
+    c2 = state.c_scale^2
     state.proposal_cov .= c2 .* cov_mat
 
     # Ensure positive definiteness with regularization
@@ -446,40 +448,146 @@ function _update_proposal_cov!(state::SMCState{T}) where {T<:AbstractFloat}
     return nothing
 end
 
+"""
+    _adapt_proposal_scale!(state::SMCState{T}, acc_rate::Real;
+                           target_acc::Real=0.25, c_min::Real=0.05,
+                           c_max::Real=5.0) -> T
+
+Herbst & Schorfheide (2014, 2015) smooth logistic scaling update for SMC mutation:
+
+```math
+c_{n+1} = \\mathrm{clamp}\\!\\left(
+    c_n \\left(0.95 + \\frac{0.10}{1 + \\exp(-16(\\hat{\\alpha}_n - \\alpha^*))}\\right),
+    c_{\\min}, c_{\\max}
+\\right).
+```
+
+Strictly monotone in `acc_rate`, fixed point at `acc_rate == target_acc`, bounded
+step in `(0.95, 1.05)` per tempering stage. Updates `state.c_scale` in-place and
+returns the new scale.
+"""
+function _adapt_proposal_scale!(state::SMCState{T}, acc_rate::Real;
+                                target_acc::Real=0.25,
+                                c_min::Real=0.05,
+                                c_max::Real=5.0) where {T<:AbstractFloat}
+    factor = T(0.95) + T(0.10) / (one(T) + exp(-T(16) * (T(acc_rate) - T(target_acc))))
+    state.c_scale = clamp(state.c_scale * factor, T(c_min), T(c_max))
+    return state.c_scale
+end
+
+"""
+    _build_block_proposals(proposal_cov::Matrix{T}, n_blocks::Int, rng::AbstractRNG)
+        -> (blocks::Vector{Vector{Int}}, block_Ls::Vector{LowerTriangular{T,Matrix{T}}})
+
+Randomized parameter blocking (Herbst & Schorfheide 2014 §3.3): draw a random
+permutation of `1:n_params`, partition into `B = min(n_blocks, n_params)` near-equal
+blocks `I_b`, and compute the conditional covariance Cholesky factor `L_b` of
+`Σ_{b|-b} = Σ_{bb} - Σ_{b,-b} Σ_{-b,-b}^{-1} Σ_{-b,b}` for each block once per
+tempering stage.
+"""
+function _build_block_proposals(proposal_cov::Matrix{T}, n_blocks::Int,
+                                 rng::AbstractRNG) where {T<:AbstractFloat}
+    n_params = size(proposal_cov, 1)
+    B = min(n_blocks, n_params)
+    perm = randperm(rng, n_params)
+    ranges = _chunk_ranges(n_params, B)
+    blocks = Vector{Vector{Int}}(undef, B)
+    block_Ls = Vector{LowerTriangular{T,Matrix{T}}}(undef, B)
+
+    for b in 1:B
+        I_b = perm[ranges[b]]
+        blocks[b] = I_b
+        if B == 1 || length(I_b) == n_params
+            Σ_cond = copy(proposal_cov)
+        else
+            I_neg = Int[idx for idx in perm if !(idx in I_b)]
+            Σ_bb = proposal_cov[I_b, I_b]
+            Σ_bneg = proposal_cov[I_b, I_neg]
+            Σ_negneg = proposal_cov[I_neg, I_neg]
+            Σ_cond = Σ_bb - Σ_bneg * robust_inv(Symmetric(Σ_negneg); silent=true) * transpose(Σ_bneg)
+        end
+        Σ_cond = Matrix{T}((Σ_cond + transpose(Σ_cond)) / 2)
+        min_diag = T(1e-10)
+        @inbounds for i in 1:length(I_b)
+            if Σ_cond[i, i] < min_diag
+                Σ_cond[i, i] = min_diag
+            end
+        end
+        L_b = try
+            cholesky(Hermitian(Σ_cond)).L
+        catch
+            try
+                cholesky(Hermitian(Σ_cond + T(1e-6) * I)).L
+            catch
+                LowerTriangular(Matrix{T}(safe_cholesky(Hermitian(Σ_cond); silent=true)))
+            end
+        end
+        block_Ls[b] = L_b
+    end
+    return blocks, block_Ls
+end
+
+"""
+    _resolve_n_screen(n_screen::Union{Nothing,Int}, n_particles::Int) -> Int
+
+Resolve the screening particle count for two-stage delayed acceptance SMC².
+When `n_screen === nothing`, chooses `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)`
+for `n_particles > 20` (and `max(5, n_particles ÷ 2)` for very small `n_particles <= 20`).
+When an explicit integer is passed, validates `n_screen >= 1` and emits a warning if
+`n_screen >= n_particles`.
+"""
+function _resolve_n_screen(n_screen::Union{Nothing,Int}, n_particles::Int)
+    if n_screen === nothing
+        return n_particles <= 20 ? max(5, n_particles ÷ 2) :
+               clamp(n_particles ÷ 5, 20, n_particles ÷ 2)
+    end
+    n_screen >= 1 || throw(ArgumentError("n_screen must be >= 1, got $n_screen"))
+    if n_screen >= n_particles
+        @warn "delayed_acceptance: n_screen ($n_screen) >= n_particles ($n_particles); " *
+              "screening PF is at least as expensive as the full PF. Pass n_screen < n_particles " *
+              "or n_screen=nothing for automatic sizing."
+    end
+    return n_screen
+end
+
 # =============================================================================
 # SMC mutation step
 # =============================================================================
 
 """
-    _smc_mutation!(state, phi, ll_fn, prior, n_mh_steps, rng)
+    _smc_mutation!(state, phi, ll_fn, prior, n_mh_steps, rng; n_blocks=1)
 
 Mutate SMC particles via `n_mh_steps` random-walk Metropolis-Hastings steps.
 
-For each particle (parallelized with `Threads.@threads`): propose
-`θ* = θ + L * z` where `L = cholesky(proposal_cov).L`, `z ~ N(0, I)`,
-and accept with log ratio `(phi * ll* + lp*) - (phi * ll_old + lp_old)`.
+When `n_blocks == 1`, proposes full-vector updates `θ* = θ + L * z` where
+`L = cholesky(proposal_cov).L`. When `n_blocks > 1` (and `n_params > 1`), partitions
+parameters into `min(n_blocks, n_params)` randomized blocks per stage with conditional
+covariance proposals `Σ_{b|-b}` (Herbst & Schorfheide 2014 §3.3).
 
-Tracks acceptance rate across all particles and steps.
-
-# Arguments
-- `state::SMCState{T}` — SMC state (particles, weights, proposal covariance)
-- `phi::T` — current tempering parameter
-- `ll_fn` — log-likelihood closure `θ → log p(Y|θ)`
-- `prior::DSGEPrior{T}` — prior specification
-- `n_mh_steps::Int` — number of MH steps per particle
-- `rng::AbstractRNG` — random number generator (used to seed per-thread RNGs)
+Tracks acceptance rate across all particles, steps, and blocks.
 """
 function _smc_mutation!(state::SMCState{T}, phi::T, ll_fn, prior::DSGEPrior{T},
-                         n_mh_steps::Int, rng::AbstractRNG) where {T<:AbstractFloat}
+                         n_mh_steps::Int, rng::AbstractRNG;
+                         n_blocks::Int=1) where {T<:AbstractFloat}
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
     n_params, N = size(state.theta_particles)
+    use_blocking = (n_blocks > 1 && n_params > 1)
 
-    # Compute Cholesky of proposal covariance
-    L = try
-        cholesky(Hermitian(state.proposal_cov)).L
-    catch
-        # Add jitter if not positive definite
-        cov_jittered = state.proposal_cov + T(1e-6) * I
-        cholesky(Hermitian(cov_jittered)).L
+    local L, blocks, block_Ls
+    if use_blocking
+        blocks, block_Ls = _build_block_proposals(state.proposal_cov, n_blocks, rng)
+        L = LowerTriangular(zeros(T, 0, 0))
+    else
+        # Compute Cholesky of proposal covariance
+        L = try
+            cholesky(Hermitian(state.proposal_cov)).L
+        catch
+            # Add jitter if not positive definite
+            cov_jittered = state.proposal_cov + T(1e-6) * I
+            cholesky(Hermitian(cov_jittered)).L
+        end
+        blocks = Vector{Vector{Int}}()
+        block_Ls = Vector{LowerTriangular{T,Matrix{T}}}()
     end
 
     # Pre-generate per-particle seeds BEFORE entering parallel work-stealing loop (#947)
@@ -500,35 +608,69 @@ function _smc_mutation!(state::SMCState{T}, phi::T, ll_fn, prior::DSGEPrior{T},
             prop_local = 0
 
             for _ in 1:n_mh_steps
-                # Propose: theta_star = theta_j + L * z
-                z = randn(thread_rng, T, n_params)
-                theta_star = theta_j + L * z
+                if use_blocking
+                    for b in eachindex(blocks)
+                        I_b = blocks[b]
+                        L_b = block_Ls[b]
+                        z_b = randn(thread_rng, T, length(I_b))
+                        step_b = L_b * z_b
+                        theta_star = copy(theta_j)
+                        @inbounds for m in eachindex(I_b)
+                            theta_star[I_b[m]] += step_b[m]
+                        end
 
-                # Evaluate prior
-                lp_star = _log_prior(theta_star, prior)
-                if lp_star == T(-Inf)
+                        lp_star = _log_prior(theta_star, prior)
+                        if lp_star == T(-Inf)
+                            prop_local += 1
+                            continue
+                        end
+
+                        ll_star = ll_fn(theta_star)
+                        if ll_star == T(-Inf)
+                            prop_local += 1
+                            continue
+                        end
+
+                        log_alpha = (phi * ll_star + lp_star) - (phi * ll_j + lp_j)
+                        if log(rand(thread_rng, T)) < log_alpha
+                            theta_j = theta_star
+                            ll_j = ll_star
+                            lp_j = lp_star
+                            acc_local += 1
+                        end
+                        prop_local += 1
+                    end
+                else
+                    # Propose: theta_star = theta_j + L * z
+                    z = randn(thread_rng, T, n_params)
+                    theta_star = theta_j + L * z
+
+                    # Evaluate prior
+                    lp_star = _log_prior(theta_star, prior)
+                    if lp_star == T(-Inf)
+                        prop_local += 1
+                        continue
+                    end
+
+                    # Evaluate likelihood
+                    ll_star = ll_fn(theta_star)
+                    if ll_star == T(-Inf)
+                        prop_local += 1
+                        continue
+                    end
+
+                    # MH acceptance ratio (tempered)
+                    log_alpha = (phi * ll_star + lp_star) - (phi * ll_j + lp_j)
+
+                    if log(rand(thread_rng, T)) < log_alpha
+                        theta_j = theta_star
+                        ll_j = ll_star
+                        lp_j = lp_star
+                        acc_local += 1
+                    end
+
                     prop_local += 1
-                    continue
                 end
-
-                # Evaluate likelihood
-                ll_star = ll_fn(theta_star)
-                if ll_star == T(-Inf)
-                    prop_local += 1
-                    continue
-                end
-
-                # MH acceptance ratio (tempered)
-                log_alpha = (phi * ll_star + lp_star) - (phi * ll_j + lp_j)
-
-                if log(rand(thread_rng, T)) < log_alpha
-                    theta_j = theta_star
-                    ll_j = ll_star
-                    lp_j = lp_star
-                    acc_local += 1
-                end
-
-                prop_local += 1
             end
 
             # Write back
@@ -574,8 +716,10 @@ function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
                               prior::DSGEPrior{T}, _theta0::AbstractVector{T};
                               n_smc::Int=500, n_mh_steps::Int=1,
                               ess_target::Real=0.5,
+                              n_blocks::Int=1,
                               max_stages::Int=500, min_dphi::Real=1e-10,
                               rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
     n_params = length(param_names)
     N = n_smc
 
@@ -711,8 +855,11 @@ function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
         # Update proposal covariance
         _update_proposal_cov!(state)
 
-        # Mutate particles via RWMH
-        _smc_mutation!(state, phi_new, ll_fn, prior, n_mh_steps, rng)
+        # Mutate particles via RWMH (optionally blocked; #951)
+        _smc_mutation!(state, phi_new, ll_fn, prior, n_mh_steps, rng; n_blocks=n_blocks)
+
+        # Adapt proposal scale c_n toward target ~25% acceptance (Herbst & Schorfheide 2014; #951)
+        _adapt_proposal_scale!(state, last(state.acceptance_rates))
 
         phi = phi_new
     end
@@ -742,6 +889,7 @@ loop to `_smc_from_likelihood`. Mutation is `_smc_mutation!`.
 - `n_smc::Int=500` — number of SMC particles
 - `n_mh_steps::Int=1` — MH steps per mutation stage
 - `ess_target::Real=0.5` — target ESS fraction
+- `n_blocks::Int=1` — randomized parameter blocks per mutation stage (Herbst & Schorfheide 2014)
 - `observables::Vector{Symbol}` — observed variables
 - `measurement_error` — measurement error SDs or `nothing`
 - `solver::Symbol=:gensys` — DSGE solver method
@@ -761,6 +909,7 @@ function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                       theta0::AbstractVector{T};
                       n_smc::Int=500, n_mh_steps::Int=1,
                       ess_target::Real=0.5,
+                      n_blocks::Int=1,
                       observables::Vector{Symbol}=spec.endog,
                       measurement_error=nothing,
                       solver::Symbol=:gensys,
@@ -780,7 +929,8 @@ function _smc_sample(spec::ModelSpec{T}, data::AbstractMatrix,
 
     state = _smc_from_likelihood(ll_fn, param_names, prior, theta0;
                                  n_smc=n_smc, n_mh_steps=n_mh_steps,
-                                 ess_target=ess_target, max_stages=max_stages,
+                                 ess_target=ess_target, n_blocks=n_blocks,
+                                 max_stages=max_stages,
                                  min_dphi=min_dphi, rng=rng)
     state.n_lik_failures = lik_failures[]
     state.n_lik_evals = lik_evals[]
@@ -1131,20 +1281,51 @@ function _exchange_step!(state::SMCState{T}, spec::ModelSpec{T},
         ess_target::Real=0.5,
         solutions::Union{Nothing,Vector{Any}}=nothing,
         ll_cheap::Union{Nothing,Vector{T}}=nothing,
+        screen_pool::Vector{PFWorkspace{T}}=PFWorkspace{T}[],
         failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
         evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     N = size(state.theta_particles, 2)
     ll_old = copy(state.log_likelihoods)
     ll_new = fill(T(-Inf), N)
     seeds = [hash((:exchange, j, rand(rng, UInt64))) for j in 1:N]
+    refresh_cheap = (ll_cheap !== nothing && !isempty(screen_pool))
+    screen_seeds = refresh_cheap ? [hash((:exchange_screen, j, rand(rng, UInt64))) for j in 1:N] : UInt64[]
     nw = min(length(pool), max(N, 1))
     _with_single_blas_thread() do
         _parallel_for_worksteal(N; n_workers=nw) do j, w
             rr = Random.Xoshiro(seeds[j])
-            ll_new[j] = _solve_and_run_pf(spec, param_names,
-                Vector{T}(state.theta_particles[:, j]), observables, measurement_error,
-                solver, solver_kwargs, pool[w], data, T_obs, rr;
-                failures=failures, evals=evals)
+            theta_j = Vector{T}(state.theta_particles[:, j])
+            if refresh_cheap
+                # Single-solve refresh of both authoritative ll_new and screening ll_cheap (#951).
+                # Re-drawing auxiliary ll_cheap ~ p_screen(.|theta_j) preserves the marginal target.
+                Threads.atomic_add!(evals, 1)
+                ss_j, sol_j = _solve_and_build_state_space(spec, param_names, theta_j,
+                    observables, measurement_error, solver, solver_kwargs)
+                if ss_j === nothing
+                    Threads.atomic_add!(failures, 1)
+                    ll_new[j] = T(-Inf)
+                    ll_cheap[j] = T(-Inf)
+                else
+                    ll_j = _run_pf_on_state_space(ss_j, pool[w], data, T_obs, rr;
+                                                  store_trajectory=false)
+                    if !isfinite(ll_j)
+                        Threads.atomic_add!(failures, 1)
+                        ll_j = T(-Inf)
+                    end
+                    ll_new[j] = ll_j
+                    if solutions !== nothing && sol_j isa ProjectionSolution
+                        solutions[j] = sol_j
+                    end
+                    s_rng = Random.Xoshiro(screen_seeds[j])
+                    ll_cheap[j] = _run_pf_on_state_space(ss_j, screen_pool[w], data, T_obs,
+                                                         s_rng; store_trajectory=false)
+                end
+            else
+                ll_new[j] = _solve_and_run_pf(spec, param_names,
+                    theta_j, observables, measurement_error,
+                    solver, solver_kwargs, pool[w], data, T_obs, rr;
+                    failures=failures, evals=evals)
+            end
         end
     end
     state.log_likelihoods .= ll_new
@@ -1208,15 +1389,88 @@ function _exchange_step!(state::SMCState{T}, spec::ModelSpec{T},
 end
 
 """
+    _solve_and_build_state_space(spec, param_names, theta, observables,
+                                 measurement_error, solver, solver_kwargs) -> (ss, sol)
+
+Update parameters, compute steady state, solve the DSGE model, and construct the
+appropriate state space (`NonlinearStateSpace`, `ProjectionStateSpace`, or
+`DSGEStateSpace`). Returns `(nothing, nothing)` on indeterminacy or benign
+numerical solve failure; non-benign exceptions propagate.
+"""
+function _solve_and_build_state_space(spec::ModelSpec{T}, param_names::Vector{Symbol},
+                                      theta::AbstractVector{T},
+                                      observables::Vector{Symbol},
+                                      measurement_error,
+                                      solver::Symbol,
+                                      solver_kwargs::NamedTuple) where {T<:AbstractFloat}
+    try
+        new_pv = copy(spec.param_values)
+        for (i, pn) in enumerate(param_names)
+            new_pv[pn] = theta[i]
+        end
+        new_spec = _respec(spec, new_pv)
+        new_spec = compute_steady_state(new_spec)
+        sol = solve(new_spec; method=solver, solver_kwargs...)
+        if !is_determined(sol)
+            return nothing, nothing
+        end
+
+        # Build observation equation; apply the same effective-SS offset as the Kalman path
+        # so linear=true constant models are not silently mis-offset in the PF (E-07 / #115).
+        Z, d_vec, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
+        d_vec = _effective_obs_offset(d_vec, new_spec, sol, observables)
+
+        if sol isa PerturbationSolution
+            ss = _build_nonlinear_state_space(sol, Z, d_vec, H_mat)
+        elseif sol isa ProjectionSolution
+            ss = _build_projection_state_space(sol, Z, d_vec, H_mat)
+        else
+            ss = _build_state_space(sol, Z, d_vec, H_mat)
+        end
+        return ss, sol
+    catch e
+        if _benign_solve_error(e)
+            return nothing, nothing
+        end
+        rethrow(e)
+    end
+end
+
+"""
+    _run_pf_on_state_space(ss, ws, data, T_obs, rng;
+                           use_csmc=false, store_trajectory=false) -> T
+
+Run a bootstrap PF or conditional SMC on an already-constructed state space `ss`.
+Returns the log-likelihood `T` (or `T(-Inf)` if non-finite or on benign numeric failure).
+"""
+function _run_pf_on_state_space(ss, ws::PFWorkspace{T}, data::Matrix{T},
+                                T_obs::Int, rng::AbstractRNG;
+                                use_csmc::Bool=false,
+                                store_trajectory::Bool=false) where {T<:AbstractFloat}
+    try
+        ll = if use_csmc
+            _conditional_smc!(ws, ss, data, T_obs; rng=rng)
+        else
+            _bootstrap_particle_filter!(ws, ss, data, T_obs;
+                                        store_trajectory=store_trajectory, rng=rng)
+        end
+        return isfinite(ll) ? ll : T(-Inf)
+    catch e
+        if _benign_solve_error(e)
+            return T(-Inf)
+        end
+        rethrow(e)
+    end
+end
+
+"""
     _solve_and_run_pf(spec, param_names, theta, observables, measurement_error,
                        solver, solver_kwargs, ws, data, T_obs, rng;
                        use_csmc=false, store_trajectory=false, return_solution=false)
 
 Shared helper: update parameters → solve → dispatch state space → run PF/CSMC.
-
-Creates a new `ModelSpec` with updated parameters, computes steady state, solves
-the model, builds the correct state space type based on solution dispatch, and
-runs either `_bootstrap_particle_filter!` or `_conditional_smc!`.
+Thin wrapper around [`_solve_and_build_state_space`](@ref) and
+[`_run_pf_on_state_space`](@ref).
 
 Returns the log-likelihood `T` (or `T(-Inf)` on failure). When
 `return_solution=true`, returns `(ll, solution)` tuple instead.
@@ -1237,60 +1491,19 @@ function _solve_and_run_pf(spec::ModelSpec{T}, param_names::Vector{Symbol},
                             evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     fail = return_solution ? (T(-Inf), nothing) : T(-Inf)
     Threads.atomic_add!(evals, 1)
-    try
-        # Update parameter values
-        new_pv = copy(spec.param_values)
-        for (i, pn) in enumerate(param_names)
-            new_pv[pn] = theta[i]
-        end
-
-        # Create new spec with updated parameters
-        new_spec = _respec(spec, new_pv)
-
-        # Compute steady state and solve
-        new_spec = compute_steady_state(new_spec)
-        sol = solve(new_spec; method=solver, solver_kwargs...)
-        if !is_determined(sol)
-            Threads.atomic_add!(failures, 1)
-            return fail
-        end
-
-        # Build observation equation; apply the same effective-SS offset as the Kalman path
-        # so linear=true constant models are not silently mis-offset in the PF (E-07 / #115).
-        Z, d_vec, H_mat = _build_observation_equation(new_spec, observables, measurement_error)
-        d_vec = _effective_obs_offset(d_vec, new_spec, sol, observables)
-
-        # Dispatch: PerturbationSolution → NonlinearStateSpace,
-        #           ProjectionSolution → ProjectionStateSpace,
-        #           else → DSGEStateSpace
-        if sol isa PerturbationSolution
-            ss = _build_nonlinear_state_space(sol, Z, d_vec, H_mat)
-        elseif sol isa ProjectionSolution
-            ss = _build_projection_state_space(sol, Z, d_vec, H_mat)
-        else
-            ss = _build_state_space(sol, Z, d_vec, H_mat)
-        end
-
-        # Run particle filter or conditional SMC
-        if use_csmc
-            ll = _conditional_smc!(ws, ss, data, T_obs; rng=rng)
-        else
-            ll = _bootstrap_particle_filter!(ws, ss, data, T_obs;
-                                              store_trajectory=store_trajectory, rng=rng)
-        end
-
-        if !isfinite(ll)
-            Threads.atomic_add!(failures, 1)
-            ll = T(-Inf)
-        end
-        return return_solution ? (ll, sol) : ll
-    catch e
-        if _benign_solve_error(e)
-            Threads.atomic_add!(failures, 1)
-            return fail
-        end
-        rethrow(e)
+    ss, sol = _solve_and_build_state_space(spec, param_names, theta, observables,
+                                           measurement_error, solver, solver_kwargs)
+    if ss === nothing
+        Threads.atomic_add!(failures, 1)
+        return fail
     end
+    ll = _run_pf_on_state_space(ss, ws, data, T_obs, rng;
+                                use_csmc=use_csmc, store_trajectory=store_trajectory)
+    if !isfinite(ll)
+        Threads.atomic_add!(failures, 1)
+        ll = T(-Inf)
+    end
+    return return_solution ? (ll, sol) : ll
 end
 
 """
@@ -1359,17 +1572,46 @@ function _smc2_init_likelihoods!(log_likelihoods::Vector{T}, solutions::Vector{A
         solver::Symbol, solver_kwargs::NamedTuple, pf_ll_fn,
         pool::Vector{PFWorkspace{T}}, data::Matrix{T}, T_obs::Int,
         seeds::AbstractVector{<:Integer};
+        ll_cheap::Union{Nothing,Vector{T}}=nothing,
+        screen_pool::Vector{PFWorkspace{T}}=PFWorkspace{T}[],
+        screen_seeds::Union{Nothing,AbstractVector{<:Integer}}=nothing,
         failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
         evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     N = size(theta_particles, 2)
     nw = min(length(pool), max(N, 1))
+    do_screen = (ll_cheap !== nothing && !isempty(screen_pool) && screen_seeds !== nothing)
     _with_single_blas_thread() do
         _parallel_for_worksteal(N; n_workers=nw) do j, w
             ws = pool[w]
             thread_rng = Random.Xoshiro(seeds[j])
-            if solver in (:projection, :pfi)
-                ll_j, sol_j = _solve_and_run_pf(spec, param_names,
-                    Vector{T}(theta_particles[:, j]), observables,
+            theta_j = Vector{T}(theta_particles[:, j])
+            if do_screen
+                # Single-solve Stage 0 initialization for delayed acceptance (#951):
+                # solve DSGE and build state space once, then run both full & screening PF.
+                Threads.atomic_add!(evals, 1)
+                ss_j, sol_j = _solve_and_build_state_space(spec, param_names, theta_j,
+                    observables, measurement_error, solver, solver_kwargs)
+                if ss_j === nothing
+                    Threads.atomic_add!(failures, 1)
+                    log_likelihoods[j] = T(-Inf)
+                    ll_cheap[j] = T(-Inf)
+                else
+                    ll_j = _run_pf_on_state_space(ss_j, ws, data, T_obs, thread_rng;
+                                                  store_trajectory=true)
+                    if !isfinite(ll_j)
+                        Threads.atomic_add!(failures, 1)
+                        ll_j = T(-Inf)
+                    end
+                    log_likelihoods[j] = ll_j
+                    if sol_j isa ProjectionSolution
+                        solutions[j] = sol_j
+                    end
+                    screen_rng = Random.Xoshiro(screen_seeds[j])
+                    ll_cheap[j] = _run_pf_on_state_space(ss_j, screen_pool[w], data, T_obs,
+                                                         screen_rng; store_trajectory=false)
+                end
+            elseif solver in (:projection, :pfi)
+                ll_j, sol_j = _solve_and_run_pf(spec, param_names, theta_j, observables,
                     measurement_error, solver, solver_kwargs,
                     ws, data, T_obs, thread_rng;
                     store_trajectory=true, return_solution=true,
@@ -1379,7 +1621,7 @@ function _smc2_init_likelihoods!(log_likelihoods::Vector{T}, solutions::Vector{A
                     solutions[j] = sol_j
                 end
             else
-                log_likelihoods[j] = pf_ll_fn(Vector{T}(theta_particles[:, j]), ws, thread_rng)
+                log_likelihoods[j] = pf_ll_fn(theta_j, ws, thread_rng)
             end
         end
     end
@@ -1421,12 +1663,14 @@ Algorithm:
 - `measurement_error` — measurement error SDs or `nothing`
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple` — additional solver kwargs
-- `delayed_acceptance::Bool=false` — enable two-stage delayed acceptance MH
-  (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF
-  (`n_screen` particles) before running the expensive CSMC, preserving
-  detailed balance while avoiding ~60-80% of wasted CSMC evaluations.
-- `n_screen::Int=200` — number of particles for the screening PF in
-  delayed acceptance (only used when `delayed_acceptance=true`)
+- `delayed_acceptance::Bool=false` — enable single-solve two-stage delayed acceptance MH
+  (Christen & Fox 2005). Solves the DSGE model at most once per proposal and pre-screens
+  with a cheap bootstrap PF (`n_screen` particles) before running the full PF on the same
+  state space, preserving exact posterior detailed balance.
+- `n_screen::Union{Nothing,Int}=nothing` — number of particles for the screening PF in
+  delayed acceptance (`nothing` auto-sizes to `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)`
+  for `n_particles > 20` or `max(5, n_particles ÷ 2)` otherwise)
+- `n_blocks::Int=1` — randomized parameter blocks per mutation stage (Herbst & Schorfheide 2014)
 - `rng::AbstractRNG` — random number generator
 
 # Returns
@@ -1446,14 +1690,20 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                        theta0::AbstractVector{T};
                        n_smc::Int=200, n_particles::Int=100,
                        n_mh_steps::Int=1, ess_target::Real=0.5,
+                       n_blocks::Int=1,
                        observables::Vector{Symbol}=spec.endog,
                        measurement_error=nothing,
                        solver::Symbol=:gensys,
                        solver_kwargs::NamedTuple=NamedTuple(),
                        delayed_acceptance::Bool=false,
-                       n_screen::Int=200,
+                       n_screen::Union{Nothing,Int}=nothing,
                        max_stages::Int=500, min_dphi::Real=1e-10,
                        rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
+    if n_screen !== nothing && n_screen < 1
+        throw(ArgumentError("n_screen must be >= 1, got $n_screen"))
+    end
+    n_screen_eff = delayed_acceptance ? _resolve_n_screen(n_screen, n_particles) : 0
     data = Matrix{T}(data)
     n_params = length(param_names)
     N = n_smc
@@ -1538,7 +1788,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
 
     # Delayed acceptance: screening workspace pool + cheap log-likelihoods
     screen_pool = if delayed_acceptance
-        [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, n_screen;
+        [_allocate_pf_workspace(T, n_states, n_obs, n_shocks, n_screen_eff;
                                 nv=pf_nv, nx=pf_nx, order=pf_order, T_obs=T_obs,
                                 proj_nx=pf_proj_nx, proj_n_basis=pf_proj_n_basis,
                                 proj_max_degree=pf_proj_max_degree,
@@ -1584,25 +1834,14 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
     # — are bit-identical to the old serial loop and independent of thread count.
     log_likelihoods = fill(T(-Inf), N)
     init_seeds = UInt64[hash((j, rand(rng, UInt64))) for j in 1:N]
+    screen_seeds = delayed_acceptance ?
+        UInt64[hash((j, UInt64(0xDA), rand(rng, UInt64))) for j in 1:N] : nothing
     _smc2_init_likelihoods!(log_likelihoods, solutions, theta_particles, spec,
         param_names, observables, measurement_error, solver, eff_solver_kwargs, pf_ll_fn,
-        pool, data, T_obs, init_seeds; failures=lik_failures, evals=lik_evals)
-
-    # Compute cheap screening likelihoods for delayed acceptance (work-stealing + scoped BLAS; #947).
-    if delayed_acceptance
-        screen_seeds = UInt64[hash((j, UInt64(0xDA), rand(rng, UInt64))) for j in 1:N]
-        nw_scr = min(n_pool, max(N, 1))
-        _with_single_blas_thread() do
-            _parallel_for_worksteal(N; n_workers=nw_scr) do j, w
-                screen_rng = Random.Xoshiro(screen_seeds[j])
-                ll_cheap[j] = _solve_and_run_pf(spec, param_names,
-                                                  Vector{T}(theta_particles[:, j]), observables,
-                                                  measurement_error, solver, eff_solver_kwargs,
-                                                  screen_pool[w], data, T_obs, screen_rng;
-                                                  store_trajectory=false)
-            end
-        end
-    end
+        pool, data, T_obs, init_seeds;
+        ll_cheap=(delayed_acceptance ? ll_cheap : nothing),
+        screen_pool=screen_pool, screen_seeds=screen_seeds,
+        failures=lik_failures, evals=lik_evals)
 
     if all(!isfinite, log_likelihoods)
         error("SMC² initialization failed: all $N prior particles produced non-finite " *
@@ -1699,12 +1938,21 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         # Update proposal covariance
         _update_proposal_cov!(state)
 
-        # --- SMC² Mutation: CSMC-based MH steps ---
-        L = try
-            cholesky(Hermitian(state.proposal_cov)).L
-        catch
-            cov_jittered = state.proposal_cov + T(1e-6) * I
-            cholesky(Hermitian(cov_jittered)).L
+        # --- SMC² Mutation: PMMH / single-solve delayed acceptance (optionally blocked; #951) ---
+        use_blocking = (n_blocks > 1 && n_params > 1)
+        local L, blocks, block_Ls
+        if use_blocking
+            blocks, block_Ls = _build_block_proposals(state.proposal_cov, n_blocks, rng)
+            L = LowerTriangular(zeros(T, 0, 0))
+        else
+            L = try
+                cholesky(Hermitian(state.proposal_cov)).L
+            catch
+                cov_jittered = state.proposal_cov + T(1e-6) * I
+                cholesky(Hermitian(cov_jittered)).L
+            end
+            blocks = Vector{Vector{Int}}()
+            block_Ls = Vector{LowerTriangular{T,Matrix{T}}}()
         end
 
         # Pre-generate per-particle seeds BEFORE entering parallel work-stealing loop
@@ -1716,6 +1964,121 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         nw_mut = min(n_pool, max(N, 1))
         worker_acc = zeros(Int, nw_mut)
         worker_prop = zeros(Int, nw_mut)
+        worker_s2_prop = zeros(Int, nw_mut)
+
+        function _eval_smc2_proposal(theta_star::Vector{T}, theta_j::Vector{T},
+                                     ll_j::T, lp_j::T, j::Int,
+                                     ws::PFWorkspace{T}, ws_screen::PFWorkspace{T},
+                                     thread_rng::AbstractRNG)
+            lp_star = _log_prior(theta_star, prior)
+            if lp_star == T(-Inf)
+                return false, false, theta_j, ll_j, lp_j
+            end
+
+            mh_solver_kwargs = if solver in (:projection, :pfi) && solutions[j] isa ProjectionSolution
+                merge(eff_solver_kwargs, (initial_coeffs=solutions[j].coefficients,))
+            else
+                eff_solver_kwargs
+            end
+
+            if delayed_acceptance
+                # Single-solve delayed acceptance (#951): solve DSGE & build state space AT MOST ONCE,
+                # reusing ss_star for both Stage 1 (ws_screen) and Stage 2 (ws) (or ll_cheap refresh).
+                ss_star, sol_star = _solve_and_build_state_space(
+                    spec, param_names, theta_star, observables, measurement_error,
+                    solver, mh_solver_kwargs)
+                if ss_star === nothing
+                    if !isfinite(ll_cheap[j])
+                        Threads.atomic_add!(lik_evals, 1)
+                        Threads.atomic_add!(lik_failures, 1)
+                    end
+                    return false, false, theta_j, ll_j, lp_j
+                end
+
+                if isfinite(ll_cheap[j])
+                    # Stage 1: cheap screening PF on ss_star
+                    ll_cheap_star = _run_pf_on_state_space(
+                        ss_star, ws_screen, data, T_obs, thread_rng;
+                        use_csmc=false, store_trajectory=false)
+                    if !isfinite(ll_cheap_star)
+                        return false, false, theta_j, ll_j, lp_j
+                    end
+
+                    log_alpha_1 = (phi_new * ll_cheap_star + lp_star) -
+                                  (phi_new * ll_cheap[j] + lp_j)
+                    if log(rand(thread_rng, T)) >= log_alpha_1
+                        return false, false, theta_j, ll_j, lp_j
+                    end
+
+                    # Stage 2: authoritative PF on the EXACT SAME ss_star (zero second solve)
+                    Threads.atomic_add!(lik_evals, 1)
+                    ll_star = _run_pf_on_state_space(
+                        ss_star, ws, data, T_obs, thread_rng;
+                        use_csmc=false, store_trajectory=false)
+                    if !isfinite(ll_star)
+                        Threads.atomic_add!(lik_failures, 1)
+                        return false, true, theta_j, ll_j, lp_j
+                    end
+
+                    log_alpha_2 = isfinite(ll_j) ?
+                        (phi_new * (ll_star - ll_cheap_star) - phi_new * (ll_j - ll_cheap[j])) :
+                        T(Inf)
+                    if log(rand(thread_rng, T)) < log_alpha_2
+                        ll_cheap[j] = ll_cheap_star
+                        if sol_star isa ProjectionSolution
+                            solutions[j] = sol_star
+                        end
+                        return true, true, theta_star, ll_star, lp_star
+                    end
+                    return false, true, theta_j, ll_j, lp_j
+                else
+                    # Fallback when incumbent ll_cheap[j] == -Inf (#950): single-stage PMMH + refresh ll_cheap
+                    Threads.atomic_add!(lik_evals, 1)
+                    ll_star = _run_pf_on_state_space(
+                        ss_star, ws, data, T_obs, thread_rng;
+                        use_csmc=false, store_trajectory=false)
+                    if !isfinite(ll_star)
+                        Threads.atomic_add!(lik_failures, 1)
+                        return false, true, theta_j, ll_j, lp_j
+                    end
+
+                    log_alpha = isfinite(ll_j) ?
+                        ((phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)) :
+                        T(Inf)
+                    if log(rand(thread_rng, T)) < log_alpha
+                        if sol_star isa ProjectionSolution
+                            solutions[j] = sol_star
+                        end
+                        ll_cheap[j] = _run_pf_on_state_space(
+                            ss_star, ws_screen, data, T_obs, thread_rng;
+                            use_csmc=false, store_trajectory=false)
+                        return true, true, theta_star, ll_star, lp_star
+                    end
+                    return false, true, theta_j, ll_j, lp_j
+                end
+            else
+                # Standard single-stage PMMH
+                ll_star, sol_star = _solve_and_run_pf(
+                    spec, param_names, theta_star, observables, measurement_error,
+                    solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
+                    use_csmc=false, return_solution=true,
+                    failures=lik_failures, evals=lik_evals)
+                if ll_star == T(-Inf)
+                    return false, true, theta_j, ll_j, lp_j
+                end
+
+                log_alpha = isfinite(ll_j) ?
+                    ((phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)) :
+                    T(Inf)
+                if log(rand(thread_rng, T)) < log_alpha
+                    if sol_star isa ProjectionSolution
+                        solutions[j] = sol_star
+                    end
+                    return true, true, theta_star, ll_star, lp_star
+                end
+                return false, true, theta_j, ll_j, lp_j
+            end
+        end
 
         _with_single_blas_thread() do
             _parallel_for_worksteal(N; n_workers=nw_mut) do j, w
@@ -1728,104 +2091,35 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                 lp_j = state.log_priors[j]
                 acc_local = 0
                 prop_local = 0
+                s2_local = 0
 
                 for _ in 1:n_mh_steps
-                    # Propose: theta_star = theta_j + L * z (symmetric RW ⇒ q-terms cancel)
-                    z = randn(thread_rng, T, n_params)
-                    theta_star = theta_j + L * z
-
-                    # Evaluate prior
-                    lp_star = _log_prior(theta_star, prior)
-                    if lp_star == T(-Inf)
+                    if use_blocking
+                        for b in eachindex(blocks)
+                            I_b = blocks[b]
+                            L_b = block_Ls[b]
+                            z_b = randn(thread_rng, T, length(I_b))
+                            step_b = L_b * z_b
+                            theta_star = copy(theta_j)
+                            @inbounds for m in eachindex(I_b)
+                                theta_star[I_b[m]] += step_b[m]
+                            end
+                            accepted, reached_s2, theta_j, ll_j, lp_j = _eval_smc2_proposal(
+                                theta_star, theta_j, ll_j, lp_j, j, ws, ws_screen, thread_rng)
+                            accepted && (acc_local += 1)
+                            reached_s2 && (s2_local += 1)
+                            prop_local += 1
+                        end
+                    else
+                        # Propose: theta_star = theta_j + L * z (symmetric RW ⇒ q-terms cancel)
+                        z = randn(thread_rng, T, n_params)
+                        theta_star = theta_j + L * z
+                        accepted, reached_s2, theta_j, ll_j, lp_j = _eval_smc2_proposal(
+                            theta_star, theta_j, ll_j, lp_j, j, ws, ws_screen, thread_rng)
+                        accepted && (acc_local += 1)
+                        reached_s2 && (s2_local += 1)
                         prop_local += 1
-                        continue
                     end
-
-                    # Build solver_kwargs with warm-starting from cached solution (inner threading suppressed)
-                    mh_solver_kwargs = if solver in (:projection, :pfi) && solutions[j] isa ProjectionSolution
-                        merge(eff_solver_kwargs, (initial_coeffs=solutions[j].coefficients,))
-                    else
-                        eff_solver_kwargs
-                    end
-
-                    if delayed_acceptance && isfinite(ll_cheap[j])
-                        # ── Two-stage delayed acceptance (Christen & Fox 2005) on top of PMMH ──
-                        ll_cheap_star = _solve_and_run_pf(
-                            spec, param_names, theta_star, observables, measurement_error,
-                            solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
-
-                        if ll_cheap_star == T(-Inf)
-                            prop_local += 1
-                            continue
-                        end
-
-                        log_alpha_1 = (phi_new * ll_cheap_star + lp_star) -
-                                      (phi_new * ll_cheap[j] + lp_j)
-
-                        if log(rand(thread_rng, T)) >= log_alpha_1
-                            prop_local += 1
-                            continue
-                        end
-
-                        ll_star, sol_star = _solve_and_run_pf(
-                            spec, param_names, theta_star, observables, measurement_error,
-                            solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                            use_csmc=false, return_solution=true,
-                            failures=lik_failures, evals=lik_evals)
-
-                        if ll_star == T(-Inf)
-                            prop_local += 1
-                            continue
-                        end
-
-                        log_alpha_2 = isfinite(ll_j) ?
-                            (phi_new * (ll_star - ll_cheap_star) - phi_new * (ll_j - ll_cheap[j])) :
-                            T(Inf)
-
-                        if log(rand(thread_rng, T)) < log_alpha_2
-                            theta_j = theta_star
-                            ll_j = ll_star
-                            lp_j = lp_star
-                            ll_cheap[j] = ll_cheap_star
-                            if sol_star isa ProjectionSolution
-                                solutions[j] = sol_star
-                            end
-                            acc_local += 1
-                        end
-                    else
-                        # ── Standard single-stage PMMH (also fallback when DA has ll_cheap[j] == -Inf; #950) ──
-                        ll_star, sol_star = _solve_and_run_pf(
-                            spec, param_names, theta_star, observables, measurement_error,
-                            solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
-                            use_csmc=false, return_solution=true,
-                            failures=lik_failures, evals=lik_evals)
-
-                        if ll_star == T(-Inf)
-                            prop_local += 1
-                            continue
-                        end
-
-                        log_alpha = isfinite(ll_j) ?
-                            ((phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)) :
-                            T(Inf)
-
-                        if log(rand(thread_rng, T)) < log_alpha
-                            theta_j = theta_star
-                            ll_j = ll_star   # keep the noisy accepted estimate (PMMH)
-                            lp_j = lp_star
-                            if sol_star isa ProjectionSolution
-                                solutions[j] = sol_star
-                            end
-                            if delayed_acceptance
-                                ll_cheap[j] = _solve_and_run_pf(
-                                    spec, param_names, theta_star, observables, measurement_error,
-                                    solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
-                            end
-                            acc_local += 1
-                        end
-                    end
-
-                    prop_local += 1
                 end
 
                 # Write back
@@ -1834,16 +2128,27 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                 state.log_priors[j] = lp_j
                 worker_acc[w] += acc_local
                 worker_prop[w] += prop_local
+                worker_s2_prop[w] += s2_local
             end
         end
 
         # Record acceptance rate (reduced once from per-worker counters)
         tp = sum(worker_prop)
-        acc_rate = tp > 0 ? T(sum(worker_acc)) / T(tp) : zero(T)
+        tot_acc = sum(worker_acc)
+        acc_rate = tp > 0 ? T(tot_acc) / T(tp) : zero(T)
         push!(state.acceptance_rates, acc_rate)
 
-        # Adapt N_x on the PF ESTIMATOR variance at fixed θ (Chopin et al. 2013 §3.4)
-        if acc_rate < T(0.15)
+        # Adapt proposal scale c_n toward target ~25% acceptance (Herbst & Schorfheide 2014; #951)
+        _adapt_proposal_scale!(state, acc_rate)
+
+        # Adapt N_x on the PF ESTIMATOR variance at fixed θ (Chopin et al. 2013 §3.4).
+        # Under delayed acceptance, gate on Stage-2 conditional acceptance as well so Stage-1
+        # screening rejections don't spuriously re-probe N_x every stage; if N_x doubles,
+        # resize screen_pool (when auto-sized) and single-solve refresh ll_cheap in _exchange_step!.
+        s2_prop = sum(worker_s2_prop)
+        acc_s2 = s2_prop > 0 ? T(tot_acc) / T(s2_prop) : zero(T)
+        should_probe_nx = delayed_acceptance ? (acc_rate < T(0.10) && acc_s2 < T(0.15)) : (acc_rate < T(0.15))
+        if should_probe_nx
             est_var = _pf_estimator_variance(spec, param_names, state.theta_particles,
                 observables, measurement_error, solver, eff_solver_kwargs, pool, data, T_obs,
                 rng; n_probe=min(N, 8), n_rep=2)   # target estimator variance ≈ 1–3
@@ -1853,12 +2158,19 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                 for ws in pool
                     _resize_pf_workspace!(ws, N_x)
                 end
+                if delayed_acceptance && n_screen === nothing
+                    n_screen_eff = _resolve_n_screen(nothing, N_x)
+                    for ws_scr in screen_pool
+                        _resize_pf_workspace!(ws_scr, n_screen_eff)
+                    end
+                end
                 # Exchange step: recompute ALL θ-likelihoods at the new N_x with exact Chopin (2013) weights (#950).
                 _exchange_step!(state, spec, param_names, observables, measurement_error,
                     solver, eff_solver_kwargs, pool, data, T_obs, rng;
                     phi=phi_new, ess_target=ess_target,
                     solutions=solutions,
                     ll_cheap=(delayed_acceptance ? ll_cheap : nothing),
+                    screen_pool=screen_pool,
                     failures=lik_failures, evals=lik_evals)
             end
         end

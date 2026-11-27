@@ -305,10 +305,18 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
   full HA solve per particle).
 - `n_particles::Int=500` — number of PF particles (for `:smc2` only)
 - `n_mh_steps::Int=1` — MH mutation steps per SMC stage
+- `n_blocks::Int=1` — number of randomized parameter blocks per SMC/SMC² mutation stage
+  (Herbst & Schorfheide 2014 §3.3). When `n_blocks > 1`, parameters are randomly
+  partitioned at each stage and mutated block-by-block using conditional covariance
+  proposals `Σ_{b|-b}`, maintaining high acceptance in medium/large-scale DSGE models.
 - `n_draws` — total draws for `:mh` (including burnin). Default `10000` for
   representative-agent specs and `5000` for `HouseholdSystem`.
 - `burnin` — burn-in draws discarded from `:mh` output; the posterior uses
   `n_draws - burnin`. Default `5000` (RA) / `1000` (HA).
+- `n_chains::Int=1` — number of independent RWMH chains run in parallel (`method=:mh` only);
+  when `n_chains > 1`, draws are stacked vertically (`n_chains * retained` rows) and
+  [`mcmc_diagnostics`](@ref) computes true multi-chain split-R̂ and ESS across `2 * n_chains`
+  half-chains.
 - `keep_burnin::Bool=false` — if true, retain the full `:mh` chain (e.g. for trace plots)
 - `ess_target::Float64=0.5` — target ESS fraction for adaptive tempering
 - `measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing` — measurement error SDs;
@@ -330,10 +338,15 @@ SMC², or Random-Walk Metropolis-Hastings (RWMH).
 - `likelihood::Symbol=:auto` — likelihood evaluation method (currently auto = Kalman)
 - `solver::Symbol=:gensys` — DSGE solver method
 - `solver_kwargs::NamedTuple=NamedTuple()` — additional solver keyword arguments
-- `delayed_acceptance::Bool=false` — enable two-stage delayed acceptance MH for `:smc2`
-  (Christen & Fox 2005). Pre-screens proposals with a cheap bootstrap PF to avoid
-  expensive CSMC evaluations on proposals that would be rejected. Exact posterior.
-- `n_screen::Int=200` — particles for screening PF (only used when `delayed_acceptance=true`)
+- `delayed_acceptance::Bool=false` — enable single-solve two-stage delayed acceptance MH
+  for `:smc2` (Christen & Fox 2005). Solves the DSGE model at most once per proposal and
+  pre-screens with a cheap bootstrap PF (`n_screen` particles) before running the full PF
+  on the same state space, preserving exact posterior detailed balance.
+- `n_screen::Union{Nothing,Int}=nothing` — particles for screening PF (only used when
+  `delayed_acceptance=true`). Default `nothing` auto-sizes to
+  `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)` for `n_particles > 20` (or
+  `max(5, n_particles ÷ 2)` for `n_particles <= 20`). Emits a warning if an explicit
+  `n_screen >= n_particles` is provided.
 - `max_stages::Int=500` — hard cap on adaptive-tempering stages (`:smc`/`:smc2`); exceeding
   it raises an error, guarding a degenerate likelihood that never advances φ→1 (Herbst &
   Schorfheide 2016 use ~200–500 fixed stages)
@@ -409,6 +422,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               n_smc::Union{Nothing,Int}=nothing,
                               n_particles::Int=500,
                               n_mh_steps::Int=1,
+                              n_blocks::Int=1,
                               n_draws::Union{Nothing,Int}=nothing,
                               burnin::Union{Nothing,Int}=nothing,
                               n_chains::Int=1,
@@ -423,7 +437,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               solver::Symbol=:gensys,
                               solver_kwargs::NamedTuple=NamedTuple(),
                               delayed_acceptance::Bool=false,
-                              n_screen::Int=200,
+                              n_screen::Union{Nothing,Int}=nothing,
                               max_stages::Int=500, min_dphi::Real=1e-10,
                               proposal::Symbol=:adaptive,
                               transform::Bool=true,
@@ -434,6 +448,10 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     # through to the RA Kalman path is a silent wrong likelihood (#649 / MSR-07).
     _require_estimable_spec(:estimate_dsge_bayes, spec)
     n_chains >= 1 || throw(ArgumentError("n_chains must be >= 1, got $n_chains"))
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
+    if n_screen !== nothing && n_screen < 1
+        throw(ArgumentError("n_screen must be >= 1, got $n_screen"))
+    end
     rng = _resolve_repro_rng(rng, seed)
 
     if has_kind(spec, HouseholdSystem)
@@ -468,7 +486,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         return _ha_estimate_dsge_bayes(spec, data, theta0;
             priors=priors, method=ha_method_est, observables=observables,
             n_draws=defs.n_draws, burnin=defs.burnin, n_chains=n_chains,
-            n_smc=defs.n_smc, n_mh_steps=n_mh_steps,
+            n_smc=defs.n_smc, n_mh_steps=n_mh_steps, n_blocks=n_blocks,
             ess_target=ess_target, measurement_error=measurement_error,
             max_stages=max_stages, min_dphi=min_dphi, rng=rng, seed=seed, kwargs...)
     end
@@ -543,6 +561,9 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     if method != :mh && n_chains > 1
         throw(ArgumentError("n_chains > 1 is only supported for method=:mh, got method=:$method"))
     end
+    if method == :mh && n_blocks > 1
+        throw(ArgumentError("n_blocks > 1 is only supported for method=:smc and method=:smc2, got method=:$method"))
+    end
     if proposal ∉ (:adaptive, :mode)
         throw(ArgumentError("proposal must be :adaptive or :mode, got :$proposal"))
     end
@@ -566,12 +587,14 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         n_particles=n_particles, n_draws=n_draws, n_smc=n_smc,
         n_mh_steps=n_mh_steps, burnin=burnin, ess_target=ess_target,
         solver=solver, solver_kwargs=solver_kwargs, theta0=theta0_sorted,
-        keep_burnin=keep_burnin, transform=transform, proposal=proposal)
+        keep_burnin=keep_burnin, transform=transform, proposal=proposal,
+        extra=Dict{String,Any}("n_blocks" => n_blocks, "n_chains" => n_chains))
 
     if method == :smc
         state = _smc_sample(spec, data_mat, param_names, prior, theta0_sorted;
                              n_smc=n_smc, n_mh_steps=n_mh_steps,
-                             ess_target=ess_target, observables=observables,
+                             ess_target=ess_target, n_blocks=n_blocks,
+                             observables=observables,
                              measurement_error=measurement_error,
                              solver=solver, solver_kwargs=solver_kwargs,
                              trends=trends,
@@ -586,6 +609,7 @@ function estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         state = _smc2_sample(spec, data_mat, param_names, prior, theta0_sorted;
                               n_smc=n_smc, n_particles=n_particles,
                               n_mh_steps=n_mh_steps, ess_target=ess_target,
+                              n_blocks=n_blocks,
                               observables=observables,
                               measurement_error=measurement_error,
                               solver=solver, solver_kwargs=solver_kwargs,

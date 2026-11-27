@@ -492,6 +492,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                               n_chains::Int=1,
                               n_smc::Int=500,
                               n_mh_steps::Int=1,
+                              n_blocks::Int=1,
                               ess_target::Float64=0.5,
                               max_stages::Int=500, min_dphi::Real=1e-10,
                               measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
@@ -507,9 +508,14 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
             "got :$method. SMC², HA GMM/SMM, and CT Bayes are out of scope (#649)."))
     end
     n_chains >= 1 || throw(ArgumentError("n_chains must be >= 1, got $n_chains"))
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
     if n_chains > 1 && method !== :mh
         throw(ArgumentError(
             "n_chains > 1 is only supported for method=:mh; got method=:$method"))
+    end
+    if n_blocks > 1 && method !== :smc
+        throw(ArgumentError(
+            "n_blocks > 1 is only supported for method=:smc; got method=:$method"))
     end
 
     # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
@@ -564,7 +570,8 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     if method === :smc
         state = _smc_from_likelihood(ll_fn, param_names, prior, theta0_sorted;
                                      n_smc=n_smc, n_mh_steps=n_mh_steps,
-                                     ess_target=ess_target, max_stages=max_stages,
+                                     ess_target=ess_target, n_blocks=n_blocks,
+                                     max_stages=max_stages,
                                      min_dphi=min_dphi, rng=rng)
         state.n_lik_failures = lik_failures[]
         state.n_lik_evals = lik_evals[]

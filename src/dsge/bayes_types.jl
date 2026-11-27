@@ -517,6 +517,7 @@ Fields:
 - `proposal_cov::Matrix{T}` — MCMC mutation proposal covariance
 - `n_lik_failures::Int` — number of likelihood evaluations that failed (returned -Inf)
 - `n_lik_evals::Int` — total number of likelihood evaluations
+- `c_scale::T` — adaptive Herbst–Schorfheide proposal scaling factor `c_n` (initialized to `2.38 / sqrt(n_params)`)
 """
 mutable struct SMCState{T<:AbstractFloat}
     theta_particles::Matrix{T}
@@ -531,12 +532,18 @@ mutable struct SMCState{T<:AbstractFloat}
     proposal_cov::Matrix{T}
     n_lik_failures::Int
     n_lik_evals::Int
+    c_scale::T
 end
 
-# Backward-compatible 10-arg constructor (failure counters default to 0); the samplers
-# build with this form and set n_lik_failures / n_lik_evals post-hoc.
+# Backward-compatible 10-arg and 12-arg constructors (failure counters default to 0,
+# c_scale defaults to Roberts-Rosenthal optimal 2.38 / sqrt(n_params)).
 SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov) where {T<:AbstractFloat} =
-    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, 0, 0)
+    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, 0, 0,
+                T(2.38) / sqrt(T(max(size(tp, 1), 1))))
+
+SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, nf::Int, ne::Int) where {T<:AbstractFloat} =
+    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, nf, ne,
+                T(2.38) / sqrt(T(max(size(tp, 1), 1))))
 
 # =============================================================================
 # BayesianDSGE — posterior result container
