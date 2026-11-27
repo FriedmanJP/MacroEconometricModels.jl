@@ -322,6 +322,8 @@ Scalar log-likelihood (sum over t of log p(y_t | y_{1:t-1})).
 """
 function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:AbstractFloat}
     n_obs, T_obs = size(data)
+    size(ss.Z, 1) == n_obs || throw(DimensionMismatch(
+        "data has $n_obs rows, expected $(size(ss.Z, 1)) observables"))
     n_states = size(ss.G1, 1)
     n_shocks = size(ss.impact, 2)
 

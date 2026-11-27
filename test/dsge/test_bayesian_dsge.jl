@@ -1500,7 +1500,7 @@ end
         MacroEconometricModels.DSGEPrior(priors; lower=Dict(:ρ => 0.01), upper=Dict(:ρ => 0.99)),
         [0.5];
         n_smc=50, n_particles=50, n_mh_steps=1, ess_target=0.5,
-        observables=[:y], measurement_error=nothing,
+        observables=[:y], measurement_error=[0.1],
         solver=:gensys, solver_kwargs=NamedTuple(),
         rng=Random.Xoshiro(123))
 
@@ -5146,4 +5146,344 @@ end
     @test_throws ArgumentError estimate_dsge_bayes(ha, Y, Dict(:alpha => 0.36);
         priors=Dict(:alpha => Normal(0.36, 0.01)), prefilter=:hp,
         n_draws=2, burnin=0)
+end
+
+# =============================================================================
+# Regression & Feature Tests for #946, #947, #948, #949, #950, #951 (v1.1.3)
+# =============================================================================
+
+@testset "Projection PF workspace weight-reset parity (#946)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: rho = 0.7, sig = 0.02
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + sig * eps[t]
+        steady_state = [0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec; method=:projection, degree=3, scale=5.0)
+    Z, d, H = M._build_observation_equation(spec, [:y], [0.01])
+    pss = M._build_projection_state_space(sol, Z, d, H)
+    data = randn(Xoshiro(9461), 1, 25) .* 0.03
+
+    ws_fresh = M._allocate_pf_workspace(Float64, 1, 1, 1, 60;
+        T_obs=25, proj_nx=1, proj_n_basis=size(pss.coefficients, 2),
+        proj_max_degree=pss.max_degree, proj_n_vars=1)
+    @test all(==( -log(60.0)), ws_fresh.log_weights)
+
+    ws_reused = M._allocate_pf_workspace(Float64, 1, 1, 1, 60;
+        T_obs=25, proj_nx=1, proj_n_basis=size(pss.coefficients, 2),
+        proj_max_degree=pss.max_degree, proj_n_vars=1)
+    # Contaminate weights with extreme non-uniform values before reusing
+    ws_reused.log_weights .= collect(range(-50.0, 0.0; length=60))
+    ws_reused.weights .= exp.(ws_reused.log_weights) ./ sum(exp.(ws_reused.log_weights))
+
+    ll_fresh = M._bootstrap_particle_filter!(ws_fresh, pss, data, 25; rng=Xoshiro(9462))
+    ll_reused = M._bootstrap_particle_filter!(ws_reused, pss, data, 25; rng=Xoshiro(9462))
+    @test ll_fresh === ll_reused
+
+    # _resize_pf_workspace! resets log_weights to -log(N_new)
+    M._resize_pf_workspace!(ws_reused, 120)
+    @test length(ws_reused.log_weights) == 120
+    @test all(==(-log(120.0)), ws_reused.log_weights)
+end
+
+@testset "Nonlinear PF & smoother control timing and carried weights (#949)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: rho = 0.8, sig = 1.0
+        endogenous: z, y
+        exogenous: eps
+        z[t] = rho * z[t-1] + sig * eps[t]
+        y[t] = 2.0 * z[t]
+        steady_state = [0.0, 0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol_lin = solve(spec; method=:gensys)
+    sim = simulate(sol_lin, 40; rng=Xoshiro(9491))
+
+    # Both state (:z) and control (:y) observables match exact Kalman across P1/P2/P3/Projection
+    for (obs, col) in ((:z, 1), (:y, 2))
+        data_obs = Matrix{Float64}(sim[:, col:col]')
+        Z, d, H = M._build_observation_equation(spec, [obs], [0.2])
+        ss_lin = M._build_state_space(sol_lin, Z, d, H)
+        ll_kf = M._kalman_loglikelihood(ss_lin, data_obs)
+
+        for ord in (1, 2, 3)
+            sol_p = solve(spec; method=:perturbation, order=ord)
+            nss = M._build_nonlinear_state_space(sol_p, Z, d, H)
+            nx = length(nss.state_indices)
+            ws = M._allocate_pf_workspace(Float64, 2, 1, 1, 800; nv=nx+1, nx=nx, order=ord, T_obs=40)
+            ll_pf = M._bootstrap_particle_filter!(ws, nss, data_obs, 40; rng=Xoshiro(9492))
+            @test abs(ll_pf - ll_kf) < 1.0
+        end
+
+        sol_proj = solve(spec; method=:projection, degree=3, scale=5.0)
+        pss = M._build_projection_state_space(sol_proj, Z, d, H)
+        ws_pr = M._allocate_pf_workspace(Float64, 2, 1, 1, 800; T_obs=40,
+            proj_nx=length(pss.state_indices), proj_n_basis=size(pss.coefficients, 2),
+            proj_max_degree=pss.max_degree, proj_n_vars=2)
+        ll_pr = M._bootstrap_particle_filter!(ws_pr, pss, data_obs, 40; rng=Xoshiro(9492))
+        @test abs(ll_pr - ll_kf) < 1.0
+    end
+
+    # Particle smoother carried-weight unbiasedness under large ME (skipped resamples)
+    data_z = Matrix{Float64}(sim[:, 1:1]')
+    Z_s, d_s, H_s = M._build_observation_equation(spec, [:z], [0.5])
+    ll_kf_sm = M._kalman_loglikelihood(M._build_state_space(sol_lin, Z_s, d_s, H_s), data_z)
+    nss_sm = M._build_nonlinear_state_space(solve(spec; method=:perturbation, order=2), Z_s, d_s, H_s)
+    res_sm = dsge_particle_smoother(nss_sm, data_z; N=600, N_back=30, rng=Xoshiro(9493))
+    @test abs(res_sm.log_likelihood - ll_kf_sm) < 1.0
+
+    # RBC orders 1-3: _pf_transition_pruned! and _nonlinear_transition match _pss_step to ~1e-12
+    rbc = @dsge begin
+        parameters: alpha = 0.33, beta = 0.99, delta = 0.025, rho = 0.9, sigma = 0.01
+        endogenous: y, c, k, a
+        exogenous: eps_a
+        y[t] = exp(a[t]) * k[t-1]^alpha
+        k[t] = (1 - delta) * k[t-1] + y[t] - c[t]
+        1 / c[t] = beta * (1 / c[t+1]) * (alpha * exp(a[t+1]) * k[t]^(alpha - 1) + 1 - delta)
+        a[t] = rho * a[t-1] + sigma * eps_a[t]
+    end
+    rbc = compute_steady_state(rbc)
+    Z_r, d_r, H_r = M._build_observation_equation(rbc, [:y], [0.01])
+    for ord in (1, 2, 3)
+        sol_r = solve(rbc; method=:perturbation, order=ord)
+        pss_r = pruned_state_space(sol_r)
+        nss_r = M._build_nonlinear_state_space(sol_r, Z_r, d_r, H_r)
+        nx = length(nss_r.state_indices)
+        ws = M._allocate_pf_workspace(Float64, 4, 1, 1, 1; nv=nx+1, nx=nx, order=ord)
+        rng_t = Xoshiro(9494 + ord)
+        xf0 = 0.02 .* randn(rng_t, nx)
+        xs0 = ord >= 2 ? 0.002 .* randn(rng_t, nx) : zeros(nx)
+        xt0 = ord >= 3 ? 0.0002 .* randn(rng_t, nx) : zeros(nx)
+        eps_v = randn(rng_t, 1)
+
+        ws.particles_fo[:, 1] .= xf0
+        ws.particles_so !== nothing && (ws.particles_so[:, 1] .= xs0)
+        ws.particles_to !== nothing && (ws.particles_to[:, 1] .= xt0)
+        ws.shocks[:, 1] .= eps_v
+        M._pf_transition_pruned!(ws, nss_r)
+
+        xf_p, xs_p, xt_p, x_tot_p, y_p = M._pss_step(pss_r, xf0, xs0, xt0, eps_v)
+        xf_n, xs_n, xt_n, x_tot_n, y_n = M._nonlinear_transition(nss_r, xf0, xs0, xt0, eps_v)
+
+        @test ws.particles[nss_r.state_indices, 1] ≈ x_tot_p atol=1e-12
+        @test ws.particles[nss_r.control_indices, 1] ≈ y_p atol=1e-12
+        @test x_tot_n ≈ x_tot_p atol=1e-12
+        @test y_n ≈ y_p atol=1e-12
+    end
+end
+
+@testset "SMC/SMC2/CSMC defects fixed (#950)" begin
+    M = MacroEconometricModels
+    pr1 = M._build_bayes_prior(Dict(:x => Normal(0.0, 1.0)))
+
+    # 1. All-failed SMC errors cleanly instead of silently finishing with -1e10 sentinel
+    @test_throws ErrorException M._smc_from_likelihood(
+        _ -> -Inf, [:x], pr1, [0.0]; n_smc=20, rng=Xoshiro(9501))
+
+    # 2. High-indeterminacy SMC (70% -Inf prior region) recovers exact log-ML
+    # Prior: x ~ N(0,1); valid region x > 0.5244 (30% mass); likelihood: N(1.0, 0.5^2)
+    cutoff = quantile(Normal(0.0, 1.0), 0.70)
+    ll_indet = th -> th[1] < cutoff ? -Inf : logpdf(Normal(th[1], 0.5), 1.0)
+    # Exact log Z = log(∫_{cutoff}^∞ N(x; 0, 1) * N(1.0; x, 0.5^2) dx)
+    # Product of N(0,1) and N(1, 0.25) = N(1; 0, 1.25) * N(x; 0.8, 0.2)
+    exact_lml = logpdf(Normal(0.0, sqrt(1.25)), 1.0) + log(1.0 - cdf(Normal(0.8, sqrt(0.2)), cutoff))
+    st_indet = M._smc_from_likelihood(ll_indet, [:x], pr1, [0.8];
+        n_smc=250, n_mh_steps=2, rng=Xoshiro(9502))
+    @test isfinite(st_indet.log_marginal_likelihood)
+    @test abs(st_indet.log_marginal_likelihood - exact_lml) < 0.35
+    @test all(x -> x >= cutoff, vec(st_indet.theta_particles))
+
+    # 3. _exchange_step! applies Chopin et al. (2013) exchange weights (11-arg compat preserved)
+    spec_ar = @dsge begin
+        parameters: rho = 0.7, sig = 0.05
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + sig * eps[t]
+        steady_state = [0.0]
+    end
+    spec_ar = compute_steady_state(spec_ar)
+    data_ar = randn(Xoshiro(9503), 1, 20) .* 0.05
+    tp = reshape(collect(range(0.4, 0.8; length=12)), 1, 12)
+    ll_init = fill(-20.0, 12)
+    lw_init = fill(-log(12.0), 12)
+    pool_ex = [M._allocate_pf_workspace(Float64, 1, 1, 1, 40; T_obs=20)]
+    st_ex = M.SMCState{Float64}(copy(tp), copy(lw_init), copy(ll_init), zeros(12),
+        [0.0, 0.5], Float64[], Float64[], 0.0, pool_ex, fill(0.01, 1, 1))
+    M._exchange_step!(st_ex, spec_ar, [:rho], [:y], [0.02], :gensys, NamedTuple(),
+        pool_ex, data_ar, 20, Xoshiro(9504))
+    @test isfinite(st_ex.log_marginal_likelihood)
+    @test st_ex.log_marginal_likelihood != 0.0
+
+    # 4. _conditional_smc! updates trajectory columns 1:(T_obs-1) on all 3 state spaces
+    Z_ar, d_ar, H_ar = M._build_observation_equation(spec_ar, [:y], [0.02])
+    ss_lin = M._build_state_space(solve(spec_ar; method=:gensys), Z_ar, d_ar, H_ar)
+    ss_nl  = M._build_nonlinear_state_space(solve(spec_ar; method=:perturbation, order=2), Z_ar, d_ar, H_ar)
+    ss_pr  = M._build_projection_state_space(solve(spec_ar; method=:projection, degree=3, scale=5.0), Z_ar, d_ar, H_ar)
+    for (lbl, ss_obj, ws_obj) in (
+        (:linear, ss_lin, M._allocate_pf_workspace(Float64, 1, 1, 1, 40; T_obs=20)),
+        (:nonlinear, ss_nl, M._allocate_pf_workspace(Float64, 1, 1, 1, 40; nv=2, nx=1, order=2, T_obs=20)),
+        (:projection, ss_pr, M._allocate_pf_workspace(Float64, 1, 1, 1, 40; T_obs=20,
+            proj_nx=1, proj_n_basis=size(ss_pr.coefficients, 2), proj_max_degree=ss_pr.max_degree, proj_n_vars=1)),
+    )
+        ref_init = fill(999.0, 1, 20)
+        ws_obj.reference_trajectory .= ref_init
+        ll_c = M._conditional_smc!(ws_obj, ss_obj, data_ar, 20; rng=Xoshiro(9505))
+        @test isfinite(ll_c)
+        # Every column 1:19 must be updated away from sentinel 999.0 (and not merely column 20)
+        @test count(t -> ws_obj.reference_trajectory[1, t] != 999.0, 1:19) >= 15
+    end
+end
+
+@testset "H=0 zero-warning guard and small-matrix Kalman parity (#947)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: beta = 0.99, kappa = 0.1, phi_pi = 1.5, phi_y = 0.125, rho_a = 0.8, rho_r = 0.5
+        endogenous: y, pi, r, a, er
+        exogenous: eps_a, eps_r
+        y[t] = y[t+1] - (r[t] - pi[t+1]) + a[t]
+        pi[t] = beta * pi[t+1] + kappa * y[t]
+        r[t] = rho_r * r[t-1] + (1 - rho_r) * (phi_pi * pi[t] + phi_y * y[t]) + er[t]
+        a[t] = rho_a * a[t-1] + eps_a[t]
+        er[t] = eps_r[t]
+    end
+    spec = compute_steady_state(spec)
+    sol = solve(spec)
+    Z, d, H = M._build_observation_equation(spec, [:y, :pi], nothing)
+    @test all(iszero, H)
+
+    # Zero warnings when building DSGEStateSpace / NonlinearStateSpace with H=0
+    ss = @test_logs M._build_state_space(sol, Z, d, H)
+    @test ss.log_det_H == -Inf
+    sol_p2 = solve(spec; method=:perturbation, order=2)
+    nss = @test_logs M._build_nonlinear_state_space(sol_p2, Z, d, H)
+    @test nss.log_det_H == -Inf
+
+    # Small-matrix lock-free Kalman matches reference Kalman recursion to < 1e-11
+    sim = simulate(sol, 40; rng=Xoshiro(9471))
+    data = Matrix{Float64}(sim[:, [1, 2]]')
+    ll_small = M._kalman_loglikelihood(ss, data)
+    # Reference standard Kalman recursion
+    x_ref = zeros(5)
+    P_ref = M.solve_lyapunov(ss.G1, ss.impact)
+    RQR_ref = ss.impact * ss.Q * ss.impact'
+    ll_ref = 0.0
+    for t in 1:40
+        x_p = ss.G1 * x_ref
+        P_p = ss.G1 * P_ref * ss.G1' + RQR_ref
+        v = data[:, t] - ss.Z * x_p - ss.d
+        F = ss.Z * P_p * ss.Z' + ss.H
+        F = 0.5 * (F + F')
+        ll_ref += -0.5 * (2 * log(2pi) + logdet(F) + dot(v, F \ v))
+        K = (P_p * ss.Z') / F
+        x_ref = x_p + K * v
+        P_ref = 0.5 * ((P_p - K * ss.Z * P_p) + (P_p - K * ss.Z * P_p)')
+    end
+    @test isapprox(ll_small, ll_ref; rtol=1e-11, atol=1e-11)
+end
+
+@testset "Multi-chain MH, post-estimation parity, and SMC enhancements (#948, #951)" begin
+    M = MacroEconometricModels
+    nk = @dsge begin
+        parameters: beta = 0.99, kappa = 0.1, phi_pi = 1.5, phi_y = 0.125, rho_a = 0.8, rho_r = 0.5
+        endogenous: y, pi, r, a, er
+        exogenous: eps_a, eps_r
+        y[t] = y[t+1] - (r[t] - pi[t+1]) + a[t]
+        pi[t] = beta * pi[t+1] + kappa * y[t]
+        r[t] = rho_r * r[t-1] + (1 - rho_r) * (phi_pi * pi[t] + phi_y * y[t]) + er[t]
+        a[t] = rho_a * a[t-1] + eps_a[t]
+        er[t] = eps_r[t]
+    end
+    nk = compute_steady_state(nk)
+    sol_nk = solve(nk)
+    sim_nk = simulate(sol_nk, 50; rng=Xoshiro(9481))
+    Y_nk = sim_nk[:, [1, 2]]
+    priors_nk = Dict(:phi_pi => Normal(1.5, 0.25), :kappa => Beta(2, 18), :rho_a => Beta(8, 2))
+    th0_nk = Dict(:phi_pi => 1.5, :kappa => 0.1, :rho_a => 0.8)
+
+    # Validation guards
+    @test_throws ArgumentError estimate_dsge_bayes(nk, Y_nk, th0_nk; priors=priors_nk,
+        observables=[:y, :pi], method=:smc, n_chains=2, n_smc=20)
+    @test_throws ArgumentError estimate_dsge_bayes(nk, Y_nk, th0_nk; priors=priors_nk,
+        observables=[:y, :pi], method=:mh, n_blocks=2, n_draws=20, burnin=5)
+    @test_throws ArgumentError M._resolve_n_screen(0, 100)
+    @test_logs (:warn, r"n_screen") M._resolve_n_screen(150, 100)
+    @test M._resolve_n_screen(nothing, 200) == 40
+    @test M._resolve_n_screen(nothing, 500) == 100
+    @test M._resolve_n_screen(nothing, 16) == 8
+
+    # _adapt_proposal_scale! & SMCState backward-compatible constructors
+    st10 = M.SMCState{Float64}(zeros(4, 10), zeros(10), zeros(10), zeros(10), [0.0],
+        Float64[], Float64[], 0.0, M.PFWorkspace{Float64}[], Matrix{Float64}(I, 4, 4))
+    @test st10.c_scale ≈ 2.38 / 2.0
+    st12 = M.SMCState{Float64}(zeros(4, 10), zeros(10), zeros(10), zeros(10), [0.0],
+        Float64[], Float64[], 0.0, M.PFWorkspace{Float64}[], Matrix{Float64}(I, 4, 4), 1, 2)
+    @test st12.c_scale ≈ 2.38 / 2.0
+    c0 = st10.c_scale
+    @test M._adapt_proposal_scale!(st10, 0.25) ≈ c0
+    @test M._adapt_proposal_scale!(st10, 0.05) < c0
+    st10.c_scale = c0
+    @test M._adapt_proposal_scale!(st10, 0.70) > c0
+    st10.c_scale = 0.051
+    @test M._adapt_proposal_scale!(st10, 0.0; c_min=0.05) == 0.05
+    st10.c_scale = 4.99
+    @test M._adapt_proposal_scale!(st10, 1.0; c_max=5.0) == 5.0
+
+    # Multi-chain MH (n_chains=2) + multi-chain diagnostics + post-estimation threaded parity
+    res_mc = _suppress_warnings() do
+        estimate_dsge_bayes(nk, Y_nk, th0_nk; priors=priors_nk, observables=[:y, :pi],
+            measurement_error=[0.05, 0.05], method=:mh, proposal=:mode,
+            n_draws=120, burnin=40, n_chains=2, rng=Xoshiro(9482))
+    end
+    @test res_mc.n_chains == 2
+    @test size(res_mc.theta_draws, 1) == 2 * 80
+    diag_mc = mcmc_diagnostics(res_mc)
+    @test all(isfinite, values(diag_mc.rhat))
+    @test all(v -> v > 0, values(diag_mc.ess_bulk))
+
+    # Threaded vs serial bit-exact parity across post-estimation utilities
+    b_s = bridge_sampling_ml(res_mc; n_proposal=60, rng=Xoshiro(9483), threaded=false)
+    b_t = bridge_sampling_ml(res_mc; n_proposal=60, rng=Xoshiro(9483), threaded=true)
+    @test isfinite(b_s) && b_s === b_t
+
+    ir_s = irf(res_mc, 8; n_draws=20, rng=Xoshiro(9484), threaded=false)
+    ir_t = irf(res_mc, 8; n_draws=20, rng=Xoshiro(9484), threaded=true)
+    @test ir_s.point_estimate == ir_t.point_estimate && ir_s.quantiles == ir_t.quantiles
+
+    fv_s = fevd(res_mc, 8; n_draws=20, rng=Xoshiro(9485), threaded=false)
+    fv_t = fevd(res_mc, 8; n_draws=20, rng=Xoshiro(9485), threaded=true)
+    @test fv_s.point_estimate == fv_t.point_estimate && fv_s.quantiles == fv_t.quantiles
+
+    sm_s = simulate(res_mc, 15; n_draws=20, rng=Xoshiro(9486), threaded=false)
+    sm_t = simulate(res_mc, 15; n_draws=20, rng=Xoshiro(9486), threaded=true)
+    @test sm_s.all_paths == sm_t.all_paths && sm_s.quantiles == sm_t.quantiles
+
+    pp_s = posterior_predictive(res_mc, 15; T_periods=15, rng=Xoshiro(9487), threaded=false)
+    pp_t = posterior_predictive(res_mc, 15; T_periods=15, rng=Xoshiro(9487), threaded=true)
+    @test pp_s == pp_t
+
+    pr_s = prior_predictive(nk, priors_nk; T_periods=20, n_draws=15, rng=Xoshiro(9488), threaded=false)
+    pr_t = prior_predictive(nk, priors_nk; T_periods=20, n_draws=15, rng=Xoshiro(9488), threaded=true)
+    @test pr_s.stats == pr_t.stats
+
+    ppc_s = posterior_predictive_check(res_mc; n_draws=15, rng=Xoshiro(9489), threaded=false)
+    ppc_t = posterior_predictive_check(res_mc; n_draws=15, rng=Xoshiro(9489), threaded=true)
+    @test ppc_s.replicated == ppc_t.replicated && ppc_s.p_values == ppc_t.p_values
+
+    # Blocked SMC (n_blocks=2) and blocked Perturb-2 SMC2 with single-solve DA (n_screen=nothing)
+    r_smc_b2 = estimate_dsge_bayes(nk, Y_nk, th0_nk; priors=priors_nk, observables=[:y, :pi],
+        measurement_error=[0.05, 0.05], method=:smc, n_smc=40, n_mh_steps=1, n_blocks=2,
+        rng=Xoshiro(9511))
+    @test isfinite(r_smc_b2.log_marginal_likelihood)
+    @test size(r_smc_b2.theta_draws) == (40, 3)
+
+    r_da_b2 = estimate_dsge_bayes(nk, Y_nk, th0_nk; priors=priors_nk, observables=[:y, :pi],
+        measurement_error=[0.5, 0.2], method=:smc2, solver=:perturbation, solver_kwargs=(order=2,),
+        n_smc=24, n_particles=60, n_mh_steps=1, n_blocks=2, delayed_acceptance=true,
+        rng=Xoshiro(9512))
+    @test isfinite(r_da_b2.log_marginal_likelihood)
+    @test size(r_da_b2.theta_draws) == (24, 3)
 end

@@ -591,4 +591,45 @@ end
     @test occursin("aggregates", msg) || occursin("prices", msg)
 end
 
+@testset "Particle smoother and BayesianDSGE HD threaded parity (#948)" begin
+    M = MacroEconometricModels
+    spec = @dsge begin
+        parameters: rho = 0.75, sig = 0.02
+        endogenous: y, z
+        exogenous: eps
+        z[t] = rho * z[t-1] + sig * eps[t]
+        y[t] = 1.5 * z[t]
+        steady_state = [0.0, 0.0]
+    end
+    spec = compute_steady_state(spec)
+    sol_p2 = solve(spec; method=:perturbation, order=2)
+    sim = simulate(sol_p2, 25; rng=Random.Xoshiro(94801))
+    Z, d, H = M._build_observation_equation(spec, [:y], [0.01])
+    nss = M._build_nonlinear_state_space(sol_p2, Z, d, H)
+    data_dev = Matrix{Float64}(sim[:, 1:1]')
+
+    ps_s = dsge_particle_smoother(nss, data_dev; N=100, N_back=30,
+                                  rng=Random.Xoshiro(94802), threaded=false)
+    ps_t = dsge_particle_smoother(nss, data_dev; N=100, N_back=30,
+                                  rng=Random.Xoshiro(94802), threaded=true)
+    @test ps_s.smoothed_states == ps_t.smoothed_states
+    @test ps_s.smoothed_shocks == ps_t.smoothed_shocks
+    @test ps_s.smoothed_covariances == ps_t.smoothed_covariances
+
+    # BayesianDSGE HD threaded vs serial bit-exact parity
+    priors = Dict(:rho => Beta(6, 2))
+    bayes = M._suppress_warnings() do
+        estimate_dsge_bayes(spec, sim[:, 1:1], Dict(:rho => 0.75);
+            priors=priors, observables=[:y], measurement_error=[0.01],
+            method=:smc, n_smc=24, n_mh_steps=1, rng=Random.Xoshiro(94803))
+    end
+    hd_s = historical_decomposition(bayes, sim, [:y]; n_draws=16, measurement_error=[0.01],
+                                    rng=Random.Xoshiro(94804), threaded=false)
+    hd_t = historical_decomposition(bayes, sim, [:y]; n_draws=16, measurement_error=[0.01],
+                                    rng=Random.Xoshiro(94804), threaded=true)
+    @test hd_s.point_estimate == hd_t.point_estimate
+    @test hd_s.quantiles == hd_t.quantiles
+    @test hd_s.initial_point_estimate == hd_t.initial_point_estimate
+end
+
 end  # outer testset

@@ -2271,3 +2271,33 @@ end
         end
     end
 end
+
+@testset "BayesianDSGE multi-chain n_chains round-trip & v1 compat (#948)" begin
+    spec_mc = @dsge begin
+        parameters: rho = 0.7, sig = 0.05
+        endogenous: y
+        exogenous: eps
+        y[t] = rho * y[t-1] + sig * eps[t]
+        steady_state = [0.0]
+    end
+    spec_mc = compute_steady_state(spec_mc)
+    Y_mc = simulate(solve(spec_mc), 30; seed=94820)
+    res_mc = _suppress_warnings() do
+        estimate_dsge_bayes(spec_mc, Y_mc, Dict(:rho => 0.7);
+            priors=Dict(:rho => Beta(6, 2)), observables=[:y],
+            measurement_error=[0.02], method=:mh,
+            n_draws=40, burnin=15, n_chains=2, seed=94821)
+    end
+    @test res_mc.n_chains == 2
+    res_mc2 = _cover(res_mc)
+    @test res_mc2.n_chains == 2
+    @test res_mc2.theta_draws == res_mc.theta_draws
+    @test mcmc_diagnostics(res_mc2).rhat == mcmc_diagnostics(res_mc).rhat
+
+    # Backward compatibility: legacy v1 payload without "n_chains" defaults to n_chains == 1
+    payload = _MEM._to_serializable(res_mc)
+    delete!(payload, "n_chains")
+    res_v1 = _MEM._from_serializable(BayesianDSGE, payload, 1)
+    @test res_v1.n_chains == 1
+    @test res_v1.theta_draws == res_mc.theta_draws
+end

@@ -422,16 +422,16 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
     # Fast path: mode_only — use posterior mode solution directly
     # =========================================================================
     if mode_only
-        sol = post.solution
-        if sol isa DSGESolution
-            hd = historical_decomposition(sol, data, observables;
+        mode_sol = post.solution
+        if mode_sol isa DSGESolution
+            hd = historical_decomposition(mode_sol, data, observables;
                                            states=states, measurement_error=measurement_error)
-        elseif sol isa PerturbationSolution
-            hd = historical_decomposition(sol, data, observables;
+        elseif mode_sol isa PerturbationSolution
+            hd = historical_decomposition(mode_sol, data, observables;
                                            states=states, measurement_error=measurement_error,
                                            rng=rng, threaded=threaded)
         else
-            error("Unsupported solution type $(typeof(sol)) for mode_only HD")
+            error("Unsupported solution type $(typeof(mode_sol)) for mode_only HD")
         end
         # Re-wrap with Bayesian mode method tag
         return HistoricalDecomposition{T}(
@@ -489,20 +489,20 @@ function historical_decomposition(post::BayesianDSGE{T}, data::AbstractMatrix,
         theta = Vector{T}(@view post.theta_draws[idx, :])
         try
             _suppress_warnings() do
-                sol, _ = _build_solution_at_theta(spec, post.param_names, theta,
-                                                   observables, measurement_error,
-                                                   solver, solver_kwargs)
-                if sol isa DSGESolution && !is_determined(sol)
+                sol_k, _ = _build_solution_at_theta(spec, post.param_names, theta,
+                                                    observables, measurement_error,
+                                                    solver, solver_kwargs)
+                if sol_k isa DSGESolution && !is_determined(sol_k)
                     return  # skip indeterminate
                 end
 
-                hd_i = if sol isa PerturbationSolution
-                    historical_decomposition(sol, data, observables;
+                hd_i = if sol_k isa PerturbationSolution
+                    historical_decomposition(sol_k, data, observables;
                                              states=states,
                                              measurement_error=measurement_error,
                                              rng=local_rng, threaded=false)
                 else
-                    historical_decomposition(sol, data, observables;
+                    historical_decomposition(sol_k, data, observables;
                                              states=states,
                                              measurement_error=measurement_error)
                 end

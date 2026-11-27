@@ -2267,4 +2267,40 @@ end
     @test size(sol.jacobians[:H_U], 1) == 16
 end
 
+@testset "HA multi-chain MH and blocked SMC (#948, #951)" begin
+    spec_h = MacroEconometricModels._huggett_example(; credit_limit=-2.0, a_max=6.0, n_a=40)
+    ss_h = compute_steady_state(spec_h; max_iter=80, tol=1e-3)
+    sol_h = solve(spec_h; method=:ssj, ss=ss_h, T_horizon=16, n_reduced=6)
+    sim_h = simulate(sol_h, 15; rng=Random.Xoshiro(94830)) .+ sol_h.steady_state.prices[:r]
+    priors_h = Dict(:rho_z => Uniform(0.75, 0.95), :sigma_z => Uniform(0.005, 0.02))
+    th0_h = Dict(:rho_z => 0.9, :sigma_z => 0.01)
+    ha_kw = (T_horizon=16, n_reduced=6)
+
+    # Validation guards
+    @test_throws ArgumentError estimate_dsge_bayes(spec_h, sim_h, th0_h;
+        priors=priors_h, observables=[:r], method=:smc, n_chains=2, n_smc=6, ha_kwargs=ha_kw)
+    @test_throws ArgumentError estimate_dsge_bayes(spec_h, sim_h, th0_h;
+        priors=priors_h, observables=[:r], method=:mh, n_blocks=2, n_draws=4, burnin=1, ha_kwargs=ha_kw)
+
+    # Multi-chain HA RWMH
+    res_ha_mc = MacroEconometricModels._suppress_warnings() do
+        estimate_dsge_bayes(spec_h, sim_h, th0_h;
+            priors=priors_h, observables=[:r], measurement_error=[0.01],
+            method=:mh, n_draws=6, burnin=2, n_chains=2, ha_kwargs=ha_kw,
+            rng=Random.Xoshiro(94831))
+    end
+    @test res_ha_mc.n_chains == 2
+    @test size(res_ha_mc.theta_draws) == (8, 2)
+
+    # Blocked HA SMC
+    res_ha_smc = MacroEconometricModels._suppress_warnings() do
+        estimate_dsge_bayes(spec_h, sim_h, th0_h;
+            priors=priors_h, observables=[:r], measurement_error=[0.01],
+            method=:smc, n_smc=6, n_mh_steps=1, n_blocks=2, ha_kwargs=ha_kw,
+            rng=Random.Xoshiro(94832))
+    end
+    @test isfinite(res_ha_smc.log_marginal_likelihood)
+    @test size(res_ha_smc.theta_draws) == (6, 2)
+end
+
 end # @testset "HA-DSGE Types"
