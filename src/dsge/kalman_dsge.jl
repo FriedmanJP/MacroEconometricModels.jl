@@ -141,10 +141,8 @@ pre-computes scaling constants for the Chebyshev domain.
 """
 function _build_projection_state_space(sol::ProjectionSolution{T}, Z::Matrix{T},
                                         d::Vector{T}, H::Matrix{T}) where {T<:AbstractFloat}
-    # Compute impact matrix once from linearized solution
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
-    impact = Matrix{T}(result_lin.impact)
+    # Reuse cached companion-QZ first-order shock-impact matrix from ProjectionSolution
+    impact = Matrix{T}(sol.impact)
 
     # Pre-compute scaling constants: z_i = x_i * scale_i + shift_i
     nx = length(sol.state_indices)

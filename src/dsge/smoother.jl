@@ -432,8 +432,9 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
     gx_state = @view nss.gx[:, 1:nx]       # ny x nx
     eta_y = @view nss.gx[:, nx+1:nv]       # ny x n_eps
 
-    # First-order state
+    # First-order state and control (evaluated on LAGGED state + current shock, matching _pss_step; S-01 / #949)
     xf_new = hx_state * xf_prev + eta_x * eps_t
+    y_t = ny > 0 ? (gx_state * xf_prev + eta_y * eps_t) : zeros(T, 0)
 
     # Build augmented vector vf = [xf_prev; eps_t]
     vf = zeros(T, nv)
@@ -455,6 +456,17 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
         end
         if nss.hsigmasigma !== nothing
             xs_new += T(0.5) * nss.hsigmasigma
+        end
+
+        # Second-order control terms on lagged xs_prev and vf = [xf_prev; eps_t]
+        if ny > 0
+            y_t += gx_state * xs_prev
+            if nss.gxx !== nothing && !isempty(kron_vf)
+                y_t += T(0.5) * nss.gxx * kron_vf
+            end
+            if nss.gsigmasigma !== nothing
+                y_t += T(0.5) * nss.gsigmasigma
+            end
         end
 
         if nss.order >= 3
@@ -479,53 +491,28 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
             if nss.hsigmasigmasigma !== nothing
                 xrd_new += (one(T) / T(6)) * nss.hsigmasigmasigma
             end
+
+            # Third-order control terms on lagged (xrd_prev, xs_prev, vf)
+            if ny > 0
+                y_t += gx_state * xrd_prev
+                if nss.gxx !== nothing && !isempty(kron_vf_vs)
+                    y_t += nss.gxx * kron_vf_vs
+                end
+                if nss.gxxx !== nothing && !isempty(kron3_vf)
+                    y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf
+                end
+                if nss.gsigmax !== nothing
+                    y_t += T(0.5) * nss.gsigmax * vf
+                end
+                if nss.gsigmasigmasigma !== nothing
+                    y_t += (one(T) / T(6)) * nss.gsigmasigmasigma
+                end
+            end
         end
     end
 
     # Total state
     x_total = xf_new + xs_new + xrd_new
-
-    # Controls
-    y_t = gx_state * x_total + eta_y * eps_t
-
-    if nss.order >= 2 && nss.gxx !== nothing
-        # Build vf_new = [xf_new; eps_t] for control Kronecker products
-        vf_new = zeros(T, nv)
-        if nx > 0
-            vf_new[1:nx] = xf_new
-        end
-        vf_new[nx+1:nv] = eps_t
-        kron_vf_new = kron(vf_new, vf_new)
-
-        if nss.order >= 3
-            vs_new = zeros(T, nv)
-            if nx > 0
-                vs_new[1:nx] = xs_new
-            end
-            kron_vfvs_new = kron(vf_new, vs_new)
-            y_t += T(0.5) * nss.gxx * (kron_vf_new + T(2) * kron_vfvs_new)
-        else
-            y_t += T(0.5) * nss.gxx * kron_vf_new
-        end
-
-        if nss.gsigmasigma !== nothing
-            y_t += T(0.5) * nss.gsigmasigma
-        end
-
-        if nss.order >= 3
-            kron3_vf_new = kron(vf_new, kron_vf_new)
-
-            if nss.gxxx !== nothing
-                y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf_new
-            end
-            if nss.gsigmax !== nothing
-                y_t += T(0.5) * nss.gsigmax * vf_new
-            end
-            if nss.gsigmasigmasigma !== nothing
-                y_t += (one(T) / T(6)) * nss.gsigmasigmasigma
-            end
-        end
-    end
 
     return xf_new, xs_new, xrd_new, x_total, y_t
 end
@@ -672,13 +659,13 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
         # Propagate through pruned nonlinear transition
         _pf_transition_pruned!(ws, nss)
 
-        # Compute log weights
+        # Compute log weights into scratch buffer so carried non-uniform weights are preserved (#128 / #949)
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, nss.Z, nss.d, nss.H_inv, nss.log_det_H)
 
-        # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        # Accumulate log-likelihood (ratio-form increment, unbiased when adaptive resampling skips)
+        log_lik += _pf_increment!(ws)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)

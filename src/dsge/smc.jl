@@ -220,17 +220,45 @@ If ESS at `phi = 1.0` exceeds the target, returns `1.0` (final step). Maximum
 # Returns
 `phi_new::T` — next tempering parameter in `(phi_old, 1.0]`.
 """
+# Safe incremental tempering log-weight avoiding IEEE-754 `0 * (-Inf) == NaN` (#950).
+@inline function _safe_temper_inc(delta_phi::T, ll::T) where {T<:AbstractFloat}
+    return isfinite(ll) ? delta_phi * ll : (delta_phi > zero(T) ? T(-Inf) : zero(T))
+end
+
 function _adaptive_tempering(log_liks::AbstractVector{T}, log_weights::AbstractVector{T},
                               phi_old::T, ess_target::Real, N::Int) where {T<:AbstractFloat}
-    target_ess = T(ess_target) * N
+    # Identify particles with finite cumulative weight and finite log-likelihood (#950).
+    lw_active = T[]
+    @inbounds for j in 1:N
+        if isfinite(log_weights[j]) && isfinite(log_liks[j])
+            push!(lw_active, log_weights[j])
+        end
+    end
+    isempty(lw_active) && return phi_old
+
+    # Effective ESS ceiling as Δφ → 0⁺ once -Inf particles receive zero weight.
+    a0 = _logsumexp(lw_active)
+    b0 = _logsumexp(T(2) .* lw_active)
+    ess_0plus = isfinite(a0) ? exp(T(2) * a0 - b0) : zero(T)
+
+    # Normal case: active support exceeds ess_target * N → standard target.
+    # High-indeterminacy case (e.g., 60–80% of prior draws are indeterminate at φ=0):
+    # bisect relative to the surviving valid support ceiling so Δφ advances cleanly,
+    # resampling then eliminates all -Inf particles and ΔlogML captures log P(valid).
+    nominal_target = T(ess_target) * N
+    target_ess = ess_0plus > nominal_target ? nominal_target :
+                 max(one(T), T(ess_target) * ess_0plus)
 
     # Helper: ESS of the updated cumulative weights at a given phi.
+    lw_buf = Vector{T}(undef, N)
     function _compute_ess(phi)
         delta_phi = phi - phi_old
-        lw = log_weights .+ delta_phi .* log_liks
-        a = _logsumexp(lw)
+        @inbounds for j in 1:N
+            lw_buf[j] = log_weights[j] + _safe_temper_inc(delta_phi, log_liks[j])
+        end
+        a = _logsumexp(lw_buf)
         isfinite(a) || return zero(T)            # all weights collapsed
-        b = _logsumexp(T(2) .* lw)
+        b = _logsumexp(T(2) .* lw_buf)
         return exp(T(2) * a - b)
     end
 
@@ -585,6 +613,11 @@ function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
         log_likelihoods[j] = ll_fn(theta_particles[:, j])
     end
 
+    if all(!isfinite, log_likelihoods)
+        error("SMC initialization failed: all $N prior particles produced non-finite " *
+              "log-likelihoods (-Inf). Check model determinacy, prior support, or data scaling.")
+    end
+
     # Initialize SMC state
     state = SMCState{T}(
         theta_particles,
@@ -611,28 +644,19 @@ function _smc_from_likelihood(ll_fn, param_names::Vector{Symbol},
 
     while phi < one(T)
         stage += 1
-        # Find next tempering parameter
-        # Only use particles with finite log-likelihoods for tempering
-        valid_lls = copy(state.log_likelihoods)
-        for j in 1:N
-            if !isfinite(valid_lls[j])
-                valid_lls[j] = T(-1e10)  # large negative but finite
-            end
+        if all(!isfinite, state.log_likelihoods)
+            error("SMC tempering failed at stage $stage (φ=$phi): all $N particles have " *
+                  "non-finite log-likelihoods (-Inf).")
         end
 
-        phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
+        # Find next tempering parameter using true -Inf likelihoods (no -1e10 sentinel; #950)
+        phi_new = _adaptive_tempering(state.log_likelihoods, state.log_weights, phi, ess_target, N)
         # Abort a degenerate-likelihood stall before paying for the expensive mutation (#145).
         _check_tempering_progress(stage, max_stages, phi, phi_new, min_step)
         delta_phi = phi_new - phi
 
-        # Compute incremental log weights
-        inc_log_w = delta_phi .* state.log_likelihoods
-        # Handle -Inf likelihoods
-        for j in 1:N
-            if !isfinite(inc_log_w[j])
-                inc_log_w[j] = T(-1e10)
-            end
-        end
+        # Compute incremental log weights (preserving true -Inf for failed/indeterminate draws)
+        inc_log_w = T[_safe_temper_inc(delta_phi, state.log_likelihoods[j]) for j in 1:N]
 
         # Update log marginal likelihood with the ratio increment (E-08 / #131):
         #   ΔlogML = logsumexp(log_weights + inc) − logsumexp(log_weights)
@@ -1078,17 +1102,83 @@ the outer θ-weights are not a mix of estimates computed at two different `N_x`.
 function _exchange_step!(state::SMCState{T}, spec::ModelSpec{T},
         param_names::Vector{Symbol}, observables::Vector{Symbol}, measurement_error,
         solver::Symbol, solver_kwargs::NamedTuple, pool::Vector{PFWorkspace{T}},
-        data::Matrix{T}, T_obs::Int, rng::AbstractRNG) where {T<:AbstractFloat}
+        data::Matrix{T}, T_obs::Int, rng::AbstractRNG;
+        phi::Real=(isempty(state.phi_schedule) ? one(T) : state.phi_schedule[end]),
+        ess_target::Real=0.5,
+        solutions::Union{Nothing,Vector{Any}}=nothing,
+        ll_cheap::Union{Nothing,Vector{T}}=nothing,
+        failures::Threads.Atomic{Int}=Threads.Atomic{Int}(0),
+        evals::Threads.Atomic{Int}=Threads.Atomic{Int}(0)) where {T<:AbstractFloat}
     N = size(state.theta_particles, 2)
+    ll_old = copy(state.log_likelihoods)
+    ll_new = fill(T(-Inf), N)
     ranges = _chunk_ranges(N, length(pool))
     seeds = [hash((:exchange, j, rand(rng, UInt64))) for j in 1:N]
     Threads.@threads for c in eachindex(ranges)
         ws = pool[c]
         for j in ranges[c]
             rr = Random.Xoshiro(seeds[j])
-            state.log_likelihoods[j] = _solve_and_run_pf(spec, param_names,
+            ll_new[j] = _solve_and_run_pf(spec, param_names,
                 Vector{T}(state.theta_particles[:, j]), observables, measurement_error,
-                solver, solver_kwargs, ws, data, T_obs, rr)
+                solver, solver_kwargs, ws, data, T_obs, rr;
+                failures=failures, evals=evals)
+        end
+    end
+    state.log_likelihoods .= ll_new
+
+    # Chopin, Jacob & Papaspiliopoulos (2013 §3.4) exact exchange importance weights (#950):
+    #   Δlog W_j = φ · (log Ẑ_{N_new}(θ_j, u_new) - log Ẑ_{N_old}(θ_j, u_old))
+    phi_T = T(phi)
+    delta_lw = Vector{T}(undef, N)
+    @inbounds for j in 1:N
+        if phi_T == zero(T)
+            delta_lw[j] = zero(T)
+        elseif !isfinite(ll_new[j]) || !isfinite(ll_old[j])
+            delta_lw[j] = T(-Inf)
+        else
+            delta_lw[j] = phi_T * (ll_new[j] - ll_old[j])
+        end
+    end
+
+    lse_old = _logsumexp(state.log_weights)
+    new_lw = state.log_weights .+ delta_lw
+    lse_new = _logsumexp(new_lw)
+    if isfinite(lse_new) && isfinite(lse_old)
+        state.log_marginal_likelihood += lse_new - lse_old
+    else
+        state.log_marginal_likelihood = T(-Inf)
+    end
+    state.log_weights .= new_lw
+
+    # Resample if exchange weights collapse ESS below ess_target * N
+    if isfinite(lse_new)
+        weights_norm = Vector{T}(undef, N)
+        _normalize_log_weights!(weights_norm, state.log_weights)
+        ess = one(T) / sum(abs2, weights_norm)
+        if isfinite(ess) && ess < T(ess_target) * N
+            ancestors = collect(1:N)
+            cumweights = zeros(T, N)
+            _systematic_resample!(ancestors, weights_norm, cumweights, N, rng)
+
+            theta_rs = similar(state.theta_particles)
+            ll_rs = similar(state.log_likelihoods)
+            lp_rs = similar(state.log_priors)
+            sol_rs = solutions === nothing ? nothing : Vector{Any}(undef, N)
+            llc_rs = ll_cheap === nothing ? nothing : similar(ll_cheap)
+            @inbounds for j in 1:N
+                a = ancestors[j]
+                theta_rs[:, j] = state.theta_particles[:, a]
+                ll_rs[j] = state.log_likelihoods[a]
+                lp_rs[j] = state.log_priors[a]
+                sol_rs !== nothing && (sol_rs[j] = solutions[a])
+                llc_rs !== nothing && (llc_rs[j] = ll_cheap[a])
+            end
+            state.theta_particles .= theta_rs
+            state.log_likelihoods .= ll_rs
+            state.log_priors .= lp_rs
+            sol_rs !== nothing && (solutions .= sol_rs)
+            llc_rs !== nothing && (ll_cheap .= llc_rs)
+            fill!(state.log_weights, -log(T(N)))
         end
     end
     return nothing
@@ -1485,6 +1575,11 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         end
     end
 
+    if all(!isfinite, log_likelihoods)
+        error("SMC² initialization failed: all $N prior particles produced non-finite " *
+              "log-likelihoods (-Inf). Check model determinacy, prior support, measurement_error, or data scaling.")
+    end
+
     # Initialize SMC state
     state = SMCState{T}(
         theta_particles,
@@ -1511,26 +1606,19 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
 
     while phi < one(T)
         stage += 1
-        # Find next tempering parameter
-        valid_lls = copy(state.log_likelihoods)
-        for j in 1:N
-            if !isfinite(valid_lls[j])
-                valid_lls[j] = T(-1e10)
-            end
+        if all(!isfinite, state.log_likelihoods)
+            error("SMC² tempering failed at stage $stage (φ=$phi): all $N particles have " *
+                  "non-finite log-likelihoods (-Inf).")
         end
 
-        phi_new = _adaptive_tempering(valid_lls, state.log_weights, phi, ess_target, N)
+        # Find next tempering parameter using true -Inf likelihoods (no -1e10 sentinel; #950)
+        phi_new = _adaptive_tempering(state.log_likelihoods, state.log_weights, phi, ess_target, N)
         # Abort a degenerate-likelihood stall before paying for the expensive PF mutation (#145).
         _check_tempering_progress(stage, max_stages, phi, phi_new, min_step)
         delta_phi = phi_new - phi
 
-        # Compute incremental log weights
-        inc_log_w = delta_phi .* state.log_likelihoods
-        for j in 1:N
-            if !isfinite(inc_log_w[j])
-                inc_log_w[j] = T(-1e10)
-            end
-        end
+        # Compute incremental log weights (preserving true -Inf for failed/indeterminate draws)
+        inc_log_w = T[_safe_temper_inc(delta_phi, state.log_likelihoods[j]) for j in 1:N]
 
         # Update log marginal likelihood with the ratio increment (E-08 / #131):
         #   ΔlogML = logsumexp(log_weights + inc) − logsumexp(log_weights)
@@ -1638,7 +1726,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                         solver_kwargs
                     end
 
-                    if delayed_acceptance
+                    if delayed_acceptance && isfinite(ll_cheap[j])
                         # ── Two-stage delayed acceptance (Christen & Fox 2005) on top of PMMH ──
                         # Stage 1: cheap bootstrap-PF screen.
                         ll_cheap_star = _solve_and_run_pf(
@@ -1673,8 +1761,9 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                         end
 
                         # Stage 2 acceptance ratio (delayed-acceptance correction term)
-                        log_alpha_2 = phi_new * (ll_star - ll_cheap_star) -
-                                      phi_new * (ll_j - ll_cheap[j])
+                        log_alpha_2 = isfinite(ll_j) ?
+                            (phi_new * (ll_star - ll_cheap_star) - phi_new * (ll_j - ll_cheap[j])) :
+                            T(Inf)
 
                         if log(rand(thread_rng, T)) < log_alpha_2
                             theta_j = theta_star
@@ -1687,7 +1776,7 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                             Threads.atomic_add!(total_accepted, 1)
                         end
                     else
-                        # ── Standard single-stage PMMH: fresh unconditional bootstrap PF ──
+                        # ── Standard single-stage PMMH (also fallback when DA has ll_cheap[j] == -Inf; #950) ──
                         ll_star, sol_star = _solve_and_run_pf(
                             spec, param_names, theta_star, observables, measurement_error,
                             solver, mh_solver_kwargs, ws, data, T_obs, thread_rng;
@@ -1700,7 +1789,9 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                         end
 
                         # PMMH acceptance: unbiased PF estimate for θ* vs stored incumbent for θ_j.
-                        log_alpha = (phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)
+                        log_alpha = isfinite(ll_j) ?
+                            ((phi_new * ll_star + lp_star) - (phi_new * ll_j + lp_j)) :
+                            T(Inf)
 
                         if log(rand(thread_rng, T)) < log_alpha
                             theta_j = theta_star
@@ -1708,6 +1799,11 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                             lp_j = lp_star
                             if sol_star isa ProjectionSolution
                                 solutions[j] = sol_star
+                            end
+                            if delayed_acceptance
+                                ll_cheap[j] = _solve_and_run_pf(
+                                    spec, param_names, theta_star, observables, measurement_error,
+                                    solver, mh_solver_kwargs, ws_screen, data, T_obs, thread_rng)
                             end
                             Threads.atomic_add!(total_accepted, 1)
                         end
@@ -1747,10 +1843,13 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                 for ws in pool
                     _resize_pf_workspace!(ws, N_x)
                 end
-                # Exchange step: recompute ALL θ-likelihoods at the new N_x so the outer
-                # weights are not a mix of estimates from two different N_x (no stale values).
+                # Exchange step: recompute ALL θ-likelihoods at the new N_x with exact Chopin (2013) weights (#950).
                 _exchange_step!(state, spec, param_names, observables, measurement_error,
-                    solver, solver_kwargs, pool, data, T_obs, rng)
+                    solver, solver_kwargs, pool, data, T_obs, rng;
+                    phi=phi_new, ess_target=ess_target,
+                    solutions=solutions,
+                    ll_cheap=(delayed_acceptance ? ll_cheap : nothing),
+                    failures=lik_failures, evals=lik_evals)
             end
         end
 

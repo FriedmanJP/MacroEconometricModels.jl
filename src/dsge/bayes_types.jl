@@ -365,7 +365,7 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
                                  proj_max_degree::Int=0, proj_n_vars::Int=0) where {T<:AbstractFloat}
     particles = zeros(T, n_states, N)
     particles_new = zeros(T, n_states, N)
-    log_weights = zeros(T, N)
+    log_weights = fill(-log(T(N)), N)
     weights = fill(one(T) / N, N)
     ancestors = collect(1:N)
     cumweights = zeros(T, N)
@@ -419,7 +419,7 @@ function _resize_pf_workspace!(ws::PFWorkspace{T}, N_new::Int) where {T}
 
     ws.particles = zeros(T, n_states, N_new)
     ws.particles_new = zeros(T, n_states, N_new)
-    ws.log_weights = zeros(T, N_new)
+    ws.log_weights = fill(-log(T(N_new)), N_new)
     ws.weights = fill(one(T) / N_new, N_new)
     ws.ancestors = collect(1:N_new)
     ws.cumweights = zeros(T, N_new)
