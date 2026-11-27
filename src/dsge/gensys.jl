@@ -239,14 +239,12 @@ function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:
     end
 
     if method == :gensys
-        ld = linearize(spec)
+        # Compute f_0, f_1, f_lead, f_ε exactly once and reuse across QZ + UC (#947).
+        ld, f_lead = _linearize_with_lead(spec)
 
-        # Recover f_0,f_1,f_ε from the canonical form (as klein/bk do); f_lead is
-        # not stored losslessly in ld.Pi, so compute it directly.
         f_0 = ld.Gamma0
         f_1 = -ld.Gamma1
         f_ε = -ld.Psi
-        f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
 
         div = T(get(kwargs, :div, 1 + 1e-8))
         cluster_tol = T(get(kwargs, :cluster_tol, 1e-6))
@@ -262,7 +260,8 @@ function solve(spec::ModelSpec{T}; method::Symbol=:gensys, kwargs...) where {T<:
         uc_ok = false
         local uc_result
         try
-            uc_result = _solve_undetermined_coefficients(spec)
+            uc_result = _solve_undetermined_coefficients(spec; f_0=f_0, f_1=f_1,
+                                                         f_lead=f_lead, f_eps=f_ε)
             resid = (f_0 + f_lead * uc_result.G1) * uc_result.G1 + f_1
             uc_ok = maximum(abs.(resid)) < T(1e-8) && uc_result.converged &&
                     maximum(abs.(eigvals(uc_result.G1)); init=zero(T)) < div

@@ -20,7 +20,7 @@ Rearranging into Sims form: `Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η
 
 Requires `compute_steady_state` to have been called first.
 """
-function linearize(spec::ModelSpec{T}) where {T<:AbstractFloat}
+function _linearize_with_lead(spec::ModelSpec{T}) where {T<:AbstractFloat}
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
 
@@ -31,52 +31,38 @@ function linearize(spec::ModelSpec{T}) where {T<:AbstractFloat}
     θ = spec.param_values
     ε_zero = zeros(T, n_ε)
 
-    # Compute numerical Jacobians via central differences
+    # Compute numerical Jacobians via central differences (each computed once; #947)
     f_0 = _dsge_jacobian(spec, y_ss, :current)     # n × n
     f_1 = _dsge_jacobian(spec, y_ss, :lag)          # n × n
     f_lead = _dsge_jacobian(spec, y_ss, :lead)      # n × n
     f_ε = _dsge_jacobian_shocks(spec, y_ss)         # n × n_ε
 
-    # Sims canonical form: Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t
-    # From the first-order expansion: f_0·ŷ_t + f_1·ŷ_{t-1} + f_lead·ŷ_{t+1} + f_ε·ε = 0
-    # Rearranging to isolate ŷ_t: f_0·ŷ_t = -f_1·ŷ_{t-1} - f_ε·ε - f_lead·ŷ_{t+1}
-    # Under RE: ŷ_{t+1} = E_t[ŷ_{t+1}] + η_{t+1}, so f_lead·ŷ_{t+1} = f_lead·(…+η)
-    # The gensys form Γ₀·y_t = Γ₁·y_{t-1} + Ψ·ε_t + Π·η_t captures:
-    # Matching: Γ₀ = f_0, Γ₁ = -f_1, Ψ = -f_ε, Π = -f_lead columns for forward vars
-
     Gamma0 = f_0                            # n × n
     Gamma1 = -f_1                           # n × n
     Psi = -f_ε                              # n × n_ε
 
-    # Compute constant vector C
-    # For nonlinear models: f(y_ss, y_ss, y_ss, 0, θ) = 0 at SS, so C = 0
-    # For linear models with constants (e.g., measurement eqs): residual at SS is nonzero
     if spec.linear
-        # Evaluate residual at SS to capture constant terms
         resid_ss = zeros(T, n)
         for i in 1:n
             resid_ss[i] = spec.residual_fns[i](y_ss, y_ss, y_ss, ε_zero, θ)
         end
-        C = -resid_ss  # Sims form: Γ₀·y = Γ₁·y_{-1} + C + ..., so C = -f(y_ss,...)
+        C = -resid_ss
     else
-        C = zeros(T, n)  # zero at true SS by construction
+        C = zeros(T, n)
     end
 
-    # Π: select columns of -f_lead corresponding to forward-looking variables
+    # Π: select columns of -f_lead corresponding to forward-looking variables (reusing f_lead; #947)
     if n_η > 0
-        fwd_var_indices = _forward_variable_indices(spec)
-        # #223 ([T124]): the Jacobian probe and the parser catalog must agree —
-        # both count DISTINCT lead variables (n_expect == size(Π, 2)). The probe
-        # stays as the construction layer (it also catches hand-built residual
-        # fns whose exprs carry substituted-out leads); the parser catalog is
-        # the static layer used for display and validation.
+        fwd_var_indices = _forward_variable_indices(spec, f_lead)
         Pi = -f_lead[:, fwd_var_indices]    # n × n_η
     else
         Pi = zeros(T, n, 0)
     end
 
-    LinearDSGE{T}(Gamma0, Gamma1, C, Psi, Pi, spec)
+    return LinearDSGE{T}(Gamma0, Gamma1, C, Psi, Pi, spec), f_lead
 end
+
+linearize(spec::ModelSpec{T}) where {T<:AbstractFloat} = first(_linearize_with_lead(spec))
 
 """Compute Jacobian of residual vector w.r.t. y_t, y_{t-1}, or y_{t+1}."""
 function _dsge_jacobian(spec::ModelSpec{T}, y_ss::Vector{T}, which::Symbol) where {T}
@@ -136,19 +122,18 @@ function _dsge_jacobian_shocks(spec::ModelSpec{T}, y_ss::Vector{T}) where {T}
 end
 
 """Find indices of endogenous variables that appear with [t+1] in any equation."""
-function _forward_variable_indices(spec::ModelSpec{T}) where {T}
-    fwd_vars = Set{Int}()
+function _forward_variable_indices(spec::ModelSpec{T}, f_lead::AbstractMatrix{T}) where {T}
     n = spec.n_endog
-    y_ss = spec.steady_state
-    θ = spec.param_values
-    ε_zero = zeros(T, spec.n_exog)
-
-    # Use the Jacobian approach: any variable where ∂f/∂y_lead is non-zero
-    f_lead = _dsge_jacobian(spec, y_ss, :lead)
+    fwd_vars = Int[]
     for j in 1:n
         if any(abs(f_lead[i, j]) > T(1e-10) for i in 1:n)
             push!(fwd_vars, j)
         end
     end
-    sort(collect(fwd_vars))
+    return fwd_vars
+end
+
+function _forward_variable_indices(spec::ModelSpec{T}) where {T}
+    f_lead = _dsge_jacobian(spec, spec.steady_state, :lead)
+    return _forward_variable_indices(spec, f_lead)
 end

@@ -445,16 +445,51 @@ end
 # Random Orthogonal Matrix
 # =============================================================================
 
-"""Generate random orthogonal matrix via QR decomposition (Haar measure)."""
+"""Generate random orthogonal matrix via QR decomposition (Haar measure).
+
+For small `n ≤ 16`, uses in-place pure-Julia re-orthogonalized modified Gram-Schmidt
+(exact Mezzadri 2007 Haar measure with positive `R` diagonal) to avoid OpenBLAS/LAPACK
+mutex contention inside multi-threaded BVAR sign-restriction loops (#945)."""
 function generate_Q(n::Int, ::Type{T}=Float64; rng::AbstractRNG=Random.default_rng(),
                     seed::Union{Integer,Nothing}=nothing) where {T<:AbstractFloat}
     rng = _resolve_repro_rng(rng, seed)
     X = randn(rng, T, n, n)
-    Q, R = qr(X)
+    if n <= 16
+        Q = copy(X)
+        ok = true
+        @inbounds for j in 1:n
+            # Two passes of modified Gram-Schmidt for machine-precision orthogonality
+            for _ in 1:2
+                for k in 1:(j - 1)
+                    dot_kj = zero(T)
+                    @simd for i in 1:n
+                        dot_kj += Q[i, k] * Q[i, j]
+                    end
+                    @simd for i in 1:n
+                        Q[i, j] -= dot_kj * Q[i, k]
+                    end
+                end
+            end
+            nrm2 = zero(T)
+            @simd for i in 1:n
+                nrm2 += Q[i, j] * Q[i, j]
+            end
+            if !(nrm2 > zero(T)) || !isfinite(nrm2)
+                ok = false
+                break
+            end
+            inv_nrm = one(T) / sqrt(nrm2)
+            @simd for i in 1:n
+                Q[i, j] *= inv_nrm
+            end
+        end
+        ok && return Q
+    end
+    Q_fac, R = qr(X)
     # Sign-normalize columns by the QR pivots. Use an explicit ±1 map (not `sign`, whose
     # sign(0.0)=0.0 would zero an entire rotation column when a pivot is exactly 0).
     d = [r < zero(T) ? -one(T) : one(T) for r in diag(R)]
-    Matrix(Q) * Diagonal(d)
+    Matrix(Q_fac) * Diagonal(d)
 end
 
 """Haar-uniform draw from O(n); alias of [`generate_Q`](@ref)."""
@@ -549,12 +584,49 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
         _default_shock_names(n)
     end
 
+    # Precompute reduced-form MA * Cholesky factor Phi_L[h] = Phi[h] * L once per model
+    # (independent of Q), avoiding redundant Cholesky + MA recursion + BLAS lock contention
+    # across up to `max_draws` candidate rotations (#945).
+    p = model.p
+    L_chol = Matrix{T}(safe_cholesky(model.Sigma))
+    A = extract_ar_coefficients(model.B, n, p)
+    Phi = [zeros(T, n, n) for _ in 1:horizon]
+    Phi_L = [zeros(T, n, n) for _ in 1:horizon]
+    copyto!(Phi[1], I(n))
+    copyto!(Phi_L[1], L_chol)
+    temp = zeros(T, n, n)
+    scratch = zeros(T, n, n)
+    @inbounds for h in 2:horizon
+        fill!(temp, zero(T))
+        for j in 1:min(p, h - 1)
+            mul!(scratch, A[j], Phi[h - j])
+            temp .+= scratch
+        end
+        Phi[h] .= temp
+        mul!(Phi_L[h], temp, L_chol)
+    end
+
+    @inline function _fill_rotated_irf!(irf_buf::Array{T,3}, Q::Matrix{T})
+        @inbounds for h in 1:horizon
+            M = Phi_L[h]
+            for j in 1:n, i in 1:n
+                s = zero(T)
+                @simd for k in 1:n
+                    s += M[i, k] * Q[k, j]
+                end
+                irf_buf[h, i, j] = s
+            end
+        end
+        return irf_buf
+    end
+
     if !store_all
         # Original behavior: return first valid Q
+        irf_buf = Array{T,3}(undef, horizon, n, n)
         for _ in 1:max_draws
             Q = generate_Q(n, T; rng=rng)
-            irf_result = compute_irf(model, Q, horizon)
-            check_func(irf_result) && return Q, irf_result
+            _fill_rotated_irf!(irf_buf, Q)
+            check_func(irf_buf) && return Q, irf_buf
         end
         throw(IdentificationError("No valid Q found after $max_draws draws"))
     end
@@ -562,13 +634,14 @@ function identify_sign(model::VARModel{T}, horizon::Int, check_func::Function;
     # Full identified set: collect ALL valid rotations
     accepted_Q = Matrix{T}[]
     accepted_irf_list = Array{T,3}[]
+    irf_buf = Array{T,3}(undef, horizon, n, n)
 
     for _ in 1:max_draws
         Q = generate_Q(n, T; rng=rng)
-        irf_result = compute_irf(model, Q, horizon)
-        if check_func(irf_result)
+        _fill_rotated_irf!(irf_buf, Q)
+        if check_func(irf_buf)
             push!(accepted_Q, Q)
-            push!(accepted_irf_list, irf_result)
+            push!(accepted_irf_list, copy(irf_buf))
         end
     end
 

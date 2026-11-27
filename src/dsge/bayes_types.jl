@@ -114,8 +114,13 @@ struct DSGEStateSpace{T<:AbstractFloat}
         @assert size(G1, 1) == size(G1, 2) "G1 must be square"
         @assert size(Z, 2) == size(G1, 1) "Z columns must match G1 dimension"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(G1, impact, Z, d, H, Q, H_inv, log_det_H)
     end
 end
@@ -196,8 +201,13 @@ struct NonlinearStateSpace{T<:AbstractFloat}
         n_obs = size(Z, 1)
         @assert size(H) == (n_obs, n_obs) "H must be n_obs x n_obs"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(hx, gx, eta, steady_state, state_indices, control_indices, order,
                hxx, gxx, hsigmasigma, gsigmasigma,
                hxxx, gxxx, hsigmax, gsigmax, hsigmasigmasigma, gsigmasigmasigma,
@@ -257,8 +267,13 @@ struct ProjectionStateSpace{T<:AbstractFloat}
         n_obs = size(Z, 1)
         @assert size(H) == (n_obs, n_obs) "H must be n_obs × n_obs"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(coefficients, multi_indices, max_degree,
                steady_state, state_indices, control_indices,
                impact, state_bounds, scale, shift,

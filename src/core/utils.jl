@@ -368,3 +368,76 @@ function _weights_are_uniform(w::AbstractVector)
     end
     true
 end
+
+# =============================================================================
+# Scoped Single-Thread BLAS & Dynamic Work-Stealing Pool (#945, #947, #948)
+# =============================================================================
+
+const _BLAS_PIN_LOCK = ReentrantLock()
+const _BLAS_PIN_DEPTH = Ref(0)
+const _BLAS_PREV_THREADS = Ref(1)
+
+"""
+    _with_single_blas_thread(f)
+
+Execute `f()` with `BLAS.set_num_threads(1)` whenever `Threads.nthreads() > 1`,
+restoring the previous BLAS thread count on exit. Reentrant and safe under
+concurrent tasks (refcounted behind a lock) so nested or parallel callers never
+race on `BLAS.set_num_threads`.
+"""
+function _with_single_blas_thread(f::F) where {F}
+    lock(_BLAS_PIN_LOCK)
+    try
+        if _BLAS_PIN_DEPTH[] == 0
+            prev = BLAS.get_num_threads()
+            _BLAS_PREV_THREADS[] = prev
+            prev > 1 && BLAS.set_num_threads(1)
+        end
+        _BLAS_PIN_DEPTH[] += 1
+    finally
+        unlock(_BLAS_PIN_LOCK)
+    end
+    try
+        return f()
+    finally
+        lock(_BLAS_PIN_LOCK)
+        try
+            _BLAS_PIN_DEPTH[] -= 1
+            if _BLAS_PIN_DEPTH[] == 0 && _BLAS_PREV_THREADS[] > 1
+                BLAS.set_num_threads(_BLAS_PREV_THREADS[])
+            end
+        finally
+            unlock(_BLAS_PIN_LOCK)
+        end
+    end
+end
+
+"""
+    _parallel_for_worksteal(f, N::Int; n_workers::Int=Threads.nthreads())
+
+Julia 1.10+-compatible dynamic work-stealing loop over `1:N`. Calls `f(j, w)`
+where `j ∈ 1:N` is the item index and `w ∈ 1:nw` is a stable worker-slot index
+owned exclusively by one task for the entire run (never `Threads.threadid()`),
+eliminating static-chunk stragglers and `threadid()` migration hazards.
+"""
+function _parallel_for_worksteal(f::F, N::Int; n_workers::Int=Threads.nthreads()) where {F}
+    N <= 0 && return nothing
+    nw = min(max(n_workers, 1), N)
+    if nw <= 1
+        for j in 1:N
+            f(j, 1)
+        end
+        return nothing
+    end
+    next_j = Threads.Atomic{Int}(1)
+    @sync for w in 1:nw
+        Threads.@spawn begin
+            while true
+                j = Threads.atomic_add!(next_j, 1)
+                j > N && break
+                f(j, w)
+            end
+        end
+    end
+    return nothing
+end

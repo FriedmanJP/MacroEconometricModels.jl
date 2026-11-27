@@ -22,16 +22,33 @@ using LinearAlgebra, Statistics
 # Posterior Sample Processing
 # =============================================================================
 
+# Explicit allowlist of per-draw BVAR identification methods safe for outer-loop
+# `Threads.@threads :dynamic` parallelization (#945). Methods that call non-thread-safe
+# C libraries (NLopt, e.g., :robust_bayes) or already spawn heavy internal threading
+# (:arias, :uhlig, :markov_switching) stay outer-serial.
+const _PARALLEL_SAFE_BVAR_ID_METHODS = (
+    :cholesky, :sign, :narrative, :long_run,
+    :fastica, :jade, :sobi, :dcov, :hsic, :cvm,
+    :student_t, :mixture_normal, :mixture_normal_asym, :pml, :skew_normal,
+    :lms, :gmm_moments, :lewis_tvv, :sv_em,
+    :garch, :smooth_transition, :external_volatility,
+)
+
+@inline _is_parallel_safe_bvar_id_method(method::Symbol) = method in _PARALLEL_SAFE_BVAR_ID_METHODS
+
 """
     process_posterior_samples(post::BVARPosterior, compute_func::Function;
                               data, method, horizon, check_func, narrative_check,
-                              max_draws, transition_var, regime_indicator) -> (Vector, Int)
+                              max_draws, transition_var, regime_indicator,
+                              threaded=true, rng=Random.default_rng()) -> (Vector, Int)
 
 Generic framework for processing posterior samples from BVARPosterior.
 
 # Process
 1. Extract chain parameters using `extract_chain_parameters`
-2. Loop over samples, reconstructing VARModel for each
+2. Loop over samples (in parallel via `Threads.@threads :dynamic` with pre-generated
+   per-draw `Xoshiro` seeds when `threaded=true && Threads.nthreads() > 1` and `method`
+   is parallel-safe, producing bit-identical results across thread counts)
 3. Skip non-stationary draws (counted separately from identification failures)
 4. Compute identification matrix Q using specified method
 5. Apply `compute_func(model, Q, horizon)` to get result for each sample
@@ -50,6 +67,12 @@ Generic framework for processing posterior samples from BVARPosterior.
 - `max_draws::Int`: Maximum draws for sign/narrative identification
 - `transition_var`: Transition variable (for method=:smooth_transition)
 - `regime_indicator`: Regime indicator (for method=:external_volatility)
+- `threaded::Bool=true`: Parallelize across posterior draws when `Threads.nthreads() > 1`
+  and `method` is thread-safe. For optimal multi-core scaling on small `n × n` matrix loops,
+  pair `Threads.nthreads() > 1` with `BLAS.set_num_threads(1)` (or `OPENBLAS_NUM_THREADS=1`);
+  this routine also scopes single-thread BLAS automatically around its parallel region.
+- `rng::AbstractRNG=Random.default_rng()`: RNG used to generate thread-count-invariant
+  per-draw `Xoshiro` seeds
 
 # Returns
 - `results::Vector`: Vector of results from `compute_func` for each valid sample; the element type is
@@ -76,6 +99,8 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     regime_indicator::Union{Nothing,AbstractVector{Int}}=nothing,
     restrictions=nothing,
     normalize=nothing, shock_size=nothing,  # peeled: never forwarded to compute_Q
+    threaded::Bool=true,
+    rng::AbstractRNG=Random.default_rng(),
     kwargs...
 )
     use_data = isempty(data) ? post.data : data
@@ -99,7 +124,7 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
             Q_mean = compute_Q(m_mean, method; horizon=horizon, check_func=check_func,
                                narrative_check=narrative_check, restrictions=restrictions,
                                max_draws=max_draws, transition_var=transition_var,
-                               regime_indicator=regime_indicator, kwargs...)
+                               regime_indicator=regime_indicator, rng=rng, kwargs...)
             P_ref = Matrix{T}(safe_cholesky(m_mean.Sigma) * Q_mean)
         catch e
             e isa IdentificationError || rethrow(e)
@@ -107,40 +132,72 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
         end
     end
 
-    # Concrete-typed result container: `compute_func` returns the same concrete type for every
-    # draw (e.g. `Array{T,3}` from core/irf.jl and core/fevd.jl, consumed by
-    # `stack_posterior_results`), so infer the element type from the first valid result instead
-    # of boxing everything into a `Vector{Any}`. (#210 box A)
-    local results
-    valid_count = 0
-    n_unidentified = 0
-    n_nonstationary = 0
+    # Pre-generate per-draw seeds sequentially before the loop so serial (threaded=false)
+    # and multi-threaded (threaded=true, any thread count) runs are 100% bit-identical (#945).
+    seeds = rand(rng, UInt64, samples)
+    # Status per draw: 0 = ok, 1 = non-stationary, 2 = unidentified
+    statuses = fill(Int8(2), samples)
+    slots = Vector{Any}(undef, samples)
 
-    for s in 1:samples
-        m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
-        if !is_stationary(m).is_stationary
-            n_nonstationary += 1
-            continue
-        end
-        try
-            Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
-                          narrative_check=narrative_check, restrictions=restrictions,
-                          max_draws=max_draws, transition_var=transition_var,
-                          regime_indicator=regime_indicator, kwargs...)
-            if P_ref === nothing && match_columns
-                P_ref = Matrix{T}(safe_cholesky(m.Sigma) * Q)
+    use_parallel = threaded && Threads.nthreads() > 1 && samples > 1 &&
+                   _is_parallel_safe_bvar_id_method(method) &&
+                   !(match_columns && P_ref === nothing)
+
+    if use_parallel
+        P_ref_fixed = P_ref
+        _with_single_blas_thread() do
+            Threads.@threads :dynamic for s in 1:samples
+                local_rng = Random.Xoshiro(seeds[s])
+                m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
+                if !is_stationary(m).is_stationary
+                    statuses[s] = Int8(1)
+                    continue
+                end
+                try
+                    Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                                  narrative_check=narrative_check, restrictions=restrictions,
+                                  max_draws=max_draws, transition_var=transition_var,
+                                  regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                    Q, _ = _maybe_match_Q(Q, m, P_ref_fixed)
+                    slots[s] = compute_func(m, Q, horizon)
+                    statuses[s] = Int8(0)
+                catch e
+                    e isa IdentificationError || rethrow(e)
+                    statuses[s] = Int8(2)
+                end
             end
-            Q, _ = _maybe_match_Q(Q, m, P_ref)
-            res = compute_func(m, Q, horizon)
-            valid_count += 1
-            valid_count == 1 && (results = Vector{typeof(res)}(undef, samples))
-            results[valid_count] = res
-        catch e
-            e isa IdentificationError || rethrow(e)
-            n_unidentified += 1
-            continue
+        end
+    else
+        for s in 1:samples
+            local_rng = Random.Xoshiro(seeds[s])
+            m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data)
+            if !is_stationary(m).is_stationary
+                statuses[s] = Int8(1)
+                continue
+            end
+            try
+                Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
+                              narrative_check=narrative_check, restrictions=restrictions,
+                              max_draws=max_draws, transition_var=transition_var,
+                              regime_indicator=regime_indicator, rng=local_rng, kwargs...)
+                if P_ref === nothing && match_columns
+                    P_ref = Matrix{T}(safe_cholesky(m.Sigma) * Q)
+                end
+                Q, _ = _maybe_match_Q(Q, m, P_ref)
+                slots[s] = compute_func(m, Q, horizon)
+                statuses[s] = Int8(0)
+            catch e
+                e isa IdentificationError || rethrow(e)
+                statuses[s] = Int8(2)
+            end
         end
     end
+
+    valid_idx = findall(==(Int8(0)), statuses)
+    valid_count = length(valid_idx)
+    n_nonstationary = count(==(Int8(1)), statuses)
+    n_unidentified = count(==(Int8(2)), statuses)
+
     valid_count == 0 && throw(IdentificationError(
         "All posterior draws failed identification or were non-stationary " *
         "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
@@ -148,7 +205,14 @@ function process_posterior_samples(post::BVARPosterior, compute_func::Function;
     frac_u = T(n_unidentified) / T(samples)
     frac_u > T(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
 
-    results[1:valid_count], valid_count
+    # Concrete-typed result container inferred from first valid draw (#210 box A)
+    first_res = slots[valid_idx[1]]
+    results = Vector{typeof(first_res)}(undef, valid_count)
+    @inbounds for (k, s) in enumerate(valid_idx)
+        results[k] = slots[s]
+    end
+
+    results, valid_count
 end
 
 # Deprecated wrapper for old (chain, p, n) signature
