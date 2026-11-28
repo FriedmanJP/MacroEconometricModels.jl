@@ -23,23 +23,23 @@ report(m_ologit)</code></pre><pre class="documenter-example-output"><code class=
   Converged                 Yes
   Iterations                  6
 
-                                  Coefficients
+                                    Coefficients
 
-               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+               Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  nwifeinc   -0.0167     0.0071   -2.3377   0.0194    -0.0307    -0.0027   **
-  educ        0.1584     0.0344    4.6013   &lt;0.001     0.0909     0.2258   ***
-  exper       0.1156     0.0106   10.9281   &lt;0.001     0.0949     0.1363   ***
-  age        -0.0820     0.0110   -7.4809   &lt;0.001    -0.1035    -0.0605   ***
-  kidslt6    -1.3283     0.1754   -7.5728   &lt;0.001    -1.6721    -0.9845   ***
+  nwifeinc   -0.0167     0.0071   -2.3377   0.0194      -0.0284       -0.0049   **
+  educ        0.1584     0.0344    4.6013   &lt;0.001       0.1018        0.2150   ***
+  exper       0.1156     0.0106   10.9281   &lt;0.001       0.0982        0.1330   ***
+  age        -0.0820     0.0110   -7.4809   &lt;0.001      -0.1000       -0.0640   ***
+  kidslt6    -1.3283     0.1754   -7.5728   &lt;0.001      -1.6168       -1.0398   ***
 
-                                 Cutpoints
+                                    Cutpoints
 
-           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+           Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  cut1   -1.3026     0.6106   -2.1333   0.0329    -2.4994    -0.1058   **
-  cut2   -0.1962     0.6082   -0.3226    0.747    -1.3883     0.9959
-  cut3    1.8112     0.6160    2.9401   0.0033     0.6038     3.0186   ***
+  cut1   -1.3026     0.6106   -2.1333   0.0329      -2.3070       -0.2983   **
+  cut2   -0.1962     0.6082   -0.3226    0.747      -1.1966        0.8043
+  cut3    1.8112     0.6160    2.9401   0.0033       0.7979        2.8245   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Ordered probit on the same design</strong></p><pre><code class="language-julia hljs">m_oprobit = estimate_oprobit(supply, Xo; varnames=onames)
 report(m_oprobit)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">    Ordered Probit Regression
@@ -59,23 +59,23 @@ report(m_oprobit)</code></pre><pre class="documenter-example-output"><code class
   Converged                  Yes
   Iterations                   6
 
-                                  Coefficients
+                                    Coefficients
 
-               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+               Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  nwifeinc   -0.0094     0.0041   -2.2866   0.0222    -0.0174    -0.0013   **
-  educ        0.0887     0.0198    4.4693   &lt;0.001     0.0498     0.1276   ***
-  exper       0.0672     0.0060   11.1926   &lt;0.001     0.0555     0.0790   ***
-  age        -0.0480     0.0064   -7.5122   &lt;0.001    -0.0605    -0.0355   ***
-  kidslt6    -0.7796     0.1014   -7.6859   &lt;0.001    -0.9784    -0.5808   ***
+  nwifeinc   -0.0094     0.0041   -2.2866   0.0222      -0.0161       -0.0026   **
+  educ        0.0887     0.0198    4.4693   &lt;0.001       0.0561        0.1213   ***
+  exper       0.0672     0.0060   11.1926   &lt;0.001       0.0573        0.0771   ***
+  age        -0.0480     0.0064   -7.5122   &lt;0.001      -0.0585       -0.0375   ***
+  kidslt6    -0.7796     0.1014   -7.6859   &lt;0.001      -0.9465       -0.6128   ***
 
-                                 Cutpoints
+                                    Cutpoints
 
-           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+           Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  cut1   -0.8111     0.3583   -2.2639   0.0236    -1.5133    -0.1089   **
-  cut2   -0.1543     0.3571   -0.4320   0.6657    -0.8541     0.5456
-  cut3    0.9791     0.3591    2.7269   0.0064     0.2754     1.6829   ***
+  cut1   -0.8111     0.3583   -2.2639   0.0236      -1.4004       -0.2218   **
+  cut2   -0.1543     0.3571   -0.4320   0.6657      -0.7416        0.4331
+  cut3    0.9791     0.3591    2.7269   0.0064       0.3885        1.5697   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 3: Multinomial logit (needs its own intercept)</strong></p><pre><code class="language-julia hljs">Xm = hcat(ones(mroz.N_obs), Xo)
 mnames = [&quot;(Intercept)&quot;; onames]
@@ -99,38 +99,38 @@ report(m_mlogit)</code></pre><pre class="documenter-example-output"><code class=
   Converged                     Yes
   Iterations                      6
 
-                                Alternative 2 (vs 1)
+                                  Alternative 2 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower    CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)   -0.6206     0.8969   -0.6920    0.489    -2.3786      1.1373
-  nwifeinc      -0.0198     0.0101   -1.9618   0.0498    -0.0396   -1.86e-05   **
-  educ           0.2302     0.0513    4.4914   &lt;0.001     0.1298      0.3307   ***
-  exper          0.0755     0.0162    4.6748   &lt;0.001     0.0439      0.1072   ***
-  age           -0.0690     0.0160   -4.3084   &lt;0.001    -0.1003     -0.0376   ***
-  kidslt6       -0.9940     0.2290   -4.3412   &lt;0.001    -1.4428     -0.5452   ***
+  (Intercept)   -0.6206     0.8969   -0.6920    0.489      -2.0959        0.8547
+  nwifeinc      -0.0198     0.0101   -1.9618   0.0498      -0.0364       -0.0032   **
+  educ           0.2302     0.0513    4.4914   &lt;0.001       0.1459        0.3145   ***
+  exper          0.0755     0.0162    4.6748   &lt;0.001       0.0489        0.1021   ***
+  age           -0.0690     0.0160   -4.3084   &lt;0.001      -0.0953       -0.0426   ***
+  kidslt6       -0.9940     0.2290   -4.3412   &lt;0.001      -1.3706       -0.6174   ***
 
-                               Alternative 3 (vs 1)
+                                  Alternative 3 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)    1.2524     0.8812    1.4213   0.1552    -0.4747     2.9794
-  nwifeinc      -0.0158     0.0100   -1.5755   0.1151    -0.0354     0.0039
-  educ           0.2163     0.0510    4.2404   &lt;0.001     0.1163     0.3163   ***
-  exper          0.1368     0.0160    8.5410   &lt;0.001     0.1054     0.1682   ***
-  age           -0.1195     0.0164   -7.2659   &lt;0.001    -0.1517    -0.0873   ***
-  kidslt6       -1.9634     0.2851   -6.8865   &lt;0.001    -2.5223    -1.4046   ***
+  (Intercept)    1.2524     0.8812    1.4213   0.1552      -0.1970        2.7018
+  nwifeinc      -0.0158     0.0100   -1.5755   0.1151      -0.0323        0.0007
+  educ           0.2163     0.0510    4.2404   &lt;0.001       0.1324        0.3002   ***
+  exper          0.1368     0.0160    8.5410   &lt;0.001       0.1105        0.1632   ***
+  age           -0.1195     0.0164   -7.2659   &lt;0.001      -0.1466       -0.0925   ***
+  kidslt6       -1.9634     0.2851   -6.8865   &lt;0.001      -2.4324       -1.4945   ***
 
-                               Alternative 4 (vs 1)
+                                  Alternative 4 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)   -0.7463     1.2283   -0.6076   0.5434    -3.1537     1.6610
-  nwifeinc      -0.0370     0.0169   -2.1869   0.0287    -0.0702    -0.0038   **
-  educ           0.2361     0.0701    3.3701   &lt;0.001     0.0988     0.3734   ***
-  exper          0.1741     0.0218    8.0012   &lt;0.001     0.1314     0.2167   ***
-  age           -0.1072     0.0235   -4.5700   &lt;0.001    -0.1532    -0.0612   ***
-  kidslt6       -1.8132     0.4432   -4.0917   &lt;0.001    -2.6818    -0.9447   ***
+  (Intercept)   -0.7463     1.2283   -0.6076   0.5434      -2.7666        1.2740
+  nwifeinc      -0.0370     0.0169   -2.1869   0.0287      -0.0648       -0.0092   **
+  educ           0.2361     0.0701    3.3701   &lt;0.001       0.1209        0.3513   ***
+  exper          0.1741     0.0218    8.0012   &lt;0.001       0.1383        0.2099   ***
+  age           -0.1072     0.0235   -4.5700   &lt;0.001      -0.1458       -0.0686   ***
+  kidslt6       -1.8132     0.4432   -4.0917   &lt;0.001      -2.5422       -1.0843   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 4: Average marginal effects</strong></p><pre><code class="language-julia hljs">me = marginal_effects(m_ologit)
 round.(me.effects, digits=4)   # rows = variables, columns = categories</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5×4 Matrix{Float64}:
@@ -157,23 +157,23 @@ round.(me.effects, digits=4)   # rows = variables, columns = categories</code></
   Converged                 Yes
   Iterations                  6
 
-                                  Coefficients
+                                    Coefficients
 
-               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+               Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  nwifeinc   -0.0167     0.0075   -2.2362   0.0253    -0.0313    -0.0021   **
-  educ        0.1584     0.0357    4.4394   &lt;0.001     0.0885     0.2283   ***
-  exper       0.1156     0.0107   10.8266   &lt;0.001     0.0947     0.1365   ***
-  age        -0.0820     0.0106   -7.7307   &lt;0.001    -0.1028    -0.0612   ***
-  kidslt6    -1.3283     0.1672   -7.9468   &lt;0.001    -1.6559    -1.0007   ***
+  nwifeinc   -0.0167     0.0075   -2.2362   0.0253      -0.0290       -0.0044   **
+  educ        0.1584     0.0357    4.4394   &lt;0.001       0.0997        0.2171   ***
+  exper       0.1156     0.0107   10.8266   &lt;0.001       0.0980        0.1332   ***
+  age        -0.0820     0.0106   -7.7307   &lt;0.001      -0.0995       -0.0646   ***
+  kidslt6    -1.3283     0.1672   -7.9468   &lt;0.001      -1.6033       -1.0534   ***
 
-                                 Cutpoints
+                                    Cutpoints
 
-           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+           Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  cut1   -1.3026     0.6195   -2.1025   0.0355    -2.5169    -0.0883   **
-  cut2   -0.1962     0.6188   -0.3171   0.7512    -1.4089     1.0165
-  cut3    1.8112     0.6271    2.8880   0.0039     0.5820     3.0404   ***
+  cut1   -1.3026     0.6195   -2.1025   0.0355      -2.3217       -0.2836   **
+  cut2   -0.1962     0.6188   -0.3171   0.7512      -1.2140        0.8216
+  cut3    1.8112     0.6271    2.8880   0.0039       0.7796        2.8428   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Every slope is significant at the 5% level or better. An extra year of schooling raises the latent labour-supply index by 0.158 and an extra year of experience by 0.116, while each additional year of age lowers it by 0.082 and each preschool child by 1.328 — the dominant force in the model, as in the participation decision on the <a href="../binary_choice/#binary_choice_page">binary choice page</a>. The three cutpoints <span>$(-1.30, -0.20, 1.81)$</span> are spaced unevenly: the gap between the second and third is far wider than between the first and second, which says that crossing from part time into the 1000-1999 hour band takes much more of a push in the latent index than crossing from no work into part time. The sandwich standard errors here differ from the observed-information ones by only a few percent, so misspecification of the conditional variance is not a live concern in this sample.</p><h3 id="Keyword-Arguments"><a class="docs-heading-anchor" href="#Keyword-Arguments">Keyword Arguments</a><a id="Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments" title="Permalink"></a></h3><p><code>estimate_ologit</code> and <code>estimate_oprobit</code> share this signature.</p><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:ols</code></td><td style="text-align: right">Covariance estimator: <code>:ols</code> (observed information), <code>:hc0</code>, <code>:hc1</code>, <code>:cluster</code></td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Union{Nothing,Vector{String}}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Coefficient names (<code>&quot;x1&quot;</code>, <code>&quot;x2&quot;</code>, … if <code>nothing</code>)</td></tr><tr><td style="text-align: right"><code>clusters</code></td><td style="text-align: right"><code>Union{Nothing,AbstractVector}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Cluster assignments (required for <code>:cluster</code>)</td></tr><tr><td style="text-align: right"><code>maxiter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>200</code></td><td style="text-align: right">Maximum Newton-Raphson iterations</td></tr><tr><td style="text-align: right"><code>tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-8}$</span></td><td style="text-align: right">Relative convergence tolerance on the log-likelihood</td></tr></table><h3 id="Return-Values"><a class="docs-heading-anchor" href="#Return-Values">Return Values</a><a id="Return-Values-1"></a><a class="docs-heading-anchor-permalink" href="#Return-Values" title="Permalink"></a></h3><p><code>estimate_ologit</code> returns an <code>OrderedLogitModel{T}</code> and <code>estimate_oprobit</code> an <code>OrderedProbitModel{T}</code>, with identical fields:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>y</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Outcome remapped to <span>$1:J$</span> in sorted category order</td></tr><tr><td style="text-align: right"><code>X</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times K$</span> regressor matrix (no intercept)</td></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right"><span>$K \times 1$</span> slope coefficients</td></tr><tr><td style="text-align: right"><code>cutpoints</code></td><td style="text-align: right"><code>Vector{T}</code></td><td style="text-align: right"><span>$J-1$</span> estimated cutpoints</td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Joint covariance of <span>$[\beta; \alpha]$</span>, <span>$(K + J - 1)$</span> square</td></tr><tr><td style="text-align: right"><code>fitted</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times J$</span> fitted category probabilities</td></tr><tr><td style="text-align: right"><code>loglik</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Maximized log-likelihood</td></tr><tr><td style="text-align: right"><code>loglik_null</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Log-likelihood of the sample-frequency model</td></tr><tr><td style="text-align: right"><code>pseudo_r2</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">McFadden&#39;s pseudo <span>$R^2$</span></td></tr><tr><td style="text-align: right"><code>aic</code>, <code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Information criteria on <span>$K + J - 1$</span> parameters</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Coefficient names</td></tr><tr><td style="text-align: right"><code>categories</code></td><td style="text-align: right"><code>Vector</code></td><td style="text-align: right">Original category labels, sorted</td></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether Newton-Raphson met the tolerance</td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Iterations performed</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Covariance estimator used</td></tr></table><hr/><h2 id="Ordered-Probit"><a class="docs-heading-anchor" href="#Ordered-Probit">Ordered Probit</a><a id="Ordered-Probit-1"></a><a class="docs-heading-anchor-permalink" href="#Ordered-Probit" title="Permalink"></a></h2><p>The <strong>ordered probit</strong> replaces the logistic CDF with the standard normal:</p><p class="math-container">\[P(y_i \leq j \mid x_i) = \Phi(\alpha_j - x_i&#39; \beta)\]</p><p>where:</p><ul><li><span>$\Phi(\cdot)$</span> is the standard normal CDF</li><li><span>$\alpha_j$</span> and <span>$\beta$</span> carry the same meaning as under the logistic link</li></ul><p>The latent-variable reading is the sharper one here: <span>$y_i^* = x_i&#39;\beta + \varepsilon_i$</span> with <span>$\varepsilon_i \sim N(0,1)$</span>, and <span>$y_i = j$</span> when <span>$\alpha_{j-1} &lt; y_i^* \le \alpha_j$</span>. The API is identical to ordered logit.</p><pre><code class="language-julia hljs">round.(coef(m_ologit) ./ coef(m_oprobit), digits=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{Float64}:
  1.78
@@ -198,38 +198,38 @@ Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Every slop
   Converged                     Yes
   Iterations                      6
 
-                                Alternative 2 (vs 1)
+                                  Alternative 2 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower    CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)   -0.6206     0.8969   -0.6920    0.489    -2.3786      1.1373
-  nwifeinc      -0.0198     0.0101   -1.9618   0.0498    -0.0396   -1.86e-05   **
-  educ           0.2302     0.0513    4.4914   &lt;0.001     0.1298      0.3307   ***
-  exper          0.0755     0.0162    4.6748   &lt;0.001     0.0439      0.1072   ***
-  age           -0.0690     0.0160   -4.3084   &lt;0.001    -0.1003     -0.0376   ***
-  kidslt6       -0.9940     0.2290   -4.3412   &lt;0.001    -1.4428     -0.5452   ***
+  (Intercept)   -0.6206     0.8969   -0.6920    0.489      -2.0959        0.8547
+  nwifeinc      -0.0198     0.0101   -1.9618   0.0498      -0.0364       -0.0032   **
+  educ           0.2302     0.0513    4.4914   &lt;0.001       0.1459        0.3145   ***
+  exper          0.0755     0.0162    4.6748   &lt;0.001       0.0489        0.1021   ***
+  age           -0.0690     0.0160   -4.3084   &lt;0.001      -0.0953       -0.0426   ***
+  kidslt6       -0.9940     0.2290   -4.3412   &lt;0.001      -1.3706       -0.6174   ***
 
-                               Alternative 3 (vs 1)
+                                  Alternative 3 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)    1.2524     0.8812    1.4213   0.1552    -0.4747     2.9794
-  nwifeinc      -0.0158     0.0100   -1.5755   0.1151    -0.0354     0.0039
-  educ           0.2163     0.0510    4.2404   &lt;0.001     0.1163     0.3163   ***
-  exper          0.1368     0.0160    8.5410   &lt;0.001     0.1054     0.1682   ***
-  age           -0.1195     0.0164   -7.2659   &lt;0.001    -0.1517    -0.0873   ***
-  kidslt6       -1.9634     0.2851   -6.8865   &lt;0.001    -2.5223    -1.4046   ***
+  (Intercept)    1.2524     0.8812    1.4213   0.1552      -0.1970        2.7018
+  nwifeinc      -0.0158     0.0100   -1.5755   0.1151      -0.0323        0.0007
+  educ           0.2163     0.0510    4.2404   &lt;0.001       0.1324        0.3002   ***
+  exper          0.1368     0.0160    8.5410   &lt;0.001       0.1105        0.1632   ***
+  age           -0.1195     0.0164   -7.2659   &lt;0.001      -0.1466       -0.0925   ***
+  kidslt6       -1.9634     0.2851   -6.8865   &lt;0.001      -2.4324       -1.4945   ***
 
-                               Alternative 4 (vs 1)
+                                  Alternative 4 (vs 1)
 
-                  Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+                  Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  (Intercept)   -0.7463     1.2283   -0.6076   0.5434    -3.1537     1.6610
-  nwifeinc      -0.0370     0.0169   -2.1869   0.0287    -0.0702    -0.0038   **
-  educ           0.2361     0.0701    3.3701   &lt;0.001     0.0988     0.3734   ***
-  exper          0.1741     0.0218    8.0012   &lt;0.001     0.1314     0.2167   ***
-  age           -0.1072     0.0235   -4.5700   &lt;0.001    -0.1532    -0.0612   ***
-  kidslt6       -1.8132     0.4432   -4.0917   &lt;0.001    -2.6818    -0.9447   ***
+  (Intercept)   -0.7463     1.2283   -0.6076   0.5434      -2.7666        1.2740
+  nwifeinc      -0.0370     0.0169   -2.1869   0.0287      -0.0648       -0.0092   **
+  educ           0.2361     0.0701    3.3701   &lt;0.001       0.1209        0.3513   ***
+  exper          0.1741     0.0218    8.0012   &lt;0.001       0.1383        0.2099   ***
+  age           -0.1072     0.0235   -4.5700   &lt;0.001      -0.1458       -0.0686   ***
+  kidslt6       -1.8132     0.4432   -4.0917   &lt;0.001      -2.5422       -1.0843   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>Reading the blocks against the base category of not working: schooling raises the log-odds of every working state by a similar amount (0.230, 0.216, 0.236), so education mostly drives the participation margin rather than the choice of hours. Experience does the opposite, rising monotonically from 0.076 for part time to 0.174 for full-time work, so experience is what sorts working women into longer hours. Preschool children push against all three working states, most strongly against the 1000-1999 hour band (<span>$-1.963$</span>). The multinomial fit costs 18 parameters against the ordered logit&#39;s 8 and buys 8.4 log-likelihood points (<span>$-820.41$</span> against <span>$-828.85$</span>), which the BIC (1760.06 against 1710.70) judges a poor trade.</p><h3 id="Keyword-Arguments-2"><a class="docs-heading-anchor" href="#Keyword-Arguments-2">Keyword Arguments</a><a class="docs-heading-anchor-permalink" href="#Keyword-Arguments-2" title="Permalink"></a></h3><table><tr><th style="text-align: right">Keyword</th><th style="text-align: right">Type</th><th style="text-align: right">Default</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right"><code>:ols</code></td><td style="text-align: right">Covariance estimator: <code>:ols</code> (observed information), <code>:hc0</code>, <code>:hc1</code>, <code>:cluster</code></td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Union{Nothing,Vector{String}}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Coefficient names, one per column of <code>X</code></td></tr><tr><td style="text-align: right"><code>clusters</code></td><td style="text-align: right"><code>Union{Nothing,AbstractVector}</code></td><td style="text-align: right"><code>nothing</code></td><td style="text-align: right">Cluster assignments (required for <code>:cluster</code>)</td></tr><tr><td style="text-align: right"><code>maxiter</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right"><code>200</code></td><td style="text-align: right">Maximum Newton-Raphson iterations</td></tr><tr><td style="text-align: right"><code>tol</code></td><td style="text-align: right"><code>Real</code></td><td style="text-align: right"><span>$10^{-8}$</span></td><td style="text-align: right">Relative convergence tolerance on the log-likelihood</td></tr></table><h3 id="Return-Values-2"><a class="docs-heading-anchor" href="#Return-Values-2">Return Values</a><a class="docs-heading-anchor-permalink" href="#Return-Values-2" title="Permalink"></a></h3><p><code>estimate_mlogit</code> returns a <code>MultinomialLogitModel{T}</code>:</p><table><tr><th style="text-align: right">Field</th><th style="text-align: right">Type</th><th style="text-align: right">Description</th></tr><tr><td style="text-align: right"><code>y</code></td><td style="text-align: right"><code>Vector{Int}</code></td><td style="text-align: right">Outcome remapped to <span>$1:J$</span> in sorted category order</td></tr><tr><td style="text-align: right"><code>X</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times K$</span> regressor matrix, intercept included</td></tr><tr><td style="text-align: right"><code>beta</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$K \times (J-1)$</span> coefficients; column <span>$j$</span> belongs to category <span>$j+1$</span></td></tr><tr><td style="text-align: right"><code>vcov_mat</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right">Covariance of <code>vec(beta)</code>, <span>$K(J-1)$</span> square</td></tr><tr><td style="text-align: right"><code>fitted</code></td><td style="text-align: right"><code>Matrix{T}</code></td><td style="text-align: right"><span>$n \times J$</span> fitted probabilities</td></tr><tr><td style="text-align: right"><code>loglik</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Maximized log-likelihood</td></tr><tr><td style="text-align: right"><code>loglik_null</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Constants-only log-likelihood (Stata-comparable)</td></tr><tr><td style="text-align: right"><code>pseudo_r2</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">McFadden&#39;s pseudo <span>$R^2$</span></td></tr><tr><td style="text-align: right"><code>aic</code>, <code>bic</code></td><td style="text-align: right"><code>T</code></td><td style="text-align: right">Information criteria on <span>$K(J-1)$</span> parameters</td></tr><tr><td style="text-align: right"><code>varnames</code></td><td style="text-align: right"><code>Vector{String}</code></td><td style="text-align: right">Coefficient names</td></tr><tr><td style="text-align: right"><code>categories</code></td><td style="text-align: right"><code>Vector</code></td><td style="text-align: right">Original category labels; the first is the base</td></tr><tr><td style="text-align: right"><code>converged</code></td><td style="text-align: right"><code>Bool</code></td><td style="text-align: right">Whether Newton-Raphson met the tolerance</td></tr><tr><td style="text-align: right"><code>iterations</code></td><td style="text-align: right"><code>Int</code></td><td style="text-align: right">Iterations performed</td></tr><tr><td style="text-align: right"><code>cov_type</code></td><td style="text-align: right"><code>Symbol</code></td><td style="text-align: right">Covariance estimator used</td></tr></table><hr/><h2 id="Marginal-Effects"><a class="docs-heading-anchor" href="#Marginal-Effects">Marginal Effects</a><a id="Marginal-Effects-1"></a><a class="docs-heading-anchor-permalink" href="#Marginal-Effects" title="Permalink"></a></h2><p>Neither model&#39;s coefficients are marginal effects: the probabilities are nonlinear in the index, and in the multinomial case a coefficient can even carry the opposite sign to the effect on its own category&#39;s probability. <code>marginal_effects</code> returns average marginal effects — the sample mean of the observation-level derivative (Cameron &amp; Trivedi 2005, ch. 15) — as a <span>$K \times J$</span> matrix whose rows are variables and columns are categories.</p><p>For an ordered model the derivative of the category probability is a difference of link densities:</p><p class="math-container">\[\text{AME}_{k,j} = \frac{1}{n} \sum_{i=1}^{n} \left[ f(\alpha_{j-1} - x_i&#39; \beta) - f(\alpha_j - x_i&#39; \beta) \right] \beta_k\]</p><p>where:</p><ul><li><span>$f(\cdot)$</span> is the logistic or standard normal density</li><li><span>$f(\alpha_0 - x_i&#39;\beta) \equiv 0$</span> and <span>$f(\alpha_J - x_i&#39;\beta) \equiv 0$</span> at the open ends</li></ul><p>Each row sums to zero across categories: probability moved into one category must leave another.</p><pre><code class="language-julia hljs">me_o = marginal_effects(m_ologit)
 round.(me_o.effects, digits=4)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5×4 Matrix{Float64}:
@@ -254,7 +254,7 @@ round.(predict(m_ologit, kids), digits=3)</code></pre><pre class="documenter-exa
 round.([sum(abs2, rd), -2 * loglikelihood(m_ologit)], digits=6)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
  1657.709731
  1657.709731</code></pre><p><strong>Generalized residuals.</strong> For the ordered models, <code>generalized_residuals</code> returns the length-<span>$n$</span> vector</p><p class="math-container">\[e_i = \frac{f(\alpha_{j-1} - x_i&#39;\beta) - f(\alpha_j - x_i&#39;\beta)}{P(y_i = j \mid x_i)}, \qquad j = y_i\]</p><p>where:</p><ul><li><span>$\alpha_0 = -\infty$</span> and <span>$\alpha_J = +\infty$</span>, so the boundary categories drop one term</li><li><span>$f$</span> is the logistic or standard normal density</li></ul><p>Equivalently <span>$e_i = \partial \ell_i / \partial (x_i&#39;\beta)$</span>, the score of observation <span>$i$</span>&#39;s log-likelihood with respect to its own index — and for the probit case exactly <span>$E[\varepsilon_i \mid y_i, x_i]$</span>. This is the vector that outer-product-of-gradients LM specification tests are built on (Chesher &amp; Irish 1987; Gourieroux, Monfort, Renault &amp; Trognon 1987). Because the ordered score with respect to <span>$\beta$</span> is <span>$X&#39;e$</span>, it is orthogonal to the regressors at the optimum:</p><pre><code class="language-julia hljs">e = generalized_residuals(m_ologit)
-round(maximum(abs, m_ologit.X&#39; * e), sigdigits=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4.5e-7</code></pre><p>The largest element of <span>$X&#39;e$</span> is 4.5e-7, zero to the Newton convergence tolerance rather than to machine precision, which is the honest way to read a first-order condition at a numerical optimum. On a two-category fit <span>$e_i$</span> collapses to <span>$y_i - \hat p_i$</span>, the familiar binary score residual — the sense in which it, and not the residual matrix, is the true analogue of the binary case.</p><p><code>generalized_residuals</code> is deliberately <strong>not</strong> defined for multinomial logit: an unordered response has no single latent index, so no length-<span>$n$</span> scalar score exists. Its score is <span>$X&#39;(d_j - \hat P_j)$</span> per alternative, which is precisely the <code>:response</code> residual matrix above.</p><hr/><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p><code>plot_result</code> renders both model families as horizontal dot-and-whisker plots at 95% intervals, and the multinomial marginal effects as one facet per non-base alternative:</p><pre><code class="language-julia hljs">plot_result(m_ologit)     # slopes and cutpoints, two panels
+round(maximum(abs, m_ologit.X&#39; * e), sigdigits=2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4.5e-7</code></pre><p>The largest element of <span>$X&#39;e$</span> is 4.5e-7, zero to the Newton convergence tolerance rather than to machine precision, which is the honest way to read a first-order condition at a numerical optimum. On a two-category fit <span>$e_i$</span> collapses to <span>$y_i - \hat p_i$</span>, the familiar binary score residual — the sense in which it, and not the residual matrix, is the true analogue of the binary case.</p><p><code>generalized_residuals</code> is deliberately <strong>not</strong> defined for multinomial logit: an unordered response has no single latent index, so no length-<span>$n$</span> scalar score exists. Its score is <span>$X&#39;(d_j - \hat P_j)$</span> per alternative, which is precisely the <code>:response</code> residual matrix above.</p><hr/><h2 id="Visualization"><a class="docs-heading-anchor" href="#Visualization">Visualization</a><a id="Visualization-1"></a><a class="docs-heading-anchor-permalink" href="#Visualization" title="Permalink"></a></h2><p><code>plot_result</code> renders both model families as horizontal dot-and-whisker plots at 90% intervals (configurable via <code>conf_level</code>), and the multinomial marginal effects as one facet per non-base alternative:</p><pre><code class="language-julia hljs">plot_result(m_ologit)     # slopes and cutpoints, two panels
 plot_result(m_mlogit)     # one coefficient facet per non-base alternative
 plot_result(me_m)         # marginal-effect facets with delta-method whiskers</code></pre><p>The ordered figure separates the two parameter blocks because they live on different scales: the slopes measure how a regressor shifts the latent index, the cutpoints are positions <em>on</em> that index.</p><iframe src="../assets/plots/ordered_coef.html" width="100%" height="520" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>The preschool-child coefficient of <span>$-1.328$</span> sits far to the left of every other slope, on an interval — <span>$[-1.672, -0.985]$</span> — five times wider than the next widest. At the opposite extreme <code>nwifeinc</code> is the one slope whose interval nearly touches zero, reaching <span>$-0.003$</span> at its upper end. The cutpoint panel shows the three thresholds ordered and well separated at <span>$-1.303$</span>, <span>$-0.196$</span> and 1.811, on intervals roughly 2.4 units wide: the four bands are distinguishable, but the thresholds themselves are the least precisely estimated parameters in the model.</p><p>The multinomial figure draws one panel per alternative, each labelled with the band code and its base category:</p><iframe src="../assets/plots/mlogit_coef.html" width="100%" height="620" frameborder="0" style="border:1px solid #ddd;border-radius:4px;"></iframe><p>Reading a regressor across the three panels is the visual form of the parallel-regression question. Experience behaves exactly as the ordered model assumes, rising monotonically with the hours band (0.076, 0.137, 0.174), and schooling is flat across the three at 0.216 to 0.236 — a single common slope would lose nothing. Preschool children do not: the coefficient is <span>$-0.994$</span> for part-time work but <span>$-1.963$</span> for the 1000–1999 hour band and <span>$-1.813$</span> for full-time work, so the effect peaks in the middle of the ordering rather than growing with it. That non-monotonicity is what a single ordered slope cannot represent, and it is why the <a href="#specification-tests">Specification Tests</a> above matter before the ordered fit is reported.</p><hr/><h2 id="Complete-Example"><a class="docs-heading-anchor" href="#Complete-Example">Complete Example</a><a id="Complete-Example-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-Example" title="Permalink"></a></h2><p>An end-to-end labour-supply study: fit the ordered model, test the assumption it rests on, refit without that assumption, and compare what the two say.</p><pre><code class="language-julia hljs"># Step 1 — ordered logit on the four hours bands
 fit_o = estimate_ologit(supply, Xo; varnames=onames)
@@ -275,23 +275,23 @@ report(fit_o)</code></pre><pre class="documenter-example-output"><code class="no
   Converged                 Yes
   Iterations                  6
 
-                                  Coefficients
+                                    Coefficients
 
-               Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+               Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  nwifeinc   -0.0167     0.0071   -2.3377   0.0194    -0.0307    -0.0027   **
-  educ        0.1584     0.0344    4.6013   &lt;0.001     0.0909     0.2258   ***
-  exper       0.1156     0.0106   10.9281   &lt;0.001     0.0949     0.1363   ***
-  age        -0.0820     0.0110   -7.4809   &lt;0.001    -0.1035    -0.0605   ***
-  kidslt6    -1.3283     0.1754   -7.5728   &lt;0.001    -1.6721    -0.9845   ***
+  nwifeinc   -0.0167     0.0071   -2.3377   0.0194      -0.0284       -0.0049   **
+  educ        0.1584     0.0344    4.6013   &lt;0.001       0.1018        0.2150   ***
+  exper       0.1156     0.0106   10.9281   &lt;0.001       0.0982        0.1330   ***
+  age        -0.0820     0.0110   -7.4809   &lt;0.001      -0.1000       -0.0640   ***
+  kidslt6    -1.3283     0.1754   -7.5728   &lt;0.001      -1.6168       -1.0398   ***
 
-                                 Cutpoints
+                                    Cutpoints
 
-           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+           Coef.   Std.Err.         z    P&gt;|z|   90% CI Low   90% CI High
 
-  cut1   -1.3026     0.6106   -2.1333   0.0329    -2.4994    -0.1058   **
-  cut2   -0.1962     0.6082   -0.3226    0.747    -1.3883     0.9959
-  cut3    1.8112     0.6160    2.9401   0.0033     0.6038     3.0186   ***
+  cut1   -1.3026     0.6106   -2.1333   0.0329      -2.3070       -0.2983   **
+  cut2   -0.1962     0.6082   -0.3226    0.747      -1.1966        0.8043
+  cut3    1.8112     0.6160    2.9401   0.0033       0.7979        2.8245   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># Step 2 — does the proportional-odds restriction hold?
 bt_full = brant_test(fit_o)
@@ -370,12 +370,12 @@ report(m_ri)</code></pre><pre class="documenter-example-output"><code class="noh
   Converged                                 Yes
   Iterations                                 17
 
-                  Parameters (Preferences &amp; Attention Cost)
+                     Parameters (Preferences &amp; Attention Cost)
 
-            Coef.   Std.Err.          z    P&gt;|z|   CI lower   CI upper
+            Coef.   Std.Err.          z    P&gt;|z|   90% CI Low   90% CI High
 
-  x1       0.9833     0.0274    35.8934   &lt;0.001     0.9296     1.0370   ***
-  x2      -0.6778     0.0265   -25.5656   &lt;0.001    -0.7297    -0.6258   ***
-  omega    0.4820     0.0318    15.1538   &lt;0.001     0.4197     0.5444   ***
+  x1       0.9833     0.0274    35.8934   &lt;0.001       0.9383        1.0284   ***
+  x2      -0.6778     0.0265   -25.5656   &lt;0.001      -0.7214       -0.6341   ***
+  omega    0.4820     0.0318    15.1538   &lt;0.001       0.4297        0.5343   ***
 
-Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Putting an intercept in an ordered model&#39;s <code>X</code>.</strong> The cutpoints already play that role. A constant column leaves the index unidentified, and the Newton step works against a singular Hessian. The multinomial logit is the opposite case — it needs an explicit intercept column, as <code>Xm</code> above supplies.</p></li><li><p><strong>Fewer than three categories.</strong> Both families require <span>$J \geq 3$</span> and throw an <code>ArgumentError</code> otherwise. Use <code>estimate_logit</code> or <code>estimate_probit</code> from the <a href="../binary_choice/#binary_choice_page">binary choice page</a> for two-category outcomes.</p></li><li><p><strong>Assuming the Brant test blesses the specification.</strong> The overall test can pass while a single covariate violates proportional odds, exactly as <code>educ</code> does here. Read <code>per_variable</code> before concluding: the joint statistic averages one genuine violation against four well-behaved regressors.</p></li><li><p><strong>Reading multinomial coefficients as effects on a probability.</strong> <span>$\beta_{j,k}$</span> is the effect on the log-odds of alternative <span>$j$</span> against the base. A positive coefficient can coexist with a negative marginal effect on <span>$P(y = j)$</span> when a competing alternative rises faster. Always compute <code>marginal_effects(m)</code> before interpreting.</p></li><li><p><strong>Building marginal-effect standard errors from the reported coefficients alone.</strong> Every coefficient enters an AME through the fitted probabilities, intercepts included, so a delta method restricted to the covariance of the reported rows understates the variance. <code>marginal_effects</code> propagates the full covariance for the multinomial and the joint <span>$[\beta; \alpha]$</span> covariance for the ordered models. <code>se</code> is <code>nothing</code> only when the model covariance is unavailable.</p></li><li><p><strong>Running the IIA test with too few categories.</strong> <code>hausman_iia</code> re-estimates on the subsample without the omitted category and needs at least three categories to remain, so a four-category outcome is the minimum. It also silently drops every observation in the omitted category, so a large omitted category leaves a much smaller restricted sample.</p></li><li><p><strong>Treating an ordered outcome&#39;s category codes as cardinal.</strong> The models use only the ordering of <code>categories</code>, which is the sorted vector of the original labels. Banding a continuous variable, as <code>supply</code> bands hours, discards within-band variation; when the underlying variable is observed, a model for the level (or a Tobit for a corner solution at zero) uses more of it.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Agresti, A. (2010). <em>Analysis of Ordinal Categorical Data</em>. 2nd ed. Hoboken, NJ: Wiley. ISBN 978-0-470-08289-8.</p></li><li><p>Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression. <em>Biometrics</em>, 46(4), 1171–1178. <a href="https://doi.org/10.2307/2532457">DOI</a></p></li><li><p>Caplin, A., Dean, M., &amp; Leahy, J. (2019). Rational Inattention, Optimal Consideration Sets, and Stochastic Choice. <em>The Review of Economic Studies</em>, 86(3), 1061–1094. <a href="https://doi.org/10.1093/restud/rdy037">DOI</a></p></li><li><p>Cameron, A. C., &amp; Trivedi, P. K. (2005). <em>Microeconometrics: Methods and Applications</em>. Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.</p></li><li><p>Chesher, A., &amp; Irish, M. (1987). Residual Analysis in the Grouped and Censored Normal Linear Model. <em>Journal of Econometrics</em>, 34(1–2), 33–61. <a href="https://doi.org/10.1016/0304-4076(87)90066-2">DOI</a></p></li><li><p>Gourieroux, C., Monfort, A., Renault, E., &amp; Trognon, A. (1987). Generalised Residuals. <em>Journal of Econometrics</em>, 34(1–2), 5–32. <a href="https://doi.org/10.1016/0304-4076(87)90065-0">DOI</a></p></li><li><p>Greene, W. H. (2012). <em>Econometric Analysis</em>. 7th ed. Boston: Prentice Hall. ISBN 978-0-131-39538-1.</p></li><li><p>Hausman, J. A., &amp; McFadden, D. (1984). Specification Tests for the Multinomial Logit Model. <em>Econometrica</em>, 52(5), 1219–1240. <a href="https://doi.org/10.2307/1910997">DOI</a></p></li><li><p>Matějka, F., &amp; McKay, A. (2015). Rational Inattention to Discrete Choices: A New Foundation for the Multinomial Logit Model. <em>American Economic Review</em>, 105(1), 272–298. <a href="https://doi.org/10.1257/aer.20130047">DOI</a></p></li><li><p>McCullagh, P. (1980). Regression Models for Ordinal Data. <em>Journal of the Royal Statistical Society: Series B</em>, 42(2), 109–127. <a href="https://doi.org/10.1111/j.2517-6161.1980.tb01109.x">DOI</a></p></li><li><p>McFadden, D. (1974). Conditional Logit Analysis of Qualitative Choice Behavior. In P. Zarembka (Ed.), <em>Frontiers in Econometrics</em> (pp. 105–142). New York: Academic Press.</p></li><li><p>Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women&#39;s Hours of Work to Economic and Statistical Assumptions. <em>Econometrica</em>, 55(4), 765–799. <a href="https://doi.org/10.2307/1911029">DOI</a></p></li><li><p>Train, K. E. (2009). <em>Discrete Choice Methods with Simulation</em>. 2nd ed. Cambridge: Cambridge University Press. ISBN 978-0-521-74738-7.</p></li><li><p>Wooldridge, J. M. (2010). <em>Econometric Analysis of Cross Section and Panel Data</em>. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.</p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../binary_choice/">« Binary Choice Models</a><a class="docs-footer-nextpage" href="../panel_reg/">Panel Regression »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 25 November 2026 15:41">Wednesday 25 November 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><hr/><h2 id="Common-Pitfalls"><a class="docs-heading-anchor" href="#Common-Pitfalls">Common Pitfalls</a><a id="Common-Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Pitfalls" title="Permalink"></a></h2><ol><li><p><strong>Putting an intercept in an ordered model&#39;s <code>X</code>.</strong> The cutpoints already play that role. A constant column leaves the index unidentified, and the Newton step works against a singular Hessian. The multinomial logit is the opposite case — it needs an explicit intercept column, as <code>Xm</code> above supplies.</p></li><li><p><strong>Fewer than three categories.</strong> Both families require <span>$J \geq 3$</span> and throw an <code>ArgumentError</code> otherwise. Use <code>estimate_logit</code> or <code>estimate_probit</code> from the <a href="../binary_choice/#binary_choice_page">binary choice page</a> for two-category outcomes.</p></li><li><p><strong>Assuming the Brant test blesses the specification.</strong> The overall test can pass while a single covariate violates proportional odds, exactly as <code>educ</code> does here. Read <code>per_variable</code> before concluding: the joint statistic averages one genuine violation against four well-behaved regressors.</p></li><li><p><strong>Reading multinomial coefficients as effects on a probability.</strong> <span>$\beta_{j,k}$</span> is the effect on the log-odds of alternative <span>$j$</span> against the base. A positive coefficient can coexist with a negative marginal effect on <span>$P(y = j)$</span> when a competing alternative rises faster. Always compute <code>marginal_effects(m)</code> before interpreting.</p></li><li><p><strong>Building marginal-effect standard errors from the reported coefficients alone.</strong> Every coefficient enters an AME through the fitted probabilities, intercepts included, so a delta method restricted to the covariance of the reported rows understates the variance. <code>marginal_effects</code> propagates the full covariance for the multinomial and the joint <span>$[\beta; \alpha]$</span> covariance for the ordered models. <code>se</code> is <code>nothing</code> only when the model covariance is unavailable.</p></li><li><p><strong>Running the IIA test with too few categories.</strong> <code>hausman_iia</code> re-estimates on the subsample without the omitted category and needs at least three categories to remain, so a four-category outcome is the minimum. It also silently drops every observation in the omitted category, so a large omitted category leaves a much smaller restricted sample.</p></li><li><p><strong>Treating an ordered outcome&#39;s category codes as cardinal.</strong> The models use only the ordering of <code>categories</code>, which is the sorted vector of the original labels. Banding a continuous variable, as <code>supply</code> bands hours, discards within-band variation; when the underlying variable is observed, a model for the level (or a Tobit for a corner solution at zero) uses more of it.</p></li></ol><hr/><h2 id="References"><a class="docs-heading-anchor" href="#References">References</a><a id="References-1"></a><a class="docs-heading-anchor-permalink" href="#References" title="Permalink"></a></h2><ul><li><p>Agresti, A. (2010). <em>Analysis of Ordinal Categorical Data</em>. 2nd ed. Hoboken, NJ: Wiley. ISBN 978-0-470-08289-8.</p></li><li><p>Brant, R. (1990). Assessing Proportionality in the Proportional Odds Model for Ordinal Logistic Regression. <em>Biometrics</em>, 46(4), 1171–1178. <a href="https://doi.org/10.2307/2532457">DOI</a></p></li><li><p>Caplin, A., Dean, M., &amp; Leahy, J. (2019). Rational Inattention, Optimal Consideration Sets, and Stochastic Choice. <em>The Review of Economic Studies</em>, 86(3), 1061–1094. <a href="https://doi.org/10.1093/restud/rdy037">DOI</a></p></li><li><p>Cameron, A. C., &amp; Trivedi, P. K. (2005). <em>Microeconometrics: Methods and Applications</em>. Cambridge: Cambridge University Press. ISBN 978-0-521-84805-3.</p></li><li><p>Chesher, A., &amp; Irish, M. (1987). Residual Analysis in the Grouped and Censored Normal Linear Model. <em>Journal of Econometrics</em>, 34(1–2), 33–61. <a href="https://doi.org/10.1016/0304-4076(87)90066-2">DOI</a></p></li><li><p>Gourieroux, C., Monfort, A., Renault, E., &amp; Trognon, A. (1987). Generalised Residuals. <em>Journal of Econometrics</em>, 34(1–2), 5–32. <a href="https://doi.org/10.1016/0304-4076(87)90065-0">DOI</a></p></li><li><p>Greene, W. H. (2012). <em>Econometric Analysis</em>. 7th ed. Boston: Prentice Hall. ISBN 978-0-131-39538-1.</p></li><li><p>Hausman, J. A., &amp; McFadden, D. (1984). Specification Tests for the Multinomial Logit Model. <em>Econometrica</em>, 52(5), 1219–1240. <a href="https://doi.org/10.2307/1910997">DOI</a></p></li><li><p>Matějka, F., &amp; McKay, A. (2015). Rational Inattention to Discrete Choices: A New Foundation for the Multinomial Logit Model. <em>American Economic Review</em>, 105(1), 272–298. <a href="https://doi.org/10.1257/aer.20130047">DOI</a></p></li><li><p>McCullagh, P. (1980). Regression Models for Ordinal Data. <em>Journal of the Royal Statistical Society: Series B</em>, 42(2), 109–127. <a href="https://doi.org/10.1111/j.2517-6161.1980.tb01109.x">DOI</a></p></li><li><p>McFadden, D. (1974). Conditional Logit Analysis of Qualitative Choice Behavior. In P. Zarembka (Ed.), <em>Frontiers in Econometrics</em> (pp. 105–142). New York: Academic Press.</p></li><li><p>Mroz, T. A. (1987). The Sensitivity of an Empirical Model of Married Women&#39;s Hours of Work to Economic and Statistical Assumptions. <em>Econometrica</em>, 55(4), 765–799. <a href="https://doi.org/10.2307/1911029">DOI</a></p></li><li><p>Train, K. E. (2009). <em>Discrete Choice Methods with Simulation</em>. 2nd ed. Cambridge: Cambridge University Press. ISBN 978-0-521-74738-7.</p></li><li><p>Wooldridge, J. M. (2010). <em>Econometric Analysis of Cross Section and Panel Data</em>. 2nd ed. Cambridge, MA: MIT Press. ISBN 978-0-262-23258-6.</p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../binary_choice/">« Binary Choice Models</a><a class="docs-footer-nextpage" href="../panel_reg/">Panel Regression »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 28 November 2026 09:37">Saturday 28 November 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

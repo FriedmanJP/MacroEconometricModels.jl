@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ARIMA Forecast (h=12, 95% CI)</title>
+<title>ARIMA Forecast (h=12, 68% CI)</title>
 <style>    /* Theme surface + ink are CSS custom properties (plotrule Theming; PLT-14): one
        light default, a prefers-color-scheme dark override, and an explicit
        data-theme override the docs toggle stamps on the root element. */
@@ -138,10 +138,10 @@
     </style>
 </head>
 <body>
-<div class="figure-title">ARIMA Forecast (h=12, 95% CI)</div>
+<div class="figure-title">ARIMA Forecast (h=12, 68% CI)</div>
 <div class="panel-grid" style="--mem-panel-width: 100%;">
 <div class="panel">
-<div class="panel-title">ARIMA Forecast (h=12, 95% CI)</div>
+<div class="panel-title">ARIMA Forecast (h=12, 68% CI)</div>
 <div id="arima_fc_103"></div>
 </div>
 </div>
@@ -245,18 +245,18 @@ var hideTip = window.__mem_core.hideTip;
 {"x":-2,"hist":0.0030784944010990856,"fc":null,"ci_lo":null,"ci_hi":null},
 {"x":-1,"hist":0.007828164082873457,"fc":null,"ci_lo":null,"ci_hi":null},
 {"x":0,"hist":0.0028938234029487475,"fc":0.0028938234029487475,"ci_lo":null,"ci_hi":null},
-{"x":1,"hist":null,"fc":0.001563037641616724,"ci_lo":-0.0023678624721776235,"ci_hi":0.005493937755411071},
-{"x":2,"hist":null,"fc":0.0023945878972053574,"ci_lo":-0.0017687632981716593,"ci_hi":0.0065579390925823745},
-{"x":3,"hist":null,"fc":0.0026576906061146206,"ci_lo":-0.0015200139092293396,"ci_hi":0.00683539512145858},
-{"x":4,"hist":null,"fc":0.002581446795466822,"ci_lo":-0.0016017158287268164,"ci_hi":0.0067646094196604604},
-{"x":5,"hist":null,"fc":0.0025393595401891258,"ci_lo":-0.0016438508703393272,"ci_hi":0.006722569950717579},
-{"x":6,"hist":null,"fc":0.002544326946392123,"ci_lo":-0.0016389871394876434,"ci_hi":0.0067276410322718895},
-{"x":7,"hist":null,"fc":0.0025502452257161177,"ci_lo":-0.0016330689312760859,"ci_hi":0.006733559382708322},
-{"x":8,"hist":null,"fc":0.0025502793373859563,"ci_lo":-0.0016330364233758392,"ci_hi":0.006733595098147752},
-{"x":9,"hist":null,"fc":0.0025495296305245553,"ci_lo":-0.0016337861614218047,"ci_hi":0.006732845422470915},
-{"x":10,"hist":null,"fc":0.002549440845944875,"ci_lo":-0.0016338749659828141,"ci_hi":0.006732756657872564},
-{"x":11,"hist":null,"fc":0.002549526302860109,"ci_lo":-0.0016337895105425879,"ci_hi":0.006732842116262806},
-{"x":12,"hist":null,"fc":0.002549547232635144,"ci_lo":-0.0016337685809544875,"ci_hi":0.006732863046224775}];
+{"x":1,"hist":null,"fc":0.001563037641616724,"ci_lo":-0.0004314452351644295,"ci_hi":0.0035575205183978774},
+{"x":2,"hist":null,"fc":0.0023945878972053574,"ci_lo":0.00028216264374590714,"ci_hi":0.004507013150664808},
+{"x":3,"hist":null,"fc":0.0026576906061146206,"ci_lo":0.0005379826820020622,"ci_hi":0.0047773985302271785},
+{"x":4,"hist":null,"fc":0.002581446795466822,"ci_lo":0.00045896950445987496,"ci_hi":0.004703924086473769},
+{"x":5,"hist":null,"fc":0.0025393595401891258,"ci_lo":0.00041685800307472926,"ci_hi":0.004661861077303523},
+{"x":6,"hist":null,"fc":0.002544326946392123,"ci_lo":0.0004217728058772451,"ci_hi":0.004666881086907001},
+{"x":7,"hist":null,"fc":0.0025502452257161177,"ci_lo":0.00042769104911979895,"ci_hi":0.004672799402312437},
+{"x":8,"hist":null,"fc":0.0025502793373859563,"ci_lo":0.00042772434705972947,"ci_hi":0.004672834327712183},
+{"x":9,"hist":null,"fc":0.0025495296305245553,"ci_lo":0.00042697462437572354,"ci_hi":0.004672084636673388},
+{"x":10,"hist":null,"fc":0.002549440845944875,"ci_lo":0.00042688582965780047,"ci_hi":0.004671995862231949},
+{"x":11,"hist":null,"fc":0.002549526302860109,"ci_lo":0.0004269712858246365,"ci_hi":0.004672081319895581},
+{"x":12,"hist":null,"fc":0.002549547232635144,"ci_lo":0.00042699221550482336,"ci_hi":0.004672102249765464}];
     const series = [{"name":"History","color":"#1f77b4","key":"hist","dash":""},{"name":"Forecast","color":"#ff7f0e","key":"fc","dash":"6,3"}];
     const bands = [{"lo_key":"ci_lo","hi_key":"ci_hi","color":"#ff7f0e","alpha":0.15}];
     const refLines = [];

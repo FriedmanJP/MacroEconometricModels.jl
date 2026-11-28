@@ -12,12 +12,12 @@ report(m)</code></pre><pre class="documenter-example-output"><code class="nohigh
   Bandwidth                          5.000
   LR variance                       2.0236
 
-                           Long-run coefficients
+                              Long-run coefficients
 
-           Coef.   Std.Err.         t    P&gt;|t|   CI lower   CI upper
+           Coef.   Std.Err.         t    P&gt;|t|   68% CI Low   68% CI High
 
-  const   2.0070     0.1206   16.6356   &lt;0.001     1.7691     2.2450   ***
-  x       1.5328     0.0164   93.6392   &lt;0.001     1.5005     1.5650   ***
+  const   2.0070     0.1206   16.6356   &lt;0.001       1.8868        2.1273   ***
+  x       1.5328     0.0164   93.6392   &lt;0.001       1.5164        1.5491   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p><strong>Recipe 2: Canonical cointegrating regression</strong></p><pre><code class="language-julia hljs">mc = estimate_cointreg(y, x; method=:ccr)
 (coef = round.(coef(mc), digits=4), se = round.(stderror(mc), digits=4))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(coef = [2.0069, 1.5328], se = [0.1206, 0.0163])</code></pre><p><strong>Recipe 3: Dynamic OLS with automatic lead/lag selection</strong></p><pre><code class="language-julia hljs">md = estimate_cointreg(y, x; method=:dols, leads=:auto, lags=:auto, ic=:aic)
@@ -55,12 +55,12 @@ report(mg)</code></pre><pre class="documenter-example-output"><code class="nohig
   Deterministics                constant
   Kernel                        Bartlett
 
-                      Group-mean long-run coefficients
+                        Group-mean long-run coefficients
 
-           Coef.   Std.Err.         z    P&gt;|z|   CI lower   CI upper
+           Coef.   Std.Err.         z    P&gt;|z|   68% CI Low   68% CI High
 
-  const   2.5366     0.0871   29.1151   &lt;0.001     2.3659     2.7074   ***
-  lx      1.4870     0.0154   96.5656   &lt;0.001     1.4568     1.5171   ***
+  const   2.5366     0.0871   29.1151   &lt;0.001       2.4500        2.6233   ***
+  lx      1.4870     0.0154   96.5656   &lt;0.001       1.4716        1.5023   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><p>The group-mean slope is <span>$1.4870$</span> with a standard error of <span>$0.0154$</span>, recovering the common <span>$1.5$</span> imposed on all five units. Each unit is fitted separately, so the per-unit slopes in <code>mg.unit_coefs</code> scatter between <span>$1.460$</span> and <span>$1.532$</span> — heterogeneity that the between-dimension estimator averages away without imposing homogeneity on the short-run dynamics or the endogeneity structure, both of which differ by unit in this DGP. The reported <span>$z$</span> of <span>$96.6$</span> is Pedroni&#39;s <span>$N^{-1/2}\sum_i t_i$</span>, not the <span>$t$</span>-ratio of the mean, so it aggregates the evidence in each unit&#39;s own fit rather than treating <span>$\bar\beta$</span> as a single estimate.</p><p><strong>Pooled FMOLS</strong> reports the common slope only, with unit fixed effects removed:</p><pre><code class="language-julia hljs">mp = estimate_xtcointreg(pd, :ly, :lx; method=:fmols, pooling=:pooled, trend=:const)
 mdp = estimate_xtcointreg(pd, :ly, :lx; method=:dols, pooling=:pooled, trend=:const)
@@ -95,13 +95,13 @@ report(mm)</code></pre><pre class="documenter-example-output"><code class="nohig
   Bandwidth                          3.000
   LR variance                       1.4111
 
-                            Long-run coefficients
+                               Long-run coefficients
 
-            Coef.   Std.Err.          t    P&gt;|t|   CI lower   CI upper
+            Coef.   Std.Err.          t    P&gt;|t|   68% CI Low   68% CI High
 
-  const    0.8838     0.1545     5.7215   &lt;0.001     0.5793     1.1882   ***
-  x1       0.7792     0.0146    53.3231   &lt;0.001     0.7504     0.8080   ***
-  x2      -0.5323     0.0130   -41.0362   &lt;0.001    -0.5578    -0.5067   ***
+  const    0.8838     0.1545     5.7215   &lt;0.001       0.7298        1.0377   ***
+  x1       0.7792     0.0146    53.3231   &lt;0.001       0.7647        0.7938   ***
+  x2      -0.5323     0.0130   -41.0362   &lt;0.001      -0.5452       -0.5193   ***
 
 Significance: *** p&lt;0.01, ** p&lt;0.05, * p&lt;0.10</code></pre><pre><code class="language-julia hljs"># 2. Compare all three estimators&#39; slope block (true = [0.8, -0.5])
 slopes = [round.(coef(estimate_cointreg(yy, X; method=meth))[2:3], digits=4)
@@ -113,4 +113,4 @@ Park, Joon Y. 1992. &quot;Canonical Cointegrating Regressions.&quot; Econometric
 Saikkonen, Pentti 1991. &quot;Asymptotically Efficient Estimation of Cointegration Regressions.&quot; Econometric Theory 7 (1): 1–21.
   DOI: https://doi.org/10.1017/S0266466600004217
 Stock, James H. and Watson, Mark W. 1993. &quot;A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems.&quot; Econometrica 61 (4): 783–820.
-  DOI: https://doi.org/10.2307/2951763</code></pre><ul><li><p>Phillips, P. C. B., &amp; Hansen, B. E. (1990). Statistical Inference in Instrumental Variables Regression with I(1) Processes. <em>Review of Economic Studies</em>, 57(1), 99-125. <a href="https://doi.org/10.2307/2297545">DOI</a></p></li><li><p>Park, J. Y. (1992). Canonical Cointegrating Regressions. <em>Econometrica</em>, 60(1), 119-143. <a href="https://doi.org/10.2307/2951679">DOI</a></p></li><li><p>Saikkonen, P. (1991). Asymptotically Efficient Estimation of Cointegration Regressions. <em>Econometric Theory</em>, 7(1), 1-21. <a href="https://doi.org/10.1017/S0266466600004217">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (1993). A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems. <em>Econometrica</em>, 61(4), 783-820. <a href="https://doi.org/10.2307/2951763">DOI</a></p></li><li><p>Pedroni, P. (2000). Fully Modified OLS for Heterogeneous Cointegrated Panels. <em>Advances in Econometrics</em>, 15, 93-130. <a href="https://doi.org/10.1016/S0731-9053(00)15004-2">DOI</a></p></li><li><p>Pedroni, P. (2001). Purchasing Power Parity Tests in Cointegrated Panels. <em>Review of Economics and Statistics</em>, 83(4), 727-731. <a href="https://doi.org/10.1162/003465301753237803">DOI</a></p></li><li><p>Kao, C., &amp; Chiang, M.-H. (2000). On the Estimation and Inference of a Cointegrated Regression in Panel Data. <em>Advances in Econometrics</em>, 15, 179-222. <a href="https://doi.org/10.1016/S0731-9053(00)15007-8">DOI</a></p></li><li><p>Mark, N. C., &amp; Sul, D. (2003). Cointegration Vector Estimation by Panel DOLS and Long-Run Money Demand. <em>Oxford Bulletin of Economics and Statistics</em>, 65(5), 655-680. <a href="https://doi.org/10.1111/j.1468-0084.2003.00066.x">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ardl/">« ARDL &amp; Bounds Test</a><a class="docs-footer-nextpage" href="../lp/">Local Projections »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Wednesday 25 November 2026 15:41">Wednesday 25 November 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+  DOI: https://doi.org/10.2307/2951763</code></pre><ul><li><p>Phillips, P. C. B., &amp; Hansen, B. E. (1990). Statistical Inference in Instrumental Variables Regression with I(1) Processes. <em>Review of Economic Studies</em>, 57(1), 99-125. <a href="https://doi.org/10.2307/2297545">DOI</a></p></li><li><p>Park, J. Y. (1992). Canonical Cointegrating Regressions. <em>Econometrica</em>, 60(1), 119-143. <a href="https://doi.org/10.2307/2951679">DOI</a></p></li><li><p>Saikkonen, P. (1991). Asymptotically Efficient Estimation of Cointegration Regressions. <em>Econometric Theory</em>, 7(1), 1-21. <a href="https://doi.org/10.1017/S0266466600004217">DOI</a></p></li><li><p>Stock, J. H., &amp; Watson, M. W. (1993). A Simple Estimator of Cointegrating Vectors in Higher Order Integrated Systems. <em>Econometrica</em>, 61(4), 783-820. <a href="https://doi.org/10.2307/2951763">DOI</a></p></li><li><p>Pedroni, P. (2000). Fully Modified OLS for Heterogeneous Cointegrated Panels. <em>Advances in Econometrics</em>, 15, 93-130. <a href="https://doi.org/10.1016/S0731-9053(00)15004-2">DOI</a></p></li><li><p>Pedroni, P. (2001). Purchasing Power Parity Tests in Cointegrated Panels. <em>Review of Economics and Statistics</em>, 83(4), 727-731. <a href="https://doi.org/10.1162/003465301753237803">DOI</a></p></li><li><p>Kao, C., &amp; Chiang, M.-H. (2000). On the Estimation and Inference of a Cointegrated Regression in Panel Data. <em>Advances in Econometrics</em>, 15, 179-222. <a href="https://doi.org/10.1016/S0731-9053(00)15007-8">DOI</a></p></li><li><p>Mark, N. C., &amp; Sul, D. (2003). Cointegration Vector Estimation by Panel DOLS and Long-Run Money Demand. <em>Oxford Bulletin of Economics and Statistics</em>, 65(5), 655-680. <a href="https://doi.org/10.1111/j.1468-0084.2003.00066.x">DOI</a></p></li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../ardl/">« ARDL &amp; Bounds Test</a><a class="docs-footer-nextpage" href="../lp/">Local Projections »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.17.0 on <span class="colophon-date" title="Saturday 28 November 2026 09:37">Saturday 28 November 2026</span>. Using Julia version 1.13.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
