@@ -2129,8 +2129,10 @@ end
     r_smc = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc,
         observables=[:y], n_smc=300, measurement_error=merr,
         rng=Random.Xoshiro(1))
+    # n_particles=400 puts the bootstrap PF log-likelihood variance in the Doucet et al. (2015)
+    # optimal band (Var ≈ 1.6 vs ≈ 4.9 at 200), keeping cross-seed SD ≈ 0.007 across Julia 1.10/1.13.
     r_smc2 = estimate_dsge_bayes(spec, sim_data, [0.5]; priors=priors, method=:smc2,
-        observables=[:y], n_smc=200, n_particles=200, n_mh_steps=2,
+        observables=[:y], n_smc=200, n_particles=400, n_mh_steps=2,
         measurement_error=merr, solver=:gensys,
         rng=Random.Xoshiro(101))
 
@@ -5254,11 +5256,11 @@ end
         nss_r = M._build_nonlinear_state_space(sol_r, Z_r, d_r, H_r)
         nx = length(nss_r.state_indices)
         ws = M._allocate_pf_workspace(Float64, 4, 1, 1, 1; nv=nx+1, nx=nx, order=ord)
-        rng_t = Xoshiro(9494 + ord)
-        xf0 = 0.02 .* randn(rng_t, nx)
-        xs0 = ord >= 2 ? 0.002 .* randn(rng_t, nx) : zeros(nx)
-        xt0 = ord >= 3 ? 0.0002 .* randn(rng_t, nx) : zeros(nx)
-        eps_v = randn(rng_t, 1)
+        rng = Xoshiro(9494 + ord)
+        xf0 = 0.02 .* randn(rng, nx)
+        xs0 = ord >= 2 ? 0.002 .* randn(rng, nx) : zeros(nx)
+        xt0 = ord >= 3 ? 0.0002 .* randn(rng, nx) : zeros(nx)
+        eps_v = randn(rng, 1)
 
         ws.particles_fo[:, 1] .= xf0
         ws.particles_so !== nothing && (ws.particles_so[:, 1] .= xs0)

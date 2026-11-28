@@ -325,7 +325,15 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
     size(ss.Z, 1) == n_obs || throw(DimensionMismatch(
         "data has $n_obs rows, expected $(size(ss.Z, 1)) observables"))
     n_states = size(ss.G1, 1)
+    size(ss.G1, 2) == n_states || throw(ArgumentError(
+        "G1 must be square, got $(size(ss.G1))"))
+    size(ss.impact, 1) == n_states || throw(ArgumentError(
+        "impact has $(size(ss.impact, 1)) rows, expected n_states=$n_states"))
+    size(ss.Z, 2) == n_states || throw(DimensionMismatch(
+        "Z has $(size(ss.Z, 2)) columns, expected n_states=$n_states"))
     n_shocks = size(ss.impact, 2)
+    size(ss.Q) == (n_shocks, n_shocks) || throw(DimensionMismatch(
+        "Q must be $(n_shocks)×$(n_shocks), got $(size(ss.Q))"))
 
     # --- Initialization ---
     x = zeros(T, n_states)  # initial state mean (deviation from SS = 0)

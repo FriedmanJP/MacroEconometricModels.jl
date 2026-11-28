@@ -1962,9 +1962,6 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         # Each worker w owns pool[w] (and screen_pool[w]) exclusively — zero threadid() hazards,
         # zero static-chunk stragglers, and per-worker local acc/prop counters reduced once.
         nw_mut = min(n_pool, max(N, 1))
-        worker_acc = zeros(Int, nw_mut)
-        worker_prop = zeros(Int, nw_mut)
-        worker_s2_prop = zeros(Int, nw_mut)
 
         function _eval_smc2_proposal(theta_star::Vector{T}, theta_j::Vector{T},
                                      ll_j::T, lp_j::T, j::Int,
@@ -2080,61 +2077,67 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
             end
         end
 
-        _with_single_blas_thread() do
-            _parallel_for_worksteal(N; n_workers=nw_mut) do j, w
-                ws = pool[w]
-                ws_screen = delayed_acceptance ? screen_pool[w] : ws
-                thread_rng = Random.Xoshiro(particle_seeds_mut[j])
+        function _run_pmmh_pass!(seeds_pass::Vector{UInt64})
+            w_acc = zeros(Int, nw_mut)
+            w_prop = zeros(Int, nw_mut)
+            w_s2 = zeros(Int, nw_mut)
+            _with_single_blas_thread() do
+                _parallel_for_worksteal(N; n_workers=nw_mut) do j, w
+                    ws = pool[w]
+                    ws_screen = delayed_acceptance ? screen_pool[w] : ws
+                    thread_rng = Random.Xoshiro(seeds_pass[j])
 
-                theta_j = state.theta_particles[:, j]
-                ll_j = state.log_likelihoods[j]   # incumbent unbiased PF estimate (PMMH)
-                lp_j = state.log_priors[j]
-                acc_local = 0
-                prop_local = 0
-                s2_local = 0
+                    theta_j = state.theta_particles[:, j]
+                    ll_j = state.log_likelihoods[j]   # incumbent unbiased PF estimate (PMMH)
+                    lp_j = state.log_priors[j]
+                    acc_local = 0
+                    prop_local = 0
+                    s2_local = 0
 
-                for _ in 1:n_mh_steps
-                    if use_blocking
-                        for b in eachindex(blocks)
-                            I_b = blocks[b]
-                            L_b = block_Ls[b]
-                            z_b = randn(thread_rng, T, length(I_b))
-                            step_b = L_b * z_b
-                            theta_star = copy(theta_j)
-                            @inbounds for m in eachindex(I_b)
-                                theta_star[I_b[m]] += step_b[m]
+                    for _ in 1:n_mh_steps
+                        if use_blocking
+                            for b in eachindex(blocks)
+                                I_b = blocks[b]
+                                L_b = block_Ls[b]
+                                z_b = randn(thread_rng, T, length(I_b))
+                                step_b = L_b * z_b
+                                theta_star = copy(theta_j)
+                                @inbounds for m in eachindex(I_b)
+                                    theta_star[I_b[m]] += step_b[m]
+                                end
+                                accepted, reached_s2, theta_j, ll_j, lp_j = _eval_smc2_proposal(
+                                    theta_star, theta_j, ll_j, lp_j, j, ws, ws_screen, thread_rng)
+                                accepted && (acc_local += 1)
+                                reached_s2 && (s2_local += 1)
+                                prop_local += 1
                             end
+                        else
+                            # Propose: theta_star = theta_j + L * z (symmetric RW ⇒ q-terms cancel)
+                            z = randn(thread_rng, T, n_params)
+                            theta_star = theta_j + L * z
                             accepted, reached_s2, theta_j, ll_j, lp_j = _eval_smc2_proposal(
                                 theta_star, theta_j, ll_j, lp_j, j, ws, ws_screen, thread_rng)
                             accepted && (acc_local += 1)
                             reached_s2 && (s2_local += 1)
                             prop_local += 1
                         end
-                    else
-                        # Propose: theta_star = theta_j + L * z (symmetric RW ⇒ q-terms cancel)
-                        z = randn(thread_rng, T, n_params)
-                        theta_star = theta_j + L * z
-                        accepted, reached_s2, theta_j, ll_j, lp_j = _eval_smc2_proposal(
-                            theta_star, theta_j, ll_j, lp_j, j, ws, ws_screen, thread_rng)
-                        accepted && (acc_local += 1)
-                        reached_s2 && (s2_local += 1)
-                        prop_local += 1
                     end
-                end
 
-                # Write back
-                state.theta_particles[:, j] = theta_j
-                state.log_likelihoods[j] = ll_j
-                state.log_priors[j] = lp_j
-                worker_acc[w] += acc_local
-                worker_prop[w] += prop_local
-                worker_s2_prop[w] += s2_local
+                    # Write back
+                    state.theta_particles[:, j] = theta_j
+                    state.log_likelihoods[j] = ll_j
+                    state.log_priors[j] = lp_j
+                    w_acc[w] += acc_local
+                    w_prop[w] += prop_local
+                    w_s2[w] += s2_local
+                end
             end
+            return sum(w_acc), sum(w_prop), sum(w_s2)
         end
 
+        tot_acc, tp, s2_prop = _run_pmmh_pass!(particle_seeds_mut)
+
         # Record acceptance rate (reduced once from per-worker counters)
-        tp = sum(worker_prop)
-        tot_acc = sum(worker_acc)
         acc_rate = tp > 0 ? T(tot_acc) / T(tp) : zero(T)
         push!(state.acceptance_rates, acc_rate)
 
@@ -2145,7 +2148,6 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
         # Under delayed acceptance, gate on Stage-2 conditional acceptance as well so Stage-1
         # screening rejections don't spuriously re-probe N_x every stage; if N_x doubles,
         # resize screen_pool (when auto-sized) and single-solve refresh ll_cheap in _exchange_step!.
-        s2_prop = sum(worker_s2_prop)
         acc_s2 = s2_prop > 0 ? T(tot_acc) / T(s2_prop) : zero(T)
         should_probe_nx = delayed_acceptance ? (acc_rate < T(0.10) && acc_s2 < T(0.15)) : (acc_rate < T(0.15))
         if should_probe_nx
@@ -2172,6 +2174,11 @@ function _smc2_sample(spec::ModelSpec{T}, data::AbstractMatrix,
                     ll_cheap=(delayed_acceptance ? ll_cheap : nothing),
                     screen_pool=screen_pool,
                     failures=lik_failures, evals=lik_evals)
+                # Post-exchange PMMH rejuvenation at the new lower-variance N_x (Chopin et al. 2013 §3.4):
+                # restores particle diversity whenever exchange-step weighting triggers resampling
+                # (including on the final stage phi_new == 1.0).
+                rejuv_seeds = [hash((:exchange_rejuv, j, phi_new, N_x, rand(rng, UInt64))) for j in 1:N]
+                _run_pmmh_pass!(rejuv_seeds)
             end
         end
 
