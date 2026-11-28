@@ -10,16 +10,7 @@ Auto-linearization of DSGE models via numerical Jacobians.
 Produces the Sims canonical form: Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t
 """
 
-"""
-    linearize(spec::ModelSpec{T}) → LinearDSGE{T}
-
-Linearize a DSGE model around its steady state using numerical Jacobians.
-
-The model `f(y_t, y_{t-1}, y_{t+1}, ε, θ) = 0` is expanded to first order.
-Rearranging into Sims form: `Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t`.
-
-Requires `compute_steady_state` to have been called first.
-"""
+"""Internal helper: linearize `spec` and also return the lead Jacobian `f_lead` to avoid recomputing it."""
 function _linearize_with_lead(spec::ModelSpec{T}) where {T<:AbstractFloat}
     isempty(spec.steady_state) &&
         throw(ArgumentError("Must compute steady state first (call compute_steady_state)"))
@@ -62,6 +53,16 @@ function _linearize_with_lead(spec::ModelSpec{T}) where {T<:AbstractFloat}
     return LinearDSGE{T}(Gamma0, Gamma1, C, Psi, Pi, spec), f_lead
 end
 
+"""
+    linearize(spec::ModelSpec{T}) → LinearDSGE{T}
+
+Linearize a DSGE model around its steady state using numerical Jacobians.
+
+The model `f(y_t, y_{t-1}, y_{t+1}, ε, θ) = 0` is expanded to first order.
+Rearranging into Sims form: `Γ₀·y_t = Γ₁·y_{t-1} + C + Ψ·ε_t + Π·η_t`.
+
+Requires `compute_steady_state` to have been called first.
+"""
 linearize(spec::ModelSpec{T}) where {T<:AbstractFloat} = first(_linearize_with_lead(spec))
 
 """Compute Jacobian of residual vector w.r.t. y_t, y_{t-1}, or y_{t+1}."""
