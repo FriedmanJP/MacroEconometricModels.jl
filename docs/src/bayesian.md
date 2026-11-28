@@ -534,7 +534,7 @@ Set identification changes the answer materially. Because every draw is rotated 
 | `max_draws` | `Int` | `1000` | Rotation attempts per posterior draw, for set-identified methods |
 | `data` | `AbstractMatrix` | `post.data` | Override the data used for residuals and narrative checks |
 | `shock_names` | `Vector{String}` | `nothing` | Shock display names |
-| `threaded` | `Bool` | `false` | Use threaded quantile computation |
+| `threaded` | `Bool` | `true` | Parallelize posterior draw processing and quantile reduction across threads with thread-count-invariant per-draw RNG streams (identical to `threaded=false`) |
 
 ### `BayesianImpulseResponse{T}` Fields
 

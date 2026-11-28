@@ -726,6 +726,7 @@ function _ssj_realize(spec::ModelSpec{T}, ss::HASteadyState{T},
     if max_eig > one(T)
         G1 .*= T(0.999) / max_eig
         eig = ComplexF64.(eigvals(ComplexF64.(G1)))
+        eu = [1, 1]
     end
     return _wrap_hadsge_solution(spec, ss, G1, impact, C_sol, eu, eig,
                                  C_mat, D, jacobians, T_horizon, :ssj;

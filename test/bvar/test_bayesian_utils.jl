@@ -173,3 +173,51 @@ end
     stack_t159 = cat(results...; dims=4)
     @test maximum(abs, ir1.point_estimate .- dropdims(mean(stack_t159; dims=4); dims=4)) < 1e-12
 end
+
+@testset "BVAR threaded=false vs threaded=true bit-exact parity (#945)" begin
+    rng = Random.Xoshiro(94501)
+    n, p, T = 3, 2, 120
+    A_true = [0.5 0.1 0.0; 0.05 0.4 0.05; 0.0 0.1 0.45]
+    Y = dgp_var(rng; A=A_true, B0=Matrix{Float64}(I, n, n), T=T).Y
+    post = estimate_bvar(Y, p; n_draws=40, sampler=:direct, rng=Xoshiro(94502))
+
+    # Cholesky IRF / FEVD / HD bit-exact parity
+    ir_s = irf(post, 10; method=:cholesky, threaded=false)
+    ir_t = irf(post, 10; method=:cholesky, threaded=true)
+    @test ir_s.point_estimate == ir_t.point_estimate
+    @test ir_s.quantiles == ir_t.quantiles
+    @test ir_s._draws == ir_t._draws
+
+    fv_s = fevd(post, 10; method=:cholesky, threaded=false)
+    fv_t = fevd(post, 10; method=:cholesky, threaded=true)
+    @test fv_s.point_estimate == fv_t.point_estimate
+    @test fv_s.quantiles == fv_t.quantiles
+
+    hd_s = historical_decomposition(post; method=:cholesky, threaded=false)
+    hd_t = historical_decomposition(post; method=:cholesky, threaded=true)
+    @test hd_s.point_estimate == hd_t.point_estimate
+    @test hd_s.quantiles == hd_t.quantiles
+    @test hd_s.initial_point_estimate == hd_t.initial_point_estimate
+
+    # Long-run IRF & HD bit-exact parity
+    lr_s = irf(post, 8; method=:long_run, threaded=false)
+    lr_t = irf(post, 8; method=:long_run, threaded=true)
+    @test lr_s.point_estimate == lr_t.point_estimate
+    @test lr_s.quantiles == lr_t.quantiles
+
+    # Sign-restricted IRF & HD bit-exact parity with explicit RNG
+    chk = ir -> (ir[1, 1, 1] > 0 && ir[1, 2, 2] > 0)
+    sg_s = irf(post, 8; method=:sign, check_func=chk, max_draws=200,
+               rng=Xoshiro(94503), threaded=false)
+    sg_t = irf(post, 8; method=:sign, check_func=chk, max_draws=200,
+               rng=Xoshiro(94503), threaded=true)
+    @test sg_s.point_estimate == sg_t.point_estimate
+    @test sg_s.quantiles == sg_t.quantiles
+
+    hds_s = historical_decomposition(post; method=:sign, check_func=chk, max_draws=200,
+                                     rng=Xoshiro(94504), threaded=false)
+    hds_t = historical_decomposition(post; method=:sign, check_func=chk, max_draws=200,
+                                     rng=Xoshiro(94504), threaded=true)
+    @test hds_s.point_estimate == hds_t.point_estimate
+    @test hds_s.quantiles == hds_t.quantiles
+end

@@ -632,4 +632,40 @@ using MacroEconometricModels
         @test plot_result(post_as; view=:draws, max_panels=4) isa PlotOutput
         @test plot_result(post_as; view=:lambda) isa PlotOutput
     end
+
+    # =========================================================================
+    # 9. Threaded vs Serial Bit-Exact Parity (#948)
+    # =========================================================================
+    @testset "DSGE-VAR threaded=false vs threaded=true bit-exact parity (#948)" begin
+        dv_fs = estimate_dsge_var(sol_nk, Y_true, p; lambda=1.5, observables=obs_nk,
+                                  n_draws=60, rng=Xoshiro(94810), threaded=false)
+        dv_ft = estimate_dsge_var(sol_nk, Y_true, p; lambda=1.5, observables=obs_nk,
+                                  n_draws=60, rng=Xoshiro(94810), threaded=true)
+        @test dv_fs.B_draws == dv_ft.B_draws
+        @test dv_fs.Sigma_draws == dv_ft.Sigma_draws
+        @test dv_fs.B0_draws == dv_ft.B0_draws
+
+        priors_p = Dict{Symbol,Distribution}(:psi1 => Uniform(1.15, 2.50))
+        dv_js = estimate_dsge_var(nk_spec, Y_true, p; priors=priors_p, lambda=1.5,
+                                  observables=obs_nk, method=:rwmh, n_draws=25, burnin=10,
+                                  rng=Xoshiro(94811), threaded=false)
+        dv_jt = estimate_dsge_var(nk_spec, Y_true, p; priors=priors_p, lambda=1.5,
+                                  observables=obs_nk, method=:rwmh, n_draws=25, burnin=10,
+                                  rng=Xoshiro(94811), threaded=true)
+        @test dv_js.B_draws == dv_jt.B_draws
+        @test dv_js.Sigma_draws == dv_jt.Sigma_draws
+        @test dv_js.B0_draws == dv_jt.B0_draws
+
+        ir_s = irf(dv_ft, 10; threaded=false)
+        ir_t = irf(dv_ft, 10; threaded=true)
+        @test ir_s.point_estimate == ir_t.point_estimate && ir_s.quantiles == ir_t.quantiles
+
+        fv_s = fevd(dv_ft, 10; threaded=false)
+        fv_t = fevd(dv_ft, 10; threaded=true)
+        @test fv_s.point_estimate == fv_t.point_estimate && fv_s.quantiles == fv_t.quantiles
+
+        hd_s = historical_decomposition(dv_ft; threaded=false)
+        hd_t = historical_decomposition(dv_ft; threaded=true)
+        @test hd_s.point_estimate == hd_t.point_estimate && hd_s.quantiles == hd_t.quantiles
+    end
 end

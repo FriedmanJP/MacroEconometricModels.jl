@@ -432,8 +432,9 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
     gx_state = @view nss.gx[:, 1:nx]       # ny x nx
     eta_y = @view nss.gx[:, nx+1:nv]       # ny x n_eps
 
-    # First-order state
+    # First-order state and control (evaluated on LAGGED state + current shock, matching _pss_step; S-01 / #949)
     xf_new = hx_state * xf_prev + eta_x * eps_t
+    y_t = ny > 0 ? (gx_state * xf_prev + eta_y * eps_t) : zeros(T, 0)
 
     # Build augmented vector vf = [xf_prev; eps_t]
     vf = zeros(T, nv)
@@ -455,6 +456,17 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
         end
         if nss.hsigmasigma !== nothing
             xs_new += T(0.5) * nss.hsigmasigma
+        end
+
+        # Second-order control terms on lagged xs_prev and vf = [xf_prev; eps_t]
+        if ny > 0
+            y_t += gx_state * xs_prev
+            if nss.gxx !== nothing && !isempty(kron_vf)
+                y_t += T(0.5) * nss.gxx * kron_vf
+            end
+            if nss.gsigmasigma !== nothing
+                y_t += T(0.5) * nss.gsigmasigma
+            end
         end
 
         if nss.order >= 3
@@ -479,53 +491,28 @@ function _nonlinear_transition(nss::NonlinearStateSpace{T},
             if nss.hsigmasigmasigma !== nothing
                 xrd_new += (one(T) / T(6)) * nss.hsigmasigmasigma
             end
+
+            # Third-order control terms on lagged (xrd_prev, xs_prev, vf)
+            if ny > 0
+                y_t += gx_state * xrd_prev
+                if nss.gxx !== nothing && !isempty(kron_vf_vs)
+                    y_t += nss.gxx * kron_vf_vs
+                end
+                if nss.gxxx !== nothing && !isempty(kron3_vf)
+                    y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf
+                end
+                if nss.gsigmax !== nothing
+                    y_t += T(0.5) * nss.gsigmax * vf
+                end
+                if nss.gsigmasigmasigma !== nothing
+                    y_t += (one(T) / T(6)) * nss.gsigmasigmasigma
+                end
+            end
         end
     end
 
     # Total state
     x_total = xf_new + xs_new + xrd_new
-
-    # Controls
-    y_t = gx_state * x_total + eta_y * eps_t
-
-    if nss.order >= 2 && nss.gxx !== nothing
-        # Build vf_new = [xf_new; eps_t] for control Kronecker products
-        vf_new = zeros(T, nv)
-        if nx > 0
-            vf_new[1:nx] = xf_new
-        end
-        vf_new[nx+1:nv] = eps_t
-        kron_vf_new = kron(vf_new, vf_new)
-
-        if nss.order >= 3
-            vs_new = zeros(T, nv)
-            if nx > 0
-                vs_new[1:nx] = xs_new
-            end
-            kron_vfvs_new = kron(vf_new, vs_new)
-            y_t += T(0.5) * nss.gxx * (kron_vf_new + T(2) * kron_vfvs_new)
-        else
-            y_t += T(0.5) * nss.gxx * kron_vf_new
-        end
-
-        if nss.gsigmasigma !== nothing
-            y_t += T(0.5) * nss.gsigmasigma
-        end
-
-        if nss.order >= 3
-            kron3_vf_new = kron(vf_new, kron_vf_new)
-
-            if nss.gxxx !== nothing
-                y_t += (one(T) / T(6)) * nss.gxxx * kron3_vf_new
-            end
-            if nss.gsigmax !== nothing
-                y_t += T(0.5) * nss.gsigmax * vf_new
-            end
-            if nss.gsigmasigmasigma !== nothing
-                y_t += (one(T) / T(6)) * nss.gsigmasigmasigma
-            end
-        end
-    end
 
     return xf_new, xs_new, xrd_new, x_total, y_t
 end
@@ -585,7 +572,8 @@ end
 """
     dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
                             N::Int=1000, N_back::Int=100,
-                            rng::AbstractRNG=Random.default_rng()) where {T}
+                            rng::AbstractRNG=Random.default_rng(),
+                            threaded::Bool=true) where {T}
 
 Forward-filtering backward-simulation (FFBSi) particle smoother for nonlinear DSGE models.
 
@@ -599,6 +587,8 @@ solutions.
 - `N` — number of forward particles (default: 1000)
 - `N_back` — number of backward trajectories (default: 100)
 - `rng` — random number generator (default: `Random.default_rng()`)
+- `threaded` — parallelize the backward simulation pass across threads with
+  per-trajectory RNG streams (default: `true`; bit-identical to `threaded=false`)
 
 # Returns
 A `KalmanSmootherResult{T}` with smoothed states and shocks (covariances from particle
@@ -610,7 +600,8 @@ approximation).
 """
 function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
                                  N::Int=1000, N_back::Int=100,
-                                 rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+                                 rng::AbstractRNG=Random.default_rng(),
+                                 threaded::Bool=true) where {T<:AbstractFloat}
     n_obs, T_obs = size(data)
     nx = length(nss.state_indices)
     ny = length(nss.control_indices)
@@ -672,13 +663,13 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
         # Propagate through pruned nonlinear transition
         _pf_transition_pruned!(ws, nss)
 
-        # Compute log weights
+        # Compute log weights into scratch buffer so carried non-uniform weights are preserved (#128 / #949)
         y_t = @view data[:, t]
-        _pf_log_weights!(ws.log_weights, ws.innovations, ws.tmp_obs,
+        _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,
                           ws.particles, y_t, nss.Z, nss.d, nss.H_inv, nss.log_det_H)
 
-        # Accumulate log-likelihood
-        log_lik += _logsumexp(ws.log_weights) - log_N
+        # Accumulate log-likelihood (ratio-form increment, unbiased when adaptive resampling skips)
+        log_lik += _pf_increment!(ws)
 
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
@@ -737,32 +728,47 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
     back_states = zeros(T, n_endog, N_back, T_obs)
     back_shocks = zeros(T, n_eps, N_back, T_obs)
 
-    # Temporary backward weights
-    bw = zeros(T, N)
-
-    # Pre-allocate backward pass temporaries
-    xf_k_buf = zeros(T, nx)
-    predicted = zeros(T, nx)
-    residual_bw = zeros(T, nx)
-    implied_shock = zeros(T, n_eps)
-    det_full = zeros(T, n_endog)
-    x_tp1_states = zeros(T, nx)
+    # Pre-generate per-trajectory seeds so threaded=false and threaded=true
+    # (and any thread count) produce bit-identical backward trajectories.
+    back_seeds = rand(rng, UInt64, N_back)
     zero_eps = zeros(T, n_eps)
-    resid_buf = zeros(T, n_endog)
-    implied_eps = zeros(T, n_eps)
 
-    for b in 1:N_back
+    use_threads = threaded && Threads.nthreads() > 1 && N_back > 1
+    n_workers = use_threads ? min(Threads.nthreads(), N_back) : 1
+    use_small_gemv = (nx <= 16 && n_eps <= 16)
+
+    # Per-worker scratch buffers indexed by worker ID w ∈ 1:n_workers (never threadid())
+    bw_ws = [zeros(T, N) for _ in 1:n_workers]
+    pred_ws = [zeros(T, nx) for _ in 1:n_workers]
+    res_bw_ws = [zeros(T, nx) for _ in 1:n_workers]
+    imp_sh_ws = [zeros(T, n_eps) for _ in 1:n_workers]
+    det_ws = [zeros(T, n_endog) for _ in 1:n_workers]
+    x_tp1_ws = [zeros(T, nx) for _ in 1:n_workers]
+    res_buf_ws = [zeros(T, n_endog) for _ in 1:n_workers]
+    imp_eps_ws = [zeros(T, n_eps) for _ in 1:n_workers]
+
+    function _run_backward_traj!(b::Int, w::Int)
+        local_rng = Xoshiro(back_seeds[b])
+        bw = bw_ws[w]
+        predicted = pred_ws[w]
+        residual_bw = res_bw_ws[w]
+        implied_shock = imp_sh_ws[w]
+        det_full = det_ws[w]
+        x_tp1_states = x_tp1_ws[w]
+        resid_buf = res_buf_ws[w]
+        implied_eps = imp_eps_ws[w]
+
         # Draw x_T from final weights
-        idx_T = _categorical_draw(@view(weights_store[:, T_obs]), rng)
-        back_states[:, b, T_obs] = particles_store[:, idx_T, T_obs]
+        idx_T = _categorical_draw(@view(weights_store[:, T_obs]), local_rng)
+        @inbounds for s in 1:n_endog
+            back_states[s, b, T_obs] = particles_store[s, idx_T, T_obs]
+        end
 
         # Backward pass: t = T_obs-1 down to 1
         for t in (T_obs - 1):-1:1
-            x_tp1 = @view back_states[:, b, t + 1]
-
             # Extract the state part of x_{t+1}
-            for (k, si) in enumerate(nss.state_indices)
-                x_tp1_states[k] = x_tp1[si]
+            @inbounds for (k, si) in enumerate(nss.state_indices)
+                x_tp1_states[k] = back_states[si, b, t + 1]
             end
 
             # Compute backward weights: w_tilde_k = w_t^k * p(x_{t+1} | x_t^k)
@@ -771,32 +777,57 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
             # implied_shock = eta_x_pinv * (x_{t+1}_states - hx_state * xf_t^k)
             # log p = -0.5 * ||implied_shock||^2 (standard normal prior on shocks)
             max_log_bw = T(-Inf)
-            for k in 1:N
-                # predicted = hx_state * xf_store[:, k, t]
-                xf_k_view = @view xf_store[:, k, t]
-                mul!(predicted, hx_state, xf_k_view)
-                # residual_bw = x_tp1_states - predicted
-                @inbounds for i in 1:nx
-                    residual_bw[i] = x_tp1_states[i] - predicted[i]
+            if use_small_gemv
+                @inbounds for k in 1:N
+                    for i in 1:nx
+                        acc = zero(T)
+                        for j in 1:nx
+                            acc += hx_state[i, j] * xf_store[j, k, t]
+                        end
+                        residual_bw[i] = x_tp1_states[i] - acc
+                    end
+                    sq_norm = zero(T)
+                    for i in 1:n_eps
+                        acc = zero(T)
+                        for j in 1:nx
+                            acc += eta_x_pinv[i, j] * residual_bw[j]
+                        end
+                        sq_norm += acc * acc
+                    end
+                    log_trans = -T(0.5) * sq_norm
+                    bw_k = log(max(weights_store[k, t], T(1e-300))) + log_trans
+                    bw[k] = bw_k
+                    if bw_k > max_log_bw
+                        max_log_bw = bw_k
+                    end
                 end
-                # implied_shock = eta_x_pinv * residual_bw
-                mul!(implied_shock, eta_x_pinv, residual_bw)
-                log_trans = -T(0.5) * dot(implied_shock, implied_shock)
-                bw[k] = log(max(weights_store[k, t], T(1e-300))) + log_trans
-                if bw[k] > max_log_bw
-                    max_log_bw = bw[k]
+            else
+                @inbounds for k in 1:N
+                    xf_k_view = @view xf_store[:, k, t]
+                    mul!(predicted, hx_state, xf_k_view)
+                    for i in 1:nx
+                        residual_bw[i] = x_tp1_states[i] - predicted[i]
+                    end
+                    mul!(implied_shock, eta_x_pinv, residual_bw)
+                    log_trans = -T(0.5) * dot(implied_shock, implied_shock)
+                    bw_k = log(max(weights_store[k, t], T(1e-300))) + log_trans
+                    bw[k] = bw_k
+                    if bw_k > max_log_bw
+                        max_log_bw = bw_k
+                    end
                 end
             end
 
             # Normalize backward weights (in log space then exponentiate)
             bw_sum = zero(T)
-            for k in 1:N
+            @inbounds for k in 1:N
                 bw[k] = exp(bw[k] - max_log_bw)
                 bw_sum += bw[k]
             end
             if bw_sum > zero(T)
-                for k in 1:N
-                    bw[k] /= bw_sum
+                inv_bw_sum = one(T) / bw_sum
+                @inbounds for k in 1:N
+                    bw[k] *= inv_bw_sum
                 end
             else
                 # Fallback: uniform
@@ -804,8 +835,10 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
             end
 
             # Draw ancestor
-            idx = _categorical_draw(bw, rng)
-            back_states[:, b, t] = particles_store[:, idx, t]
+            idx = _categorical_draw(bw, local_rng)
+            @inbounds for s in 1:n_endog
+                back_states[s, b, t] = particles_store[s, idx, t]
+            end
         end
 
         # Extract shocks from backward trajectory
@@ -816,22 +849,19 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
         prev_xrd = zeros(T, nx)
 
         for t in 1:T_obs
-            x_t = @view back_states[:, b, t]
-
             # Get the deterministic prediction (zero shocks) from previous state
-            # Assemble deterministic full state
             fill!(det_full, zero(T))
-            xf_det, xs_det, xrd_det, x_total_det, y_det = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, zero_eps)
-            for (k, si) in enumerate(nss.state_indices)
+            _, _, _, x_total_det, y_det = _nonlinear_transition(nss, prev_xf, prev_xs, prev_xrd, zero_eps)
+            @inbounds for (k, si) in enumerate(nss.state_indices)
                 det_full[si] = x_total_det[k]
             end
-            for (k, ci) in enumerate(nss.control_indices)
+            @inbounds for (k, ci) in enumerate(nss.control_indices)
                 det_full[ci] = y_det[k]
             end
 
             # Implied shock: resid_buf = x_t - det_full, implied_eps = impact_pinv * resid_buf
             @inbounds for i in 1:n_endog
-                resid_buf[i] = x_t[i] - det_full[i]
+                resid_buf[i] = back_states[i, b, t] - det_full[i]
             end
             mul!(implied_eps, impact_pinv, resid_buf)
             @inbounds for i in 1:n_eps
@@ -844,6 +874,17 @@ function dsge_particle_smoother(nss::NonlinearStateSpace{T}, data::Matrix{T};
             prev_xf = xf_new
             prev_xs = xs_new
             prev_xrd = xrd_new
+        end
+        return nothing
+    end
+
+    _with_single_blas_thread() do
+        if use_threads
+            _parallel_for_worksteal(_run_backward_traj!, N_back; n_workers=n_workers)
+        else
+            for b in 1:N_back
+                _run_backward_traj!(b, 1)
+            end
         end
     end
 

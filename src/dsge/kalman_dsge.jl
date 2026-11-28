@@ -141,10 +141,8 @@ pre-computes scaling constants for the Chebyshev domain.
 """
 function _build_projection_state_space(sol::ProjectionSolution{T}, Z::Matrix{T},
                                         d::Vector{T}, H::Matrix{T}) where {T<:AbstractFloat}
-    # Compute impact matrix once from linearized solution
-    result_lin = gensys(sol.linear.Gamma0, sol.linear.Gamma1,
-                        sol.linear.C, sol.linear.Psi, sol.linear.Pi)
-    impact = Matrix{T}(result_lin.impact)
+    # Reuse cached companion-QZ first-order shock-impact matrix from ProjectionSolution
+    impact = Matrix{T}(sol.impact)
 
     # Pre-compute scaling constants: z_i = x_i * scale_i + shift_i
     nx = length(sol.state_indices)
@@ -161,6 +159,130 @@ function _build_projection_state_space(sol::ProjectionSolution{T}, Z::Matrix{T},
                               sol.steady_state, sol.state_indices,
                               sol.control_indices, impact, sol.state_bounds,
                               scale_vec, shift_vec, Z, d, H)
+end
+
+# =============================================================================
+# Lock-free pure-Julia small-matrix kernels for multi-threaded Kalman (#947)
+# =============================================================================
+# Avoids OpenBLAS `USE_LOCKING` mutex serialization on small n×n (≤16) matrices
+# when called concurrently inside `Threads.@threads` / `_parallel_for_worksteal`.
+
+const _KALMAN_SMALL_DIM = 16
+
+@inline function _small_mul!(C::Matrix{T}, A::Matrix{T}, B::Matrix{T}) where {T<:AbstractFloat}
+    m, k_dim = size(A)
+    n = size(B, 2)
+    fill!(C, zero(T))
+    @inbounds for j in 1:n, k in 1:k_dim
+        bkj = B[k, j]
+        @simd for i in 1:m
+            C[i, j] += A[i, k] * bkj
+        end
+    end
+    return C
+end
+
+@inline function _small_mul_Bt!(C::Matrix{T}, A::Matrix{T}, B::Matrix{T}) where {T<:AbstractFloat}
+    m, k_dim = size(A)
+    n = size(B, 1)
+    fill!(C, zero(T))
+    @inbounds for j in 1:n, k in 1:k_dim
+        bjk = B[j, k]
+        @simd for i in 1:m
+            C[i, j] += A[i, k] * bjk
+        end
+    end
+    return C
+end
+
+@inline function _small_mul_vec!(y::Vector{T}, A::Matrix{T}, x::Vector{T}) where {T<:AbstractFloat}
+    m, n = size(A)
+    fill!(y, zero(T))
+    @inbounds for j in 1:n
+        xj = x[j]
+        @simd for i in 1:m
+            y[i] += A[i, j] * xj
+        end
+    end
+    return y
+end
+
+@inline function _small_cholesky!(L::Matrix{T}, A::Matrix{T}) where {T<:AbstractFloat}
+    n = size(A, 1)
+    log_det = zero(T)
+    @inbounds for j in 1:n
+        s = A[j, j]
+        for k in 1:(j - 1)
+            ljk = L[j, k]
+            s -= ljk * ljk
+        end
+        if !(s > zero(T)) || !isfinite(s)
+            return false, T(-Inf)
+        end
+        ljj = sqrt(s)
+        L[j, j] = ljj
+        log_det += log(ljj)
+        inv_ljj = one(T) / ljj
+        for i in (j + 1):n
+            s_ij = A[i, j]
+            for k in 1:(j - 1)
+                s_ij -= L[i, k] * L[j, k]
+            end
+            L[i, j] = s_ij * inv_ljj
+        end
+    end
+    return true, T(2) * log_det
+end
+
+@inline function _small_chol_solve_vec!(x::Vector{T}, L::Matrix{T}, b::Vector{T}) where {T<:AbstractFloat}
+    n = length(b)
+    @inbounds for i in 1:n
+        s = b[i]
+        for k in 1:(i - 1)
+            s -= L[i, k] * x[k]
+        end
+        x[i] = s / L[i, i]
+    end
+    @inbounds for i in n:-1:1
+        s = x[i]
+        for k in (i + 1):n
+            s -= L[k, i] * x[k]
+        end
+        x[i] = s / L[i, i]
+    end
+    return x
+end
+
+@inline function _small_chol_rdiv!(K::Matrix{T}, PZ::Matrix{T}, L::Matrix{T}) where {T<:AbstractFloat}
+    m, p = size(PZ)
+    @inbounds for j in 1:p
+        inv_ljj = one(T) / L[j, j]
+        @simd for i in 1:m
+            K[i, j] = PZ[i, j]
+        end
+        for k in 1:(j - 1)
+            ljk = L[j, k]
+            @simd for i in 1:m
+                K[i, j] -= ljk * K[i, k]
+            end
+        end
+        @simd for i in 1:m
+            K[i, j] *= inv_ljj
+        end
+    end
+    @inbounds for j in p:-1:1
+        inv_ljj = one(T) / L[j, j]
+        for k in (j + 1):p
+            lkj = L[k, j]
+            @simd for i in 1:m
+                K[i, j] -= lkj * K[i, k]
+            end
+        end
+        @simd for i in 1:m
+            K[i, j] *= inv_ljj
+        end
+    end
+    return K
 end
 
 # =============================================================================
@@ -200,15 +322,35 @@ Scalar log-likelihood (sum over t of log p(y_t | y_{1:t-1})).
 """
 function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<:AbstractFloat}
     n_obs, T_obs = size(data)
+    size(ss.Z, 1) == n_obs || throw(DimensionMismatch(
+        "data has $n_obs rows, expected $(size(ss.Z, 1)) observables"))
     n_states = size(ss.G1, 1)
+    size(ss.G1, 2) == n_states || throw(ArgumentError(
+        "G1 must be square, got $(size(ss.G1))"))
+    size(ss.impact, 1) == n_states || throw(ArgumentError(
+        "impact has $(size(ss.impact, 1)) rows, expected n_states=$n_states"))
+    size(ss.Z, 2) == n_states || throw(DimensionMismatch(
+        "Z has $(size(ss.Z, 2)) columns, expected n_states=$n_states"))
     n_shocks = size(ss.impact, 2)
+    size(ss.Q) == (n_shocks, n_shocks) || throw(DimensionMismatch(
+        "Q must be $(n_shocks)×$(n_shocks), got $(size(ss.Q))"))
 
     # --- Initialization ---
     x = zeros(T, n_states)  # initial state mean (deviation from SS = 0)
 
     # Stationary covariance via Lyapunov equation; eigenvalue-partitioned diffuse
     # initialization for unit roots (never a silent P0=10I; non-stability errors propagate).
-    RQR = ss.impact * ss.Q * ss.impact'
+    use_small = (n_states <= _KALMAN_SMALL_DIM) && (n_obs <= _KALMAN_SMALL_DIM) &&
+                (n_shocks <= _KALMAN_SMALL_DIM)
+    RQR = if use_small
+        RQ = Matrix{T}(undef, n_states, n_shocks)
+        _small_mul!(RQ, ss.impact, ss.Q)
+        out = Matrix{T}(undef, n_states, n_states)
+        _small_mul_Bt!(out, RQ, ss.impact)
+        out
+    else
+        ss.impact * ss.Q * ss.impact'
+    end
     P = if maximum(abs, eigvals(ss.G1)) >= one(T) - T(1e-6)
         _diffuse_initial_covariance(ss.G1, RQR)
     else
@@ -227,6 +369,7 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
 
     # Innovation covariance F = Z * P_pred * Z' + H
     F = zeros(T, n_obs, n_obs)
+    F_L = zeros(T, n_obs, n_obs)        # lower Cholesky factor for small-matrix path
     ZP = zeros(T, n_obs, n_states)   # Z * P_pred
     PZ = zeros(T, n_states, n_obs)   # P_pred * Z'
 
@@ -237,8 +380,7 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
 
     # Update temporaries
     Kv = zeros(T, n_states)     # K * v
-    KF = zeros(T, n_states, n_obs)  # K * F  (not needed, but K * Z * P is)
-    KZP = zeros(T, n_states, n_states)  # K * Z * P_pred (for Joseph form or direct)
+    KZP = zeros(T, n_states, n_states)  # K * Z * P_pred
 
     # Check if data has any NaN
     has_nan = any(isnan, data)
@@ -248,11 +390,15 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
 
     @inbounds for t in 1:T_obs
         # --- Prediction step ---
-        # x_pred = G1 * x
-        mul!(x_pred, ss.G1, x)
-        # P_pred = G1 * P * G1' + impact * Q * impact'
-        mul!(G1P, ss.G1, P)
-        mul!(P_pred, G1P, ss.G1')
+        if use_small
+            _small_mul_vec!(x_pred, ss.G1, x)
+            _small_mul!(G1P, ss.G1, P)
+            _small_mul_Bt!(P_pred, G1P, ss.G1)
+        else
+            mul!(x_pred, ss.G1, x)
+            mul!(G1P, ss.G1, P)
+            mul!(P_pred, G1P, ss.G1')
+        end
         @inbounds for j in 1:n_states, i in 1:n_states
             P_pred[i, j] += RQR[i, j]
         end
@@ -307,8 +453,66 @@ function _kalman_loglikelihood(ss::DSGEStateSpace{T}, data::Matrix{T}) where {T<
             x .= x_pred .+ K_t * v_t
             P .= P_pred .- K_t * Z_t * P_pred
             P .= (P .+ P') ./ 2  # symmetrize
+        elseif use_small
+            # --- Lock-free pure-Julia small-matrix full observation path (#947) ---
+            _small_mul_vec!(Zx, ss.Z, x_pred)
+            @inbounds for i in 1:n_obs
+                v[i] = y_t[i] - Zx[i] - ss.d[i]
+            end
+
+            _small_mul!(ZP, ss.Z, P_pred)
+            _small_mul_Bt!(F, ZP, ss.Z)
+            @inbounds for j in 1:n_obs, i in 1:n_obs
+                F[i, j] += ss.H[i, j]
+            end
+            @inbounds for j in 1:n_obs, i in 1:j-1
+                avg = (F[i, j] + F[j, i]) / 2
+                F[i, j] = avg
+                F[j, i] = avg
+            end
+
+            ok, log_det_F = _small_cholesky!(F_L, F)
+            if !ok
+                @inbounds for i in 1:n_obs
+                    F[i, i] += T(1e-8)
+                end
+                ok, log_det_F = _small_cholesky!(F_L, F)
+                if !ok
+                    F_chol = cholesky(Hermitian(F))
+                    log_det_F = logdet(F_chol)
+                    copyto!(F_L, F_chol.L)
+                end
+            end
+
+            _small_chol_solve_vec!(F_inv_v, F_L, v)
+            quad = zero(T)
+            @inbounds @simd for i in 1:n_obs
+                quad += v[i] * F_inv_v[i]
+            end
+            ll += -T(0.5) * (n_obs * log2pi + log_det_F + quad)
+
+            # Kalman gain: PZ = P_pred * Z', K = PZ * F^{-1}
+            _small_mul_Bt!(PZ, P_pred, ss.Z)
+            _small_chol_rdiv!(K, PZ, F_L)
+
+            # State update: x = x_pred + K * v
+            _small_mul_vec!(Kv, K, v)
+            @inbounds @simd for i in 1:n_states
+                x[i] = x_pred[i] + Kv[i]
+            end
+
+            # Covariance update: P = P_pred - K * ZP
+            _small_mul!(KZP, K, ZP)
+            @inbounds for j in 1:n_states, i in 1:n_states
+                P[i, j] = P_pred[i, j] - KZP[i, j]
+            end
+            @inbounds for j in 1:n_states, i in 1:j-1
+                avg = (P[i, j] + P[j, i]) / 2
+                P[i, j] = avg
+                P[j, i] = avg
+            end
         else
-            # --- Full observation path (pre-allocated, zero allocation) ---
+            # --- Full observation path (BLAS/LAPACK for larger systems) ---
 
             # Innovation: v = y_t - Z * x_pred - d
             mul!(Zx, ss.Z, x_pred)

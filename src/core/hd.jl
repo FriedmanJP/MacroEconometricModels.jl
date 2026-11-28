@@ -447,6 +447,10 @@ Compute Bayesian historical decomposition from posterior draws with posterior qu
 Note: `:smooth_transition` requires `transition_var` kwarg.
       `:external_volatility` requires `regime_indicator` kwarg.
       `:proxy` requires `instruments` and is partial when `k < n`.
+      Set `threaded=true` (default) to parallelize across posterior draws with
+      thread-count-invariant per-draw `Xoshiro` seeds (pair `Threads.nthreads() > 1`
+      with `BLAS.set_num_threads(1)` / `OPENBLAS_NUM_THREADS=1` for best scaling;
+      single-thread BLAS is also scoped automatically during parallel processing).
 
 # Returns
 `BayesianHistoricalDecomposition` with posterior quantiles and means.
@@ -468,11 +472,12 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     restrictions=nothing,
     normalize::Union{Nothing,Symbol}=nothing,
     shock_size::Union{Nothing,Pair}=nothing,
+    threaded::Bool=true,
     seed::Union{Integer,Nothing}=nothing,
     kwargs...
 )
     rng = _resolve_repro_rng(get(kwargs, :rng, Random.default_rng()), seed)
-    kwargs = (; kwargs..., rng=rng)
+    pass_kwargs = (; (k => v for (k, v) in pairs(kwargs) if k !== :rng)...)
     use_data = isempty(data) ? post.data : data
     isempty(use_data) && throw(ArgumentError("Data required for historical decomposition"))
     _validate_narrative_data(method, use_data)
@@ -489,7 +494,7 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     horizon = min(horizon, T_eff)
     actual = ET.(use_data[(p + 1):end, :])
 
-    # Storage for all posterior draws
+    # Storage for all posterior draws (written at draw index s, then compacted in order)
     all_contributions = zeros(ET, samples, T_eff, n, n)
     all_initial = zeros(ET, samples, T_eff, n)
     all_shocks = zeros(ET, samples, T_eff, n)
@@ -497,21 +502,26 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     b_vecs, sigmas = extract_chain_parameters(post)
     apply_ue = _unit_effect_requested(normalize)
 
-    valid_count = 0
-    n_unidentified = 0
-    n_nonstationary = 0
-    for s in 1:samples
+    # Pre-generate per-draw seeds sequentially so threaded=false == threaded=true and 1T == NT (#945)
+    seeds = rand(rng, UInt64, samples)
+    statuses = fill(Int8(2), samples)  # 0 = ok, 1 = non-stationary, 2 = unidentified
+
+    use_parallel = threaded && Threads.nthreads() > 1 && samples > 1 &&
+                   _is_parallel_safe_bvar_id_method(method)
+
+    function _run_hd_draw!(s::Int)
+        local_rng = Random.Xoshiro(seeds[s])
         m = parameters_to_model(b_vecs[s, :], sigmas[s, :], p, n, use_data;
                                 varnames=post.varnames)
         if !is_stationary(m).is_stationary
-            n_nonstationary += 1
-            continue
+            statuses[s] = Int8(1)
+            return nothing
         end
         try
             Q = compute_Q(m, method; horizon=horizon, check_func=check_func,
                           narrative_check=narrative_check, restrictions=restrictions,
                           max_draws=max_draws, transition_var=transition_var,
-                          regime_indicator=regime_indicator, kwargs...)
+                          regime_indicator=regime_indicator, rng=local_rng, pass_kwargs...)
             if apply_ue
                 Q = _apply_irf_scale(Q, m, _unit_effect_specs(Q, m, shock_size))
             end
@@ -520,21 +530,49 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
             contributions = _compute_hd_contributions(shocks, Theta)
             initial_cond = _compute_initial_conditions(actual, contributions)
 
-            valid_count += 1
-            all_contributions[valid_count, :, :, :] = contributions
-            all_initial[valid_count, :, :] = initial_cond
-            all_shocks[valid_count, :, :] = shocks
+            all_contributions[s, :, :, :] = contributions
+            all_initial[s, :, :] = initial_cond
+            all_shocks[s, :, :] = shocks
+            statuses[s] = Int8(0)
         catch e
-            e isa IdentificationError && (n_unidentified += 1; continue)
+            e isa IdentificationError && (statuses[s] = Int8(2); return nothing)
             rethrow(e)
         end
+        return nothing
     end
+
+    if use_parallel
+        _with_single_blas_thread() do
+            Threads.@threads :dynamic for s in 1:samples
+                _run_hd_draw!(s)
+            end
+        end
+    else
+        for s in 1:samples
+            _run_hd_draw!(s)
+        end
+    end
+
+    valid_idx = findall(==(Int8(0)), statuses)
+    valid_count = length(valid_idx)
+    n_nonstationary = count(==(Int8(1)), statuses)
+    n_unidentified = count(==(Int8(2)), statuses)
+
     valid_count == 0 && throw(IdentificationError(
         "All posterior draws failed identification or were non-stationary " *
         "(unidentified=$n_unidentified, non-stationary=$n_nonstationary)"))
     n_nonstationary > samples ÷ 2 && @warn "$n_nonstationary/$samples posterior draws non-stationary, skipped"
     frac_u = ET(n_unidentified) / ET(samples)
     frac_u > ET(0.5) && @warn "$n_unidentified/$samples posterior draws unidentified ($n_nonstationary non-stationary)"
+
+    # Compact valid draws in-place in deterministic index order (k <= valid_idx[k] always)
+    @inbounds for (k, s) in enumerate(valid_idx)
+        if k != s
+            all_contributions[k, :, :, :] = @view all_contributions[s, :, :, :]
+            all_initial[k, :, :] = @view all_initial[s, :, :]
+            all_shocks[k, :, :] = @view all_shocks[s, :, :]
+        end
+    end
 
     # Compute quantiles and means
     q_vec = ET.(quantiles)
@@ -547,21 +585,42 @@ function historical_decomposition(post::BVARPosterior, horizon::Int=0;
     shocks_m = zeros(ET, T_eff, n)
 
     _central = point_estimate == :median ? median : mean
-    @inbounds for t in 1:T_eff
-        for i in 1:n
-            # Initial conditions
-            d_init = @view all_initial[1:valid_count, t, i]
-            initial_q[t, i, :] = quantile(d_init, q_vec)
-            initial_m[t, i] = _central(d_init)
+    if threaded && Threads.nthreads() > 1 && T_eff * n * n > 1000
+        ti_pairs = [(t, i) for t in 1:T_eff for i in 1:n]
+        Threads.@threads :dynamic for idx in eachindex(ti_pairs)
+            t, i = ti_pairs[idx]
+            @inbounds begin
+                d_init = @view all_initial[1:valid_count, t, i]
+                initial_q[t, i, :] = quantile(d_init, q_vec)
+                initial_m[t, i] = _central(d_init)
 
-            # Shocks
-            d_shock = @view all_shocks[1:valid_count, t, i]
-            shocks_m[t, i] = _central(d_shock)
+                d_shock = @view all_shocks[1:valid_count, t, i]
+                shocks_m[t, i] = _central(d_shock)
 
-            for j in 1:n
-                d = @view all_contributions[1:valid_count, t, i, j]
-                contrib_q[t, i, j, :] = quantile(d, q_vec)
-                contrib_m[t, i, j] = _central(d)
+                for j in 1:n
+                    d = @view all_contributions[1:valid_count, t, i, j]
+                    contrib_q[t, i, j, :] = quantile(d, q_vec)
+                    contrib_m[t, i, j] = _central(d)
+                end
+            end
+        end
+    else
+        @inbounds for t in 1:T_eff
+            for i in 1:n
+                # Initial conditions
+                d_init = @view all_initial[1:valid_count, t, i]
+                initial_q[t, i, :] = quantile(d_init, q_vec)
+                initial_m[t, i] = _central(d_init)
+
+                # Shocks
+                d_shock = @view all_shocks[1:valid_count, t, i]
+                shocks_m[t, i] = _central(d_shock)
+
+                for j in 1:n
+                    d = @view all_contributions[1:valid_count, t, i, j]
+                    contrib_q[t, i, j, :] = quantile(d, q_vec)
+                    contrib_m[t, i, j] = _central(d)
+                end
             end
         end
     end

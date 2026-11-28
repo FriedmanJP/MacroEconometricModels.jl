@@ -383,9 +383,9 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
     # Initialize from stationary distribution
     _pf_initialize_stationary!(ws, ss; rng=rng)
 
-    # Force particle N to reference trajectory at t=0 (initial state)
-    # The reference trajectory stores post-transition states, so we set
-    # particle N to the reference at t=1 after the first transition
+    # Full trajectory & ancestor history for exact CSMC backward tracing (#950)
+    particles_hist = Array{T,3}(undef, n_states, N, T_obs)
+    ancestors_hist = Matrix{Int}(undef, N, T_obs)
 
     log_lik = zero(T)
 
@@ -405,6 +405,13 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
             ws.particles[s, N] = ws.reference_trajectory[s, t]
         end
 
+        # Record particles at time t BEFORE end-of-step resampling
+        for k in 1:N
+            @simd for s in 1:n_states
+                particles_hist[s, k, t] = ws.particles[s, k]
+            end
+        end
+
         # Compute log weights
         y_t = @view data[:, t]
         # Fresh observation log-densities into the cumweights scratch (#128).
@@ -417,28 +424,37 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
 
-        # ESS-based adaptive resampling
-        ess = zero(T)
-        @simd for k in 1:N
-            ess += ws.weights[k] * ws.weights[k]
-        end
-        ess = one(T) / ess
+        # ESS-based adaptive resampling (skip at final step T_obs so terminal weights align with particles_hist[:,:,T_obs])
+        if t < T_obs
+            ess = zero(T)
+            @simd for k in 1:N
+                ess += ws.weights[k] * ws.weights[k]
+            end
+            ess = one(T) / ess
 
-        if ess < threshold * N
-            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+            if ess < threshold * N
+                _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
 
-            # CSMC: ensure particle N always survives resampling
-            ws.ancestors[N] = N
+                # CSMC: ensure particle N always survives resampling
+                ws.ancestors[N] = N
 
-            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-            ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            fill!(ws.weights, inv_N)
-            fill!(ws.log_weights, -log_N)
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = ws.ancestors[k]
+                end
+
+                _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+                ws.particles, ws.particles_new = ws.particles_new, ws.particles
+                fill!(ws.weights, inv_N)
+                fill!(ws.log_weights, -log_N)
+            else
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = k
+                end
+            end
         end
     end
 
-    # Sample new reference trajectory from final particle cloud
-    # Pick a particle index proportional to final weights
+    # Sample new reference trajectory from final particle cloud and trace full lineage 1:T_obs (#950)
     u = rand(rng, T)
     cumw = zero(T)
     chosen = N  # default to last particle (reference)
@@ -450,14 +466,17 @@ function _conditional_smc!(ws::PFWorkspace{T}, ss::DSGEStateSpace{T},
         end
     end
 
-    # Update reference trajectory: copy chosen particle's path
-    # For the simple (non-ancestor-tracing) version, we store the final state
-    # at each time step. Full backward sampling would require storing all particles
-    # at all times, which is memory-intensive. Here we use the forward-only approach:
-    # the reference trajectory is the path of the chosen particle at the final time.
-    # For CSMC in PMCMC, this is valid as the reference is refreshed each iteration.
-    @inbounds @simd for s in 1:n_states
-        ws.reference_trajectory[s, T_obs] = ws.particles[s, chosen]
+    idx = chosen
+    @inbounds for t in T_obs:-1:1
+        @simd for s in 1:n_states
+            ws.reference_trajectory[s, t] = particles_hist[s, idx, t]
+        end
+        if ws.reference_ancestors !== nothing && t <= length(ws.reference_ancestors)
+            ws.reference_ancestors[t] = idx
+        end
+        if t > 1
+            idx = ancestors_hist[idx, t]
+        end
     end
 
     return log_lik
@@ -598,88 +617,147 @@ function _pf_transition_pruned!(ws::PFWorkspace{T},
     gx_state = @view nlss.gx[:, 1:nx]       # ny x nx
     eta_y = @view nlss.gx[:, nx+1:nv]       # ny x n_eps
 
-    # --- First-order state: XF_new = hx_state * XF + eta_x * E ---
+    # --- First-order state: XF_new = hx_state * XF_old + eta_x * E ---
     # Store XF_new in transition_scratch[1:nx, :]
     xf_new = @view ws.transition_scratch[1:nx, :]
-    mul!(xf_new, hx_state, ws.particles_fo)
-    mul!(xf_new, eta_x, ws.shocks, one(T), one(T))
+    if nx > 0
+        mul!(xf_new, hx_state, ws.particles_fo)
+        mul!(xf_new, eta_x, ws.shocks, one(T), one(T))
+    end
 
-    if nlss.order >= 2 && nlss.hxx !== nothing
-        # --- Build augmented vector V = [XF; E] ---
-        @inbounds for k in 1:N
-            @simd for i in 1:nx
-                ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
-            end
-            @simd for i in 1:n_eps
-                ws.augmented_buffer[nx + i, k] = ws.shocks[i, k]
-            end
+    # --- Controls (evaluated on LAGGED components XF_old, XS_old, XT_old + current shock E; S-01 / #949) ---
+    # Compute controls BEFORE overwriting ws.particles_fo / particles_so / particles_to, reusing
+    # the augmented_buffer and Kronecker buffers built from lagged states.
+    ctrl = ny > 0 ? (@view ws.particles_new[1:ny, :]) : nothing
+    if ny > 0
+        if nx > 0
+            mul!(ctrl, gx_state, ws.particles_fo)
+            mul!(ctrl, eta_y, ws.shocks, one(T), one(T))
+        else
+            mul!(ctrl, eta_y, ws.shocks)
         end
+    end
 
-        # --- Fill kron(V, V) buffer ---
-        _fill_kron_buffer!(ws.kron_buffer, ws.augmented_buffer, nv)
-
-        # --- Second-order state: XS_new = hx_state * XS + 0.5 * Hxx * kron + 0.5 * hσσ ---
-        xs_new = @view ws.transition_scratch[nx+1:2*nx, :]
-
-        mul!(xs_new, hx_state, ws.particles_so)
-        mul!(xs_new, nlss.hxx, ws.kron_buffer, T(0.5), one(T))
-        if nlss.hsigmasigma !== nothing
+    if nlss.order >= 2
+        # --- Build augmented vector V = [XF_old; E] and kron(V, V) ---
+        if ws.augmented_buffer !== nothing && ws.kron_buffer !== nothing
             @inbounds for k in 1:N
                 @simd for i in 1:nx
-                    xs_new[i, k] += T(0.5) * nlss.hsigmasigma[i]
+                    ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
+                end
+                @simd for i in 1:n_eps
+                    ws.augmented_buffer[nx + i, k] = ws.shocks[i, k]
+                end
+            end
+            _fill_kron_buffer!(ws.kron_buffer, ws.augmented_buffer, nv)
+        end
+
+        # --- Second-order state: XS_new = hx_state * XS_old + 0.5 * Hxx * kron + 0.5 * hσσ ---
+        xs_new = @view ws.transition_scratch[nx+1:2*nx, :]
+        if nx > 0 && ws.particles_so !== nothing
+            mul!(xs_new, hx_state, ws.particles_so)
+            if nlss.hxx !== nothing && ws.kron_buffer !== nothing
+                mul!(xs_new, nlss.hxx, ws.kron_buffer, T(0.5), one(T))
+            end
+            if nlss.hsigmasigma !== nothing
+                @inbounds for k in 1:N
+                    @simd for i in 1:nx
+                        xs_new[i, k] += T(0.5) * nlss.hsigmasigma[i]
+                    end
                 end
             end
         end
 
-        if nlss.order >= 3 && nlss.hxxx !== nothing && ws.particles_to !== nothing
-            # --- 3rd-order: compute kron(vf, vs) where vs = [xs; 0] ---
-            @inbounds for i in 1:nv, j in 1:nv
-                idx = (i - 1) * nv + j
-                @simd for k in 1:N
-                    vf_i = ws.augmented_buffer[i, k]
-                    vs_j = j <= nx ? ws.particles_so[j, k] : zero(T)
-                    ws.kron_cross_buffer[idx, k] = vf_i * vs_j
+        # --- Second-order controls on lagged XS_old and kron(vf_old, vf_old) ---
+        if ny > 0
+            if nx > 0 && ws.particles_so !== nothing
+                mul!(ctrl, gx_state, ws.particles_so, one(T), one(T))
+            end
+            if nlss.gxx !== nothing && ws.kron_buffer !== nothing
+                mul!(ctrl, nlss.gxx, ws.kron_buffer, T(0.5), one(T))
+            end
+            if nlss.gsigmasigma !== nothing
+                @inbounds for k in 1:N
+                    @simd for i in 1:ny
+                        ctrl[i, k] += T(0.5) * nlss.gsigmasigma[i]
+                    end
                 end
             end
+        end
 
-            # Fill kron3(vf, vf, vf)
-            _fill_kron3_buffer!(ws.kron3_buffer, ws.augmented_buffer, nv)
+        if nlss.order >= 3 && ws.particles_to !== nothing
+            # --- 3rd-order: compute kron(vf_old, vs_old) and kron3(vf_old) ---
+            if ws.kron_cross_buffer !== nothing && ws.augmented_buffer !== nothing && ws.particles_so !== nothing
+                @inbounds for i in 1:nv, j in 1:nv
+                    idx = (i - 1) * nv + j
+                    @simd for k in 1:N
+                        vf_i = ws.augmented_buffer[i, k]
+                        vs_j = j <= nx ? ws.particles_so[j, k] : zero(T)
+                        ws.kron_cross_buffer[idx, k] = vf_i * vs_j
+                    end
+                end
+            end
+            if ws.kron3_buffer !== nothing && ws.augmented_buffer !== nothing
+                _fill_kron3_buffer!(ws.kron3_buffer, ws.augmented_buffer, nv)
+            end
 
             # --- 3rd-order state: XT_new ---
             xt_new = @view ws.transition_scratch[2*nx+1:3*nx, :]
-
-            mul!(xt_new, hx_state, ws.particles_to)
-            # + hxx * kron(vf, vs)
-            mul!(xt_new, nlss.hxx, ws.kron_cross_buffer, one(T), one(T))
-            # + (1/6) * hxxx * kron3(vf)
-            mul!(xt_new, nlss.hxxx, ws.kron3_buffer, T(1) / T(6), one(T))
-            # + (1/2) * hσσx * vf
-            if nlss.hsigmax !== nothing
-                mul!(xt_new, nlss.hsigmax, ws.augmented_buffer, T(0.5), one(T))
-            end
-            # + (1/6) * hσσσ
-            if nlss.hsigmasigmasigma !== nothing
-                @inbounds for k in 1:N
-                    @simd for i in 1:nx
-                        xt_new[i, k] += nlss.hsigmasigmasigma[i] / T(6)
+            if nx > 0
+                mul!(xt_new, hx_state, ws.particles_to)
+                if nlss.hxx !== nothing && ws.kron_cross_buffer !== nothing
+                    mul!(xt_new, nlss.hxx, ws.kron_cross_buffer, one(T), one(T))
+                end
+                if nlss.hxxx !== nothing && ws.kron3_buffer !== nothing
+                    mul!(xt_new, nlss.hxxx, ws.kron3_buffer, one(T) / T(6), one(T))
+                end
+                if nlss.hsigmax !== nothing && ws.augmented_buffer !== nothing
+                    mul!(xt_new, nlss.hsigmax, ws.augmented_buffer, T(0.5), one(T))
+                end
+                if nlss.hsigmasigmasigma !== nothing
+                    @inbounds for k in 1:N
+                        @simd for i in 1:nx
+                            xt_new[i, k] += nlss.hsigmasigmasigma[i] / T(6)
+                        end
                     end
                 end
             end
 
-            # Copy pruned components to their buffers
-            copyto!(ws.particles_to, xt_new)
+            # --- 3rd-order controls on lagged (XT_old, XS_old, VF_old) ---
+            if ny > 0
+                if nx > 0
+                    mul!(ctrl, gx_state, ws.particles_to, one(T), one(T))
+                end
+                if nlss.gxx !== nothing && ws.kron_cross_buffer !== nothing
+                    mul!(ctrl, nlss.gxx, ws.kron_cross_buffer, one(T), one(T))
+                end
+                if nlss.gxxx !== nothing && ws.kron3_buffer !== nothing
+                    mul!(ctrl, nlss.gxxx, ws.kron3_buffer, one(T) / T(6), one(T))
+                end
+                if nlss.gsigmax !== nothing && ws.augmented_buffer !== nothing
+                    mul!(ctrl, nlss.gsigmax, ws.augmented_buffer, T(0.5), one(T))
+                end
+                if nlss.gsigmasigmasigma !== nothing
+                    @inbounds for k in 1:N
+                        @simd for i in 1:ny
+                            ctrl[i, k] += nlss.gsigmasigmasigma[i] / T(6)
+                        end
+                    end
+                end
+            end
+
+            # Commit 3rd-order pruned state AFTER controls used lagged particles_to
+            nx > 0 && copyto!(ws.particles_to, xt_new)
         end
 
-        # Update pruned component buffers
-        copyto!(ws.particles_so, xs_new)
+        # Commit 2nd-order pruned state AFTER controls used lagged particles_so
+        nx > 0 && ws.particles_so !== nothing && copyto!(ws.particles_so, xs_new)
     end
 
-    # Copy xf_new to particles_fo
-    copyto!(ws.particles_fo, @view ws.transition_scratch[1:nx, :])
+    # Commit 1st-order pruned state AFTER controls used lagged particles_fo
+    nx > 0 && copyto!(ws.particles_fo, xf_new)
 
-    # --- Compute total state and controls, assemble full endogenous ---
-
-    # Build x_total in the state_indices of particles
+    # --- Assemble full endogenous vector (updated states + controls) into ws.particles ---
     @inbounds for k in 1:N
         for (si_idx, si) in enumerate(nlss.state_indices)
             x_total = ws.particles_fo[si_idx, k]  # xf_new
@@ -693,86 +771,7 @@ function _pf_transition_pruned!(ws::PFWorkspace{T},
         end
     end
 
-    # Compute controls: use particles_new[1:ny, :] as scratch for ctrl
     if ny > 0
-        ctrl = @view ws.particles_new[1:ny, :]
-
-        # Build x_total contiguous matrix in augmented_buffer[1:nx, :]
-        @inbounds for k in 1:N
-            @simd for i in 1:nx
-                ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
-                if nlss.order >= 2 && ws.particles_so !== nothing
-                    ws.augmented_buffer[i, k] += ws.particles_so[i, k]
-                end
-                if nlss.order >= 3 && ws.particles_to !== nothing
-                    ws.augmented_buffer[i, k] += ws.particles_to[i, k]
-                end
-            end
-        end
-        x_total_mat = @view ws.augmented_buffer[1:nx, :]
-
-        # Base: Y = gx_state * x_total + eta_y * E
-        mul!(ctrl, gx_state, x_total_mat)
-        mul!(ctrl, eta_y, ws.shocks, one(T), one(T))
-
-        # 2nd-order control terms
-        if nlss.order >= 2 && nlss.gxx !== nothing
-            # Rebuild augmented V = [xf; eps] for Kronecker
-            @inbounds for k in 1:N
-                @simd for i in 1:nx
-                    ws.augmented_buffer[i, k] = ws.particles_fo[i, k]
-                end
-                @simd for i in 1:n_eps
-                    ws.augmented_buffer[nx + i, k] = ws.shocks[i, k]
-                end
-            end
-            _fill_kron_buffer!(ws.kron_buffer, ws.augmented_buffer, nv)
-
-            # + 0.5 * Gxx * kron(vf, vf)
-            mul!(ctrl, nlss.gxx, ws.kron_buffer, T(0.5), one(T))
-            # + 0.5 * gσσ
-            if nlss.gsigmasigma !== nothing
-                @inbounds for k in 1:N
-                    @simd for i in 1:ny
-                        ctrl[i, k] += T(0.5) * nlss.gsigmasigma[i]
-                    end
-                end
-            end
-
-            # 3rd-order control terms
-            if nlss.order >= 3 && nlss.gxxx !== nothing
-                # kron(vf, vs) — recompute
-                @inbounds for i in 1:nv, j in 1:nv
-                    idx = (i - 1) * nv + j
-                    @simd for k in 1:N
-                        vf_i = ws.augmented_buffer[i, k]
-                        vs_j = j <= nx ? ws.particles_so[j, k] : zero(T)
-                        ws.kron_cross_buffer[idx, k] = vf_i * vs_j
-                    end
-                end
-                # kron3(vf, vf, vf)
-                _fill_kron3_buffer!(ws.kron3_buffer, ws.augmented_buffer, nv)
-
-                # + gxx * kron(vf, vs)
-                mul!(ctrl, nlss.gxx, ws.kron_cross_buffer, one(T), one(T))
-                # + (1/6) * gxxx * kron3(vf)
-                mul!(ctrl, nlss.gxxx, ws.kron3_buffer, T(1) / T(6), one(T))
-                # + (1/2) * gσσx * vf
-                if nlss.gsigmax !== nothing
-                    mul!(ctrl, nlss.gsigmax, ws.augmented_buffer, T(0.5), one(T))
-                end
-                # + (1/6) * gσσσ
-                if nlss.gsigmasigmasigma !== nothing
-                    @inbounds for k in 1:N
-                        @simd for i in 1:ny
-                            ctrl[i, k] += nlss.gsigmasigmasigma[i] / T(6)
-                        end
-                    end
-                end
-            end
-        end
-
-        # Place controls at control_indices in particles
         @inbounds for k in 1:N
             for (ci_idx, ci) in enumerate(nlss.control_indices)
                 ws.particles[ci, k] = ctrl[ci_idx, k]
@@ -952,6 +951,10 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
     # Initialize from first-order stationary distribution
     _pf_initialize_nonlinear!(ws, nlss; rng=rng)
 
+    # Full trajectory & ancestor history for exact CSMC backward tracing (#950)
+    particles_hist = Array{T,3}(undef, n_endog, N, T_obs)
+    ancestors_hist = Matrix{Int}(undef, N, T_obs)
+
     log_lik = zero(T)
 
     @inbounds for t in 1:T_obs
@@ -981,6 +984,13 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
             end
         end
 
+        # Record particles at time t BEFORE end-of-step resampling
+        for k in 1:N
+            @simd for s in 1:n_endog
+                particles_hist[s, k, t] = ws.particles[s, k]
+            end
+        end
+
         # Compute log weights
         y_t = @view data[:, t]
         _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
@@ -992,28 +1002,37 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
 
-        # ESS-based adaptive resampling
-        ess = zero(T)
-        @simd for k in 1:N
-            ess += ws.weights[k] * ws.weights[k]
-        end
-        ess = one(T) / ess
+        # ESS-based adaptive resampling (skip at final step T_obs so terminal weights align with particles_hist[:,:,T_obs])
+        if t < T_obs
+            ess = zero(T)
+            @simd for k in 1:N
+                ess += ws.weights[k] * ws.weights[k]
+            end
+            ess = one(T) / ess
 
-        if ess < threshold * N
-            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-            # CSMC: ensure particle N always survives
-            ws.ancestors[N] = N
-            # Resample main particles
-            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-            ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            # Resample pruned components
-            _pf_resample_pruned!(ws, N, nx, nlss.order)
-            fill!(ws.weights, inv_N)
-            fill!(ws.log_weights, -log_N)
+            if ess < threshold * N
+                _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+                # CSMC: ensure particle N always survives
+                ws.ancestors[N] = N
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = ws.ancestors[k]
+                end
+                # Resample main particles
+                _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+                ws.particles, ws.particles_new = ws.particles_new, ws.particles
+                # Resample pruned components
+                _pf_resample_pruned!(ws, N, nx, nlss.order)
+                fill!(ws.weights, inv_N)
+                fill!(ws.log_weights, -log_N)
+            else
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = k
+                end
+            end
         end
     end
 
-    # Sample new reference trajectory from final particle cloud
+    # Sample new reference trajectory from final particle cloud and trace full lineage 1:T_obs (#950)
     u = rand(rng, T)
     cumw = zero(T)
     chosen = N
@@ -1024,8 +1043,17 @@ function _conditional_smc!(ws::PFWorkspace{T}, nlss::NonlinearStateSpace{T},
             break
         end
     end
-    @inbounds @simd for s in 1:n_endog
-        ws.reference_trajectory[s, T_obs] = ws.particles[s, chosen]
+    idx = chosen
+    @inbounds for t in T_obs:-1:1
+        @simd for s in 1:n_endog
+            ws.reference_trajectory[s, t] = particles_hist[s, idx, t]
+        end
+        if ws.reference_ancestors !== nothing && t <= length(ws.reference_ancestors)
+            ws.reference_ancestors[t] = idx
+        end
+        if t > 1
+            idx = ancestors_hist[idx, t]
+        end
     end
 
     return log_lik
@@ -1106,13 +1134,13 @@ function _pf_transition_projection!(ws::PFWorkspace{T},
         end
     end
 
-    # Step 5: Add shock impact to state variables
-    @inbounds for (ii, si) in enumerate(pss.state_indices)
+    # Step 5: Add shock impact to all endogenous variables (states + controls; #949)
+    @inbounds for i in 1:n_endog
         for j in 1:n_eps
-            imp = pss.impact[si, j]
+            imp = pss.impact[i, j]
             if imp != zero(T)
                 @simd for k in 1:N
-                    ws.particles[si, k] += imp * ws.shocks[j, k]
+                    ws.particles[i, k] += imp * ws.shocks[j, k]
                 end
             end
         end
@@ -1144,12 +1172,59 @@ function _pf_initialize_projection!(ws::PFWorkspace{T},
     nx = length(pss.state_indices)
     n_endog = length(pss.steady_state)
 
-    # Compute approximate P0 from impact matrix
+    # Compute stationary initial covariance P0 via Lyapunov on local Chebyshev policy slope
+    # at steady state (falls back to 10 * Sigma_state if nonstationary or singular; #949).
     impact_state = pss.impact[pss.state_indices, :]
     Sigma_state = impact_state * impact_state'
-
-    # Scale by a diffuse factor for reasonable initial dispersion
     P0 = T(10) * Sigma_state
+    if nx > 0
+        # Exact derivative of Chebyshev policy w.r.t. physical states at steady state
+        n_basis = size(pss.multi_indices, 1)
+        max_deg = pss.max_degree
+        z_ss = Vector{T}(undef, nx)
+        for d in 1:nx
+            si = pss.state_indices[d]
+            z_ss[d] = clamp(pss.steady_state[si] * pss.scale[d] + pss.shift[d], T(-1), T(1))
+        end
+        T_val = Matrix{T}(undef, max_deg + 1, nx)
+        dT_val = Matrix{T}(undef, max_deg + 1, nx)
+        for d in 1:nx
+            zd = z_ss[d]
+            T_val[1, d] = one(T)
+            dT_val[1, d] = zero(T)
+            if max_deg >= 1
+                T_val[2, d] = zd
+                dT_val[2, d] = one(T)
+            end
+            for deg in 2:max_deg
+                T_val[deg + 1, d] = T(2) * zd * T_val[deg, d] - T_val[deg - 1, d]
+                dT_val[deg + 1, d] = T(2) * T_val[deg, d] + T(2) * zd * dT_val[deg, d] - dT_val[deg - 1, d]
+            end
+        end
+        dB = zeros(T, n_basis, nx)
+        for j in 1:n_basis
+            for d in 1:nx
+                prod_val = dT_val[pss.multi_indices[j, d] + 1, d] * pss.scale[d]
+                for d2 in 1:nx
+                    d2 == d && continue
+                    prod_val *= T_val[pss.multi_indices[j, d2] + 1, d2]
+                end
+                dB[j, d] = prod_val
+            end
+        end
+        hx_local = pss.coefficients[pss.state_indices, :] * dB
+        try
+            if maximum(abs, eigvals(hx_local)) < one(T) - T(1e-6)
+                P_lyap = solve_lyapunov(hx_local, impact_state)
+                P_lyap = (P_lyap + P_lyap') / 2
+                if all(isfinite, P_lyap) && isposdef(Symmetric(P_lyap + T(1e-12) * I))
+                    P0 = P_lyap
+                end
+            end
+        catch
+            # keep fallback P0 = 10 * Sigma_state
+        end
+    end
 
     # Cholesky for drawing with jitter fallback
     chol_P0 = try
@@ -1159,7 +1234,7 @@ function _pf_initialize_projection!(ws::PFWorkspace{T},
     end
     L = chol_P0.L
 
-    # Draw initial states around steady state
+    # Draw initial states around steady state (stored directly in ws.particles; #949)
     temp = randn(rng, T, nx, N)
     state_draws = L * temp
 
@@ -1185,9 +1260,10 @@ function _pf_initialize_projection!(ws::PFWorkspace{T},
         end
     end
 
-    # Evaluate policy to fill controls (transition with zero shocks)
-    fill!(ws.shocks, zero(T))
-    _pf_transition_projection!(ws, pss)
+    # Reset weights uniformly so reused PFWorkspaces never leak prior-particle weights (#946)
+    inv_N = one(T) / N
+    fill!(ws.weights, inv_N)
+    fill!(ws.log_weights, -log(T(N)))
 
     return nothing
 end
@@ -1206,8 +1282,10 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
                                        store_trajectory::Bool=false) where {T<:AbstractFloat}
     N = size(ws.particles, 2)
     n_obs = size(data, 1)
+    n_states = size(ws.particles, 1)
     log_lik = zero(T)
     log_N = log(T(N))
+    inv_N = one(T) / N
 
     # Initialize from stationary distribution
     _pf_initialize_projection!(ws, pss; rng=rng)
@@ -1241,10 +1319,15 @@ function _bootstrap_particle_filter!(ws::PFWorkspace{T}, pss::ProjectionStateSpa
             _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
             _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
             ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            # Resampled particles are uniformly weighted — reset so the next ratio-form
-            # increment's lse_prev = 0 (the projection filters previously omitted this because
-            # the old code overwrote log_weights each step; #128 needs it).
-            fill!(ws.log_weights, -log(T(N)))
+            # Resampled particles are uniformly weighted — reset both weights and log_weights (#128 / #946)
+            fill!(ws.weights, inv_N)
+            fill!(ws.log_weights, -log_N)
+        end
+
+        if store_trajectory && ws.reference_trajectory !== nothing && t <= size(ws.reference_trajectory, 2)
+            @simd for s in 1:n_states
+                ws.reference_trajectory[s, t] = ws.particles[s, N]
+            end
         end
     end
 
@@ -1259,7 +1342,8 @@ end
     _conditional_smc!(ws, pss::ProjectionStateSpace, data, T_obs; ...)
 
 Conditional SMC (particle Gibbs) for projection/PFI state space.
-Forces particle N to follow the reference trajectory at each time step.
+Forces particle N to follow the reference trajectory at each time step and traces
+the full sampled trajectory across `1:T_obs` from an `N × T_obs` ancestor history.
 """
 function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
                              data::Matrix{T}, T_obs::Int;
@@ -1269,22 +1353,25 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
     n_states = size(ws.particles, 1)
     log_lik = zero(T)
     log_N = log(T(N))
+    inv_N = one(T) / N
 
     # Initialize
     _pf_initialize_projection!(ws, pss; rng=rng)
 
-    # Initialize reference trajectory if not set (first CSMC pass)
+    # Initialize reference trajectory if not set (first CSMC pass): store genuine 1:T_obs path (#950)
     if ws.reference_trajectory !== nothing && all(iszero, ws.reference_trajectory)
-        # Use a bootstrap PF to get initial trajectory
         ws_init = deepcopy(ws)
-        _bootstrap_particle_filter!(ws_init, pss, data, T_obs; rng=rng)
-        # Store final particles as initial reference (repeat for each time step)
+        _bootstrap_particle_filter!(ws_init, pss, data, T_obs; rng=rng, store_trajectory=true)
         for t in 1:min(T_obs, size(ws.reference_trajectory, 2))
             @inbounds @simd for s in 1:n_states
-                ws.reference_trajectory[s, t] = ws_init.particles[s, N]
+                ws.reference_trajectory[s, t] = ws_init.reference_trajectory[s, t]
             end
         end
     end
+
+    # Full trajectory & ancestor history for exact CSMC backward tracing (#950)
+    particles_hist = Array{T,3}(undef, n_states, N, T_obs)
+    ancestors_hist = Matrix{Int}(undef, N, T_obs)
 
     @inbounds for t in 1:T_obs
         # Draw shocks
@@ -1300,6 +1387,13 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
             end
         end
 
+        # Record particles at time t BEFORE end-of-step resampling
+        for k in 1:N
+            @simd for s in 1:n_states
+                particles_hist[s, k, t] = ws.particles[s, k]
+            end
+        end
+
         # Compute observation log-weights
         y_t = @view data[:, t]
         _pf_log_weights!(ws.cumweights, ws.innovations, ws.tmp_obs,   # scratch, not overwrite (#128)
@@ -1311,36 +1405,56 @@ function _conditional_smc!(ws::PFWorkspace{T}, pss::ProjectionStateSpace{T},
         # Normalize weights
         _normalize_log_weights!(ws.weights, ws.log_weights)
 
-        # ESS-based adaptive resampling
-        ess = zero(T)
-        @simd for k in 1:N
-            ess += ws.weights[k]^2
-        end
-        ess = one(T) / ess
+        # ESS-based adaptive resampling (skip at final step T_obs so terminal weights align with particles_hist[:,:,T_obs])
+        if t < T_obs
+            ess = zero(T)
+            @simd for k in 1:N
+                ess += ws.weights[k]^2
+            end
+            ess = one(T) / ess
 
-        if ess < T(threshold) * T(N)
-            _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
-            ws.ancestors[N] = N  # Reference particle always survives
-            _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
-            ws.particles, ws.particles_new = ws.particles_new, ws.particles
-            fill!(ws.log_weights, -log(T(N)))   # uniform after resampling for the ratio-form increment (#128)
-        end
-
-        # Store trajectory for backward sampling
-        if ws.reference_trajectory !== nothing
-            @simd for s in 1:n_states
-                ws.reference_trajectory[s, t] = ws.particles[s, N]
+            if ess < T(threshold) * T(N)
+                _systematic_resample!(ws.ancestors, ws.weights, ws.cumweights, N, rng)
+                ws.ancestors[N] = N  # Reference particle always survives
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = ws.ancestors[k]
+                end
+                _resample_particles!(ws.particles_new, ws.particles, ws.ancestors)
+                ws.particles, ws.particles_new = ws.particles_new, ws.particles
+                fill!(ws.weights, inv_N)
+                fill!(ws.log_weights, -log_N)   # uniform after resampling for the ratio-form increment (#128 / #946)
+            else
+                for k in 1:N
+                    ancestors_hist[k, t + 1] = k
+                end
             end
         end
     end
 
-    # Backward sample new reference trajectory
-    if ws.reference_ancestors !== nothing
-        idx = N
-        ws.reference_ancestors[T_obs] = idx
-        for t in (T_obs-1):-1:1
-            idx = ws.ancestors[idx]
+    # Sample final particle proportional to terminal weights and trace full lineage 1:T_obs (#950)
+    u = rand(rng, T)
+    cumw = zero(T)
+    chosen = N
+    @inbounds for k in 1:N
+        cumw += ws.weights[k]
+        if cumw >= u
+            chosen = k
+            break
+        end
+    end
+
+    idx = chosen
+    @inbounds for t in T_obs:-1:1
+        if ws.reference_trajectory !== nothing && t <= size(ws.reference_trajectory, 2)
+            @simd for s in 1:n_states
+                ws.reference_trajectory[s, t] = particles_hist[s, idx, t]
+            end
+        end
+        if ws.reference_ancestors !== nothing && t <= length(ws.reference_ancestors)
             ws.reference_ancestors[t] = idx
+        end
+        if t > 1
+            idx = ancestors_hist[idx, t]
         end
     end
 

@@ -6,6 +6,80 @@ output, not just documentation.
 
 ---
 
+## v1.1.3
+
+Bayesian DSGE / SMC² / particle-smoother correctness, multi-threaded scalability, and SMC algorithm
+enhancement release (closes `#945`–`#951`), fixing critical nonlinear particle-filter, smoother, and
+SMC/SMC² numerical bugs while delivering thread-count-invariant (`1T == NT`) multi-threaded speedups
+across BVAR, SMC/SMC², Bayesian DSGE post-estimation, particle smoothing, and DSGE-VAR workflows.
+
+> **Correctness Fixes (Numerical Output Changed)**: This release resolves mathematical defects in
+> nonlinear particle filtering, particle smoothing, and SMC/SMC² (`#946`, `#949`, `#950`):
+> - Perturbation PF (`_pf_transition_pruned!`) and particle smoother (`_nonlinear_transition`) now
+>   evaluate control variables on lagged state components and current shocks (fixing the S-01
+>   control-timing bug), and Projection PF applies shock impacts to controls as well as states.
+> - `dsge_particle_smoother` preserves carried non-uniform log-weights across skipped resamples via
+>   `_pf_increment!`, eliminating downward log-likelihood bias.
+> - Projection PF resets `ws.weights`/`ws.log_weights` on workspace reuse (`#946`).
+> - SMC² `_exchange_step!` applies exact Chopin et al. (2013 §3.4) exchange weights, `_conditional_smc!`
+>   updates the full reference trajectory `1:T_obs` on all three state spaces, the `-1e10` sentinel is
+>   removed (all-failed runs now error clearly; `:smc2` bootstrap PF requires positive
+>   `measurement_error`), and delayed acceptance no longer locks when an incumbent particle has
+>   `ll_cheap == -Inf`.
+
+**New**
+
+- **Herbst–Schorfheide Adaptive SMC Scaling & Randomized Blocking (`#951`)**: `SMCState` now tracks
+  an adaptive proposal scale `c_scale` updated per tempering stage toward 25% acceptance via the
+  Herbst & Schorfheide (2014, 2015) logistic rule. Added `n_blocks::Int=1` to `estimate_dsge_bayes`
+  (`:smc` and `:smc2`, RA and HA) for randomized conditional-covariance parameter blocking per stage.
+- **Single-Solve Delayed Acceptance & Auto-Sized `n_screen` (`#951`)**: Factored
+  `_solve_and_build_state_space` and `_run_pf_on_state_space` so two-stage delayed acceptance solves
+  the DSGE model at most once per proposal (and at Stage 0 / `_exchange_step!`), reusing the built
+  state space across Stage 1 and Stage 2. Changed `n_screen` default from `200` to `nothing`
+  (auto-sized to `clamp(n_particles ÷ 5, 20, n_particles ÷ 2)` for `n_particles > 20`; warns if an
+  explicit `n_screen >= n_particles` is passed).
+- **Parallel Multi-Chain RWMH (`#948`)**: Added `n_chains::Int=1` to `estimate_dsge_bayes` for
+  `method=:mh` (both RA and HA), running independent chains concurrently with dispersed starting
+  points and deterministic per-chain RNG streams. Stored `n_chains::Int` on `BayesianDSGE` (with
+  v1 JLD2 backward compatibility defaulting to `1`) and updated `mcmc_diagnostics` and
+  `posterior_summary` to compute true multi-chain split-R̂ and bulk/tail ESS across `2 * n_chains`
+  half-chains.
+
+**Performance**
+
+- **Thread-Count-Invariant BVAR Parallelism (`#945`)**: Parallelized `process_posterior_samples` and
+  `historical_decomposition(::BVARPosterior)` (`threaded::Bool=true` default on `irf`, `fevd`, and
+  `historical_decomposition`) with pre-generated per-draw seeds (`1T == NT` bit-exact), lock-free
+  small-matrix Haar QR in `generate_Q`, and hoisted `Phi_L` products in `identify_sign`.
+- **SMC / SMC² Thread Scaling & Small-Matrix Kalman (`#947`)**: Eliminated multi-threaded SMC/SMC²
+  regressions via scoped single-thread BLAS (`_with_single_blas_thread`), Julia-1.10-compatible
+  dynamic work-stealing (`_parallel_for_worksteal`), lock-free pure-Julia small-matrix Kalman
+  kernels (`<= 16` states/obs/shocks), deduplicated `linearize`/`gensys` Jacobians, suppressed nested
+  threading in projection/PFI SMC², and zero-warning `H == 0` state-space guards.
+- **DSGE-Bayes, Smoother & DSGE-VAR Parallelism (`#948`)**: Parallelized `posterior_mode` numerical
+  Hessians, `bridge_sampling_ml`, `irf`/`fevd`/`simulate`/`posterior_predictive`/`prior_predictive`/
+  `posterior_predictive_check`/`historical_decomposition` on `BayesianDSGE`, `dsge_particle_smoother`
+  backward trajectories, and fixed-θ/joint `estimate_dsge_var` (with unique-θ deduplication) plus
+  `irf`/`fevd`/`historical_decomposition` on `DSGEVARPosterior` (hoisting `construct_var_matrices`
+  outside the draw loop) — all bit-exact across thread counts.
+
+**Fixed**
+
+- **Projection PF Weight Contamination (`#946`)**: Reset `ws.weights` and `ws.log_weights` uniformly
+  in `_pf_initialize_projection!`, `_allocate_pf_workspace`, `_resize_pf_workspace!`, and projection
+  resampling paths, eliminating cross-particle likelihood contamination and `1T`/`4T` divergence.
+- **Nonlinear PF & Particle Smoother Math (`#949`)**: Fixed S-01 lagged-state control timing in
+  `_pf_transition_pruned!` and `_nonlinear_transition`, full-vector shock impacts and stationary
+  Lyapunov initialization in Projection PF, and carried-weight accumulation in `dsge_particle_smoother`.
+- **SMC / SMC² / CSMC Defects (`#950`)**: Implemented exact Chopin et al. (2013) exchange weights in
+  `_exchange_step!`, removed `-1e10` likelihood sentinels with active-support tempering bisection and
+  explicit all-failed errors, fixed delayed-acceptance `-Inf` lock, and repaired full backward
+  reference-trajectory updating in `_conditional_smc!`.
+- **HA-DSGE SSJ Stabilization Determinacy Flag**: Updated `_ssj_realize` to mark `eu = [1, 1]` after
+  stabilizing truncated Ho-Kalman `G1` spectral radius to `0.999`, restoring finite HA Kalman
+  likelihoods on Huggett and Krusell–Smith models.
+
 ## v1.1.2
 
 Default confidence and credible interval harmonization and universal configurability release

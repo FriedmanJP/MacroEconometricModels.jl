@@ -114,8 +114,13 @@ struct DSGEStateSpace{T<:AbstractFloat}
         @assert size(G1, 1) == size(G1, 2) "G1 must be square"
         @assert size(Z, 2) == size(G1, 1) "Z columns must match G1 dimension"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(G1, impact, Z, d, H, Q, H_inv, log_det_H)
     end
 end
@@ -196,8 +201,13 @@ struct NonlinearStateSpace{T<:AbstractFloat}
         n_obs = size(Z, 1)
         @assert size(H) == (n_obs, n_obs) "H must be n_obs x n_obs"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(hx, gx, eta, steady_state, state_indices, control_indices, order,
                hxx, gxx, hsigmasigma, gsigmasigma,
                hxxx, gxxx, hsigmax, gsigmax, hsigmasigmasigma, gsigmasigmasigma,
@@ -257,8 +267,13 @@ struct ProjectionStateSpace{T<:AbstractFloat}
         n_obs = size(Z, 1)
         @assert size(H) == (n_obs, n_obs) "H must be n_obs × n_obs"
         @assert length(d) == n_obs "d length must match n_obs"
-        H_inv = Matrix{T}(robust_inv(H))
-        log_det_H = T(logdet(H))
+        if all(iszero, H)
+            H_inv = zeros(T, n_obs, n_obs)
+            log_det_H = T(-Inf)
+        else
+            H_inv = Matrix{T}(robust_inv(H))
+            log_det_H = T(logdet(H))
+        end
         new{T}(coefficients, multi_indices, max_degree,
                steady_state, state_indices, control_indices,
                impact, state_bounds, scale, shift,
@@ -365,7 +380,7 @@ function _allocate_pf_workspace(::Type{T}, n_states::Int, n_obs::Int,
                                  proj_max_degree::Int=0, proj_n_vars::Int=0) where {T<:AbstractFloat}
     particles = zeros(T, n_states, N)
     particles_new = zeros(T, n_states, N)
-    log_weights = zeros(T, N)
+    log_weights = fill(-log(T(N)), N)
     weights = fill(one(T) / N, N)
     ancestors = collect(1:N)
     cumweights = zeros(T, N)
@@ -419,7 +434,7 @@ function _resize_pf_workspace!(ws::PFWorkspace{T}, N_new::Int) where {T}
 
     ws.particles = zeros(T, n_states, N_new)
     ws.particles_new = zeros(T, n_states, N_new)
-    ws.log_weights = zeros(T, N_new)
+    ws.log_weights = fill(-log(T(N_new)), N_new)
     ws.weights = fill(one(T) / N_new, N_new)
     ws.ancestors = collect(1:N_new)
     ws.cumweights = zeros(T, N_new)
@@ -502,6 +517,7 @@ Fields:
 - `proposal_cov::Matrix{T}` — MCMC mutation proposal covariance
 - `n_lik_failures::Int` — number of likelihood evaluations that failed (returned -Inf)
 - `n_lik_evals::Int` — total number of likelihood evaluations
+- `c_scale::T` — adaptive Herbst–Schorfheide proposal scaling factor `c_n` (initialized to `2.38 / sqrt(n_params)`)
 """
 mutable struct SMCState{T<:AbstractFloat}
     theta_particles::Matrix{T}
@@ -516,12 +532,18 @@ mutable struct SMCState{T<:AbstractFloat}
     proposal_cov::Matrix{T}
     n_lik_failures::Int
     n_lik_evals::Int
+    c_scale::T
 end
 
-# Backward-compatible 10-arg constructor (failure counters default to 0); the samplers
-# build with this form and set n_lik_failures / n_lik_evals post-hoc.
+# Backward-compatible 10-arg and 12-arg constructors (failure counters default to 0,
+# c_scale defaults to Roberts-Rosenthal optimal 2.38 / sqrt(n_params)).
 SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov) where {T<:AbstractFloat} =
-    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, 0, 0)
+    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, 0, 0,
+                T(2.38) / sqrt(T(max(size(tp, 1), 1))))
+
+SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, nf::Int, ne::Int) where {T<:AbstractFloat} =
+    SMCState{T}(tp, lw, ll, lp, phi, ess, ar, lml, pool, pcov, nf, ne,
+                T(2.38) / sqrt(T(max(size(tp, 1), 1))))
 
 # =============================================================================
 # BayesianDSGE — posterior result container
@@ -587,6 +609,7 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
     solver_kwargs::NamedTuple
     prefilter::Union{Nothing,PrefilterSpec{T}}
     trends::Union{Nothing,ObservationTrends{T}}
+    n_chains::Int
     manifest::Union{Nothing,ReproManifest}
 
     function BayesianDSGE{T}(theta_draws, log_posterior, param_names, priors,
@@ -598,19 +621,21 @@ struct BayesianDSGE{T<:AbstractFloat} <: AbstractDSGEModel
                               measurement_error=nothing, solver=:gensys,
                               solver_kwargs=NamedTuple(),
                               prefilter=nothing, trends=nothing;
+                              n_chains::Int=1,
                               manifest=nothing) where {T<:AbstractFloat}
         n_draws, n_params = size(theta_draws)
         @assert length(log_posterior) == n_draws "log_posterior length must match n_draws"
         @assert length(param_names) == n_params "param_names length must match n_params"
         @assert method in (:smc, :rwmh, :csmc, :smc2, :importance) "unknown method: $method"
         @assert solved_at in (:posterior_mean, :highest_posterior_draw) "solved_at must be :posterior_mean or :highest_posterior_draw"
+        @assert n_chains >= 1 "n_chains must be >= 1"
         me = measurement_error === nothing ? nothing : Vector{T}(measurement_error)
         new{T}(theta_draws, log_posterior, param_names, priors,
                log_marginal_likelihood, method, acceptance_rate,
                ess_history, phi_schedule, spec, solution, state_space,
                n_failed_draws, n_lik_evals, solved_at,
                Matrix{T}(data), Vector{Symbol}(observables), me,
-               solver, solver_kwargs, prefilter, trends, manifest)
+               solver, solver_kwargs, prefilter, trends, n_chains, manifest)
     end
 end
 

@@ -569,25 +569,40 @@ end
 # Hessian, Sandwich Covariance, and Delta-Method Standard Errors
 # =============================================================================
 
-"""Compute numerical Hessian via central finite differences."""
-function _numerical_hessian(f::Function, x::Vector{T}; eps_step::T=T(1e-5)) where {T<:AbstractFloat}
+"""Compute numerical Hessian via central finite differences (optionally parallelized across upper-triangular pairs; #948)."""
+function _numerical_hessian(f::Function, x::Vector{T};
+                            eps_step::T=T(1e-5),
+                            threaded::Bool=false) where {T<:AbstractFloat}
     n = length(x)
     H = zeros(T, n, n)
-    f0 = f(x)
+    pairs = Tuple{Int,Int}[(i, j) for i in 1:n for j in i:n]
+    vals = Vector{T}(undef, length(pairs))
+    inv_denom = one(T) / (4 * eps_step^2)
 
-    for i in 1:n
-        ei = zeros(T, n)
-        ei[i] = eps_step
-        for j in i:n
-            ej = zeros(T, n)
-            ej[j] = eps_step
-            fpp = f(x + ei + ej)
-            fpm = f(x + ei - ej)
-            fmp = f(x - ei + ej)
-            fmm = f(x - ei - ej)
-            H[i, j] = (fpp - fpm - fmp + fmm) / (4 * eps_step^2)
-            H[j, i] = H[i, j]
+    function _eval_pair(idx::Int)
+        i, j = pairs[idx]
+        xpp = copy(x); xpp[i] += eps_step; xpp[j] += eps_step
+        xpm = copy(x); xpm[i] += eps_step; xpm[j] -= eps_step
+        xmp = copy(x); xmp[i] -= eps_step; xmp[j] += eps_step
+        xmm = copy(x); xmm[i] -= eps_step; xmm[j] -= eps_step
+        vals[idx] = (f(xpp) - f(xpm) - f(xmp) + f(xmm)) * inv_denom
+    end
+
+    if threaded && Threads.nthreads() > 1 && length(pairs) > 1
+        _with_single_blas_thread() do
+            Threads.@threads :dynamic for idx in eachindex(pairs)
+                _eval_pair(idx)
+            end
         end
+    else
+        for idx in eachindex(pairs)
+            _eval_pair(idx)
+        end
+    end
+
+    @inbounds for (idx, (i, j)) in enumerate(pairs)
+        H[i, j] = vals[idx]
+        H[j, i] = vals[idx]
     end
     H
 end

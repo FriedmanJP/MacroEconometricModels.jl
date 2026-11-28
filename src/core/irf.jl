@@ -581,11 +581,14 @@ Note: `:smooth_transition` requires `transition_var` kwarg.
       `:proxy` requires `instruments` and is partial when `k < n`.
 
 Uses `process_posterior_samples` and `compute_posterior_quantiles` from bayesian_utils.jl.
+Set `threaded=true` (default) to parallelize across posterior draws when `Threads.nthreads() > 1`
+(pair with `BLAS.set_num_threads(1)` / `OPENBLAS_NUM_THREADS=1` for optimal small-matrix scaling;
+single-thread BLAS is also scoped automatically during parallel draw processing).
 """
 function irf(post::BVARPosterior, horizon::Int;
     method::Symbol=:cholesky, data::AbstractMatrix=Matrix{Float64}(undef, 0, 0),
     check_func=nothing, narrative_check=nothing, quantiles::Vector{<:Real}=[0.16, 0.5, 0.84],
-    threaded::Bool=false, point_estimate::Symbol=:mean,
+    threaded::Bool=true, point_estimate::Symbol=:mean,
     shock_names::Union{Nothing,Vector{String}}=nothing,
     max_draws::Int=1000,
     transition_var::Union{Nothing,AbstractVector}=nothing,
@@ -623,7 +626,7 @@ function irf(post::BVARPosterior, horizon::Int;
         check_func=check_func, narrative_check=narrative_check,
         max_draws=max_draws,
         transition_var=transition_var, regime_indicator=regime_indicator,
-        restrictions=restrictions, kwargs...
+        restrictions=restrictions, threaded=threaded, kwargs...
     )
 
     # Stack results into single array

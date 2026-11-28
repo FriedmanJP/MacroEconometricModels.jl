@@ -319,114 +319,58 @@ end
 const _HA_DEFAULT_T_HORIZON = 300
 
 """
-    _ha_estimate_dsge_bayes(spec, data, θ0; priors, kwargs...) → BayesianDSGE{T}
+    _ha_mh_single_chain(ll_fn, prior, theta0_sorted, n_draws, burnin,
+                        proposal_scale, adapt_interval, chain_rng, perturb_init)
 
-Internal HA dispatch for [`estimate_dsge_bayes`](@ref). Re-solves the HA
-steady state and linearizes at each draw; Kalman filter on the reduced system.
-Public HA keywords (`ha_method`, `ha_kwargs`, `proposal_scale`, `adapt_interval`)
-and measurement-error semantics are documented on the public entry.
+Run one adaptive RWMH chain for HA Bayesian estimation. When `perturb_init` is
+true (chains 2..C in multi-chain mode), perturbs the initial point within the
+prior bounds before sampling.
 """
-function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
-                              theta0::Union{AbstractVector{<:Real},
-                                            AbstractDict{Symbol,<:Real},NamedTuple};
-                              priors::Dict{Symbol,<:Distribution},
-                              method::Symbol=:mh,
-                              observables::Vector{Symbol}=Symbol[],
-                              n_draws::Int=5000,
-                              burnin::Int=1000,
-                              n_smc::Int=500,
-                              n_mh_steps::Int=1,
-                              ess_target::Float64=0.5,
-                              max_stages::Int=500, min_dphi::Real=1e-10,
-                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
-                              ha_method::Symbol=:ssj,
-                              ha_kwargs::NamedTuple=(T_horizon=_HA_DEFAULT_T_HORIZON, n_reduced=15),
-                              proposal_scale::Float64=0.01,
-                              adapt_interval::Int=100,
-                              seed::Union{Nothing,Integer}=nothing,
-                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
-    if method ∉ (:mh, :smc)
-        throw(ArgumentError(
-            "HA Bayesian estimation supports only method=:mh (RWMH) and method=:smc; " *
-            "got :$method. SMC², HA GMM/SMM, and CT Bayes are out of scope (#649)."))
-    end
-
-    # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
-    lower_dict = Dict{Symbol,Float64}()
-    upper_dict = Dict{Symbol,Float64}()
-    for (pn, d) in priors
-        lo, hi = _infer_prior_bounds(d)
-        lower_dict[pn] = lo
-        upper_dict[pn] = hi
-    end
-    prior = DSGEPrior(priors; lower=lower_dict, upper=upper_dict)
-    param_names = prior.param_names  # sorted deterministically
-
-    # ── 2. Handle observables ────────────────────────────────────────────
-    if isempty(observables)
-        # Default: use first few aggregate endogenous variables
-        observables = spec.endog[1:min(3, length(spec.endog))]
-    end
-    n_obs = length(observables)
-
-    # ── 3. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
-    # Public convention is T×n; the Kalman filter on the reduced system expects
-    # n_obs × T_obs internally.
-    data_mat = _orient_data(data, n_obs, T)
-
-    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
-    # The stochastic-singularity error itself is raised by _build_ha_observation_equation
-    # and rethrown from ll_fn's narrow catch on the first evaluation (HA has no cheap
-    # pre-solve shock count).
-    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
-
-    # ── 4. Resolve theta0 against sorted prior keys ──────────────────────
-    # Dict/NamedTuple resolved by name (order-independent); a positional vector must be
-    # in sorted prior-key order and is length-validated (E-12 / H-12 / #136). (The old
-    # comment claimed a reordering that never happened — it only cast T.(theta0).)
-    n_params = length(param_names)
-    theta0_sorted = _resolve_theta0(theta0, param_names, T)
-    manifest = _dsge_bayes_manifest(; seed=seed, method=method,
-        n_particles=0, n_draws=n_draws, n_smc=n_smc, n_mh_steps=n_mh_steps,
-        burnin=burnin, ess_target=ess_target, solver=ha_method,
-        solver_kwargs=ha_kwargs, theta0=theta0_sorted,
-        extra=Dict{String,Any}("ha_method" => String(ha_method),
-                               "ha_kwargs" => _plain_nt_settings(ha_kwargs)))
-
-    # ── 5. Build HA likelihood function (tracking failed/total likelihood evals) ──
-    lik_failures = Threads.Atomic{Int}(0)
-    lik_evals = Threads.Atomic{Int}(0)
-    ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
-                                     measurement_error, ha_method, ha_kwargs;
-                                     failures=lik_failures, evals=lik_evals)
-
-    if method === :smc
-        state = _smc_from_likelihood(ll_fn, param_names, prior, theta0_sorted;
-                                     n_smc=n_smc, n_mh_steps=n_mh_steps,
-                                     ess_target=ess_target, max_stages=max_stages,
-                                     min_dphi=min_dphi, rng=rng)
-        state.n_lik_failures = lik_failures[]
-        state.n_lik_evals = lik_evals[]
-        theta_draws = Matrix{T}(state.theta_particles')
-        log_posterior = state.log_likelihoods .+ state.log_priors
-        return _ha_smc_to_bayesian_dsge(state, spec, param_names, prior,
-                                        theta_draws, log_posterior,
-                                        observables, measurement_error,
-                                        ha_method, ha_kwargs,
-                                        lik_failures[], lik_evals[],
-                                        data_mat; manifest=manifest)
-    end
-
-    # ── 6. Random-Walk Metropolis-Hastings ───────────────────────────────
-    # Initialize
+function _ha_mh_single_chain(ll_fn, prior::DSGEPrior{T}, theta0_sorted::Vector{T},
+                             n_draws::Int, burnin::Int, proposal_scale::Float64,
+                             adapt_interval::Int, chain_rng::AbstractRNG,
+                             perturb_init::Bool) where {T<:AbstractFloat}
+    n_params = length(theta0_sorted)
     theta_current = copy(theta0_sorted)
+
+    if perturb_init
+        # Dispersed in-bounds starting point for multi-chain convergence diagnostics
+        perturbed = false
+        for _ in 1:50
+            theta_try = theta0_sorted + T(max(proposal_scale, 0.01)) * randn(chain_rng, T, n_params)
+            for i in 1:n_params
+                lo, hi = prior.lower[i], prior.upper[i]
+                span = isfinite(lo) && isfinite(hi) ? hi - lo : one(T)
+                margin = T(1e-8) * span
+                if isfinite(lo) && theta_try[i] <= lo
+                    theta_try[i] = lo + margin
+                end
+                if isfinite(hi) && theta_try[i] >= hi
+                    theta_try[i] = hi - margin
+                end
+            end
+            lp_try = _log_prior(theta_try, prior)
+            if isfinite(lp_try)
+                ll_try = ll_fn(theta_try)
+                if isfinite(ll_try)
+                    theta_current = theta_try
+                    perturbed = true
+                    break
+                end
+            end
+        end
+        if !perturbed
+            theta_current = copy(theta0_sorted)
+        end
+    end
+
     ll_current = ll_fn(theta_current)
     lp_current = _log_prior(theta_current, prior)
 
     # If initial point has -Inf likelihood, try perturbing
     if !isfinite(ll_current) || !isfinite(lp_current)
-        for attempt in 1:50
-            theta_try = theta_current + T(0.01) * randn(rng, T, n_params)
+        for _ in 1:50
+            theta_try = theta_current + T(0.01) * randn(chain_rng, T, n_params)
             for i in 1:n_params
                 theta_try[i] = clamp(theta_try[i], prior.lower[i], prior.upper[i])
             end
@@ -456,7 +400,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
 
     for draw in 1:n_draws
         # Propose
-        z = randn(rng, T, n_params)
+        z = randn(chain_rng, T, n_params)
         theta_star = theta_current + scale_factor * proposal_L * z
 
         # Evaluate prior
@@ -470,7 +414,7 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
                 # MH acceptance ratio
                 log_alpha = (ll_star + lp_star) - (ll_current + lp_current)
 
-                if log(rand(rng, T)) < log_alpha
+                if log(rand(chain_rng, T)) < log_alpha
                     theta_current = theta_star
                     ll_current = ll_star
                     lp_current = lp_star
@@ -524,12 +468,163 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
     end
 
     acceptance_rate = T(total_accepted) / T(n_draws)
-
-    # ── 7. Discard burn-in ───────────────────────────────────────────────
     post_draws = draws[burnin+1:end, :]
     post_log_posterior = log_posterior[burnin+1:end]
+    return post_draws, post_log_posterior, acceptance_rate
+end
 
-    # ── 8. Build solution at posterior mean (else the highest-posterior draw, marked) ──
+"""
+    _ha_estimate_dsge_bayes(spec, data, θ0; priors, kwargs...) → BayesianDSGE{T}
+
+Internal HA dispatch for [`estimate_dsge_bayes`](@ref). Re-solves the HA
+steady state and linearizes at each draw; Kalman filter on the reduced system.
+Public HA keywords (`ha_method`, `ha_kwargs`, `proposal_scale`, `adapt_interval`)
+and measurement-error semantics are documented on the public entry.
+"""
+function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
+                              theta0::Union{AbstractVector{<:Real},
+                                            AbstractDict{Symbol,<:Real},NamedTuple};
+                              priors::Dict{Symbol,<:Distribution},
+                              method::Symbol=:mh,
+                              observables::Vector{Symbol}=Symbol[],
+                              n_draws::Int=5000,
+                              burnin::Int=1000,
+                              n_chains::Int=1,
+                              n_smc::Int=500,
+                              n_mh_steps::Int=1,
+                              n_blocks::Int=1,
+                              ess_target::Float64=0.5,
+                              max_stages::Int=500, min_dphi::Real=1e-10,
+                              measurement_error::Union{Nothing,Symbol,Vector{<:Real}}=nothing,
+                              ha_method::Symbol=:ssj,
+                              ha_kwargs::NamedTuple=(T_horizon=_HA_DEFAULT_T_HORIZON, n_reduced=15),
+                              proposal_scale::Float64=0.01,
+                              adapt_interval::Int=100,
+                              seed::Union{Nothing,Integer}=nothing,
+                              rng::AbstractRNG=Random.default_rng()) where {T<:AbstractFloat}
+    if method ∉ (:mh, :smc)
+        throw(ArgumentError(
+            "HA Bayesian estimation supports only method=:mh (RWMH) and method=:smc; " *
+            "got :$method. SMC², HA GMM/SMM, and CT Bayes are out of scope (#649)."))
+    end
+    n_chains >= 1 || throw(ArgumentError("n_chains must be >= 1, got $n_chains"))
+    n_blocks >= 1 || throw(ArgumentError("n_blocks must be >= 1, got $n_blocks"))
+    if n_chains > 1 && method !== :mh
+        throw(ArgumentError(
+            "n_chains > 1 is only supported for method=:mh; got method=:$method"))
+    end
+    if n_blocks > 1 && method !== :smc
+        throw(ArgumentError(
+            "n_blocks > 1 is only supported for method=:smc; got method=:$method"))
+    end
+
+    # ── 1. Build DSGEPrior from priors dict ──────────────────────────────
+    lower_dict = Dict{Symbol,Float64}()
+    upper_dict = Dict{Symbol,Float64}()
+    for (pn, d) in priors
+        lo, hi = _infer_prior_bounds(d)
+        lower_dict[pn] = lo
+        upper_dict[pn] = hi
+    end
+    prior = DSGEPrior(priors; lower=lower_dict, upper=upper_dict)
+    param_names = prior.param_names  # sorted deterministically
+
+    # ── 2. Handle observables ────────────────────────────────────────────
+    if isempty(observables)
+        # Default: use first few aggregate endogenous variables
+        observables = spec.endog[1:min(3, length(spec.endog))]
+    end
+    n_obs = length(observables)
+
+    # ── 3. Data handling: resolve orientation by matching n_obs (E-18 / #142) ─
+    # Public convention is T×n; the Kalman filter on the reduced system expects
+    # n_obs × T_obs internally.
+    data_mat = _orient_data(data, n_obs, T)
+
+    # Resolve :auto measurement error against data variance (per-observable). (#141/T042)
+    # The stochastic-singularity error itself is raised by _build_ha_observation_equation
+    # and rethrown from ll_fn's narrow catch on the first evaluation (HA has no cheap
+    # pre-solve shock count).
+    measurement_error = _resolve_measurement_error(measurement_error, data_mat, observables)
+
+    # ── 4. Resolve theta0 against sorted prior keys ──────────────────────
+    # Dict/NamedTuple resolved by name (order-independent); a positional vector must be
+    # in sorted prior-key order and is length-validated (E-12 / H-12 / #136). (The old
+    # comment claimed a reordering that never happened — it only cast T.(theta0).)
+    theta0_sorted = _resolve_theta0(theta0, param_names, T)
+    manifest = _dsge_bayes_manifest(; seed=seed, method=method,
+        n_particles=0, n_draws=n_draws, n_smc=n_smc, n_mh_steps=n_mh_steps,
+        burnin=burnin, ess_target=ess_target, solver=ha_method,
+        solver_kwargs=ha_kwargs, theta0=theta0_sorted,
+        extra=Dict{String,Any}("ha_method" => String(ha_method),
+                               "ha_kwargs" => _plain_nt_settings(ha_kwargs),
+                               "n_chains" => n_chains))
+
+    # ── 5. Build HA likelihood function (tracking failed/total likelihood evals) ──
+    lik_failures = Threads.Atomic{Int}(0)
+    lik_evals = Threads.Atomic{Int}(0)
+    ll_fn = _build_ha_likelihood_fn(spec, param_names, data_mat, observables,
+                                     measurement_error, ha_method, ha_kwargs;
+                                     failures=lik_failures, evals=lik_evals)
+
+    if method === :smc
+        state = _smc_from_likelihood(ll_fn, param_names, prior, theta0_sorted;
+                                     n_smc=n_smc, n_mh_steps=n_mh_steps,
+                                     ess_target=ess_target, n_blocks=n_blocks,
+                                     max_stages=max_stages,
+                                     min_dphi=min_dphi, rng=rng)
+        state.n_lik_failures = lik_failures[]
+        state.n_lik_evals = lik_evals[]
+        theta_draws = Matrix{T}(state.theta_particles')
+        log_posterior = state.log_likelihoods .+ state.log_priors
+        return _ha_smc_to_bayesian_dsge(state, spec, param_names, prior,
+                                        theta_draws, log_posterior,
+                                        observables, measurement_error,
+                                        ha_method, ha_kwargs,
+                                        lik_failures[], lik_evals[],
+                                        data_mat; manifest=manifest)
+    end
+
+    # ── 6. Random-Walk Metropolis-Hastings (single or parallel multi-chain) ──
+    local post_draws, post_log_posterior, acceptance_rate
+    if n_chains == 1
+        post_draws, post_log_posterior, acceptance_rate = _ha_mh_single_chain(
+            ll_fn, prior, theta0_sorted, n_draws, burnin,
+            proposal_scale, adapt_interval, rng, false)
+    else
+        chain_seeds = rand(rng, UInt64, n_chains)
+        chain_draws = Vector{Matrix{T}}(undef, n_chains)
+        chain_lp = Vector{Vector{T}}(undef, n_chains)
+        chain_acc = Vector{T}(undef, n_chains)
+        _with_single_blas_thread() do
+            if Threads.nthreads() > 1
+                Threads.@threads :dynamic for c in 1:n_chains
+                    local_rng = Xoshiro(chain_seeds[c])
+                    d_c, lp_c, acc_c = _ha_mh_single_chain(
+                        ll_fn, prior, theta0_sorted, n_draws, burnin,
+                        proposal_scale, adapt_interval, local_rng, c > 1)
+                    chain_draws[c] = d_c
+                    chain_lp[c] = lp_c
+                    chain_acc[c] = acc_c
+                end
+            else
+                for c in 1:n_chains
+                    local_rng = Xoshiro(chain_seeds[c])
+                    d_c, lp_c, acc_c = _ha_mh_single_chain(
+                        ll_fn, prior, theta0_sorted, n_draws, burnin,
+                        proposal_scale, adapt_interval, local_rng, c > 1)
+                    chain_draws[c] = d_c
+                    chain_lp[c] = lp_c
+                    chain_acc[c] = acc_c
+                end
+            end
+        end
+        post_draws = reduce(vcat, chain_draws)
+        post_log_posterior = reduce(vcat, chain_lp)
+        acceptance_rate = mean(chain_acc)
+    end
+
+    # ── 7. Build solution at posterior mean (else the highest-posterior draw, marked) ──
     # No longer silently re-solves the ORIGINAL spec on failure (the E-25/#149 bug); the
     # helper marks which θ the stored solution was built at and errors loudly if none solve.
     linear_sol, ss_result, solved_at, _theta_used = _build_ha_result_solution(
@@ -549,6 +644,6 @@ function _ha_estimate_dsge_bayes(spec::ModelSpec{T}, data::AbstractMatrix,
         linear_sol.spec, linear_sol, ss_result,
         lik_failures[], lik_evals[], solved_at,
         data_mat, observables, measurement_error, ha_method, ha_kwargs;
-        manifest=manifest
+        n_chains=n_chains, manifest=manifest
     )
 end
